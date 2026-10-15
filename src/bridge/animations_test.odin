@@ -225,9 +225,9 @@ programmatic_selection_synchronizes_tree_state :: proc(t: ^testing.T) {
     testing.expect(t, !root^.is_selected && !earlier_sibling^.is_selected)
     testing.expect(t, selected^.is_selected)
     testing.expect(t, root^.is_expanded)
-    testing.expect(t, state^.ui_runtime.tree_reveal_pending)
+    testing.expect(t, state^.ui_runtime.library.tree.reveal_pending)
     testing.expect_value(t,
-        state^.ui_runtime.tree_reveal_stable_id, selected^.stable_id)
+        state^.ui_runtime.library.tree.reveal_stable_id, selected^.stable_id)
 }
 
 //   Verify a target outside the registry cannot disturb current selection.
@@ -246,7 +246,7 @@ programmatic_selection_rejects_unregistered_target :: proc(t: ^testing.T) {
     testing.expect(t, !select_animation_programmatically(state, &outsider))
     testing.expect_value(t, ji.selected_animation, &selected)
     testing.expect(t, selected.is_selected)
-    testing.expect(t, !state^.ui_runtime.tree_reveal_pending)
+    testing.expect(t, !state^.ui_runtime.library.tree.reveal_pending)
 }
 
 //   Verify an explicit reload request schedules owner-thread lifecycle work.

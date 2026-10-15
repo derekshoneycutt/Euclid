@@ -93,7 +93,7 @@ gif_path_input_rect_for_panel :: proc(
 gif_path_input_visible :: #force_inline proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     capture_view: capturemodel.Gif_Capture_View) -> bool {
-    return runtime != nil && runtime^.active_accordion_section == .Save_Gif &&
+    return runtime != nil && runtime^.layout.active_accordion_section == .Save_Gif &&
         capture_view.phase == .Saved && capture_view.path_available
 }
 
@@ -101,7 +101,7 @@ gif_path_input_visible :: #force_inline proc(
 gif_path_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
     return gif_path_input_rect_for_panel(
-        uiaccordion.accordion_content_rect(runtime, .Save_Gif))
+        uiaccordion.accordion_content_rect(&runtime^.layout, .Save_Gif))
 }
 
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
@@ -182,7 +182,8 @@ draw_encoded_gif_status :: proc(
     }
     if prepared.phase == .Saved && len(prepared.last_path) > 0 {
         field := gif_path_input_rect_for_panel(
-            uiaccordion.accordion_content_rect(&state^.ui_runtime, .Save_Gif))
+            uiaccordion.accordion_content_rect(
+                &state^.ui_runtime.layout, .Save_Gif))
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             viewmessages.shell_message(state, .Gif_Saved_Path_Label), x,
             field.y + (field.height - theme.TREE_FONT_SIZE) * 0.5)
@@ -196,14 +197,14 @@ gif_path_input_params :: proc(
     state: ^core.Euclid_General_State, rect: geometry.Rectangle,
     frame: input.Input_Frame, text: string) -> uiwidgets.Input_Box_Params {
     runtime := &state^.ui_runtime
-    focus := runtime^.interaction_frame.effective_focus
-    target := runtime^.interaction_frame.pointer_target
+    focus := runtime^.input.interaction_frame.effective_focus
+    target := runtime^.input.interaction_frame.pointer_target
     advance, measured := viewtext.ui_text_column_advance(
         view_font.cache_borrow(&state^.font_cache, .Regular), theme.TREE_FONT_SIZE)
     if !measured {
         advance = theme.TEXT_WRAP_ADVANCE
     }
-    return {rect = rect, clip_rect = runtime^.ui_regions.accordion_rect,
+    return {rect = rect, clip_rect = runtime^.layout.ui_regions.accordion_rect,
         controls = uilibrary.tree_semantic_id(),
         descriptor = {
             id = uisemantics.semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID),
@@ -300,7 +301,9 @@ gif_slider_params :: proc(
     return {
         panel = geometry.Rectangle(ctx.panel), row_y = row_y,
         mouse_input = ctx.mouse_input,
-        ui_runtime = ctx.ui_runtime, press_id = press_id, label = label,
+        press_owner = &ctx.ui_runtime^.input.press_owner,
+        semantic_focus = ctx.ui_runtime^.semantic_focus,
+        press_id = press_id, label = label,
         value = value, min_value = 1, max_value = 4, font = ctx.font,
         font_resolver = ctx.resolver,
         semantic_domain = .Gif_Control,
@@ -514,12 +517,12 @@ prepare_gif_timing_controls :: proc(
         ctx, {6203, viewmessages.shell_message(ctx.state, .Gif_Timing_Animation),
             viewmessages.shell_message(ctx.state, .Gif_Timing_Animation_Description),
             2, animation_rect}),
-        &ctx.ui_runtime.ui_press_owner, interactive)
+        &ctx.ui_runtime.input.press_owner, interactive)
     result^.recorded_timing = uiwidgets.prepare_text_button(gif_timing_button_params(
         ctx, {6204, viewmessages.shell_message(ctx.state, .Gif_Timing_Recorded),
             viewmessages.shell_message(ctx.state, .Gif_Timing_Recorded_Description),
             3, recorded_rect}),
-        &ctx.ui_runtime.ui_press_owner, interactive)
+        &ctx.ui_runtime.input.press_owner, interactive)
     if result^.animation_timing.action.activated {
         ctx.gif_capture_status.gif_timing_mode = .Animation
     }
@@ -546,9 +549,10 @@ prepare_gif_path_input :: proc(
         return
     }
     result^.path_input = uiwidgets.input_box_prepare(
-        params, &ctx.ui_runtime.ui_press_owner)
-    if result^.path_input.hovered || ctx.ui_runtime.ui_press_owner.kind == .Input_Box {
-        ctx.ui_runtime.cursor = .Text
+        params, &ctx.ui_runtime.input.press_owner)
+    if result^.path_input.hovered ||
+       ctx.ui_runtime.input.press_owner.kind == .Input_Box {
+        ctx.ui_runtime.input.cursor = .Text
     }
 }
 
@@ -577,7 +581,7 @@ prepare_gif_capture_button :: proc(
     result: ^Gif_View_Preparation, interactive := true) {
     params := gif_save_button_params(ctx, result^.rows.save_button_y)
     result^.save_button = uiwidgets.prepare_text_button(
-        params, &ctx.ui_runtime.ui_press_owner, interactive)
+        params, &ctx.ui_runtime.input.press_owner, interactive)
     if result^.save_button.action.activated {
         ctx.gif_capture_status.save_gif_requested = true
     }

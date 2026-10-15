@@ -161,15 +161,18 @@ tooltip_control_source_follows_pointer_and_keyboard_focus :: proc(t: ^testing.T)
     focus^.focus_origin = .Keyboard
     runtime: viewmodel.Euclid_Ui_Runtime_State
     runtime.semantic_focus = focus
-    testing.expect_value(t, uioverlay.tooltip_control_source(&runtime, owner, 7),
+    testing.expect_value(t, uioverlay.tooltip_control_source(
+        &runtime.input, runtime.semantic_focus, owner, 7),
         viewmodel.Ui_Tooltip_Source.Keyboard)
 
     focus^.focus_origin = .Pointer
-    testing.expect_value(t, uioverlay.tooltip_control_source(&runtime, owner, 7),
+    testing.expect_value(t, uioverlay.tooltip_control_source(
+        &runtime.input, runtime.semantic_focus, owner, 7),
         viewmodel.Ui_Tooltip_Source.None)
 
-    runtime.interaction_frame.pointer_target = {kind = .Control, id = 7}
-    testing.expect_value(t, uioverlay.tooltip_control_source(&runtime, owner, 7),
+    runtime.input.interaction_frame.pointer_target = {kind = .Control, id = 7}
+    testing.expect_value(t, uioverlay.tooltip_control_source(
+        &runtime.input, runtime.semantic_focus, owner, 7),
         viewmodel.Ui_Tooltip_Source.Pointer)
 }
 

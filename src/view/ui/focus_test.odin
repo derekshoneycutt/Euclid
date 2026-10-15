@@ -620,10 +620,10 @@ semantic_terminal_reverse_escape_wraps_backward :: proc(t: ^testing.T) {
 }
 
 // Verify semantic traversal updates transitional Terminal and accordion eligibility.
-@(test)
-semantic_traversal_updates_surface_focus_same_frame :: proc(t: ^testing.T) {
+// Build the two-node semantic snapshot used by the surface-focus transition test.
+semantic_traversal_test_state :: proc(
+    t: ^testing.T) -> ^viewmodel.Ui_Semantic_Focus_State {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
-    defer free(state, context.allocator)
     settings := semantic_test_id(.Settings_Control, 1)
     terminal := semantic_test_id(.Terminal, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
@@ -638,24 +638,40 @@ semantic_traversal_updates_surface_focus_same_frame :: proc(t: ^testing.T) {
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = terminal
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    return state
+}
+
+// Seed transitional UI focus to match the semantic snapshot's Terminal focus.
+semantic_traversal_test_runtime :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State) -> viewmodel.Euclid_Ui_Runtime_State {
+    return viewmodel.Euclid_Ui_Runtime_State{
         semantic_focus = state,
-        presentation_visible = true,
-        interaction = {
-            logical_focus = {kind = .Terminal},
-            terminal_effectively_focused = true,
+        presentation = {visible = true},
+        input = {
+            interaction = {
+                logical_focus = {kind = .Terminal},
+                terminal_effectively_focused = true,
+            },
+            interaction_frame = {terminal_focused = true},
         },
-        interaction_frame = {terminal_focused = true},
     }
+}
+
+// Verify semantic traversal updates transitional Terminal and accordion eligibility.
+@(test)
+semantic_traversal_updates_surface_focus_same_frame :: proc(t: ^testing.T) {
+    state := semantic_traversal_test_state(t)
+    defer free(state, context.allocator)
+    runtime := semantic_traversal_test_runtime(state)
     events := [1]input.Input_Event{{
         kind = .Press, key = .Tab, modifiers = {.Control}}}
     frame := input.Input_Frame{events = events[:], window_focused = true}
 
     _ = uisemantics.semantic_route_keyboard(state, frame, true)
     ui_apply_semantic_focus(&runtime, frame, true)
-    testing.expect_value(t, runtime.interaction_frame.logical_focus.kind,
+    testing.expect_value(t, runtime.input.interaction_frame.logical_focus.kind,
         viewmodel.Ui_Focus_Kind.Accordion)
-    testing.expect(t, runtime.interaction_frame.accordion.keyboard)
-    testing.expect(t, !runtime.interaction_frame.terminal_focused)
-    testing.expect(t, runtime.interaction_frame.terminal_focus_changed)
+    testing.expect(t, runtime.input.interaction_frame.accordion.keyboard)
+    testing.expect(t, !runtime.input.interaction_frame.terminal_focused)
+    testing.expect(t, runtime.input.interaction_frame.terminal_focus_changed)
 }

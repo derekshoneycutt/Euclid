@@ -45,32 +45,32 @@ tree_row_is_revealed :: proc(row: Tree_Prepared_Row) -> bool {
 // draw_encoded_prepared_tree shares full-size row positions and clips across both passes.
 draw_encoded_prepared_tree :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    prepared: Tree_List_Preparation, text: bool) {
-    panel := prepared.scroll.view_rect
+    prepared: ^Tree_List_Preparation, text: bool) {
+    panel := prepared^.scroll.view_rect
     visibility := Tree_Visibility_Policy{
-        search = &state^.ui_runtime.library_search,
-        projection = &state^.ui_runtime.tree_projection,
+        search = &state^.ui_runtime.library.search,
+        projection = &state^.ui_runtime.library.tree.projection,
     }
     ctx := Encoded_Tree_Walk_Context{
         state = state, ji = state^.julia_interface, encoder = encoder, panel = panel,
-        pressed_node = prepared.pressed_node,
-        scroll_y = prepared.scroll.scroll_y_out,
+        pressed_node = prepared^.pressed_node,
+        scroll_y = prepared^.scroll.scroll_y_out,
         visibility = visibility}
     foreground := tree_reorder_foreground(
-        &state^.ui_runtime, prepared.layout)
+        &state^.ui_runtime.library.actions.reorder, &prepared^.layout)
     occlusion: geometry.Rectangle
     if foreground >= 0 {
         occlusion = tree_reorder_block_clip(
-            prepared.layout.rows[foreground], panel, prepared.scroll.scroll_y_out)
+            prepared^.layout.rows[foreground], panel, prepared^.scroll.scroll_y_out)
     }
-    for index in 0..<prepared.layout.count {
-        row := prepared.layout.rows[index]
+    for index in 0..<prepared^.layout.count {
+        row := prepared^.layout.rows[index]
         row_geometry := tree_row_screen_geometry(
-            row, panel, prepared.scroll.scroll_y_out)
+            row, panel, prepared^.scroll.scroll_y_out)
         bounds := geometry.Rectangle(row_geometry.bounds)
         clip := geometry.Rectangle(row_geometry.clip_bounds)
         drawer := tree_actions_screen_rect(
-            row.actions.drawer_rect, panel, prepared.scroll.scroll_y_out)
+            row.actions.drawer_rect, panel, prepared^.scroll.scroll_y_out)
         if !geometry.rectangles_intersect(bounds, clip) &&
             !(row.actions.height > 0 && geometry.rectangles_intersect(drawer, clip)) {
             continue
@@ -143,9 +143,9 @@ tree_update_scroll :: proc(
         content_height = content_height, mouse_input = params.mouse_input,
         interaction_space_rect = params.list_panel,
         wheel_step = theme.TREE_ROW_HEIGHT * theme.WHEEL_SCROLL_MULTIPLIER,
-        press_owner = &params.ui_runtime^.ui_press_owner,
-        state_in = {params.ui_runtime^.tree_scroll_dragging,
-            params.ui_runtime^.tree_scroll_drag_off},
+        press_owner = &params.ui_runtime^.input.press_owner,
+        state_in = {params.ui_runtime^.library.tree.scroll_dragging,
+            params.ui_runtime^.library.tree.scroll_drag_off},
         semantic_focus = params.ui_runtime^.semantic_focus,
         semantic_id = tree_semantic_id()})
 }
@@ -168,16 +168,19 @@ tree_update_prepared_rows :: proc(
     params: Tree_List_Params, prepared: ^Tree_List_Preparation) -> Tree_Hit {
     hit: Tree_Hit
     tree_cancel_hidden_capture(params, prepared)
-    ctx := Tree_Walk_Context{ji = params.ji, ui_runtime = params.ui_runtime,
+    ctx := Tree_Walk_Context{
+        ji = params.ji,
+        tree = &params.ui_runtime^.library.tree,
+        interaction = &params.ui_runtime^.input,
         panel = prepared^.scroll.view_rect, scroll_y = prepared^.scroll.scroll_y_out,
         allow_clicks = !prepared^.scroll.pointer_reserved,
         mouse_input = params.mouse_input, font = params.font,
         font_resolver = params.font_resolver,
         visibility = {search = params.visibility.search,
-            projection = &params.ui_runtime^.tree_projection}}
+            projection = &params.ui_runtime^.library.tree.projection}}
     tree_actions_cancel_hidden_capture(params, prepared)
     foreground := tree_reorder_foreground(
-        params.ui_runtime, prepared^.layout)
+        &params.ui_runtime^.library.actions.reorder, &prepared^.layout)
     foreground_hit := false
     if foreground >= 0 {
         block := tree_reorder_block_clip(prepared^.layout.rows[foreground],
@@ -187,10 +190,10 @@ tree_update_prepared_rows :: proc(
     }
     for index in 0..<prepared^.layout.count {
         if foreground_hit && index != foreground {
-            if params.ui_runtime^.ui_press_owner.kind == .List_Item &&
-                params.ui_runtime^.ui_press_owner.id ==
+            if params.ui_runtime^.input.press_owner.kind == .List_Item &&
+                params.ui_runtime^.input.press_owner.id ==
                     tree_placement_press_id(prepared^.layout.rows[index].item) {
-                params.ui_runtime^.ui_press_owner = {}
+                params.ui_runtime^.input.press_owner = {}
             }
             continue
         }
@@ -205,16 +208,16 @@ tree_update_prepared_row :: proc(
     row: ^Tree_Prepared_Row, hit: ^Tree_Hit) {
     row_geometry := tree_row_screen_geometry(row^, ctx.panel, ctx.scroll_y)
     clip := geometry.Rectangle(row_geometry.clip_bounds)
-    owns := params.ui_runtime^.ui_press_owner.active &&
-        params.ui_runtime^.ui_press_owner.kind == .List_Item &&
-        params.ui_runtime^.ui_press_owner.id == tree_placement_press_id(row^.item)
+    owns := params.ui_runtime^.input.press_owner.active &&
+        params.ui_runtime^.input.press_owner.kind == .List_Item &&
+        params.ui_runtime^.input.press_owner.id == tree_placement_press_id(row^.item)
     admitted := tree_row_is_revealed(row^) &&
         geometry.rectangles_intersect(geometry.Rectangle(row_geometry.bounds), clip)
     if owns &&
        (!admitted || uiwidgets.input_frame_left_released(params.mouse_input) &&
         !geometry.rectangle_contains(clip,
             uiwidgets.input_frame_mouse_position(params.mouse_input))) {
-        params.ui_runtime^.ui_press_owner = {}
+        params.ui_runtime^.input.press_owner = {}
     }
     tree_actions_prepare_controls(params, row, ctx, hit)
     if !admitted {
@@ -229,7 +232,7 @@ tree_update_prepared_row :: proc(
 // tree_cancel_hidden_capture releases rows removed or clipped by an immediate topology change.
 tree_cancel_hidden_capture :: proc(
     params: Tree_List_Params, prepared: ^Tree_List_Preparation) {
-    owner := params.ui_runtime^.ui_press_owner
+    owner := params.ui_runtime^.input.press_owner
     if !owner.active || owner.kind != .List_Item {
         return
     }
@@ -244,7 +247,7 @@ tree_cancel_hidden_capture :: proc(
             return
         }
     }
-    params.ui_runtime^.ui_press_owner = {}
+    params.ui_runtime^.input.press_owner = {}
 }
 
 // tree_motion_anchor stores the initiating parent's screen offset, not child visibility.
@@ -256,7 +259,7 @@ tree_motion_anchor :: proc(
     if row == nil || !row^.logical {
         return
     }
-    motion := &params.ui_runtime^.tree_motion
+    motion := &params.ui_runtime^.library.motion
     motion^.anchor_id = item^.key
     motion^.anchor_view_y = row^.content_y - params.scroll_y^
     motion^.anchored = true
@@ -272,7 +275,8 @@ tree_motion_anchor_action :: proc(
         kind == .Tree_Parent && item^.expanded ||
         kind == .Tree_Child && !item^.expanded
     if changes && item^.first_child != TREE_NO_ITEM {
-        layout := tree_prepare_layout(params)
+        layout: Tree_Prepared_Layout
+        tree_prepare_layout(params, &layout)
         tree_motion_anchor(params, item, &layout)
     }
 }
@@ -280,11 +284,13 @@ tree_motion_anchor_action :: proc(
 // tree_motion_settle_navigation finishes only the ancestors needed by the requested row.
 tree_motion_settle_navigation :: proc(params: Tree_List_Params) {
     runtime := params.ui_runtime
-    if !runtime^.tree_reveal_pending || runtime^.tree_reveal_reason != .Navigation {
+    if !runtime^.library.tree.reveal_pending ||
+       runtime^.library.tree.reveal_reason != .Navigation {
         return
     }
-    projection := &runtime^.tree_projection
-    target_index := tree_projection_find(projection, runtime^.tree_reveal_stable_id)
+    projection := &runtime^.library.tree.projection
+    target_index := tree_projection_find(
+        projection, runtime^.library.tree.reveal_stable_id)
     if target_index == TREE_NO_ITEM {
         return
     }
@@ -292,11 +298,12 @@ tree_motion_settle_navigation :: proc(params: Tree_List_Params) {
         parent != TREE_NO_ITEM && steps < projection^.count;
         parent, steps = projection^.items[parent].parent, steps + 1 {
         projection^.items[parent].expanded = true
-        index := tree_motion_index(&runtime^.tree_motion, projection^.items[parent].key)
-        runtime^.tree_motion.branches[index].expanded = true
-        runtime^.tree_motion.branches[index].height =
-            runtime^.tree_motion.branches[index].full_height
-        runtime^.tree_motion.branches[index].running = false
+        index := tree_motion_index(
+            &runtime^.library.motion, projection^.items[parent].key)
+        runtime^.library.motion.branches[index].expanded = true
+        runtime^.library.motion.branches[index].height =
+            runtime^.library.motion.branches[index].full_height
+        runtime^.library.motion.branches[index].running = false
     }
 }
 
@@ -304,12 +311,12 @@ tree_motion_settle_navigation :: proc(params: Tree_List_Params) {
 tree_apply_visual_reveal :: proc(
     params: Tree_List_Params, layout: ^Tree_Prepared_Layout) {
     runtime := params.ui_runtime
-    if !runtime^.tree_reveal_pending {
+    if !runtime^.library.tree.reveal_pending {
         return
     }
     target_index := tree_projection_find(
-        &runtime^.tree_projection, runtime^.tree_reveal_stable_id)
-    target := &runtime^.tree_projection.items[target_index] if
+        &runtime^.library.tree.projection, runtime^.library.tree.reveal_stable_id)
+    target := &runtime^.library.tree.projection.items[target_index] if
         target_index != TREE_NO_ITEM else nil
     row := tree_layout_find_item(layout, target)
     if row == nil || !tree_row_is_revealed(row^) {
@@ -323,26 +330,26 @@ tree_apply_visual_reveal :: proc(
         scroll = row^.content_y + theme.TREE_ROW_HEIGHT - params.list_panel.height
     }
     params.scroll_y^ = clamp(scroll, 0, maximum)
-    runtime^.tree_reveal_pending = false
-    motion := &runtime^.tree_motion
+    runtime^.library.tree.reveal_pending = false
+    motion := &runtime^.library.motion
     motion^.anchored = motion^.anchored && motion^.anchor_id == row^.item^.key
     if motion^.anchored {
         motion^.anchor_view_y = row^.content_y - params.scroll_y^
     }
-    runtime^.tree_scroll_dragging = false
-    runtime^.tree_scroll_drag_off = 0
+    runtime^.library.tree.scroll_dragging = false
+    runtime^.library.tree.scroll_drag_off = 0
     if uiwidgets.scroll_container_owns_press(
-       &runtime^.ui_press_owner, UI_TREE_SCROLLBAR_ID) {
-        runtime^.ui_press_owner = {}
+       &runtime^.input.press_owner, UI_TREE_SCROLLBAR_ID) {
+        runtime^.input.press_owner = {}
     }
 }
 
 // tree_motion_apply_anchor defers to explicit wheel/drag input and ordinary row reveal.
 tree_motion_apply_anchor :: proc(
     params: Tree_List_Params, layout: ^Tree_Prepared_Layout) {
-    motion := &params.ui_runtime^.tree_motion
+    motion := &params.ui_runtime^.library.motion
     if params.mouse_input.mouse_wheel_delta != 0 ||
-       params.ui_runtime^.tree_scroll_dragging {
+       params.ui_runtime^.library.tree.scroll_dragging {
         motion^.anchored = false
     }
     if !motion^.anchored {
@@ -362,8 +369,8 @@ tree_motion_apply_anchor :: proc(
 tree_motion_release_anchor :: proc(
     params: Tree_List_Params, scroll: uiwidgets.Scroll_Container_Update_Result) {
     if scroll.changed || scroll.pointer_reserved || scroll.wheel_consumed ||
-        !tree_motion_running(&params.ui_runtime^.tree_motion) {
-        params.ui_runtime^.tree_motion.anchored = false
+        !tree_motion_running(&params.ui_runtime^.library.motion) {
+        params.ui_runtime^.library.motion.anchored = false
     }
 }
 
@@ -378,22 +385,26 @@ tree_motion_running :: proc(motion: ^viewmodel.Ui_Tree_Motion) -> bool {
 }
 
 // prepare_tree_visual settles hidden Library content without commands, semantics, or scrolling.
-prepare_tree_visual :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
+prepare_tree_visual :: proc(
+    params: Tree_List_Params,
+    prepared: ^Tree_List_Preparation) {
+    prepared^ = {}
     tree_actions_close_context(params.ui_runtime)
     if params.ji == nil ||
         params.ji^.animation_count == 0 &&
             (params.collections == nil || params.collections^.entry_count == 0) {
-        params.ui_runtime^.tree_motion = {}
-        return {}
+        params.ui_runtime^.library.motion = {}
+        return
     }
     if !tree_projection_prepare(params) {
         log.error("library_tree_projection_rejected")
-        return {}
+        return
     }
-    tree_motion_reset(params)
-    layout := tree_prepare_layout(params)
-    return {layout = layout, content_height = layout.content_height,
-        scroll = uiwidgets.scroll_container_visual(params.list_panel,
-            layout.content_height, params.scroll_y^,
-            theme.TREE_ROW_HEIGHT * theme.WHEEL_SCROLL_MULTIPLIER)}
+    frame := tree_frame_context(params)
+    tree_motion_reset(frame.geometry, frame.admission)
+    tree_prepare_layout(params, &prepared^.layout)
+    prepared^.content_height = prepared^.layout.content_height
+    prepared^.scroll = uiwidgets.scroll_container_visual(params.list_panel,
+        prepared^.layout.content_height, params.scroll_y^,
+        theme.TREE_ROW_HEIGHT * theme.WHEEL_SCROLL_MULTIPLIER)
 }

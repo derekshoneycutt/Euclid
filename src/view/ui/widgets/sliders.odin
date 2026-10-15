@@ -15,7 +15,8 @@ Integer_Slider_Params :: struct {
     panel : geometry.Rectangle,
     row_y : f32,
     mouse_input : input.Input_Frame,
-    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     press_id : int,
     label : string,
     value : int,
@@ -119,36 +120,36 @@ slider_apply_wheel_step :: proc(
 
 //   Return whether this slider currently owns the shared global press state.
 slider_owns_press :: #force_inline proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     press_id: int) -> bool {
 
-    return ui_runtime.ui_press_owner.active &&
-        ui_runtime.ui_press_owner.kind == .Slider &&
-        ui_runtime.ui_press_owner.id == press_id
+    return press_owner^.active &&
+        press_owner^.kind == .Slider &&
+        press_owner^.id == press_id
 }
 
 //   Capture shared press ownership for this slider if no control currently owns it.
 slider_try_capture_press :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     mouse_input: input.Input_Frame,
     press_id: int,
     hovered_hit: bool,
     owns_press: ^bool) {
 
-    if ui_runtime.ui_press_owner.active ||
+    if press_owner^.active ||
         !input_frame_left_pressed(mouse_input) || !hovered_hit {
         return
     }
 
-    ui_runtime.ui_press_owner.active = true
-    ui_runtime.ui_press_owner.kind = .Slider
-    ui_runtime.ui_press_owner.id = press_id
+    press_owner^.active = true
+    press_owner^.kind = .Slider
+    press_owner^.id = press_id
     owns_press^ = true
 }
 
 //   Release shared press ownership when the current mouse hold ends.
 slider_release_if_needed :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     mouse_input: input.Input_Frame,
     owns_press: ^bool) {
 
@@ -156,9 +157,9 @@ slider_release_if_needed :: proc(
         return
     }
 
-    ui_runtime.ui_press_owner.active = false
-    ui_runtime.ui_press_owner.kind = .None
-    ui_runtime.ui_press_owner.id = -1
+    press_owner^.active = false
+    press_owner^.kind = .None
+    press_owner^.id = -1
     owns_press^ = false
 }
 
@@ -201,10 +202,10 @@ slider_resolve_value :: proc(
 
     hovered_hit := geometry.rectangle_contains(
         hit, geometry.Vector2(input_frame_mouse_position(params.mouse_input)))
-    owns_press := slider_owns_press(params.ui_runtime, params.press_id)
-    slider_try_capture_press(params.ui_runtime, params.mouse_input, params.press_id,
+    owns_press := slider_owns_press(params.press_owner, params.press_id)
+    slider_try_capture_press(params.press_owner, params.mouse_input, params.press_id,
         hovered_hit, &owns_press)
-    slider_release_if_needed(params.ui_runtime, params.mouse_input, &owns_press)
+    slider_release_if_needed(params.press_owner, params.mouse_input, &owns_press)
     slider_apply_drag_value(&clamped,
         Slider_Drag_Input{params.min_value, params.max_value, denom,
             params.mouse_input, track},
@@ -218,7 +219,7 @@ slider_apply_semantic_commands :: proc(
     id: viewmodel.Ui_Node_Id,
     value: int) -> int {
     result := value
-    focus := params.ui_runtime.semantic_focus
+    focus := params.semantic_focus
     if uisemantics.semantic_command_requested(focus, id, .Increment) {
         result += 1
     }
@@ -286,7 +287,7 @@ update_settings_integer_slider :: proc(
         clamped = slider_apply_semantic_commands(params, id, clamped)
         sources += range_action_source(clamped != before_semantic, .Semantic)
         result := slider_result(params, track, hit, clamped, sources)
-        _ = uisemantics.semantic_register_control(params.ui_runtime.semantic_focus, {
+        _ = uisemantics.semantic_register_control(params.semantic_focus, {
             id = id, role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound, .Set_Value},
@@ -301,7 +302,7 @@ update_settings_integer_slider :: proc(
         })
         if pointer.owns_press {
             _ = uisemantics.semantic_request_pointer_focus(
-                params.ui_runtime.semantic_focus, id)
+                params.semantic_focus, id)
         }
         return result
     }

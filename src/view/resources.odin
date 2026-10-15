@@ -64,8 +64,8 @@ initialize_sdl_render_resources :: proc(
     settings: ^core.Euclid_Run_Settings, state: ^core.Euclid_General_State,
     font_owner: ^Sdl_Font_Texture_Context,
     platform: ^native.Sdl_Platform, draw_runtime: ^native.Sdl_Draw_Runtime) -> bool {
-    state^.ui_runtime.gpu_dust_instancing_available = draw_runtime^.dust_ready
-    state^.ui_runtime.use_gpu_dust_instancing =
+    state^.ui_runtime.rendering.gpu_dust_instancing_available = draw_runtime^.dust_ready
+    state^.ui_runtime.rendering.use_gpu_dust_instancing =
         settings^.use_gpu_dust_instancing && draw_runtime^.dust_ready
     if !initialize_sdl_font_resources(state, font_owner) {
         log.error("display_font_start_failed")

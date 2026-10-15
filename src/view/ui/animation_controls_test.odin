@@ -28,7 +28,7 @@ animation_controls_test_state :: proc(
     animation^.node_kind = .Animation
     ji^.selected_animation = animation
     state^.julia_interface = ji
-    state^.ui_runtime.ui_regions.world_rect = {0, 0, 640, 480}
+    state^.ui_runtime.layout.ui_regions.world_rect = {0, 0, 640, 480}
     return
 }
 
@@ -36,7 +36,7 @@ animation_controls_test_state :: proc(
 animation_controls_test_click_favorite :: proc(
     state: ^app_core.Euclid_General_State) {
     slots := uianimation.animation_control_layout_slots(
-        geometry.Rectangle(state^.ui_runtime.ui_regions.world_rect), true)
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), true)
     _ = uianimation.prepare_animation_controls(state, {
         mouse_position = {slots.favorite.x + slots.favorite.width * 0.5,
             slots.favorite.y + slots.favorite.height * 0.5},
@@ -59,10 +59,10 @@ animation_controls_favorites_toggle_and_reappend :: proc(t: ^testing.T) {
         free(store, context.allocator)
         destroy_shell_test_state(state)
     }
-    state^.ui_runtime.simulation_paused = true
+    state^.ui_runtime.playback.simulation_paused = true
     selected_key: uuid.Identifier
     selected_key[0] = 99
-    state^.ui_runtime.selected_tree_item_id = selected_key
+    state^.ui_runtime.library.tree.selected_item_id = selected_key
     animation_controls_test_click_favorite(state)
     first_entry_id := state^.preferences_runtime.collections_state.entries[0].id
     ji.selected_animation = &second
@@ -81,9 +81,9 @@ animation_controls_favorites_toggle_and_reappend :: proc(t: ^testing.T) {
     testing.expect_value(t, state^.preferences_runtime.collection_mutation_count, 4)
     testing.expect_value(t, state^.preferences_runtime.collection_revision, u64(4))
     testing.expect_value(t, ji.selected_animation, &first)
-    testing.expect(t, state^.ui_runtime.simulation_paused)
+    testing.expect(t, state^.ui_runtime.playback.simulation_paused)
     testing.expect(t, !ji.pending_animation_reset)
-    testing.expect_value(t, state^.ui_runtime.selected_tree_item_id, selected_key)
+    testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected_key)
 }
 
 // Keyboard activation uses the semantic button action and exposes checked focus state.
@@ -138,9 +138,9 @@ animation_controls_exclude_ineligible_favorite_targets :: proc(t: ^testing.T) {
     prepared := uianimation.prepare_animation_controls(state, {})
     testing.expect(t, !prepared.favorite_visible)
     slots := uianimation.animation_control_layout_slots(
-        geometry.Rectangle(state^.ui_runtime.ui_regions.world_rect), false)
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), false)
     id, hit := uianimation.animation_control_hit_test(
-        geometry.Rectangle(state^.ui_runtime.ui_regions.world_rect),
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect),
         state^.gif_capture_status.gif_capture_phase, false,
         {slots.favorite.x + 1, slots.favorite.y + 1})
     testing.expect(t, !hit)
@@ -234,7 +234,7 @@ animation_controls_draw_separate_matching_panels :: proc(t: ^testing.T) {
                 panels += 1
             }
         }
-        testing.expect_value(t, panels, 8 if eligible else 4)
+        testing.expect_value(t, panels, int(8 if eligible else 4))
         testing.expect_value(t, vertices[0].position,
             geometry.Vector2{prepared.slots.panel.x, prepared.slots.panel.y})
     }

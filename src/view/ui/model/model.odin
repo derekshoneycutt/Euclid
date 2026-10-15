@@ -659,67 +659,122 @@ Ui_Tree_Reveal_Reason :: enum {
     Navigation,
 }
 
-// Euclid_Ui_Runtime_State owns persistent display interaction and panel state.
-Euclid_Ui_Runtime_State :: struct {
-    tree_scroll_y: f32,
-    settings_scroll_y: f32,
-    settings_scroll_dragging: bool,
-    settings_scroll_drag_off: f32,
-    tree_reveal_pending: bool,
-    tree_reveal_stable_id: uuid.Identifier,
-    tree_reveal_reason: Ui_Tree_Reveal_Reason,
-    selected_tree_item_id: uuid.Identifier,
-    tree_projection: Ui_Tree_Projection,
-    tree_motion: Ui_Tree_Motion,
-    tree_actions_motion: Ui_Tree_Actions_Motion,
-    tree_reorder_motion: Ui_Tree_Reorder_Motion,
-    tree_actions_press_entry: uuid.Identifier,
-    tree_actions_last_focus: Ui_Node_Id,
-    tree_actions_reveal_pending: bool,
-    view_text_scroll_y: f32,
-    view_text_scroll_max: f32,
-    tree_scroll_dragging: bool,
-    tree_scroll_drag_off: f32,
-    ui_press_owner: Ui_Press_Owner_State,
-    active_accordion_section: Ui_Accordion_Section,
-    accordion_transition: Ui_Accordion_Transition,
-    platform_reduce_motion: bool,
-    presentation_visible: bool,
-    settings_slider_dragging: bool,
-    settings_slider_drag_offset_x: f32,
-    text_scroll_dragging: bool,
-    text_scroll_drag_off: f32,
-    terminal_scroll_dragging: bool,
-    terminal_scroll_drag_off: f32,
-    terminal_semantic_focus_initialized: bool,
-    terminal_semantic_focus_generation: u64,
-    dynview_selection: dynviewmodel.Dynview_Selection_State,
-    vertical_split_x: f32,
-    horizontal_split_y: f32,
-    vertical_split_hover: f32,
-    horizontal_split_hover: f32,
-    splitter_drag_offset: f32,
-    cursor: Ui_Cursor_Kind,
-    limit_fps: bool,
-    display_fps: bool,
-    settings_preferences: settings.Preferences,
-    settings_save_status: preferencesmodel.Settings_Save_Status,
-    settings_store_available: bool,
-    simulation_paused: bool,
-    animation_policy_paused: bool,
-    use_simd_batch_projection: bool,
-    gpu_dust_instancing_available: bool,
-    use_gpu_dust_instancing: bool,
-    gif_path_input: Ui_Input_Box_State,
-    library_search: Library_Search_State,
+// Ui_Layout_State retains resolved geometry and independent layout intent.
+Ui_Layout_State :: struct {
     window: Ui_Window_Metrics,
     layout_preference: settings.Layout_Preference,
     landscape: Ui_Landscape_Layout_State,
     portrait: Ui_Portrait_Layout_State,
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
+    active_accordion_section: Ui_Accordion_Section,
+    accordion_transition: Ui_Accordion_Transition,
+    vertical_split_x: f32,
+    horizontal_split_y: f32,
+    vertical_split_hover: f32,
+    horizontal_split_hover: f32,
+    splitter_drag_offset: f32,
+}
+
+// Ui_Library_Tree_State retains the visible tree and its navigation state.
+Ui_Library_Tree_State :: struct {
+    scroll_y: f32,
+    reveal_pending: bool,
+    reveal_stable_id: uuid.Identifier,
+    reveal_reason: Ui_Tree_Reveal_Reason,
+    selected_item_id: uuid.Identifier,
+    projection: Ui_Tree_Projection,
+    scroll_dragging: bool,
+    scroll_drag_off: f32,
+}
+
+// Ui_Library_Actions_State retains transient drawer and reorder interactions.
+Ui_Library_Actions_State :: struct {
+    drawer: Ui_Tree_Actions_Motion,
+    reorder: Ui_Tree_Reorder_Motion,
+    press_entry: uuid.Identifier,
+    last_focus: Ui_Node_Id,
+    reveal_pending: bool,
+}
+
+// Ui_Library_State composes bounded Library state under one owner.
+Ui_Library_State :: struct {
+    tree: Ui_Library_Tree_State,
+    motion: Ui_Tree_Motion,
+    actions: Ui_Library_Actions_State,
+    search: Library_Search_State,
+}
+
+// Ui_Presentation_Interaction_State retains Presentation scroll and selection.
+Ui_Presentation_Interaction_State :: struct {
+    text_scroll_y: f32,
+    text_scroll_max: f32,
+    visible: bool,
+    scroll_dragging: bool,
+    scroll_drag_off: f32,
+    selection: dynviewmodel.Dynview_Selection_State,
+}
+
+// Ui_Settings_Panel_State retains Settings panel interaction and scrolling.
+Ui_Settings_Panel_State :: struct {
+    scroll_y: f32,
+    scroll_dragging: bool,
+    scroll_drag_off: f32,
+    slider_dragging: bool,
+    slider_drag_offset_x: f32,
+}
+
+// Ui_Terminal_Interaction_State retains only UI-owned Terminal interaction.
+Ui_Terminal_Interaction_State :: struct {
+    scroll_dragging: bool,
+    scroll_drag_off: f32,
+    semantic_focus_initialized: bool,
+    semantic_focus_generation: u64,
+}
+
+// Ui_Shared_Interaction_State retains cross-panel input routing state.
+Ui_Shared_Interaction_State :: struct {
+    press_owner: Ui_Press_Owner_State,
     interaction: Ui_Interaction_State,
     interaction_frame: Ui_Interaction_Frame,
+    cursor: Ui_Cursor_Kind,
+}
+
+// Ui_Preference_State retains current intent and durable save feedback.
+Ui_Preference_State :: struct {
+    values: settings.Preferences,
+    save_status: preferencesmodel.Settings_Save_Status,
+    store_available: bool,
+}
+
+// Ui_Rendering_Control_State retains effective display and GPU controls.
+Ui_Rendering_Control_State :: struct {
+    limit_fps: bool,
+    display_fps: bool,
+    use_simd_batch_projection: bool,
+    gpu_dust_instancing_available: bool,
+    use_gpu_dust_instancing: bool,
+}
+
+// Ui_Playback_Control_State retains display-owned pause controls.
+Ui_Playback_Control_State :: struct {
+    simulation_paused: bool,
+    animation_policy_paused: bool,
+}
+
+// Euclid_Ui_Runtime_State composes persistent display-owned UI state.
+Euclid_Ui_Runtime_State :: struct {
+    layout: Ui_Layout_State,
+    library: Ui_Library_State,
+    presentation: Ui_Presentation_Interaction_State,
+    settings_panel: Ui_Settings_Panel_State,
+    terminal: Ui_Terminal_Interaction_State,
+    input: Ui_Shared_Interaction_State,
+    preferences: Ui_Preference_State,
+    rendering: Ui_Rendering_Control_State,
+    playback: Ui_Playback_Control_State,
+    platform_reduce_motion: bool,
+    gif_path_input: Ui_Input_Box_State,
     tooltip: Ui_Tooltip_State,
     context_menu: Ui_Context_Menu_State,
     semantic_focus: ^Ui_Semantic_Focus_State,

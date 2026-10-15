@@ -34,26 +34,28 @@ context_menu_id :: proc(
 }
 
 // context_menu_focus publishes the current enabled item or empty-menu container.
-context_menu_focus :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    menu := &runtime^.context_menu
+context_menu_focus :: proc(
+    menu: ^viewmodel.Ui_Context_Menu_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State) {
     local_id := menu^.focused + 1
-    runtime^.semantic_focus^.logical_focus = context_menu_id(menu, local_id)
-    runtime^.semantic_focus^.focus_origin = .Keyboard
+    semantic_focus^.logical_focus = context_menu_id(menu, local_id)
+    semantic_focus^.focus_origin = .Keyboard
     menu^.focus_changed = true
 }
 
 // context_menu_close releases popup focus without overriding an outside click.
 context_menu_close :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, restore: bool) {
-    menu := &runtime^.context_menu
+    menu: ^viewmodel.Ui_Context_Menu_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    restore: bool) {
     menu^.active = false
     menu^.focus_changed = restore
     if restore {
-        runtime^.semantic_focus^.logical_focus = menu^.target
-        runtime^.semantic_focus^.focus_origin = .Keyboard
+        semantic_focus^.logical_focus = menu^.target
+        semantic_focus^.focus_origin = .Keyboard
         menu^.focus_changed = true
-    } else if runtime^.semantic_focus^.logical_focus.domain == .Context_Menu {
-        uisemantics.semantic_clear_pointer_focus(runtime^.semantic_focus)
+    } else if semantic_focus^.logical_focus.domain == .Context_Menu {
+        uisemantics.semantic_clear_pointer_focus(semantic_focus)
     }
 }
 
@@ -106,10 +108,11 @@ context_menu_paste_available :: proc(state: ^core.Euclid_General_State) -> bool 
 // context_menu_target_valid rejects changed content, processes, and hidden geometry.
 context_menu_target_valid :: proc(state: ^core.Euclid_General_State) -> bool {
     menu := &state^.ui_runtime.context_menu
-    if !uipresentation.ui_presentation_is_visible(&state^.ui_runtime) ||
-        menu^.window != state^.ui_runtime.window ||
+    if !uipresentation.ui_presentation_is_visible(
+        &state^.ui_runtime.presentation) ||
+        menu^.window != state^.ui_runtime.layout.window ||
         menu^.viewport != uiwidgets.text_content_panel(
-            state^.ui_runtime.ui_regions.text_rect) {
+            state^.ui_runtime.layout.ui_regions.text_rect) {
         return false
     }
     if menu^.target.domain == .Terminal {
@@ -135,7 +138,7 @@ context_menu_refresh :: proc(state: ^core.Euclid_General_State) {
     } else {
         text := julia.current_view_snapshot_text(state)
         content := ui_dynview.dynview_selection_content(&state^.dynview, text)
-        selection := &state^.ui_runtime.dynview_selection
+        selection := &state^.ui_runtime.presentation.selection
         ui_dynview.dynview_selection_reconcile(selection, content)
         menu^.items[0].enabled = selection^.active &&
             selection^.anchor.unit_index != selection^.head.unit_index
@@ -225,26 +228,27 @@ context_menu_open :: proc(
         process_generation = state^.shell.operation_id.generation,
         focused = -1, pressed_item = -1, captured_buttons = capture,
         swallowed_activation_keys = swallowed, keyboard_anchor = caret,
-        window = runtime^.window,
-        viewport = uiwidgets.text_content_panel(runtime^.ui_regions.text_rect),
+        window = runtime^.layout.window,
+        viewport = uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect),
     }
     if !context_menu_surface_items(state) {
-        context_menu_close(runtime, false)
+        context_menu_close(menu, runtime^.semantic_focus, false)
         return
     }
     context_menu_refresh(state)
     context_menu_move(menu, 1)
-    menu^.bounds = context_menu_place(anchor, context_menu_size(state), runtime^.window)
-    runtime^.interaction.logical_focus =
+    menu^.bounds = context_menu_place(
+        anchor, context_menu_size(state), runtime^.layout.window)
+    runtime^.input.interaction.logical_focus =
         {kind = .Terminal} if target.domain == .Terminal else
             viewmodel.Ui_Focus_Target{kind = .Presentation}
-    context_menu_focus(runtime)
+    context_menu_focus(menu, runtime^.semantic_focus)
 }
 
 // context_menu_keyboard_anchor uses current prepared caret geometry or pane fallback.
 context_menu_keyboard_anchor :: proc(
     state: ^core.Euclid_General_State) -> geometry.Vector2 {
-    panel := uiwidgets.text_content_panel(state^.ui_runtime.ui_regions.text_rect)
+    panel := uiwidgets.text_content_panel(state^.ui_runtime.layout.ui_regions.text_rect)
     caret := state^.ui_runtime.context_menu.keyboard_anchor
     if uiterminal.is_terminal_selected(state) && caret.height > 0 {
         return {
@@ -253,12 +257,12 @@ context_menu_keyboard_anchor :: proc(
                 min(caret.y+caret.height, panel.y+panel.height-CONTEXT_MENU_PADDING)),
         }
     }
-    selection := state^.ui_runtime.dynview_selection
+    selection := state^.ui_runtime.presentation.selection
     targets := state^.dynview.compile_cache.document_layout_copy_targets
     if selection.active && selection.mode == .Semantic_Document && len(targets) > 0 {
         index := max(0, min(selection.head.unit_index-1, len(targets)-1))
         rect := ui_dynview.dynview_document_target_rect(targets[index], {
-            panel = panel, scroll_y = state^.ui_runtime.view_text_scroll_y,
+            panel = panel, scroll_y = state^.ui_runtime.presentation.text_scroll_y,
             text_padding = theme.TEXT_PADDING})
         return {
             max(panel.x, min(rect.x, panel.x+panel.width-CONTEXT_MENU_PADDING)),
@@ -274,11 +278,11 @@ context_menu_pointer_target :: proc(
     state: ^core.Euclid_General_State, frame: input.Input_Frame,
     child_capture: bool) -> viewmodel.Ui_Node_Id {
     runtime := &state^.ui_runtime
-    if !frame.window_focused || runtime^.ui_press_owner.active || child_capture ||
-        !uipresentation.ui_presentation_is_visible(runtime) {
+    if !frame.window_focused || runtime^.input.press_owner.active || child_capture ||
+        !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
         return {}
     }
-    panel := uiwidgets.text_content_panel(runtime^.ui_regions.text_rect)
+    panel := uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect)
     panel.width -= theme.SCROLLBAR_WIDTH
     if !geometry.rectangle_contains(panel, uiwidgets.input_frame_mouse_position(frame)) {
         return {}
@@ -297,13 +301,14 @@ context_menu_pointer_target :: proc(
 
 // context_menu_activate retains exactly one validated owner command.
 context_menu_activate :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, index: int) {
-    menu := &runtime^.context_menu
+    menu: ^viewmodel.Ui_Context_Menu_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    index: int) {
     if index < 0 || index >= menu^.count || !menu^.items[index].enabled {
         return
     }
     menu^.pending = menu^.items[index].command
-    context_menu_close(runtime, true)
+    context_menu_close(menu, semantic_focus, true)
 }
 
 // Apply directional keys independently of command activation and dismissal.
@@ -326,36 +331,37 @@ context_menu_navigation_key :: proc(
 
 // context_menu_key applies popup-only navigation without Terminal key interpretation.
 context_menu_key :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, event: input.Input_Event) {
-    menu := &runtime^.context_menu
+    menu: ^viewmodel.Ui_Context_Menu_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    event: input.Input_Event) {
     if event.kind != .Press && event.kind != .Repeat {
         return
     }
     if context_menu_navigation_key(menu, event.key) {
-        context_menu_focus(runtime)
+        context_menu_focus(menu, semantic_focus)
         return
     }
     #partial switch event.key {
     case .Enter, .Space:
         menu^.swallowed_activation_keys |= 1 if event.key == .Enter else 2
         if event.kind == .Press {
-            context_menu_activate(runtime, menu^.focused)
+            context_menu_activate(menu, semantic_focus, menu^.focused)
         }
     case .Escape:
-        context_menu_close(runtime, true)
+        context_menu_close(menu, semantic_focus, true)
     case .Tab:
         if event.kind != .Press {
             return
         }
-        context_menu_close(runtime, true)
-        snapshot := uisemantics.semantic_snapshot(runtime^.semantic_focus)
+        context_menu_close(menu, semantic_focus, true)
+        snapshot := uisemantics.semantic_snapshot(semantic_focus)
         next := uisemantics.semantic_next_tab_stop(
             snapshot, menu^.target, .Shift in event.modifiers)
         if next >= 0 {
-            runtime^.semantic_focus^.logical_focus = snapshot^.nodes[next].id
+            semantic_focus^.logical_focus = snapshot^.nodes[next].id
         }
     }
-    if menu^.active { context_menu_focus(runtime) }
+    if menu^.active { context_menu_focus(menu, semantic_focus) }
 }
 
 // context_menu_opening_key recognizes reserved Euclid popup chords.
@@ -387,7 +393,7 @@ context_menu_route_keyboard :: proc(
                 owned = true
             }
         } else if menu^.active {
-            context_menu_key(&state^.ui_runtime, event)
+            context_menu_key(menu, state^.ui_runtime.semantic_focus, event)
         }
         if owned {
             _ = input.input_event_claim(frame, index, claims)
@@ -397,9 +403,10 @@ context_menu_route_keyboard :: proc(
 
 // Retain all popup presses, activating only a matching left-button release.
 context_menu_pointer_items :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, frame: input.Input_Frame,
+    menu: ^viewmodel.Ui_Context_Menu_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    frame: input.Input_Frame,
     result: input.Input_Frame, captured: input.Input_Mouse_Buttons) {
-    menu := &runtime^.context_menu
     point := uiwidgets.input_frame_mouse_position(frame)
     inside := geometry.rectangle_contains(menu^.bounds, point)
     index := context_menu_hit(menu, point)
@@ -407,7 +414,7 @@ context_menu_pointer_items :: proc(
         menu^.captured_buttons |= transmute(u8)result.mouse_pressed
         if index >= 0 && menu^.items[index].enabled && frame.mouse_moved {
             menu^.focused = index
-            context_menu_focus(runtime)
+            context_menu_focus(menu, semantic_focus)
         }
         if .Left in result.mouse_pressed {
             menu^.pressed_item = index
@@ -415,7 +422,7 @@ context_menu_pointer_items :: proc(
     }
     if .Left in frame.mouse_released && .Left in captured {
         if inside && index == menu^.pressed_item {
-            context_menu_activate(runtime, index)
+            context_menu_activate(menu, semantic_focus, index)
         }
         menu^.pressed_item = -1
     }
@@ -440,7 +447,7 @@ context_menu_route_pointer :: proc(
             context_menu_open(state, target, uiwidgets.input_frame_mouse_position(frame))
             menu^.captured_buttons |= transmute(u8)input.Input_Mouse_Buttons{.Right}
         } else if menu^.active {
-            context_menu_close(&state^.ui_runtime, false)
+            context_menu_close(menu, state^.ui_runtime.semantic_focus, false)
             return result
         }
     }
@@ -450,10 +457,11 @@ context_menu_route_pointer :: proc(
     point := uiwidgets.input_frame_mouse_position(frame)
     inside := geometry.rectangle_contains(menu^.bounds, point)
     if !inside && card(result.mouse_pressed - {.Right}) > 0 {
-        context_menu_close(&state^.ui_runtime, false)
+        context_menu_close(menu, state^.ui_runtime.semantic_focus, false)
         return result
     }
-    context_menu_pointer_items(&state^.ui_runtime, frame, result, captured)
+    context_menu_pointer_items(
+        menu, state^.ui_runtime.semantic_focus, frame, result, captured)
     return input.input_frame_filter_pointer(result, {.Screen_Position})
 }
 
@@ -463,7 +471,7 @@ context_menu_route :: proc(
     storage: []input.Input_Event, child_capture: bool) -> input.Input_Frame {
     menu := &state^.ui_runtime.context_menu
     if menu^.active && (!frame.window_focused || !context_menu_target_valid(state)) {
-        context_menu_close(&state^.ui_runtime, false)
+        context_menu_close(menu, state^.ui_runtime.semantic_focus, false)
     }
     if menu^.active {
         context_menu_refresh(state)
@@ -505,7 +513,7 @@ context_menu_prepare :: proc(state: ^core.Euclid_General_State) {
     runtime := &state^.ui_runtime
     menu := &runtime^.context_menu
     if menu^.active && !context_menu_target_valid(state) {
-        context_menu_close(runtime, false)
+        context_menu_close(menu, runtime^.semantic_focus, false)
     }
     commands := runtime^.semantic_focus^.commands[:runtime^.semantic_focus^.command_count]
     for command in commands {
@@ -519,7 +527,8 @@ context_menu_prepare :: proc(state: ^core.Euclid_General_State) {
         if menu^.active &&
             command.target == context_menu_id(menu, int(command.target.local_id)) &&
             command.kind == .Activate {
-            context_menu_activate(runtime, int(command.target.local_id)-1)
+            context_menu_activate(
+                menu, runtime^.semantic_focus, int(command.target.local_id)-1)
         }
     }
     if menu^.active {
@@ -537,7 +546,7 @@ context_menu_execute_presentation :: proc(
     state: ^core.Euclid_General_State, command: viewmodel.Ui_Context_Command) {
     text := julia.current_view_snapshot_text(state)
     content := ui_dynview.dynview_selection_content(&state^.dynview, text)
-    selection := &state^.ui_runtime.dynview_selection
+    selection := &state^.ui_runtime.presentation.selection
     ui_dynview.dynview_selection_reconcile(selection, content)
     if command == .Select_All {
         ui_dynview.dynview_selection_select_all(selection, content.unit_count)

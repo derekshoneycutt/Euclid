@@ -49,7 +49,7 @@ prepare_library_search_visual :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle) -> Library_Search_Preparation {
     result := Library_Search_Preparation{layout = library_search_layout(
-        panel, state^.ui_runtime.library_search.suggestion_length > 0)}
+        panel, state^.ui_runtime.library.search.suggestion_length > 0)}
     params := library_search_input_params(state, result.layout, {}, panel)
     params.focused = false
     result.input = uiwidgets.input_box_draw_result(params, false)
@@ -94,14 +94,14 @@ library_search_layout :: proc(
 // library_search_visible reports whether the editable control belongs to composition.
 library_search_visible :: #force_inline proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    return runtime != nil && runtime^.active_accordion_section == .Library
+    return runtime != nil && runtime^.layout.active_accordion_section == .Library
 }
 
 // library_search_input_rect resolves the routed text-control rectangle.
 library_search_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
     return library_search_layout(
-        uiaccordion.accordion_content_rect(runtime, .Library), false).text_input
+        uiaccordion.accordion_content_rect(&runtime^.layout, .Library), false).text_input
 }
 
 // library_search_input_params borrows bounded query storage for one editable frame.
@@ -109,9 +109,9 @@ library_search_input_params :: proc(
     state: ^core.Euclid_General_State, layout: Library_Search_Layout,
     frame: input.Input_Frame,
     clip_rect: geometry.Rectangle) -> uiwidgets.Input_Box_Params {
-    search := &state^.ui_runtime.library_search
-    focus := state^.ui_runtime.interaction_frame.effective_focus
-    target := state^.ui_runtime.interaction_frame.pointer_target
+    search := &state^.ui_runtime.library.search
+    focus := state^.ui_runtime.input.interaction_frame.effective_focus
+    target := state^.ui_runtime.input.interaction_frame.pointer_target
     query := string(search^.query[:search^.query_length])
     return {rect = layout.text_input,
         clip_rect = clip_rect,
@@ -215,7 +215,7 @@ library_search_status_text :: proc(
 prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
     storage: [64]u8
     value := library_search_status_text(
-        state, &state^.ui_runtime.library_search, storage[:])
+        state, &state^.ui_runtime.library.search, storage[:])
     if len(value) == 0 {
         return
     }
@@ -251,7 +251,7 @@ prepare_library_clear :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
     frame: input.Input_Frame,
     layout: Library_Search_Layout) -> uiwidgets.Icon_Button_Result {
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     result := uiwidgets.update_icon_button({id = LIBRARY_SEARCH_CLEAR_ID,
         rect = layout.action, icon_id = .None, mouse = frame,
         interaction_space_rect = panel,
@@ -268,7 +268,7 @@ prepare_library_clear :: proc(
             traversal_order = 1,
             clip_bounds = geometry.Rectangle(panel),
             label = viewmessages.shell_message(state, .Library_Clear_Search),
-        }}, &state^.ui_runtime.ui_press_owner)
+        }}, &state^.ui_runtime.input.press_owner)
     if result.action.activated {
         library_search_clear_query(search)
     }
@@ -280,7 +280,7 @@ prepare_library_suggestion :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
     frame: input.Input_Frame,
     layout: Library_Search_Layout) -> uiwidgets.Text_Button_Result {
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     if search^.suggestion_length <= 0 {
         return {}
     }
@@ -306,7 +306,7 @@ prepare_library_suggestion :: proc(
             label = action_label,
             value = suggestion,
         }},
-        &state^.ui_runtime.ui_press_owner)
+        &state^.ui_runtime.input.press_owner)
     if result.action.activated {
         library_search_apply_suggestion(search)
     }
@@ -317,12 +317,13 @@ prepare_library_suggestion :: proc(
 prepare_library_search :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
     frame: input.Input_Frame) -> Library_Search_Preparation {
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     result := Library_Search_Preparation{layout = library_search_layout(
         panel, search^.suggestion_length > 0)}
     accept_suggestion := library_search_accept_suggestion_key(search, frame)
     params := library_search_input_params(state, result.layout, frame, panel)
-    result.input = uiwidgets.input_box_prepare(params, &state^.ui_runtime.ui_press_owner)
+    result.input = uiwidgets.input_box_prepare(
+        params, &state^.ui_runtime.input.press_owner)
     library_search_apply_input(search, result.input)
     if accept_suggestion {
         library_search_apply_suggestion(search)
@@ -333,7 +334,7 @@ prepare_library_search :: proc(
         state, panel, frame, result.layout)
     prepare_library_search_status(state)
     if result.input.hovered {
-        state^.ui_runtime.cursor = .Text
+        state^.ui_runtime.input.cursor = .Text
     }
     return result
 }
@@ -365,7 +366,7 @@ draw_encoded_library_search_geometry :: proc(
     params := library_search_input_params(state, prepared.layout, {},
         geometry.Rectangle(prepared.input.control_geometry.clip_bounds))
     uiwidgets.draw_encoded_input_box(encoder, params, prepared.input)
-    clear := state^.ui_runtime.library_search.query_length > 0
+    clear := state^.ui_runtime.library.search.query_length > 0
     if clear || !prepared.input.focused {
         draw_encoded_search_action(encoder, prepared.layout.action, clear)
     }
@@ -375,8 +376,8 @@ draw_encoded_library_search_geometry :: proc(
 draw_encoded_library_search_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Library_Search_Preparation) {
-    search := &state^.ui_runtime.library_search
-    focus := state^.ui_runtime.interaction_frame.effective_focus
+    search := &state^.ui_runtime.library.search
+    focus := state^.ui_runtime.input.interaction_frame.effective_focus
     if search^.query_length == 0 &&
         !(focus.kind == .Input_Box && focus.id == LIBRARY_SEARCH_INPUT_ID) {
         viewtext.draw_encoded_label(&state^.font_cache, encoder,

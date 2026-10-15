@@ -49,6 +49,7 @@ Splitter_Preparation :: struct {
     vertical: Splitter_Axis_Preparation,
     horizontal: Splitter_Axis_Preparation,
     locked: bool,
+    cursor: viewmodel.Ui_Cursor_Kind,
 }
 
 // Splitter_Value_Result carries converged axis values and their input provenance.
@@ -56,6 +57,26 @@ Splitter_Value_Result :: struct {
     vertical: f32,
     horizontal: f32,
     sources: viewmodel.Ui_Control_Action_Source,
+}
+
+// Splitter_Update_Context carries resolved frame facts through the interaction stages.
+Splitter_Update_Context :: struct {
+    layout: ^viewmodel.Ui_Layout_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    mouse_input: input.Input_Frame,
+    dt: f32,
+    capture_view: capturemodel.Gif_Capture_View,
+    axis: Splitter_Axis,
+    hovered: bool,
+    locked: bool,
+}
+
+// splitter_cancel_geometry_capture clears transient feedback invalidated by layout changes.
+splitter_cancel_geometry_capture :: proc(layout: ^viewmodel.Ui_Layout_State) {
+    layout^.splitter_drag_offset = 0
+    layout^.vertical_split_hover = 0
+    layout^.horizontal_split_hover = 0
 }
 
 // splitter_semantic_id returns the stable application-level axis identity.
@@ -69,30 +90,30 @@ splitter_semantic_id :: #force_inline proc(axis: Splitter_Axis) ->
 
 // splitter_axis_preparation builds one axis's prepared range and geometry.
 splitter_axis_preparation :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, axis: Splitter_Axis,
+    layout: ^viewmodel.Ui_Layout_State, axis: Splitter_Axis,
     shape: Splitter_Geometry, value: f32,
     sources: viewmodel.Ui_Control_Action_Source) -> Splitter_Axis_Preparation {
     vertical := axis == .Vertical
     minimum := f32(theme.WORLD_MIN_HEIGHT)
     maximum := max(theme.WORLD_MIN_HEIGHT,
-        f32(ui_runtime.window.height) - theme.BOTTOM_PANEL_MIN_HEIGHT)
-    original := ui_runtime.horizontal_split_y
+        f32(layout^.window.height) - theme.BOTTOM_PANEL_MIN_HEIGHT)
+    original := layout^.horizontal_split_y
     orientation := viewmodel.Ui_Range_Orientation.Vertical
     present := true
     if vertical {
         minimum = f32(theme.WORLD_MIN_WIDTH)
         maximum = max(theme.WORLD_MIN_WIDTH,
-            f32(ui_runtime.window.width) - theme.RIGHT_PANEL_MIN_WIDTH)
-        original = ui_runtime.vertical_split_x
+            f32(layout^.window.width) - theme.RIGHT_PANEL_MIN_WIDTH)
+        original = layout^.vertical_split_x
         orientation = .Horizontal
-        present = ui_runtime.current_layout_mode == .Landscape
+        present = layout^.current_layout_mode == .Landscape
     }
     window_rect := geometry.Rectangle{
-        0, 0, f32(ui_runtime.window.width), f32(ui_runtime.window.height)}
+        0, 0, f32(layout^.window.width), f32(layout^.window.height)}
     return {{geometry.Rectangle(shape.hit_rect), window_rect},
         shape.visible_rect, value, minimum, maximum, 8, value != original,
-        sources, orientation, vertical ? ui_runtime.vertical_split_hover :
-            ui_runtime.horizontal_split_hover, present}
+        sources, orientation, vertical ? layout^.vertical_split_hover :
+            layout^.horizontal_split_hover, present}
 }
 
 //   Build centered visible and hit rectangles for one splitter axis.
@@ -154,10 +175,9 @@ splitters_locked_for_gif :: #force_inline proc(
 
 //   Report whether scenario-driven splitter geometry may change now.
 splitter_positions_are_mutable :: #force_inline proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     capture_view: capturemodel.Gif_Capture_View) -> bool {
 
-    return ui_runtime != nil && !capture_view.requested &&
+    return !capture_view.requested &&
         !splitters_locked_for_gif(capture_view.phase)
 }
 
@@ -176,21 +196,21 @@ splitter_clamp_horizontal :: #force_inline proc(
 }
 
 //   Update normalized landscape split intent from current clamped pixels.
-splitter_store_ratios :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if ui_runtime^.current_layout_mode == .Portrait {
-        if ui_runtime^.window.height > 0 {
-            ui_runtime^.portrait.world_height_ratio =
-                ui_runtime^.horizontal_split_y / f32(ui_runtime^.window.height)
+splitter_store_ratios :: proc(layout: ^viewmodel.Ui_Layout_State) {
+    if layout^.current_layout_mode == .Portrait {
+        if layout^.window.height > 0 {
+            layout^.portrait.world_height_ratio =
+                layout^.horizontal_split_y / f32(layout^.window.height)
         }
         return
     }
-    if ui_runtime^.window.width > 0 {
-        ui_runtime^.landscape.vertical_ratio = ui_runtime^.vertical_split_x /
-            f32(ui_runtime^.window.width)
+    if layout^.window.width > 0 {
+        layout^.landscape.vertical_ratio =
+            layout^.vertical_split_x / f32(layout^.window.width)
     }
-    if ui_runtime^.window.height > 0 {
-        ui_runtime^.landscape.horizontal_ratio = ui_runtime^.horizontal_split_y /
-            f32(ui_runtime^.window.height)
+    if layout^.window.height > 0 {
+        layout^.landscape.horizontal_ratio =
+            layout^.horizontal_split_y / f32(layout^.window.height)
     }
 }
 
@@ -211,82 +231,86 @@ splitter_update_fade :: #force_inline proc(value, target, dt: f32) -> f32 {
 }
 
 //   Release splitter capture when geometry locks or the pointer is released.
-splitter_release_capture :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if ui_runtime.ui_press_owner.kind != .Splitter {
+splitter_release_capture :: proc(
+    layout: ^viewmodel.Ui_Layout_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State) {
+    if press_owner^.kind != .Splitter {
         return
     }
-    ui_runtime.ui_press_owner = {}
-    ui_runtime.splitter_drag_offset = 0
+    press_owner^ = {}
+    layout^.splitter_drag_offset = 0
 }
 
 //   Atomically apply scenario-requested splitter positions through ordinary UI policy.
 set_splitter_positions :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     vertical, horizontal: f32,
     capture_view: capturemodel.Gif_Capture_View) -> bool {
 
-    if !splitter_positions_are_mutable(ui_runtime, capture_view) {
+    if !splitter_positions_are_mutable(capture_view) {
         return false
     }
-    splitter_release_capture(ui_runtime)
-    vertical_value := ui_runtime^.vertical_split_x
-    if ui_runtime^.current_layout_mode == .Landscape {
+    splitter_release_capture(layout, press_owner)
+    vertical_value := layout^.vertical_split_x
+    if layout^.current_layout_mode == .Landscape {
         vertical_value = splitter_clamp_vertical(
-            vertical, ui_runtime^.window.width)
+            vertical, layout^.window.width)
     }
     horizontal_value := splitter_clamp_horizontal(
-        horizontal, ui_runtime^.window.height)
-    prepared := splitter_preparation(ui_runtime, false,
+        horizontal, layout^.window.height)
+    prepared := splitter_preparation(layout, false,
         vertical_value, horizontal_value, {.Scenario})
-    apply_splitter_preparation(ui_runtime, prepared)
-    ui_runtime^.vertical_split_hover = 0
-    ui_runtime^.horizontal_split_hover = 0
+    apply_splitter_preparation(layout, prepared)
+    splitter_cancel_geometry_capture(layout)
     return true
 }
 
 //   Capture the hovered splitter when no other control owns the pointer press.
 splitter_try_capture :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     mouse_input: input.Input_Frame,
     hovered_axis: Splitter_Axis,
     hovered: bool) {
 
     if !hovered || !uiwidgets.input_frame_left_pressed(mouse_input) ||
-        ui_runtime.ui_press_owner.active {
+        press_owner^.active {
         return
     }
     press_id := SPLITTER_VERTICAL_PRESS_ID
-    split_position := ui_runtime.vertical_split_x
+    split_position := layout^.vertical_split_x
     mouse_position := mouse_input.mouse_position.x
     if hovered_axis == .Horizontal ||
-        ui_runtime^.current_layout_mode == .Portrait {
+        layout^.current_layout_mode == .Portrait {
         press_id = SPLITTER_HORIZONTAL_PRESS_ID
-        split_position = ui_runtime.horizontal_split_y
+        split_position = layout^.horizontal_split_y
         mouse_position = mouse_input.mouse_position.y
     }
-    ui_runtime.ui_press_owner = {active = true, kind = .Splitter, id = press_id}
-    ui_runtime.splitter_drag_offset = split_position - mouse_position
+    press_owner^ = {active = true, kind = .Splitter, id = press_id}
+    layout^.splitter_drag_offset = split_position - mouse_position
 }
 
 //   Apply the active splitter drag while preserving all pane minimums.
 splitter_apply_drag :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     mouse_input: input.Input_Frame,
     vertical, horizontal: ^f32) {
 
     if !uiwidgets.input_frame_left_down(mouse_input) {
-        splitter_release_capture(ui_runtime)
+        splitter_release_capture(layout, press_owner)
         return
     }
-    if splitter_owns_press(ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID) {
+    if splitter_owns_press(press_owner^, SPLITTER_VERTICAL_PRESS_ID) {
         vertical^ = splitter_clamp_vertical(
-            mouse_input.mouse_position.x + ui_runtime.splitter_drag_offset,
-            ui_runtime^.window.width)
+            mouse_input.mouse_position.x + layout^.splitter_drag_offset,
+            layout^.window.width)
     } else if splitter_owns_press(
-        ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID) {
+        press_owner^, SPLITTER_HORIZONTAL_PRESS_ID) {
         horizontal^ = splitter_clamp_horizontal(
-            mouse_input.mouse_position.y + ui_runtime.splitter_drag_offset,
-            ui_runtime^.window.height)
+            mouse_input.mouse_position.y + layout^.splitter_drag_offset,
+            layout^.window.height)
     }
 }
 
@@ -304,10 +328,10 @@ splitter_cursor :: proc(
 
 // splitter_apply_semantic_axis resolves bounded keyboard changes for one axis.
 splitter_apply_semantic_axis :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, axis: Splitter_Axis,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    axis: Splitter_Axis,
     value, minimum, maximum: f32) -> f32 {
-    focus := ui_runtime.semantic_focus
-    if focus == nil {
+    if semantic_focus == nil {
         return value
     }
     id := splitter_semantic_id(axis)
@@ -317,19 +341,19 @@ splitter_apply_semantic_axis :: proc(
         return value
     }
     result := value
-    if uisemantics.semantic_command_requested(focus, id, .Increment) {
+    if uisemantics.semantic_command_requested(semantic_focus, id, .Increment) {
         result = uiwidgets.range_float_step(result, 1, spec)
     }
-    if uisemantics.semantic_command_requested(focus, id, .Decrement) {
+    if uisemantics.semantic_command_requested(semantic_focus, id, .Decrement) {
         result = uiwidgets.range_float_step(result, -1, spec)
     }
-    if uisemantics.semantic_command_requested(focus, id, .Set_Minimum) {
+    if uisemantics.semantic_command_requested(semantic_focus, id, .Set_Minimum) {
         result = spec.minimum
     }
-    if uisemantics.semantic_command_requested(focus, id, .Set_Maximum) {
+    if uisemantics.semantic_command_requested(semantic_focus, id, .Set_Maximum) {
         result = spec.maximum
     }
-    for command in focus.commands[:focus.command_count] {
+    for command in semantic_focus.commands[:semantic_focus.command_count] {
         if command.target == id && command.kind == .Set_Value {
             result = f32(command.numeric_value)
         }
@@ -342,51 +366,51 @@ splitter_apply_semantic_axis :: proc(
 
 // Prepare final splitter hit, clip, and visible geometry after interaction.
 splitter_preparation :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
     locked: bool, vertical_value, horizontal_value: f32,
     sources: viewmodel.Ui_Control_Action_Source) -> Splitter_Preparation {
-    vertical := splitter_geometry(.Vertical, ui_runtime^.current_layout_mode,
-        vertical_value, horizontal_value,
-        ui_runtime^.window)
-    horizontal := splitter_geometry(.Horizontal, ui_runtime^.current_layout_mode,
-        vertical_value, horizontal_value,
-        ui_runtime^.window)
+    vertical := splitter_geometry(.Vertical, layout^.current_layout_mode,
+        vertical_value, horizontal_value, layout^.window)
+    horizontal := splitter_geometry(.Horizontal, layout^.current_layout_mode,
+        vertical_value, horizontal_value, layout^.window)
     return {
         vertical = splitter_axis_preparation(
-            ui_runtime, .Vertical, vertical, vertical_value, sources),
+            layout, .Vertical, vertical, vertical_value, sources),
         horizontal = splitter_axis_preparation(
-            ui_runtime, .Horizontal, horizontal, horizontal_value, sources),
+            layout, .Horizontal, horizontal, horizontal_value, sources),
         locked = locked,
     }
 }
 
 // splitter_resolve_values converges pointer and semantic axis changes.
-splitter_resolve_values :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, mouse_input: input.Input_Frame,
-    axis: Splitter_Axis, hovered, locked: bool) -> Splitter_Value_Result {
+splitter_resolve_values :: proc(ctx: Splitter_Update_Context) -> Splitter_Value_Result {
+    layout := ctx.layout
+    press_owner := ctx.press_owner
+    semantic_focus := ctx.semantic_focus
+    mouse_input := ctx.mouse_input
     result := Splitter_Value_Result{
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y, {}}
-    if locked {
-        splitter_release_capture(ui_runtime)
+        layout^.vertical_split_x, layout^.horizontal_split_y, {}}
+    if ctx.locked {
+        splitter_release_capture(layout, press_owner)
         return result
     }
-    splitter_try_capture(ui_runtime, mouse_input, axis, hovered)
-    if ui_runtime.ui_press_owner.kind == .Splitter {
-        splitter_apply_drag(ui_runtime, mouse_input,
+    splitter_try_capture(layout, press_owner, mouse_input, ctx.axis, ctx.hovered)
+    if press_owner^.kind == .Splitter {
+        splitter_apply_drag(layout, press_owner, mouse_input,
             &result.vertical, &result.horizontal)
     }
-    pointer_changed := result.vertical != ui_runtime.vertical_split_x ||
-        result.horizontal != ui_runtime.horizontal_split_y
+    pointer_changed := result.vertical != layout^.vertical_split_x ||
+        result.horizontal != layout^.horizontal_split_y
     result.sources += uiwidgets.range_action_source(pointer_changed, .Pointer)
     before := result
-    if ui_runtime.current_layout_mode == .Landscape {
-        result.vertical = splitter_apply_semantic_axis(ui_runtime, .Vertical,
+    if layout^.current_layout_mode == .Landscape {
+        result.vertical = splitter_apply_semantic_axis(semantic_focus, .Vertical,
             result.vertical, theme.WORLD_MIN_WIDTH, max(theme.WORLD_MIN_WIDTH,
-                f32(ui_runtime.window.width) - theme.RIGHT_PANEL_MIN_WIDTH))
+                f32(layout^.window.width) - theme.RIGHT_PANEL_MIN_WIDTH))
     }
-    result.horizontal = splitter_apply_semantic_axis(ui_runtime, .Horizontal,
+    result.horizontal = splitter_apply_semantic_axis(semantic_focus, .Horizontal,
         result.horizontal, theme.WORLD_MIN_HEIGHT, max(theme.WORLD_MIN_HEIGHT,
-            f32(ui_runtime.window.height) - theme.BOTTOM_PANEL_MIN_HEIGHT))
+            f32(layout^.window.height) - theme.BOTTOM_PANEL_MIN_HEIGHT))
     semantic_changed := result.vertical != before.vertical ||
         result.horizontal != before.horizontal
     result.sources += uiwidgets.range_action_source(semantic_changed, .Semantic)
@@ -394,55 +418,57 @@ splitter_resolve_values :: proc(
 }
 
 // splitter_update_feedback advances cursor and hover fades for both axes.
-splitter_update_feedback :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, axis: Splitter_Axis,
-    hovered, locked: bool, dt: f32) {
+splitter_update_feedback :: proc(ctx: Splitter_Update_Context) ->
+    viewmodel.Ui_Cursor_Kind {
+    layout := ctx.layout
+    press_owner := ctx.press_owner^
     vertical_target: f32
     horizontal_target: f32
-    if !locked && ((hovered && axis == .Vertical) || splitter_owns_press(
-        ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID)) {
+    if !ctx.locked && ((ctx.hovered && ctx.axis == .Vertical) || splitter_owns_press(
+        press_owner, SPLITTER_VERTICAL_PRESS_ID)) {
         vertical_target = 1
     }
-    if !locked && ((hovered && axis == .Horizontal) || splitter_owns_press(
-        ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID)) {
+    if !ctx.locked && ((ctx.hovered && ctx.axis == .Horizontal) || splitter_owns_press(
+        press_owner, SPLITTER_HORIZONTAL_PRESS_ID)) {
         horizontal_target = 1
     }
-    ui_runtime^.cursor = splitter_cursor(vertical_target, horizontal_target)
-    ui_runtime.vertical_split_hover = splitter_update_fade(
-        ui_runtime.vertical_split_hover, vertical_target, dt)
-    ui_runtime.horizontal_split_hover = splitter_update_fade(
-        ui_runtime.horizontal_split_hover, horizontal_target, dt)
+    layout^.vertical_split_hover = splitter_update_fade(
+        layout^.vertical_split_hover, vertical_target, ctx.dt)
+    layout^.horizontal_split_hover = splitter_update_fade(
+        layout^.horizontal_split_hover, horizontal_target, ctx.dt)
+    return splitter_cursor(vertical_target, horizontal_target)
 }
 
-//   Update splitter capture, positions, and hover fades before layout is prepared.
-update_splitters :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    mouse_input: input.Input_Frame,
-    dt: f32, phase: capturemodel.Gif_Capture_Phase) -> Splitter_Preparation {
-
-    locked := splitters_locked_for_gif(phase)
+// Update splitter capture, positions, and hover fades before layout is prepared.
+update_splitters :: proc(ctx: Splitter_Update_Context) -> Splitter_Preparation {
+    layout := ctx.layout
+    locked := splitters_locked_for_gif(ctx.capture_view.phase)
     axis, hovered := splitter_hovered_axis(
-        uiwidgets.input_frame_mouse_position(mouse_input),
-        ui_runtime^.current_layout_mode,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
-        ui_runtime^.window)
-    values := splitter_resolve_values(
-        ui_runtime, mouse_input, axis, hovered, locked)
-    splitter_update_feedback(ui_runtime, axis, hovered, locked, dt)
-    return splitter_preparation(ui_runtime, locked, values.vertical,
+        uiwidgets.input_frame_mouse_position(ctx.mouse_input),
+        layout^.current_layout_mode,
+        layout^.vertical_split_x, layout^.horizontal_split_y, layout^.window)
+    update := ctx
+    update.axis = axis
+    update.hovered = hovered
+    update.locked = locked
+    values := splitter_resolve_values(update)
+    cursor := splitter_update_feedback(update)
+    prepared := splitter_preparation(layout, locked, values.vertical,
         values.horizontal, values.sources)
+    prepared.cursor = cursor
+    return prepared
 }
 
 // apply_splitter_preparation commits prepared pane positions and ratio intent once.
 apply_splitter_preparation :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
     prepared: Splitter_Preparation) {
     if !prepared.vertical.changed && !prepared.horizontal.changed {
         return
     }
-    ui_runtime.vertical_split_x = prepared.vertical.value
-    ui_runtime.horizontal_split_y = prepared.horizontal.value
-    splitter_store_ratios(ui_runtime)
+    layout^.vertical_split_x = prepared.vertical.value
+    layout^.horizontal_split_y = prepared.horizontal.value
+    splitter_store_ratios(layout)
 }
 
 // register_splitter_semantics publishes unlocked axis controls from prepared facts.

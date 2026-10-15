@@ -266,7 +266,7 @@ gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
     for phase in phases {
         state := new(app_core.Euclid_General_State, context.allocator)
         state.content_service = &service
-        state^.ui_runtime.window = {1280, 720}
+        state^.ui_runtime.layout.window = {1280, 720}
         state^.gif_capture_status.gif_capture_phase = phase
         state^.gif_capture.source_width = 900
         state^.gif_capture.source_height = 500
@@ -276,7 +276,7 @@ gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
         evidence_trace.ring_init(&state^.evidence_ring, .Display)
 
         testing.expect(t, apply_window_metrics(state, {640, 900}))
-        testing.expect_value(t, state^.ui_runtime.window,
+        testing.expect_value(t, state^.ui_runtime.layout.window,
             viewmodel.Ui_Window_Metrics{640, 900})
         testing.expect_value(t, state^.gif_capture_status.gif_capture_phase,
             capturemodel.Gif_Capture_Phase.Error)
@@ -299,7 +299,7 @@ gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
 gif_capture_resize_ignores_stable_or_unprotected_state :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    state^.ui_runtime.window = {1280, 720}
+    state^.ui_runtime.layout.window = {1280, 720}
     state^.gif_capture_status.gif_capture_phase = .Recording
     testing.expect(t, !apply_window_metrics(state, {1280, 720}))
     testing.expect_value(t, state^.gif_capture_status.gif_capture_phase,

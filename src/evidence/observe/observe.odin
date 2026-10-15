@@ -169,7 +169,13 @@ Display :: struct {
 Display_Source :: struct {
     fixed_step : u64,
     simulation_time : f32,
-    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
+    ui_layout: ^viewmodel.Ui_Layout_State,
+    ui_library: ^viewmodel.Ui_Library_State,
+    ui_presentation: ^viewmodel.Ui_Presentation_Interaction_State,
+    ui_preferences: ^viewmodel.Ui_Preference_State,
+    ui_playback: ^viewmodel.Ui_Playback_Control_State,
+    ui_tooltip: ^viewmodel.Ui_Tooltip_State,
+    ui_platform_reduce_motion: bool,
     preferences_runtime: ^preferencesmodel.Settings_Save_Runtime,
     telemetry: ^telemetrymodel.Runtime,
     gif_capture : ^capturemodel.Gif_Capture_Session,
@@ -308,23 +314,31 @@ observe_display_julia_service :: proc(
 // Copy display-owned interaction and layout state into an in-progress observation.
 observe_display_ui :: proc(
     source: ^Display_Source, result: ^Display) {
-    if source.ui_runtime != nil {
-        result.simulation_paused = source.ui_runtime.simulation_paused
-        result.animation_policy_paused = source.ui_runtime.animation_policy_paused
-        result.view_text_scroll_y = source.ui_runtime.view_text_scroll_y
-        result.view_text_scroll_max = source.ui_runtime.view_text_scroll_max
-        result.vertical_split_x = source.ui_runtime.vertical_split_x
-        result.horizontal_split_y = source.ui_runtime.horizontal_split_y
-        search := &source.ui_runtime.library_search
+    if source.ui_playback != nil {
+        result.simulation_paused = source.ui_playback.simulation_paused
+        result.animation_policy_paused =
+            source.ui_playback.animation_policy_paused
+    }
+    if source.ui_presentation != nil {
+        result.view_text_scroll_y = source.ui_presentation.text_scroll_y
+        result.view_text_scroll_max = source.ui_presentation.text_scroll_max
+    }
+    if source.ui_layout != nil {
+        result.vertical_split_x = source.ui_layout.vertical_split_x
+        result.horizontal_split_y = source.ui_layout.horizontal_split_y
+    }
+    if source.ui_library != nil {
+        search := &source.ui_library.search
         result.library_search_idle = search.worker_available &&
             !search.query_dirty && !search.submit_requested &&
             (search.query_length == 0 ||
                 search.committed_generation == search.generation)
         result.library_search_has_matches = search.active &&
             search.total_match_count > 0
-        result.tooltip_visible = source.ui_runtime.tooltip.visible
     }
-
+    if source.ui_tooltip != nil {
+        result.tooltip_visible = source.ui_tooltip.visible
+    }
 }
 
 // Copy independent capture policy and encoder state without requiring UI storage.
@@ -340,23 +354,30 @@ observe_display_capture :: proc(source: ^Display_Source, result: ^Display) {
 
 // Copy display-owned intent and joined persistence counters, never live task results.
 observe_display_settings :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
-    if runtime == nil {
-        return
+    source: ^Display_Source, result: ^Display) {
+    if source.ui_preferences != nil {
+        result^.settings_preferences = source.ui_preferences.values
+        result^.settings_save_status = source.ui_preferences.save_status
+        result^.settings_store_available = source.ui_preferences.store_available
     }
-    result^.settings_preferences = runtime^.settings_preferences
-    result^.settings_save_status = runtime^.settings_save_status
-    result^.settings_store_available = runtime^.settings_store_available
-    result^.window_width = runtime^.window.width
-    result^.window_height = runtime^.window.height
-    result^.accordion_transition_running = runtime^.accordion_transition.running
-    result^.accordion_selected = runtime^.active_accordion_section
-    result^.accordion_reveal_heights = runtime^.accordion_transition.heights
-    result^.interface_reduce_motion =
-        runtime^.settings_preferences.interface.reduce_motion ||
-        runtime^.platform_reduce_motion
-    result^.presentation_visible = runtime^.presentation_visible
-    observe_display_tree(runtime, result)
+    if source.ui_layout != nil {
+        result^.window_width = source.ui_layout.window.width
+        result^.window_height = source.ui_layout.window.height
+        result^.accordion_transition_running =
+            source.ui_layout.accordion_transition.running
+        result^.accordion_selected = source.ui_layout.active_accordion_section
+        result^.accordion_reveal_heights = source.ui_layout.accordion_transition.heights
+    }
+    result^.interface_reduce_motion = source.ui_platform_reduce_motion
+    if source.ui_preferences != nil {
+        result^.interface_reduce_motion =
+            result^.interface_reduce_motion ||
+            source.ui_preferences.values.interface.reduce_motion
+    }
+    if source.ui_presentation != nil {
+        result^.presentation_visible = source.ui_presentation.visible
+    }
+    observe_display_tree(source.ui_library, result)
 }
 
 // Copy joined persistence counters without exposing worker payload or store pointers.
@@ -388,17 +409,20 @@ observe_display_telemetry :: proc(runtime: ^telemetrymodel.Runtime, result: ^Dis
 
 // Copy pointer-free tree reveal and scrolling facts at the display observation boundary.
 observe_display_tree :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
-    result^.tree_scroll_y = runtime^.tree_scroll_y
-    result^.tree_visual_height = runtime^.tree_motion.visual_height
-    if runtime^.tree_reorder_motion.active {
+    library: ^viewmodel.Ui_Library_State, result: ^Display) {
+    if library == nil {
+        return
+    }
+    result^.tree_scroll_y = library^.tree.scroll_y
+    result^.tree_visual_height = library^.motion.visual_height
+    if library^.actions.reorder.active {
         result^.tree_transition_count += 1
     }
-    if runtime^.tree_actions_motion.running {
+    if library^.actions.drawer.running {
         result^.tree_transition_count += 1
     }
-    for index in 0..<runtime^.tree_motion.count {
-        if runtime^.tree_motion.branches[index].running {
+    for index in 0..<library^.motion.count {
+        if library^.motion.branches[index].running {
             result^.tree_transition_count += 1
         }
     }
@@ -461,7 +485,7 @@ display :: proc(source: ^Display_Source) -> Display {
             evidence_trace.ring_evidence_complete(source.evidence_ring),
         trace = trace_state(source.evidence_ring),
     }
-    observe_display_settings(source.ui_runtime, &result)
+    observe_display_settings(source, &result)
     observe_display_preferences(source.preferences_runtime, &result)
     observe_display_telemetry(source.telemetry, &result)
     observe_display_capture(source, &result)

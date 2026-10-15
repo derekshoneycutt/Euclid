@@ -236,14 +236,15 @@ prepare_animation_control_button :: proc(
     clip: geometry.Rectangle) -> uiwidgets.Icon_Button_Result {
     result := uiwidgets.update_icon_button(
         animation_control_button_params(runtime, descriptor, mouse_input, clip),
-        &runtime^.ui_press_owner)
+        &runtime^.input.press_owner)
     owner := uisemantics.semantic_control_id(.Animation_Control, descriptor.id)
     if result.pressed || result.clicked {
         uioverlay.tooltip_dismiss(&runtime^.tooltip, owner)
     }
     uioverlay.tooltip_offer(&runtime^.tooltip, {
         owner = owner,
-        source = uioverlay.tooltip_control_source(runtime, owner, descriptor.id),
+        source = uioverlay.tooltip_control_source(
+            &runtime^.input, runtime^.semantic_focus, owner, descriptor.id),
         anchor = descriptor.rect,
         text = descriptor.label,
     })
@@ -317,9 +318,10 @@ prepare_animation_transport_controls :: proc(
     mouse_input: input.Input_Frame) ->
     (uiwidgets.Icon_Button_Result, uiwidgets.Icon_Button_Result) {
     runtime := &state^.ui_runtime
-    pause_icon := uiwidgets.Icon_Button_Id.Play if runtime^.simulation_paused else .Pause
+    pause_icon :=
+        uiwidgets.Icon_Button_Id.Play if runtime^.playback.simulation_paused else .Pause
     pause_label := viewmessages.shell_message(state, .Animation_Pause)
-    if runtime^.simulation_paused {
+    if runtime^.playback.simulation_paused {
         pause_label = viewmessages.shell_message(state, .Animation_Resume)
     }
     refresh := prepare_animation_control_button(runtime,
@@ -328,7 +330,7 @@ prepare_animation_transport_controls :: proc(
         mouse_input, slots.panel)
     pause := prepare_animation_control_button(runtime,
         {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
-            runtime^.simulation_paused, pause_label, 1},
+            runtime^.playback.simulation_paused, pause_label, 1},
         mouse_input, slots.panel)
     return refresh, pause
 }
@@ -379,7 +381,7 @@ prepare_animation_controls :: proc(
     favorite_target := animation_favorite_target(state^.julia_interface)
     favorite_visible := favorite_target != nil
     slots := animation_control_layout_slots(
-        geometry.Rectangle(ui_runtime^.ui_regions.world_rect), favorite_visible)
+        geometry.Rectangle(ui_runtime^.layout.ui_regions.world_rect), favorite_visible)
     refresh, pause := prepare_animation_transport_controls(
         state, slots, mouse_input)
     favorite, favorite_active := prepare_animation_favorite_control(
@@ -409,11 +411,11 @@ apply_animation_control_hit :: proc(
     ui_runtime := &state^.ui_runtime
     if hit.refresh_requested {
         cancel_gif_capture_if_paused_mid_capture(state, ui_runtime)
-        ui_runtime^.simulation_paused = false
+        ui_runtime^.playback.simulation_paused = false
         state^.julia_interface^.pending_animation_reset = true
     }
     if hit.toggle_pause_requested {
-        ui_runtime^.simulation_paused = !ui_runtime^.simulation_paused
+        ui_runtime^.playback.simulation_paused = !ui_runtime^.playback.simulation_paused
     }
 }
 
@@ -421,7 +423,7 @@ apply_animation_control_hit :: proc(
 cancel_gif_capture_if_paused_mid_capture :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if !ui_runtime^.simulation_paused {
+    if !ui_runtime^.playback.simulation_paused {
         return
     }
     phase := state^.gif_capture_status.gif_capture_phase
@@ -596,10 +598,10 @@ draw_encoded_animation_controls :: proc(
     draw_encoded_animation_control_panel(encoder, prepared.slots.panel)
     results := [2]uiwidgets.Icon_Button_Result{prepared.refresh, prepared.pause}
     icons := [2]uiwidgets.Icon_Button_Id{.Refresh,
-        state^.ui_runtime.simulation_paused ? .Play : .Pause}
+        state^.ui_runtime.playback.simulation_paused ? .Play : .Pause}
     slots := [2]geometry.Rectangle{prepared.slots.refresh, prepared.slots.pause}
     for index in 0..<2 {
-        toggle_active := index == 1 && state^.ui_runtime.simulation_paused
+        toggle_active := index == 1 && state^.ui_runtime.playback.simulation_paused
         draw_color := draw_encoded_animation_control_backing(
             encoder, slots[index], results[index].hovered,
             results[index].pressed, toggle_active)

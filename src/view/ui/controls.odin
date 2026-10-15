@@ -17,7 +17,6 @@ import uisettings "settings"
 import uigif "gif"
 import uilibrary "library"
 import uipresentation "presentation"
-import uilayout "layout"
 import uiregions "layout/regions"
 import uiterminal "terminal"
 import uioverlay "overlay"
@@ -87,11 +86,10 @@ ui_animation_control_input_frame :: proc(
 
 // ui_input_box_keyboard_frame restores events only for the focused input owner.
 ui_input_box_keyboard_frame :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    focus: viewmodel.Ui_Focus_Target,
     filtered, complete: input.Input_Frame,
     id: int) -> input.Input_Frame {
     result := filtered
-    focus := runtime^.interaction_frame.effective_focus
     if focus.kind == .Input_Box && focus.id == id {
         result.events = complete.events
     }
@@ -103,29 +101,13 @@ prepare_active_accordion_controls :: proc(
     state: ^core.Euclid_General_State, frame: input.Input_Frame,
     routed: input.Input_Frame, content: geometry.Rectangle,
     result: ^Ui_Control_Preparation) {
-    switch state^.ui_runtime.active_accordion_section {
+    switch state^.ui_runtime.layout.active_accordion_section {
     case .View:
     case .Library:
-        library_frame := ui_input_box_keyboard_frame(&state^.ui_runtime,
-            routed, frame, uilibrary.LIBRARY_SEARCH_INPUT_ID)
-        result^.library_search = uilibrary.prepare_library_search(
-            state, content, library_frame)
-        result^.tree = uilibrary.prepare_tree_list_panel({
-            label = viewmessages.shell_message(state, .Library_Tree_Accessible_Label),
-            general_state = state,
-            ji = state^.julia_interface,
-            collections = &state^.preferences_runtime.collections_state,
-            collections_revision =
-                state^.preferences_runtime.collection_revision,
-            ui_runtime = &state^.ui_runtime,
-            list_panel = result^.library_search.layout.tree,
-            mouse_input = library_frame, scroll_y = &state^.ui_runtime.tree_scroll_y,
-            font = view_font.cache_borrow(&state^.font_cache, .Regular),
-            font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-            visibility = {search = &state^.ui_runtime.library_search},
-        })
+        prepare_active_library_controls(state, frame, routed, content, result)
     case .Save_Gif:
-        gif_frame := ui_input_box_keyboard_frame(&state^.ui_runtime,
+        gif_frame := ui_input_box_keyboard_frame(
+            state^.ui_runtime.input.interaction_frame.effective_focus,
             routed, frame, uigif.GIF_PATH_INPUT_BOX_ID)
         result^.gif = uigif.prepare_gif_view(state, content, gif_frame)
     case .Settings:
@@ -133,33 +115,65 @@ prepare_active_accordion_controls :: proc(
     }
 }
 
+// prepare_active_library_controls prepares search and its dependent tree panel.
+prepare_active_library_controls :: proc(
+    state: ^core.Euclid_General_State, frame, routed: input.Input_Frame,
+    content: geometry.Rectangle, result: ^Ui_Control_Preparation) {
+    library_frame := ui_input_box_keyboard_frame(
+        state^.ui_runtime.input.interaction_frame.effective_focus,
+        routed, frame, uilibrary.LIBRARY_SEARCH_INPUT_ID)
+    result^.library_search = uilibrary.prepare_library_search(
+        state, content, library_frame)
+    uilibrary.prepare_tree_list_panel({
+        label = viewmessages.shell_message(state, .Library_Tree_Accessible_Label),
+        general_state = state,
+        ji = state^.julia_interface,
+        collections = &state^.preferences_runtime.collections_state,
+        collections_revision = state^.preferences_runtime.collection_revision,
+        ui_runtime = &state^.ui_runtime,
+        list_panel = result^.library_search.layout.tree,
+        mouse_input = library_frame,
+        scroll_y = &state^.ui_runtime.library.tree.scroll_y,
+        font = view_font.cache_borrow(&state^.font_cache, .Regular),
+        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        visibility = {search = &state^.ui_runtime.library.search},
+        reduce_motion = uiaccordion.ui_reduced_motion(
+            state^.ui_runtime.preferences.values.interface.reduce_motion,
+            state^.ui_runtime.platform_reduce_motion),
+    }, &result^.tree)
+    if result^.tree.cancel_geometry_capture {
+        ui_release_geometry_capture(&state^.ui_runtime)
+    }
+}
+
 // Resolve geometry-known controls and commit their actions before services run.
 prepare_ui_controls :: proc(
     state: ^core.Euclid_General_State,
     frame: input.Input_Frame,
-    splitters: uisplitter.Splitter_Preparation) -> Ui_Control_Preparation {
+    splitters: uisplitter.Splitter_Preparation,
+    result: ^Ui_Control_Preparation) {
     _ = uisemantics.semantic_begin(state^.ui_runtime.semantic_focus)
     uioverlay.tooltip_frame_begin(&state^.ui_runtime.tooltip)
     uisplitter.register_splitter_semantics(state^.ui_runtime.semantic_focus, splitters)
     animation_frame := ui_animation_control_input_frame(
-        frame, state^.ui_runtime.interaction_frame)
+        frame, state^.ui_runtime.input.interaction_frame)
     routed_frame := ui_accordion_input_frame(
-        frame, state^.ui_runtime.interaction_frame.accordion)
-    result := Ui_Control_Preparation{}
-    result.animation_controls = uianimation.prepare_animation_controls(
+        frame, state^.ui_runtime.input.interaction_frame.accordion)
+    result^.animation_controls = uianimation.prepare_animation_controls(
         state, animation_frame)
-    accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
-    result.accordion = prepare_accordion_view(
+    accordion_panel := state^.ui_runtime.layout.ui_regions.accordion_rect
+    result^.accordion = prepare_accordion_view(
         state, geometry.Rectangle(accordion_panel), routed_frame)
     child_frame := ui_clip_accordion_child_frame(&state^.ui_runtime, routed_frame)
     prepare_active_accordion_controls(state, frame, child_frame,
-        geometry.Rectangle(result.accordion.layout.content), &result)
-    prepare_outgoing_accordion_controls(state, &result)
-    if state^.ui_runtime.current_layout_mode == .Portrait {
-        state^.ui_runtime.ui_regions.text_rect = geometry.Rectangle(
-            uiaccordion.accordion_content_rect(&state^.ui_runtime, .View))
-        state^.ui_runtime.ui_regions.terminal_rect =
-            uiregions.layout_terminal_rect(state^.ui_runtime.ui_regions.text_rect)
+        geometry.Rectangle(result^.accordion.layout.content), result)
+    prepare_outgoing_accordion_controls(state, result)
+    if state^.ui_runtime.layout.current_layout_mode == .Portrait {
+        state^.ui_runtime.layout.ui_regions.text_rect = geometry.Rectangle(
+            uiaccordion.accordion_content_rect(
+                &state^.ui_runtime.layout, .View))
+        state^.ui_runtime.layout.ui_regions.terminal_rect =
+            uiregions.layout_terminal_rect(state^.ui_runtime.layout.ui_regions.text_rect)
     }
     uioverlay.tooltip_frame_resolve(&state^.ui_runtime.tooltip, {
         now_seconds = frame.sample_time_seconds,
@@ -168,13 +182,12 @@ prepare_ui_controls :: proc(
             state^.ui_runtime.context_menu.active,
         dismiss = uioverlay.tooltip_escape_pressed(frame),
     })
-    return result
 }
 
 // ui_accordion_child_owns_capture excludes header, splitter, and landscape View captures.
 ui_accordion_child_owns_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    owner := runtime^.ui_press_owner
+    owner := runtime^.input.press_owner
     #partial switch owner.kind {
     case .List_Item, .Input_Box, .Checkbox, .Slider:
         return true
@@ -188,8 +201,8 @@ ui_accordion_child_owns_capture :: proc(
             return true
         }
     }
-    return runtime^.current_layout_mode == .Portrait &&
-        runtime^.active_accordion_section == .View &&
+    return runtime^.layout.current_layout_mode == .Portrait &&
+        runtime^.layout.active_accordion_section == .View &&
         uipresentation.ui_presentation_owns_capture(owner)
 }
 
@@ -198,14 +211,14 @@ ui_clip_accordion_child_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: input.Input_Frame) -> input.Input_Frame {
     clip := uiaccordion.accordion_content_clip(
-        runtime, runtime^.active_accordion_section)
+        &runtime^.layout, runtime^.layout.active_accordion_section)
     if clip.width > 0 && clip.height > 0 &&
         geometry.rectangle_contains(clip, uiwidgets.input_frame_mouse_position(frame)) {
         return frame
     }
-    if uiwidgets.input_frame_left_released(frame) && runtime^.ui_press_owner.active &&
+    if uiwidgets.input_frame_left_released(frame) && runtime^.input.press_owner.active &&
         ui_accordion_child_owns_capture(runtime) {
-        uilayout.ui_release_geometry_capture(runtime)
+        ui_release_geometry_capture(runtime)
     }
     filtered := input.input_frame_filter_pointer(frame, {.Screen_Position})
     filtered.mouse_position = {-1, -1}
@@ -215,38 +228,49 @@ ui_clip_accordion_child_frame :: proc(
 // prepare_outgoing_accordion_controls borrows draw facts without actions or semantics.
 prepare_outgoing_accordion_controls :: proc(
     state: ^core.Euclid_General_State, result: ^Ui_Control_Preparation) {
-    if state^.ui_runtime.active_accordion_section != .Library {
-        state^.ui_runtime.tree_motion = {}
+    if state^.ui_runtime.layout.active_accordion_section != .Library {
+        state^.ui_runtime.library.motion = {}
     }
     sections := result^.accordion.sections
     for index in 0..<sections.count {
         section := sections.items[index].section
-        if section == state^.ui_runtime.active_accordion_section ||
+        if section == state^.ui_runtime.layout.active_accordion_section ||
             result^.accordion.layout.clips[int(section)].height <= 0 {
             continue
         }
-        content := result^.accordion.layout.contents[int(section)]
-        switch section {
-        case .Settings:
-            result^.settings =
-                uisettings.prepare_settings_view(state, content, {}, false)
-        case .Save_Gif:
-            result^.gif = uigif.prepare_gif_view(state, content, {}, false)
-        case .Library:
-            result^.library_search =
-                uilibrary.prepare_library_search_visual(state, content)
-            result^.tree = uilibrary.prepare_tree_visual({
-                general_state = state,
-                ji = state^.julia_interface,
-                collections = &state^.preferences_runtime.collections_state,
-                collections_revision =
-                    state^.preferences_runtime.collection_revision,
-                ui_runtime = &state^.ui_runtime,
-                list_panel = result^.library_search.layout.tree,
-                scroll_y = &state^.ui_runtime.tree_scroll_y,
-                visibility = {search = &state^.ui_runtime.library_search}})
-        case .View:
-        }
+        prepare_outgoing_accordion_section(
+            state, section, result^.accordion.layout.contents[int(section)], result)
+    }
+}
+
+// prepare_outgoing_accordion_section prepares visuals without interaction side effects.
+prepare_outgoing_accordion_section :: proc(
+    state: ^core.Euclid_General_State,
+    section: viewmodel.Ui_Accordion_Section,
+    content: geometry.Rectangle,
+    result: ^Ui_Control_Preparation) {
+    switch section {
+    case .Settings:
+        result^.settings = uisettings.prepare_settings_view(state, content, {}, false)
+    case .Save_Gif:
+        result^.gif = uigif.prepare_gif_view(state, content, {}, false)
+    case .Library:
+        result^.library_search =
+            uilibrary.prepare_library_search_visual(state, content)
+        uilibrary.prepare_tree_visual({
+            general_state = state,
+            ji = state^.julia_interface,
+            collections = &state^.preferences_runtime.collections_state,
+            collections_revision = state^.preferences_runtime.collection_revision,
+            ui_runtime = &state^.ui_runtime,
+            list_panel = result^.library_search.layout.tree,
+            scroll_y = &state^.ui_runtime.library.tree.scroll_y,
+            visibility = {search = &state^.ui_runtime.library.search},
+            reduce_motion = uiaccordion.ui_reduced_motion(
+                state^.ui_runtime.preferences.values.interface.reduce_motion,
+                state^.ui_runtime.platform_reduce_motion)},
+            &result^.tree)
+    case .View:
     }
 }
 
@@ -274,13 +298,14 @@ prepare_ui_layout_interaction :: proc(
     state: ^core.Euclid_General_State,
     frame: input.Input_Frame,
     terminal: uiterminal.Terminal_Prepared_Frame) -> Ui_Layout_Interaction_Preparation {
-    if !uipresentation.ui_presentation_is_visible(&state^.ui_runtime) {
-        state^.ui_runtime.view_text_scroll_max = 0
+    if !uipresentation.ui_presentation_is_visible(
+        &state^.ui_runtime.presentation) {
+        state^.ui_runtime.presentation.text_scroll_max = 0
         return {}
     }
     if uiterminal.is_terminal_selected(state) {
         bounds := uiterminal.terminal_content_panel(
-            state^.ui_runtime.ui_regions.text_rect)
+            state^.ui_runtime.layout.ui_regions.text_rect)
         if terminal.available {
             bounds = terminal.bounds
             state^.ui_runtime.context_menu.keyboard_anchor =
@@ -289,8 +314,8 @@ prepare_ui_layout_interaction :: proc(
         uiterminal.register_terminal_semantics(state, bounds, terminal.scroll)
         return {}
     }
-    state^.ui_runtime.terminal_semantic_focus_initialized = false
-    routed := state^.ui_runtime.interaction_frame.presentation
+    state^.ui_runtime.terminal.semantic_focus_initialized = false
+    routed := state^.ui_runtime.input.interaction_frame.presentation
     presentation_frame := input.input_frame_filter_pointer(frame,
         routed.pointer ? input.Input_Pointer_Fields{
             .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels,
@@ -298,11 +323,11 @@ prepare_ui_layout_interaction :: proc(
     if !routed.wheel {
         presentation_frame.mouse_wheel_delta = 0
     }
-    if state^.ui_runtime.current_layout_mode == .Portrait {
+    if state^.ui_runtime.layout.current_layout_mode == .Portrait {
         presentation_frame = ui_clip_accordion_child_frame(
             &state^.ui_runtime, presentation_frame)
     }
     return {presentation = uipresentation.prepare_presentation_interaction(state,
-        state^.ui_runtime.ui_regions.text_rect, presentation_frame,
+        state^.ui_runtime.layout.ui_regions.text_rect, presentation_frame,
         routed.keyboard)}
 }

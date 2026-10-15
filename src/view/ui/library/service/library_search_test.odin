@@ -133,7 +133,7 @@ library_search_quality_fixture_matches :: proc(
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     state^.julia_interface = registry
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     copy(search^.query[:], fixture.query)
     search^.query_length = len(fixture.query)
     search^.generation = generation
@@ -174,7 +174,7 @@ library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.animation_head = &nodes[0]
     state^.julia_interface^.animation_count = len(nodes)
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     search.query_length = 4
     search.generation = 7
     search.index_generation = 11
@@ -195,7 +195,7 @@ library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
 library_search_commit_rejects_stale_generation :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     search.generation = 8
     search.index_generation = 12
     search.visible_id_count = 1
@@ -214,7 +214,7 @@ library_search_commit_records_typed_evidence :: proc(t: ^testing.T) {
     state^.evidence_session.lanes = evidence_session.ALL_LANES
     state^.evidence_session.required_evidence_complete = true
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     search^.query_length = 4
     search^.generation = 7
     search^.index_generation = 11
@@ -241,6 +241,38 @@ library_search_commit_records_typed_evidence :: proc(t: ^testing.T) {
     testing.expect(t, .Required in event.flags)
     testing.expect(t, .Truncated in event.flags)
     testing.expect(t, .Suggested in event.flags)
+}
+
+// Invalid query acceptance clears results without publishing ready-result evidence.
+@(test)
+library_search_invalid_query_clears_without_commit_evidence :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.evidence_session.enabled = true
+    state^.evidence_session.lanes = evidence_session.ALL_LANES
+    state^.evidence_session.required_evidence_complete = true
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+    search := &state^.ui_runtime.library.search
+    search^.query_length = 4
+    search^.generation = 7
+    search^.committed_generation = 6
+    search^.index_generation = 11
+    search^.scenario_correlation = 23
+    search^.scenario_correlation_generation = 1
+    search^.active = true
+    search^.visible_id_count = 1
+    search^.total_match_count = 9
+    result := viewcontent.Search_Query_Result{generation = 7,
+        index_generation = 11, status = .Invalid_Query}
+
+    testing.expect(t, library_search_commit_result(state, &result))
+    testing.expect(t, search^.invalid_query && !search^.active)
+    testing.expect_value(t, search^.visible_id_count, 0)
+    testing.expect_value(t, search^.total_match_count, u32(0))
+    testing.expect_value(t, search^.committed_generation, u64(6))
+    testing.expect_value(t, search^.scenario_correlation, u64(23))
+    testing.expect_value(t, state^.evidence_ring.count, 0)
+    testing.expect_value(t, state^.evidence_session.event_count, 0)
 }
 
 // Verify debounce waits for elapsed time while explicit submit is immediate.

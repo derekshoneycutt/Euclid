@@ -41,9 +41,9 @@ Tree_Actions_Layout :: struct {
 // tree_actions_cancel_context_capture releases only action-widget press ownership.
 tree_actions_cancel_context_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if runtime^.ui_press_owner.active &&
-        tree_actions_control_id_owned(runtime^.ui_press_owner.id) {
-        runtime^.ui_press_owner = {}
+    if runtime^.input.press_owner.active &&
+        tree_actions_control_id_owned(runtime^.input.press_owner.id) {
+        runtime^.input.press_owner = {}
     }
 }
 
@@ -52,25 +52,26 @@ tree_actions_close_context :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) 
     if runtime == nil {
         return
     }
-    if runtime^.ui_press_owner.active &&
-        tree_actions_control_id_owned(runtime^.ui_press_owner.id) {
-        runtime^.ui_press_owner = {}
+    if runtime^.input.press_owner.active &&
+        tree_actions_control_id_owned(runtime^.input.press_owner.id) {
+        runtime^.input.press_owner = {}
     }
     tree_actions_repair_context_focus(runtime)
-    runtime^.tree_actions_motion = {}
-    runtime^.tree_reorder_motion = {}
-    runtime^.tree_actions_press_entry = {}
+    runtime^.library.actions.drawer = {}
+    runtime^.library.actions.reorder = {}
+    runtime^.library.actions.press_entry = {}
 }
 
 // tree_actions_eligible admits only the selected Favorites placement in its visible path.
 tree_actions_eligible :: proc(
-    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) -> bool {
+    projection: ^viewmodel.Ui_Tree_Projection,
+    selected_item_id: uuid.Identifier,
+    search_active: bool,
+    item: ^viewmodel.Ui_Tree_Item) -> bool {
     if item == nil || item^.kind != .Placement ||
-        item^.key != params.ui_runtime^.selected_tree_item_id ||
-        params.visibility.search != nil && params.visibility.search^.active {
+        item^.key != selected_item_id || search_active {
         return false
     }
-    projection := &params.ui_runtime^.tree_projection
     parent := item^.parent
     if parent == TREE_NO_ITEM || parent < 0 || parent >= projection^.count {
         return false
@@ -97,31 +98,35 @@ tree_actions_ancestors_expanded :: proc(
 // tree_actions_reconcile closes an owner that no longer matches current UI context.
 tree_actions_reconcile :: proc(params: Tree_List_Params) {
     runtime := params.ui_runtime
-    if runtime^.ui_press_owner.active &&
-        tree_actions_control_id_owned(runtime^.ui_press_owner.id) &&
-        runtime^.tree_actions_press_entry != runtime^.selected_tree_item_id {
+    if runtime^.input.press_owner.active &&
+        tree_actions_control_id_owned(runtime^.input.press_owner.id) &&
+        runtime^.library.actions.press_entry != runtime^.library.tree.selected_item_id {
         tree_actions_cancel_context_capture(runtime)
     }
-    motion := &runtime^.tree_actions_motion
+    motion := &runtime^.library.actions.drawer
     if motion^.entry_id == (uuid.Identifier{}) {
         return
     }
-    owner := tree_projection_find(&runtime^.tree_projection, motion^.entry_id)
+    owner := tree_projection_find(&runtime^.library.tree.projection, motion^.entry_id)
     if owner == TREE_NO_ITEM ||
-        !tree_actions_eligible(params, &runtime^.tree_projection.items[owner]) {
+        !tree_actions_eligible(
+            &runtime^.library.tree.projection,
+            runtime^.library.tree.selected_item_id,
+            params.visibility.search != nil && params.visibility.search^.active,
+            &runtime^.library.tree.projection.items[owner]) {
         tree_actions_close_context(runtime)
         return
     }
     if params.general_state != nil &&
-        params.general_state^.ui_runtime.active_accordion_section != .Library {
+        params.general_state^.ui_runtime.layout.active_accordion_section != .Library {
         tree_actions_close_context(runtime)
     }
 }
 
 // tree_actions_full_height chooses one bounded button arrangement for this pane width.
-tree_actions_full_height :: proc(params: Tree_List_Params, depth: int) -> f32 {
+tree_actions_full_height :: proc(panel_width: f32, depth: int) -> f32 {
     label_x := f32(depth) * theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X
-    available := max(params.list_panel.width - label_x - TREE_ACTION_DRAWER_PADDING, 0)
+    available := max(panel_width - label_x - TREE_ACTION_DRAWER_PADDING, 0)
     if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH {
         return TREE_ACTION_DRAWER_MIN_HEIGHT
     }
@@ -131,22 +136,23 @@ tree_actions_full_height :: proc(params: Tree_List_Params, depth: int) -> f32 {
 
 // tree_actions_current_height returns sampled drawer extent for one owner identity.
 tree_actions_current_height :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    motion: ^viewmodel.Ui_Tree_Actions_Motion,
     key: uuid.Identifier) -> f32 {
-    if runtime^.tree_actions_motion.entry_id == key {
-        return runtime^.tree_actions_motion.height
+    if motion^.entry_id == key {
+        return motion^.height
     }
     return 0
 }
 
 // tree_actions_sample advances the selected drawer using the shared disclosure policy.
 tree_actions_sample :: proc(
-    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) -> f32 {
-    motion := &params.ui_runtime^.tree_actions_motion
+    ctx: Tree_Geometry_Context, item: ^viewmodel.Ui_Tree_Item) -> f32 {
+    motion := ctx.drawer
     if motion^.entry_id != item^.key {
         return 0
     }
-    target := tree_actions_full_height(params, tree_item_depth(params, item))
+    target := tree_actions_full_height(
+        ctx.panel.width, tree_item_depth(ctx.projection, item))
     if !motion^.open {
         target = 0
     }
@@ -154,17 +160,17 @@ tree_actions_sample :: proc(
         motion^.height = target
     } else {
         ease := uiaccordion.interface_motion_ease(
-            motion^.start_seconds, params.mouse_input.sample_time_seconds)
+            motion^.start_seconds, ctx.now_seconds)
         motion^.height = clamp(motion^.start_height +
             (target - motion^.start_height) * ease, 0, max(target, motion^.start_height))
-        if params.mouse_input.sample_time_seconds >=
+        if ctx.now_seconds >=
             motion^.start_seconds + uiaccordion.INTERFACE_TRANSITION_SECONDS {
             motion^.height = target
             motion^.running = false
         }
     }
     if !motion^.open && !motion^.running && motion^.height <= 0 {
-        params.ui_runtime^.tree_actions_motion = {}
+        motion^ = {}
         return 0
     }
     return motion^.height
@@ -172,11 +178,12 @@ tree_actions_sample :: proc(
 
 // tree_item_depth resolves one bounded item's indentation from its projection chain.
 tree_item_depth :: proc(
-    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) -> int {
+    projection: ^viewmodel.Ui_Tree_Projection,
+    item: ^viewmodel.Ui_Tree_Item) -> int {
     depth := 0
     for parent, steps := item^.parent, 0;
-        parent != TREE_NO_ITEM && steps < params.ui_runtime^.tree_projection.count;
-        parent, steps = params.ui_runtime^.tree_projection.items[parent].parent,
+        parent != TREE_NO_ITEM && steps < projection^.count;
+        parent, steps = projection^.items[parent].parent,
             steps + 1 {
         depth += 1
     }
@@ -185,56 +192,62 @@ tree_item_depth :: proc(
 
 // tree_actions_toggle starts or reverses motion only for the current selected entry.
 tree_actions_toggle :: proc(params: Tree_List_Params, entry_id: uuid.Identifier) {
-    index := tree_projection_find(&params.ui_runtime^.tree_projection, entry_id)
+    index := tree_projection_find(&params.ui_runtime^.library.tree.projection, entry_id)
     if index == TREE_NO_ITEM ||
-        !tree_actions_eligible(params, &params.ui_runtime^.tree_projection.items[index]) {
+        !tree_actions_eligible(
+            &params.ui_runtime^.library.tree.projection,
+            params.ui_runtime^.library.tree.selected_item_id,
+            params.visibility.search != nil && params.visibility.search^.active,
+            &params.ui_runtime^.library.tree.projection.items[index]) {
         return
     }
-    motion := &params.ui_runtime^.tree_actions_motion
+    motion := &params.ui_runtime^.library.actions.drawer
     if motion^.entry_id != entry_id {
         motion^ = {entry_id = entry_id}
     }
     motion^.open = !motion^.open
     motion^.start_height = motion^.height
     motion^.start_seconds = params.mouse_input.sample_time_seconds
-    motion^.running = !uiaccordion.ui_reduced_motion(params.ui_runtime)
+    motion^.running = !params.reduce_motion
     if !motion^.open {
-        params.ui_runtime^.tree_reorder_motion = {}
+        params.ui_runtime^.library.actions.reorder = {}
         tree_actions_focus_toggle(params, entry_id)
     }
 }
 
 // tree_actions_layout prepares shared content-space geometry for every consumer.
 tree_actions_layout :: proc(
-    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item,
+    ctx: Tree_Geometry_Context, item: ^viewmodel.Ui_Tree_Item,
     depth: int, content_y: f32) -> Tree_Actions_Layout {
     result: Tree_Actions_Layout
-    if !tree_actions_eligible(params, item) {
+    if !tree_actions_eligible(
+        ctx.projection, ctx.selected_item_id, ctx.search_active, item) {
         return result
     }
     result.eligible = true
-    item_index := tree_projection_find(&params.ui_runtime^.tree_projection, item^.key)
+    item_index := tree_projection_find(ctx.projection, item^.key)
     result.toggle_id = tree_actions_control_id(item_index, 0)
-    result.toggle_rect = {params.list_panel.width - TREE_ACTION_TOGGLE_WIDTH,
+    result.toggle_rect = {ctx.panel.width - TREE_ACTION_TOGGLE_WIDTH,
         content_y, TREE_ACTION_TOGGLE_WIDTH, theme.TREE_ROW_HEIGHT}
     label_x := f32(depth) * theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X
     result.label_clip = {label_x, content_y,
         max(result.toggle_rect.x - label_x, 0), theme.TREE_ROW_HEIGHT}
-    motion := &params.ui_runtime^.tree_actions_motion
-    if motion.entry_id != item^.key || motion.height <= 0 {
+    if ctx.drawer.entry_id != item^.key || ctx.drawer.height <= 0 {
         return result
     }
-    result.open = motion.open
-    result.height = motion.height
+    result.open = ctx.drawer.open
+    result.height = ctx.drawer.height
     result.drawer_rect = {0, content_y + theme.TREE_ROW_HEIGHT,
-        params.list_panel.width, motion.height}
-    tree_actions_layout_buttons(params, item, &result)
+        ctx.panel.width, ctx.drawer.height}
+    tree_actions_layout_buttons(ctx.collections, ctx.projection, item, &result)
     return result
 }
 
 // tree_actions_layout_buttons prepares responsive action rectangles and endpoint states.
 tree_actions_layout_buttons :: proc(
-    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item,
+    collections: ^collections.Set,
+    projection: ^viewmodel.Ui_Tree_Projection,
+    item: ^viewmodel.Ui_Tree_Item,
     layout: ^Tree_Actions_Layout) {
     available := max(layout^.drawer_rect.width - layout^.label_clip.x -
         TREE_ACTION_DRAWER_PADDING, 0)
@@ -255,10 +268,11 @@ tree_actions_layout_buttons :: proc(
             inner.width, TREE_ACTION_BUTTON_HEIGHT}
     }
     layout^.move_up_enabled = tree_actions_neighbor_exists(
-        params.collections, item^.key, .Up)
+        collections, item^.key, .Up)
     layout^.move_down_enabled = tree_actions_neighbor_exists(
-        params.collections, item^.key, .Down)
-    item_index := tree_projection_find(&params.ui_runtime^.tree_projection, item^.key)
+        collections, item^.key, .Down)
+    item_index := tree_projection_find(
+        projection, item^.key)
     layout^.move_up_id = tree_actions_control_id(item_index, 1)
     layout^.move_down_id = tree_actions_control_id(item_index, 2)
 }
@@ -330,15 +344,15 @@ tree_actions_prepare_controls :: proc(
         toggle = row^.actions.open, mouse = params.mouse_input,
         interaction_space_rect = toggle_clip,
         interaction_enabled = ctx.allow_clicks &&
-            !params.ui_runtime^.tree_scroll_dragging,
+            !params.ui_runtime^.library.tree.scroll_dragging,
         inset_scale = 1, semantics = {clip_bounds = toggle_clip},
-    }, &params.ui_runtime^.ui_press_owner)
+    }, &params.ui_runtime^.input.press_owner)
     if row^.actions_toggle.clicked {
         hit^.actions_toggle_id = row^.item^.key
     }
-    if params.ui_runtime^.ui_press_owner.active &&
-        params.ui_runtime^.ui_press_owner.id == row^.actions.toggle_id {
-        params.ui_runtime^.tree_actions_press_entry = row^.item^.key
+    if params.ui_runtime^.input.press_owner.active &&
+        params.ui_runtime^.input.press_owner.id == row^.actions.toggle_id {
+        params.ui_runtime^.library.actions.press_entry = row^.item^.key
     }
     if !row^.actions.open {
         tree_actions_cancel_closed_capture(params.ui_runtime, row^.actions)
@@ -361,15 +375,15 @@ tree_actions_prepare_move_buttons :: proc(
     row^.actions_up = uiwidgets.update_text_button(tree_actions_button_params(
         params, row^.actions.move_up_id, {up, clip},
         row^.actions.move_up_enabled, ctx.allow_clicks),
-        &params.ui_runtime^.ui_press_owner)
+        &params.ui_runtime^.input.press_owner)
     row^.actions_down = uiwidgets.update_text_button(tree_actions_button_params(
         params, row^.actions.move_down_id, {down, clip},
         row^.actions.move_down_enabled, ctx.allow_clicks),
-        &params.ui_runtime^.ui_press_owner)
-    if params.ui_runtime^.ui_press_owner.active &&
-        (params.ui_runtime^.ui_press_owner.id == row^.actions.move_up_id ||
-         params.ui_runtime^.ui_press_owner.id == row^.actions.move_down_id) {
-        params.ui_runtime^.tree_actions_press_entry = row^.item^.key
+        &params.ui_runtime^.input.press_owner)
+    if params.ui_runtime^.input.press_owner.active &&
+        (params.ui_runtime^.input.press_owner.id == row^.actions.move_up_id ||
+         params.ui_runtime^.input.press_owner.id == row^.actions.move_down_id) {
+        params.ui_runtime^.library.actions.press_entry = row^.item^.key
     }
     if row^.actions_up.clicked {
         tree_actions_record_move(hit, row^.item^.key, .Up)
@@ -386,7 +400,8 @@ tree_actions_button_params :: proc(
     return {
         id = id, rect = bounds.bounds, enabled = enabled,
         mouse = params.mouse_input, interaction_space_rect = bounds.clip_bounds,
-        interaction_enabled = allow_clicks && !params.ui_runtime^.tree_scroll_dragging &&
+        interaction_enabled = allow_clicks &&
+        !params.ui_runtime^.library.tree.scroll_dragging &&
             enabled,
         font = params.font, font_resolver = params.font_resolver,
         semantics = {clip_bounds = bounds.clip_bounds},
@@ -404,10 +419,10 @@ tree_actions_record_move :: proc(
 // tree_actions_cancel_closed_capture cancels controls as soon as closing begins.
 tree_actions_cancel_closed_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State, layout: Tree_Actions_Layout) {
-    owner := runtime^.ui_press_owner
+    owner := runtime^.input.press_owner
     if owner.active && owner.kind == .Text_Button &&
         (owner.id == layout.move_up_id || owner.id == layout.move_down_id) {
-        runtime^.ui_press_owner = {}
+        runtime^.input.press_owner = {}
     }
 }
 
@@ -415,11 +430,11 @@ tree_actions_cancel_closed_capture :: proc(
 tree_actions_cancel_clipped_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     layout: Tree_Actions_Layout, clip: geometry.Rectangle) {
-    owner := runtime^.ui_press_owner
+    owner := runtime^.input.press_owner
     if owner.active && owner.kind == .Text_Button &&
         (owner.id == layout.move_up_id || owner.id == layout.move_down_id) &&
         (clip.width <= 0 || clip.height <= 0) {
-        runtime^.ui_press_owner = {}
+        runtime^.input.press_owner = {}
     }
 }
 
@@ -427,7 +442,7 @@ tree_actions_cancel_clipped_capture :: proc(
 tree_actions_cancel_hidden_capture :: proc(
     params: Tree_List_Params, prepared: ^Tree_List_Preparation) {
     runtime := params.ui_runtime
-    owner := runtime^.ui_press_owner
+    owner := runtime^.input.press_owner
     if !owner.active || owner.kind != .Icon_Button && owner.kind != .Text_Button {
         return
     }
@@ -444,7 +459,7 @@ tree_actions_cancel_hidden_capture :: proc(
             owner, row, prepared^.scroll.view_rect, prepared^.scroll.scroll_y_out) {
             return
         }
-        runtime^.ui_press_owner = {}
+        runtime^.input.press_owner = {}
         return
     }
     tree_actions_cancel_context_capture(runtime)
@@ -480,20 +495,37 @@ tree_actions_capture_visible :: proc(
     return geometry.rectangles_intersect(bounds, clip)
 }
 
+// tree_actions_move_is_admitted checks the selected, open Favorites placement.
+tree_actions_move_is_admitted :: proc(
+    params: Tree_List_Params, entry_id: uuid.Identifier) -> bool {
+    state := params.general_state
+    if state == nil {
+        log.error("library_tree_actions_move_without_current_owner")
+        return false
+    }
+    index := tree_projection_find(&params.ui_runtime^.library.tree.projection, entry_id)
+    if index == TREE_NO_ITEM ||
+        !tree_actions_eligible(
+            &params.ui_runtime^.library.tree.projection,
+            params.ui_runtime^.library.tree.selected_item_id,
+            params.visibility.search != nil && params.visibility.search^.active,
+            &params.ui_runtime^.library.tree.projection.items[index]) ||
+        state^.ui_runtime.layout.active_accordion_section != .Library ||
+        entry_id != state^.ui_runtime.library.actions.drawer.entry_id ||
+        !state^.ui_runtime.library.actions.drawer.open ||
+        entry_id != state^.ui_runtime.library.tree.selected_item_id {
+        log.error("library_tree_actions_move_without_current_owner")
+        return false
+    }
+    return true
+}
+
 // tree_actions_move submits a fresh immutable swap through the durable mutation queue.
 tree_actions_move :: proc(
     params: Tree_List_Params, entry_id: uuid.Identifier,
     direction: collections.Move_Direction) -> bool {
     state := params.general_state
-    index := tree_projection_find(&params.ui_runtime^.tree_projection, entry_id)
-    if state == nil || index == TREE_NO_ITEM ||
-        !tree_actions_eligible(params,
-            &params.ui_runtime^.tree_projection.items[index]) ||
-        state^.ui_runtime.active_accordion_section != .Library ||
-        entry_id != state^.ui_runtime.tree_actions_motion.entry_id ||
-        !state^.ui_runtime.tree_actions_motion.open ||
-        entry_id != state^.ui_runtime.selected_tree_item_id {
-        log.error("library_tree_actions_move_without_current_owner")
+    if !tree_actions_move_is_admitted(params, entry_id) {
         return false
     }
     mutation, failure := collections.make_sibling_move(
@@ -502,15 +534,17 @@ tree_actions_move :: proc(
         log.errorf("library_tree_actions_move_rejected policy=%v", failure)
         return false
     }
-    sampled := tree_reorder_capture(params)
+    sampled: viewmodel.Ui_Tree_Reorder_Motion
+    tree_reorder_capture(params, &sampled)
     result := viewpreferences.settings_save_collection_mutation(state, mutation)
     if result != .None {
         log.errorf("library_tree_actions_move_rejected error=%v", result)
         return false
     }
     tree_actions_refresh_projection(params)
-    sampled.topology_revision = params.ui_runtime^.tree_projection.topology_revision
-    params.ui_runtime^.tree_reorder_motion = sampled
+    sampled.topology_revision =
+        params.ui_runtime^.library.tree.projection.topology_revision
+    params.ui_runtime^.library.actions.reorder = sampled
     tree_actions_repair_move_focus(params, entry_id, direction)
     return true
 }

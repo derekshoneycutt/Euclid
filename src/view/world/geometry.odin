@@ -1866,7 +1866,7 @@ project_iso_points_batch_with_components :: proc(
         params.zs[:count],
         params.out[:count],
         state^.iso_scale^,
-    }, state^.ui_runtime.use_simd_batch_projection)
+    }, state^.ui_runtime.rendering.use_simd_batch_projection)
 }
 
 

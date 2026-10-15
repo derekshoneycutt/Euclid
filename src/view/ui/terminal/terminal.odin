@@ -138,21 +138,21 @@ register_terminal_semantics :: proc(
         region = .Presentation, traversal_order = 0,
         bounds = geometry.Rectangle(bounds),
         clip_bounds = geometry.Rectangle(
-            uiaccordion.ui_presentation_clip(&state^.ui_runtime, bounds)),
+            uiaccordion.ui_presentation_clip(&state^.ui_runtime.layout, bounds)),
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
         label = viewmessages.shell_message(state, .Terminal_Accessible_Label),
     })
     semantic := state^.ui_runtime.semantic_focus
-    needs_initial_focus := !state^.ui_runtime.terminal_semantic_focus_initialized ||
-        state^.ui_runtime.terminal_semantic_focus_generation !=
+    needs_initial_focus := !state^.ui_runtime.terminal.semantic_focus_initialized ||
+        state^.ui_runtime.terminal.semantic_focus_generation !=
             state^.terminal.animation_generation
     if !state^.ui_runtime.context_menu.active && (needs_initial_focus ||
-        state^.ui_runtime.interaction.logical_focus.kind == .Terminal &&
+        state^.ui_runtime.input.interaction.logical_focus.kind == .Terminal &&
         semantic^.logical_focus.domain != .Terminal) {
         if uisemantics.semantic_request_pointer_focus(semantic, id) {
-            state^.ui_runtime.terminal_semantic_focus_initialized = true
-            state^.ui_runtime.terminal_semantic_focus_generation =
+            state^.ui_runtime.terminal.semantic_focus_initialized = true
+            state^.ui_runtime.terminal.semantic_focus_generation =
                 state^.terminal.animation_generation
         }
     }
@@ -224,15 +224,17 @@ terminal_commit_prepared_scroll :: proc(
     state: ^core.Euclid_General_State,
     route: Terminal_Content_Route,
     scroll: uiwidgets.Scroll_Container_Update_Result) -> input.Input_Frame {
-    state^.ui_runtime.terminal_scroll_dragging = scroll.state_out.is_dragging_thumb
-    state^.ui_runtime.terminal_scroll_drag_off = scroll.state_out.drag_offset_y
+    state^.ui_runtime.terminal.scroll_dragging = scroll.state_out.is_dragging_thumb
+    state^.ui_runtime.terminal.scroll_drag_off = scroll.state_out.drag_offset_y
     terminalview.terminal_commit_scroll(
         &state^.terminal, scroll.scroll_y_out, route.layout.content_height)
-    ui_refine_terminal_scroll_route(&state^.ui_runtime, route.over_track,
+    ui_refine_terminal_scroll_route(
+        &state^.ui_runtime.input.interaction_frame, route.over_track,
         scroll.pointer_reserved, route.resolved.mouse_wheel_delta != 0)
     local_capture := state^.terminal.view_selection_dragging ||
         state^.terminal.hyperlink_pressed != 0
-    return ui_route_terminal_content_frame(&state^.ui_runtime, route.resolved,
+    return ui_route_terminal_content_frame(
+        state^.ui_runtime.input.interaction_frame.terminal, route.resolved,
         geometry.Rectangle(route.bounds), {
             local_capture = local_capture,
             child_capture = route.child_pointer_capture,
@@ -277,9 +279,9 @@ terminal_prepare_scroll :: proc(
         content_height = layout.content_height, mouse_input = scroll_frame,
         interaction_space_rect = bounds,
         wheel_step = layout.line_height * theme.WHEEL_SCROLL_MULTIPLIER,
-        press_owner = &state^.ui_runtime.ui_press_owner,
-        state_in = {state^.ui_runtime.terminal_scroll_dragging,
-            state^.ui_runtime.terminal_scroll_drag_off},
+        press_owner = &state^.ui_runtime.input.press_owner,
+        state_in = {state^.ui_runtime.terminal.scroll_dragging,
+            state^.ui_runtime.terminal.scroll_drag_off},
         semantic_focus = state^.ui_runtime.semantic_focus,
         semantic_id = terminal_semantic_id(state),
     })
@@ -301,7 +303,7 @@ terminal_prepare_frame :: proc(
     resolver := font.cache_terminal_resolver(&state^.font_cache)
     layout := terminalview.terminal_draw_layout(
         term, resolver, bounds, terminal_draw_theme())
-    layout.terminal_focused = state^.ui_runtime.interaction_frame.terminal_focused
+    layout.terminal_focused = state^.ui_runtime.input.interaction_frame.terminal_focused
     resolved := terminalview.terminal_resolve_mouse_frame(
         term, frame, bounds)
     prepared_scroll := terminal_prepare_scroll(

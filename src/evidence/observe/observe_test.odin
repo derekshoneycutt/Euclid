@@ -14,6 +14,53 @@ import shapemodel "../../shapes/model"
 import viewterminalmodel "../../view/terminal/model"
 import testing "core:testing"
 
+// Observe_Display_Fixture owns the borrowed state used by one display observation.
+Observe_Display_Fixture :: struct {
+    source: Display_Source,
+}
+
+// Allocate the independent component fixtures for a composed observation test.
+observe_test_display_fixture_init :: proc(fixture: ^Observe_Display_Fixture) {
+    fixture^.source.ui_layout = new(viewmodel.Ui_Layout_State, context.allocator)
+    fixture^.source.ui_library = new(viewmodel.Ui_Library_State, context.allocator)
+    fixture^.source.ui_presentation = new(
+        viewmodel.Ui_Presentation_Interaction_State, context.allocator)
+    fixture^.source.ui_preferences = new(
+        viewmodel.Ui_Preference_State, context.allocator)
+    fixture^.source.ui_playback = new(
+        viewmodel.Ui_Playback_Control_State, context.allocator)
+    fixture^.source.ui_tooltip = new(viewmodel.Ui_Tooltip_State, context.allocator)
+    fixture^.source.telemetry = new(telemetrymodel.Runtime, context.allocator)
+    fixture^.source.gif_capture = new(
+        capturemodel.Gif_Capture_Session, context.allocator)
+    fixture^.source.terminal = new(viewterminalmodel.Terminal_State, context.allocator)
+    fixture^.source.dynview = new(dynviewmodel.Dynview_System, context.allocator)
+    fixture^.source.shape_world = new(shapemodel.Shape_World, context.allocator)
+    fixture^.source.particle_system =
+        new(particlemodel.Particle_System, context.allocator)
+    fixture^.source.julia_service =
+        new(bridgemodel.Julia_Runtime_Service, context.allocator)
+    fixture^.source.evidence_ring = new(evidence_trace.Ring, context.allocator)
+}
+
+// Release each owner allocation retained by the observation fixture.
+observe_test_display_fixture_destroy :: proc(fixture: ^Observe_Display_Fixture) {
+    free(fixture^.source.ui_layout, context.allocator)
+    free(fixture^.source.ui_library, context.allocator)
+    free(fixture^.source.ui_presentation, context.allocator)
+    free(fixture^.source.ui_preferences, context.allocator)
+    free(fixture^.source.ui_playback, context.allocator)
+    free(fixture^.source.ui_tooltip, context.allocator)
+    free(fixture^.source.telemetry, context.allocator)
+    free(fixture^.source.gif_capture, context.allocator)
+    free(fixture^.source.terminal, context.allocator)
+    free(fixture^.source.dynview, context.allocator)
+    free(fixture^.source.shape_world, context.allocator)
+    free(fixture^.source.particle_system, context.allocator)
+    free(fixture^.source.julia_service, context.allocator)
+    free(fixture^.source.evidence_ring, context.allocator)
+}
+
 // Verify capture evidence survives an absent UI and never borrows policy storage.
 @(test)
 observe_test_independent_capture_owner :: proc(t: ^testing.T) {
@@ -55,28 +102,28 @@ observe_test_independent_persistence_owner :: proc(t: ^testing.T) {
 // Verify the display copies only initialized branch motion and retained visual geometry.
 @(test)
 observe_tree_motion_is_pointer_free_and_bounded :: proc(t: ^testing.T) {
-    runtime: viewmodel.Euclid_Ui_Runtime_State
-    runtime.tree_motion.count = 2
-    runtime.tree_motion.branches[0].running = true
-    runtime.tree_motion.branches[2].running = true
-    runtime.tree_motion.visual_height = 140.25
-    runtime.tree_scroll_y = 20.5
+    library: viewmodel.Ui_Library_State
+    library.motion.count = 2
+    library.motion.branches[0].running = true
+    library.motion.branches[2].running = true
+    library.motion.visual_height = 140.25
+    library.tree.scroll_y = 20.5
     result: Display
-    observe_display_settings(&runtime, &result)
+    observe_display_tree(&library, &result)
     testing.expect_value(t, result.tree_transition_count, 1)
     testing.expect_value(t, result.tree_visual_height, f32(140.25))
     testing.expect_value(t, result.tree_scroll_y, f32(20.5))
-    testing.expect(t, runtime.tree_motion.branches[0].running)
+    testing.expect(t, library.motion.branches[0].running)
 }
 
 // Verify tree-settled evidence includes attached drawer and reorder transitions.
 @(test)
 observe_tree_motion_includes_drawer_and_swap :: proc(t: ^testing.T) {
-    runtime: viewmodel.Euclid_Ui_Runtime_State
-    runtime.tree_reorder_motion.active = true
-    runtime.tree_actions_motion.running = true
+    library: viewmodel.Ui_Library_State
+    library.actions.reorder.active = true
+    library.actions.drawer.running = true
     result: Display
-    observe_display_tree(&runtime, &result)
+    observe_display_tree(&library, &result)
     testing.expect_value(t, result.tree_transition_count, 2)
 }
 
@@ -84,11 +131,11 @@ observe_tree_motion_includes_drawer_and_swap :: proc(t: ^testing.T) {
 observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.fixed_step = 17
     source^.simulation_time = 2.5
-    source^.ui_runtime^.simulation_paused = true
-    source^.ui_runtime^.view_text_scroll_y = 90.5
-    source^.ui_runtime^.view_text_scroll_max = 120
-    source^.ui_runtime^.vertical_split_x = 640
-    source^.ui_runtime^.horizontal_split_y = 360
+    source^.ui_playback^.simulation_paused = true
+    source^.ui_presentation^.text_scroll_y = 90.5
+    source^.ui_presentation^.text_scroll_max = 120
+    source^.ui_layout^.vertical_split_x = 640
+    source^.ui_layout^.horizontal_split_y = 360
     source^.telemetry^.colored_vertex_count = 400
     source^.telemetry^.colored_index_count = 600
     source^.telemetry^.curve_candidate_point_count = 100
@@ -155,40 +202,13 @@ observe_test_expect_display_scalars :: proc(
 // Verify display observation copies authoritative Euclid scalars without mutation.
 @(test)
 observe_test_display_scalars :: proc(t: ^testing.T) {
-    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
-    defer free(ui_runtime)
-    telemetry := new(telemetrymodel.Runtime, context.allocator)
-    defer free(telemetry)
-    gif_capture := new(capturemodel.Gif_Capture_Session, context.allocator)
-    defer free(gif_capture)
-    terminal := new(viewterminalmodel.Terminal_State, context.allocator)
-    defer free(terminal)
-    dynview := new(dynviewmodel.Dynview_System, context.allocator)
-    defer free(dynview)
-    shape_world := new(shapemodel.Shape_World, context.allocator)
-    defer free(shape_world)
-    particle_system := new(particlemodel.Particle_System, context.allocator)
-    defer free(particle_system)
-    julia_service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
-    defer free(julia_service)
-    evidence_ring := new(evidence_trace.Ring, context.allocator)
-    defer free(evidence_ring)
-    source := Display_Source{
-        ui_runtime = ui_runtime,
-        telemetry = telemetry,
-        gif_capture = gif_capture,
-        terminal = terminal,
-        dynview = dynview,
-        shape_world = shape_world,
-        particle_system = particle_system,
-        julia_service = julia_service,
-        evidence_ring = evidence_ring,
-    }
-    observe_test_seed_display_scalars(&source)
-    evidence_trace.ring_init(source.evidence_ring, .Display)
-
-    result := display(&source)
-    observe_test_expect_display_scalars(t, result, &source)
+    fixture: Observe_Display_Fixture
+    observe_test_display_fixture_init(&fixture)
+    defer observe_test_display_fixture_destroy(&fixture)
+    observe_test_seed_display_scalars(&fixture.source)
+    evidence_trace.ring_init(fixture.source.evidence_ring, .Display)
+    result := display(&fixture.source)
+    observe_test_expect_display_scalars(t, result, &fixture.source)
 }
 
 // Verify Julia-host observation includes its independent producer evidence state.

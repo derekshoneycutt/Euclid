@@ -299,17 +299,17 @@ session_apply_startup_preferences :: proc(
     if state == nil || state^.particle_system == nil {
         return
     }
-    state^.ui_runtime.settings_preferences = preferences
+    state^.ui_runtime.preferences.values = preferences
     state^.preferences_runtime.settings_store = store
     state^.preferences_runtime.collections_state = collection_state
-    state^.ui_runtime.settings_store_available = store != nil
-    state^.ui_runtime.settings_save_status =
+    state^.ui_runtime.preferences.store_available = store != nil
+    state^.ui_runtime.preferences.save_status =
         .Saved if store != nil else .Unavailable
-    state^.ui_runtime.display_fps = preferences.interface.display_fps
-    state^.ui_runtime.limit_fps = preferences.rendering.limit_fps
+    state^.ui_runtime.rendering.display_fps = preferences.interface.display_fps
+    state^.ui_runtime.rendering.limit_fps = preferences.rendering.limit_fps
     state^.user_drawing_sound_enabled = preferences.drawing.sound_enabled
     state^.particle_system^.use_max_dust_particles = preferences.drawing.dust_limit
-    state^.ui_runtime.use_simd_batch_projection =
+    state^.ui_runtime.rendering.use_simd_batch_projection =
         preferences.rendering.simd && projection.simd_batch_projection_available()
 }
 
@@ -416,14 +416,17 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
 //   Derive initial split pixels and portrait-entry state from the resolved mode.
 init_ui_layout_pixels :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State, width, height: int) {
-    if runtime^.current_layout_mode == .Portrait {
-        runtime^.vertical_split_x = f32(width)
-        runtime^.horizontal_split_y = f32(height) * runtime^.portrait.world_height_ratio
-        runtime^.portrait.entered = true
+    if runtime^.layout.current_layout_mode == .Portrait {
+        runtime^.layout.vertical_split_x = f32(width)
+        runtime^.layout.horizontal_split_y =
+            f32(height) * runtime^.layout.portrait.world_height_ratio
+        runtime^.layout.portrait.entered = true
         return
     }
-    runtime^.vertical_split_x = f32(width) * runtime^.landscape.vertical_ratio
-    runtime^.horizontal_split_y = f32(height) * runtime^.landscape.horizontal_ratio
+    runtime^.layout.vertical_split_x =
+        f32(width) * runtime^.layout.landscape.vertical_ratio
+    runtime^.layout.horizontal_split_y =
+        f32(height) * runtime^.layout.landscape.horizontal_ratio
 }
 
 //   Initialize display-owned GIF capture preferences and status.
@@ -437,13 +440,13 @@ init_gif_capture_fields :: proc(runtime: ^capturemodel.Gif_Capture_Status) {
 
 // Resolve the initial accordion section and presentation visibility from layout.
 init_ui_active_section :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    runtime^.active_accordion_section = runtime^.landscape.active_section
-    if runtime^.current_layout_mode == .Portrait {
-        runtime^.active_accordion_section = runtime^.portrait.active_section
+    runtime^.layout.active_accordion_section = runtime^.layout.landscape.active_section
+    if runtime^.layout.current_layout_mode == .Portrait {
+        runtime^.layout.active_accordion_section = runtime^.layout.portrait.active_section
     }
-    runtime^.presentation_visible =
-        runtime^.current_layout_mode == .Landscape ||
-        runtime^.active_accordion_section == .View
+    runtime^.presentation.visible =
+        runtime^.layout.current_layout_mode == .Landscape ||
+        runtime^.layout.active_accordion_section == .View
 }
 
 //   Initialize display-owned UI policy and layout memory from run settings.
@@ -464,27 +467,27 @@ init_ui_runtime_fields :: proc(
     if settings == nil || !init_ui_semantic_focus(runtime) {
         return false
     }
-    runtime^.limit_fps = settings^.limit_fps
-    runtime^.simulation_paused = false
-    runtime^.use_simd_batch_projection =
+    runtime^.rendering.limit_fps = settings^.limit_fps
+    runtime^.playback.simulation_paused = false
+    runtime^.rendering.use_simd_batch_projection =
         settings^.use_simd_batch_projection &&
         projection.simd_batch_projection_available()
-    runtime^.use_gpu_dust_instancing = false
-    runtime^.window = {
+    runtime^.rendering.use_gpu_dust_instancing = false
+    runtime^.layout.window = {
         width = settings^.window.width,
         height = settings^.window.height,
     }
-    runtime^.layout_preference = settings^.window.layout
-    runtime^.landscape = {
+    runtime^.layout.layout_preference = settings^.window.layout
+    runtime^.layout.landscape = {
         vertical_ratio = f32(worldmodel.VIEW_WIDTH) / f32(viewmodel.WINDOW_WIDTH),
         horizontal_ratio = f32(worldmodel.VIEW_HEIGHT) / f32(viewmodel.WINDOW_HEIGHT),
         active_section = .Library,
     }
-    runtime^.portrait = {
+    runtime^.layout.portrait = {
         world_height_ratio = 0.5,
         active_section = .View,
     }
-    runtime^.current_layout_mode = uiregions.resolve_initial_layout_mode(
+    runtime^.layout.current_layout_mode = uiregions.resolve_initial_layout_mode(
         settings^.window.layout,
         f32(settings^.window.width), f32(settings^.window.height))
     init_ui_active_section(runtime)

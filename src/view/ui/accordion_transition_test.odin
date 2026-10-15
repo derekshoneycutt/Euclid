@@ -144,13 +144,21 @@ accordion_transition_settles_for_geometry_and_policy_changes :: proc(t: ^testing
 accordion_reduced_motion_policy_is_an_or :: proc(t: ^testing.T) {
     runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(runtime, context.allocator)
-    testing.expect(t, !uiaccordion.ui_reduced_motion(runtime))
-    runtime^.settings_preferences.interface.reduce_motion = true
-    testing.expect(t, uiaccordion.ui_reduced_motion(runtime))
-    runtime^.settings_preferences.interface.reduce_motion = false
+    testing.expect(t, !uiaccordion.ui_reduced_motion(
+        runtime^.preferences.values.interface.reduce_motion,
+        runtime^.platform_reduce_motion))
+    runtime^.preferences.values.interface.reduce_motion = true
+    testing.expect(t, uiaccordion.ui_reduced_motion(
+        runtime^.preferences.values.interface.reduce_motion,
+        runtime^.platform_reduce_motion))
+    runtime^.preferences.values.interface.reduce_motion = false
     runtime^.platform_reduce_motion = true
-    testing.expect(t, uiaccordion.ui_reduced_motion(runtime))
-    testing.expect(t, !runtime^.simulation_paused && !runtime^.animation_policy_paused)
+    testing.expect(t, uiaccordion.ui_reduced_motion(
+        runtime^.preferences.values.interface.reduce_motion,
+        runtime^.platform_reduce_motion))
+    testing.expect(t,
+        !runtime^.playback.simulation_paused &&
+        !runtime^.playback.animation_policy_paused)
 }
 
 // Pointer edges and wheel cannot reach full-size controls behind an unrevealed clip.
@@ -158,13 +166,13 @@ accordion_reduced_motion_policy_is_an_or :: proc(t: ^testing.T) {
 accordion_child_input_is_clipped_without_discarding_keyboard :: proc(t: ^testing.T) {
     runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(runtime, context.allocator)
-    runtime^.active_accordion_section = .Library
-    ctx := accordion_transition_test_context(&runtime^.accordion_transition)
+    runtime^.layout.active_accordion_section = .Library
+    ctx := accordion_transition_test_context(&runtime^.layout.accordion_transition)
     _ = uiaccordion.accordion_transition_layout(
         ctx, uiaccordion.accordion_landscape_sections(), .Library)
     clip_index := int(viewmodel.Ui_Accordion_Section.Library)
-    runtime^.accordion_transition.clips[clip_index].height = 10
-    clip := uiaccordion.accordion_content_clip(runtime, .Library)
+    runtime^.layout.accordion_transition.clips[clip_index].height = 10
+    clip := uiaccordion.accordion_content_clip(&runtime^.layout, .Library)
     events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
     frame := input.Input_Frame{mouse_position = {clip.x + 1, clip.y + 20},
         mouse_pressed = {.Left}, mouse_down = {.Left}, mouse_wheel_delta = 1,
@@ -178,9 +186,9 @@ accordion_child_input_is_clipped_without_discarding_keyboard :: proc(t: ^testing
     shown := ui_clip_accordion_child_frame(runtime, frame)
     testing.expect(t, uiwidgets.input_frame_left_pressed(shown))
     testing.expect_value(t, shown.mouse_wheel_delta, f32(1))
-    runtime^.accordion_transition.clips[clip_index].height = 0
+    runtime^.layout.accordion_transition.clips[clip_index].height = 0
     testing.expect(t, !ui_accordion_pointer_is_revealed(
-        runtime, .Library, {clip.x, clip.y}))
+        &runtime^.layout, .Library, {clip.x, clip.y}))
 }
 
 // Releasing outside a reveal cancels child capture without admitting a hidden activation.
@@ -188,19 +196,20 @@ accordion_child_input_is_clipped_without_discarding_keyboard :: proc(t: ^testing
 accordion_hidden_release_cancels_only_child_capture :: proc(t: ^testing.T) {
     runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(runtime, context.allocator)
-    runtime^.active_accordion_section = .Library
-    ctx := accordion_transition_test_context(&runtime^.accordion_transition)
+    runtime^.layout.active_accordion_section = .Library
+    ctx := accordion_transition_test_context(&runtime^.layout.accordion_transition)
     _ = uiaccordion.accordion_transition_layout(
         ctx, uiaccordion.accordion_landscape_sections(), .Library)
-    runtime^.accordion_transition.clips[int(viewmodel.Ui_Accordion_Section.Library)] = {}
-    runtime^.ui_press_owner = {active = true, kind = .Checkbox, id = 4006}
+    runtime^.layout.accordion_transition.clips[
+        int(viewmodel.Ui_Accordion_Section.Library)] = {}
+    runtime^.input.press_owner = {active = true, kind = .Checkbox, id = 4006}
     frame := input.Input_Frame{mouse_released = {.Left}}
     released := ui_clip_accordion_child_frame(runtime, frame)
-    testing.expect(t, !runtime^.ui_press_owner.active)
+    testing.expect(t, !runtime^.input.press_owner.active)
     testing.expect(t, !uiwidgets.input_frame_left_released(released))
-    runtime^.ui_press_owner = {active = true, kind = .Splitter, id = 1}
+    runtime^.input.press_owner = {active = true, kind = .Splitter, id = 1}
     _ = ui_clip_accordion_child_frame(runtime, frame)
-    testing.expect(t, runtime^.ui_press_owner.active)
+    testing.expect(t, runtime^.input.press_owner.active)
 }
 
 // Outgoing controls neither consume queued actions nor publish operable semantics.
@@ -253,6 +262,21 @@ accordion_semantic_children_respect_the_selected_reveal :: proc(t: ^testing.T) {
 }
 
 // Short Settings viewports retain scroll and reveal the new row through keyboard paging.
+// Queue one Settings page-scroll command in the semantic test snapshot.
+accordion_settings_scroll_page_command :: proc(
+    t: ^testing.T,
+    state: ^core.Euclid_General_State,
+    semantic: ^viewmodel.Ui_Semantic_Focus_State) {
+    state^.ui_runtime.semantic_focus = semantic
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    semantic^.commands[0] = {
+        target = uisemantics.semantic_control_id(.Settings_Control, 6102),
+        kind = .Scroll_Page, amount = 1,
+    }
+    semantic^.command_count = 1
+}
+
+// Short Settings viewports retain scroll and reveal the new row through keyboard paging.
 @(test)
 accordion_settings_scroll_is_retained_and_visual_preparation_is_pure :: proc(
     t: ^testing.T) {
@@ -260,34 +284,41 @@ accordion_settings_scroll_is_retained_and_visual_preparation_is_pure :: proc(
     defer free(state, context.allocator)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
-    state^.ui_runtime.semantic_focus = semantic
-    testing.expect(t, uisemantics.semantic_begin(semantic))
-    semantic^.commands[0] = {
-        target = uisemantics.semantic_control_id(.Settings_Control, 6102),
-        kind = .Scroll_Page, amount = 1,}
-    semantic^.command_count = 1
+    accordion_settings_scroll_page_command(t, state, semantic)
     command, amount := uisemantics.semantic_command_for_event(
         {role = .Panel, actions = {.Scroll}},
         {kind = .Press, key = .Page_Down})
     testing.expect_value(t, command, viewmodel.Ui_Focus_Command_Kind.Scroll_Page)
     testing.expect_value(t, amount, i32(1))
     panel := geometry.Rectangle{0, 0, 600, 290}
-    visual := uisettings.prepare_settings_scroll(state, panel, {}, false)
+    ctx := uisettings.Settings_View_Context{
+        panel = panel, settings_panel = &state^.ui_runtime.settings_panel,
+        press_owner = &state^.ui_runtime.input.press_owner,
+        semantic_focus = semantic,
+    }
+    visual := uisettings.prepare_settings_scroll(ctx, false)
     testing.expect(t, visual.scrollbar.has_scrollbar)
-    testing.expect_value(t, state^.ui_runtime.settings_scroll_y, f32(0))
+    testing.expect_value(t, state^.ui_runtime.settings_panel.scroll_y, f32(0))
     testing.expect_value(t,
         uisemantics.semantic_staging_snapshot(semantic)^.node_count, 0)
-    selected := uisettings.prepare_settings_scroll(state, panel, {}, true)
+    selected := uisettings.prepare_settings_scroll(ctx, true)
     testing.expect_value(t, selected.scroll_y_out, selected.maximum)
     rows := uisettings.settings_view_layout_rows({theme.SETTINGS_PANEL_INSET,
         theme.SETTINGS_HEADER_TOP_OFFSET - selected.scroll_y_out,
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
         panel.height - theme.SETTINGS_HEADER_TOP_OFFSET})
     testing.expect(t, rows.reduce_motion_y + theme.SETTINGS_CHECKBOX_SIZE < panel.height)
-    retained := uisettings.prepare_settings_scroll(state, panel, {}, false)
+    retained := uisettings.prepare_settings_scroll(ctx, false)
     testing.expect_value(t, retained.scroll_y_out, selected.scroll_y_out)
-    testing.expect_value(t, state^.ui_runtime.settings_scroll_y, selected.scroll_y_out)
-    testing.expect_value(t, uisettings.settings_scroll_content_height(true) -
-        uisettings.settings_scroll_content_height(false),
+    testing.expect_value(t,
+        state^.ui_runtime.settings_panel.scroll_y, selected.scroll_y_out)
+}
+
+// System reduced motion reserves exactly the notice row in the Settings scroll extent.
+@(test)
+accordion_settings_system_notice_reserves_one_row :: proc(t: ^testing.T) {
+    with_notice := uisettings.settings_scroll_content_height(true)
+    without_notice := uisettings.settings_scroll_content_height(false)
+    testing.expect_value(t, with_notice - without_notice,
         f32(theme.SETTINGS_TOGGLE_ROW_GAP))
 }

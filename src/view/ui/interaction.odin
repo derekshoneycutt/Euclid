@@ -93,9 +93,9 @@ ui_presentation_target :: proc(
 
 // ui_accordion_pointer_is_revealed admits only positive-area visible child bounds.
 ui_accordion_pointer_is_revealed :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
     section: viewmodel.Ui_Accordion_Section, mouse: geometry.Vector2) -> bool {
-    clip := uiaccordion.accordion_content_clip(runtime, section)
+    clip := uiaccordion.accordion_content_clip(layout, section)
     return clip.width > 0 && clip.height > 0 &&
         geometry.rectangle_contains(clip, mouse)
 }
@@ -107,13 +107,13 @@ ui_world_hover_target :: proc(
     phase: capturemodel.Gif_Capture_Phase,
     animation_favorite_eligible: bool) -> viewmodel.Ui_Interaction_Target {
     control_id, over_control := uianimation.animation_control_hit_test(
-        geometry.Rectangle(runtime^.ui_regions.world_rect),
+        geometry.Rectangle(runtime^.layout.ui_regions.world_rect),
         phase, animation_favorite_eligible, mouse)
     if over_control {
         return viewmodel.ui_interaction_target(.Control, id = control_id)
     }
     if geometry.rectangle_contains(
-        geometry.Rectangle(runtime^.ui_regions.world_rect), mouse) {
+        geometry.Rectangle(runtime^.layout.ui_regions.world_rect), mouse) {
         return viewmodel.ui_interaction_target(.World)
     }
     return {}
@@ -128,9 +128,9 @@ ui_splitter_hover_target :: proc(
         return {}
     }
     axis, hovered := uisplitter.splitter_hovered_axis(mouse,
-        runtime^.current_layout_mode,
-        runtime^.vertical_split_x, runtime^.horizontal_split_y,
-        runtime^.window)
+        runtime^.layout.current_layout_mode,
+        runtime^.layout.vertical_split_x, runtime^.layout.horizontal_split_y,
+        runtime^.layout.window)
     if !hovered {
         return {}
     }
@@ -153,10 +153,11 @@ ui_hover_target :: proc(
     if splitter.kind != .None {
         return splitter
     }
-    regions := runtime^.ui_regions
-    if uipresentation.ui_presentation_is_visible(runtime) &&
-        (runtime^.current_layout_mode != .Portrait ||
-            ui_accordion_pointer_is_revealed(runtime, .View, geometry.Vector2(mouse))) {
+    regions := runtime^.layout.ui_regions
+    if uipresentation.ui_presentation_is_visible(&runtime^.presentation) &&
+        (runtime^.layout.current_layout_mode != .Portrait ||
+            ui_accordion_pointer_is_revealed(
+                &runtime^.layout, .View, geometry.Vector2(mouse))) {
         target := ui_presentation_target(
             geometry.Vector2(mouse), regions, terminal_present)
         if target.kind != .None {
@@ -176,7 +177,8 @@ ui_accordion_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State, mouse: geometry.Vector2,
     capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Interaction_Target {
     child_visible := ui_accordion_pointer_is_revealed(
-        runtime, runtime^.active_accordion_section, geometry.Vector2(mouse))
+        &runtime^.layout, runtime^.layout.active_accordion_section,
+        geometry.Vector2(mouse))
     if child_visible &&
        uigif.gif_path_input_visible(runtime, capture_view) &&
        geometry.rectangle_contains(
@@ -192,7 +194,7 @@ ui_accordion_hover_target :: proc(
             .Control, .Input_Box, uilibrary.LIBRARY_SEARCH_INPUT_ID)
     }
     if geometry.rectangle_contains(
-        geometry.Rectangle(runtime^.ui_regions.accordion_rect), mouse) {
+        geometry.Rectangle(runtime^.layout.ui_regions.accordion_rect), mouse) {
         return viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
     }
     return {}
@@ -203,7 +205,7 @@ ui_route_logical_focus :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     input: Ui_Interaction_Route_Input,
     pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
-    result := runtime^.interaction.logical_focus
+    result := runtime^.input.interaction.logical_focus
     if result.kind == .Input_Box && result.id == uigif.GIF_PATH_INPUT_BOX_ID &&
         !uigif.gif_path_input_visible(runtime, input.capture_view) {
         result = {}
@@ -213,8 +215,8 @@ ui_route_logical_focus :: proc(
         result = {}
     }
     terminal_present := input.terminal_present
-    visible := uipresentation.ui_presentation_is_visible(runtime)
-    if terminal_present && visible && !runtime^.interaction.terminal_was_present {
+    visible := uipresentation.ui_presentation_is_visible(&runtime^.presentation)
+    if terminal_present && visible && !runtime^.input.interaction.terminal_was_present {
         result = {kind = .Terminal}
     } else if (!terminal_present || !visible) && result.kind == .Terminal {
         result = {}
@@ -237,7 +239,7 @@ ui_valid_capture_owner :: proc(
         uilibrary.library_search_visible(runtime) {
         return owner
     }
-    runtime^.ui_press_owner = {}
+    runtime^.input.press_owner = {}
     return {}
 }
 
@@ -267,7 +269,7 @@ ui_route_interaction_frame :: proc(
     logical_focus := ui_route_logical_focus(runtime, input, pointer_target)
     terminal_focused := uiterminal.ui_terminal_effectively_focused(
         logical_focus, input.frame.window_focused, input.terminal_present,
-        uipresentation.ui_presentation_is_visible(runtime))
+        uipresentation.ui_presentation_is_visible(&runtime^.presentation))
     wheel_target := ui_interaction_wheel_target(
         input.frame.mouse_wheel_delta, capture, hover)
     result := viewmodel.Ui_Interaction_Frame{
@@ -277,17 +279,17 @@ ui_route_interaction_frame :: proc(
         pointer_target = pointer_target,
         wheel_target = wheel_target,
         terminal_focus_changed = terminal_focused !=
-            runtime^.interaction.terminal_effectively_focused,
+            runtime^.input.interaction.terminal_effectively_focused,
         terminal_focused = terminal_focused,
     }
     if input.frame.window_focused {
         result.effective_focus = logical_focus
     }
     viewmodel.ui_refresh_surface_interaction(&result)
-    runtime^.interaction.logical_focus = logical_focus
-    runtime^.interaction.terminal_was_present = input.terminal_present
-    runtime^.interaction.terminal_effectively_focused = terminal_focused
-    runtime^.interaction_frame = result
+    runtime^.input.interaction.logical_focus = logical_focus
+    runtime^.input.interaction.terminal_was_present = input.terminal_present
+    runtime^.input.interaction.terminal_effectively_focused = terminal_focused
+    runtime^.input.interaction_frame = result
     return result
 }
 
@@ -299,18 +301,18 @@ ui_apply_semantic_focus :: proc(
     if !present {
         return
     }
-    routed := &runtime^.interaction_frame
-    prior_terminal := runtime^.interaction.terminal_effectively_focused
+    routed := &runtime^.input.interaction_frame
+    prior_terminal := runtime^.input.interaction.terminal_effectively_focused
     terminal_focused := uiterminal.ui_terminal_effectively_focused(
         target, frame.window_focused, terminal_present,
-        uipresentation.ui_presentation_is_visible(runtime))
+        uipresentation.ui_presentation_is_visible(&runtime^.presentation))
     routed^.logical_focus = target
     routed^.effective_focus = target if frame.window_focused else {}
     routed^.terminal_focus_changed = routed^.terminal_focus_changed ||
         terminal_focused != prior_terminal
     routed^.terminal_focused = terminal_focused
-    runtime^.interaction.logical_focus = target
-    runtime^.interaction.terminal_effectively_focused = terminal_focused
+    runtime^.input.interaction.logical_focus = target
+    runtime^.input.interaction.terminal_effectively_focused = terminal_focused
     viewmodel.ui_refresh_surface_interaction(routed)
 }
 
@@ -323,7 +325,7 @@ ui_reconcile_focus :: proc(
     return ui_route_interaction_frame(runtime, {
         frame = frame,
         terminal_present = terminal_present,
-        capture = runtime^.ui_press_owner,
+        capture = runtime^.input.press_owner,
         capture_view = capture_view,
     })
 }

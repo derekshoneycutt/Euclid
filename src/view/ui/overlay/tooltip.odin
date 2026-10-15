@@ -72,13 +72,13 @@ tooltip_dismiss :: proc(
 // Pointer reach uses the routed pointer target, so captures owned by other surfaces
 // suppress hover. Keyboard reach matches the visible focus-outline rule.
 tooltip_control_source :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    shared: ^viewmodel.Ui_Shared_Interaction_State,
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
     owner: viewmodel.Ui_Node_Id, control_id: int) -> viewmodel.Ui_Tooltip_Source {
-    target := runtime^.interaction_frame.pointer_target
+    target := shared^.interaction_frame.pointer_target
     if target.kind == .Control && target.id == control_id {
         return .Pointer
     }
-    semantic := runtime^.semantic_focus
     if semantic != nil && semantic^.window_focused &&
         semantic^.focus_origin == .Keyboard && semantic^.logical_focus == owner {
         return .Keyboard
@@ -177,7 +177,7 @@ draw_encoded_tooltip :: proc(
     if !measured {
         return
     }
-    window := state^.ui_runtime.window
+    window := state^.ui_runtime.layout.window
     box := tooltip_place(geometry.Rectangle(tooltip^.shown.anchor),
         {width + TOOLTIP_PADDING_X * 2, TOOLTIP_HEIGHT},
         {0, 0, f32(window.width), f32(window.height)})

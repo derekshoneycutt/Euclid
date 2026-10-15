@@ -8,11 +8,17 @@ import viewcontent "../../../content"
 import uuid "core:encoding/uuid"
 import viewmodel "../../model"
 
+Library_Search_Result_Acceptance :: enum {
+    Rejected,
+    Invalid_Query,
+    Ready,
+}
+
 // library_search_record_commit publishes one accepted display-owned search result.
 library_search_record_commit :: proc(
     state: ^core.Euclid_General_State, returned_count, total_count: u32,
     more_available, suggestion_available: bool) {
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     flags: evidence_trace.Flags
     correlation_kind := evidence_trace.Correlation_Kind.None
     if search^.scenario_correlation != 0 {
@@ -98,22 +104,23 @@ library_search_add_result_path :: proc(
     }
 }
 
-// library_search_commit_result accepts one current worker result into display state.
-library_search_commit_result :: proc(
-    state: ^core.Euclid_General_State,
-    result: ^viewcontent.Search_Query_Result) -> bool {
-    search := &state^.ui_runtime.library_search
-    if result == nil || result^.generation != search^.generation ||
+// library_search_accept_result updates only search and catalogue-owned state.
+library_search_accept_result :: proc(
+    search: ^viewmodel.Library_Search_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    result: ^viewcontent.Search_Query_Result) -> Library_Search_Result_Acceptance {
+    if search == nil || result == nil ||
+        result^.generation != search^.generation ||
         result^.index_generation != search^.index_generation {
-            return false
-        }
+        return .Rejected
+    }
     if result^.status == .Invalid_Query {
         viewmodel.library_search_clear_results(search)
         search^.invalid_query = true
-        return true
+        return .Invalid_Query
     }
     if result^.status != .Ready {
-        return false
+        return .Rejected
     }
     viewmodel.library_search_clear_results(search)
     search^.active = search^.query_length > 0
@@ -121,16 +128,31 @@ library_search_commit_result :: proc(
     search^.more_available = result^.more_available
     for index in 0..<int(result^.returned_count) {
         library_search_add_result_path(
-            search, state^.julia_interface, &result^.document_keys[index])
+            search, ji, &result^.document_keys[index])
     }
     search^.suggestion_length = min(
         int(result^.suggestion_length), len(search^.suggestion))
     copy(search^.suggestion[:search^.suggestion_length],
         result^.suggestion_bytes[:search^.suggestion_length])
-    library_search_record_commit(state, u32(result^.returned_count),
-        result^.total_match_count, result^.more_available,
-        result^.suggestion_length > 0)
-    return true
+    return .Ready
+}
+
+// library_search_commit_result accepts current worker output and records ready evidence.
+library_search_commit_result :: proc(
+    state: ^core.Euclid_General_State,
+    result: ^viewcontent.Search_Query_Result) -> bool {
+    if state == nil {
+        return false
+    }
+    search := &state^.ui_runtime.library.search
+    accepted := library_search_accept_result(
+        search, state^.julia_interface, result)
+    if accepted == .Ready {
+        library_search_record_commit(state, u32(result^.returned_count),
+            result^.total_match_count, result^.more_available,
+            result^.suggestion_length > 0)
+    }
+    return accepted != .Rejected
 }
 
 // library_search_drain_results commits only current worker publications.
@@ -149,7 +171,7 @@ library_search_drain_results :: proc(
 library_search_submit_current :: proc(
     state: ^core.Euclid_General_State,
     service: ^viewcontent.Content_Service) -> bool {
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     source := string(search^.query[:search^.query_length])
     compiled := viewcontent.search_query_compile(source)
     if compiled.status != .Success {
@@ -188,7 +210,7 @@ service_library_search :: proc(
     if state == nil || service == nil {
         return
     }
-    search := &state^.ui_runtime.library_search
+    search := &state^.ui_runtime.library.search
     search^.worker_available = true
     library_search_content_generation_changed(
         search, viewcontent.content_service_index_generation(service))

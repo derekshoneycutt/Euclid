@@ -87,6 +87,42 @@ Terminal retains its own grid, scrollback, and editor state; Dynview retains com
 presentation data; capture retains GIF phase and encoder state. The UI composes these
 owners without merging their lifetimes.
 
+`Euclid_Ui_Runtime_State` in
+[`src/view/ui/model/model.odin`](../../../src/view/ui/model/model.odin) composes
+the persistent UI records by behavior: layout, Library, Presentation interaction,
+Settings-panel interaction, Terminal interaction, shared input, preferences,
+rendering controls, and playback controls. These records remain embedded in the
+startup-owned application state, so this decomposition changes access boundaries,
+not the upfront allocation strategy. A leaf operation should borrow the record it
+uses rather than requiring the complete runtime solely because the records share an
+allocation owner.
+
+| Runtime field | Persistent state owned |
+| --- | --- |
+| `layout` | Window metrics, split intent and geometry, accordion intent and transition |
+| `library` | Tree projection/scroll, tree motion and actions, bounded search results |
+| `presentation` | View visibility, text scrolling, and selection interaction |
+| `settings_panel` | Settings-panel scroll and active pointer interaction |
+| `terminal` | UI-owned Terminal scroll and semantic-focus generation |
+| `input` | Shared press owner, routed interaction, and cursor |
+| `preferences` | Current preference values and save feedback |
+| `rendering`, `playback` | Effective display controls and pause intent |
+| `tooltip`, `context_menu`, `gif_path_input` | Cross-panel transient UI state |
+| `semantic_focus` | Separately allocated bounded snapshots, commands, and logical focus |
+
+`semantic_focus` keeps its existing explicit allocation and shutdown lifecycle; it is
+not moved into the startup allocation. Component references are borrowed on the
+display thread and do not change that ownership.
+
+Frame preparation is caller-owned. The frame coordinator keeps its
+`Frame_Draw_Preparation` alive from preparation through encoding and drawing; tree,
+control, and text preparation fill destinations within that value. Prepared values
+and pointers into their source models are frame-bounded and must not be retained past
+that frame. Unit tests should construct the smallest relevant component records:
+layout tests use `Ui_Layout_State`, tree preparation uses bounded Library components,
+and only coordinator/integration tests need composed application state or full
+production-capacity fixtures.
+
 Workers may prepare bounded derived results, such as simulation or text caches. The
 display owner joins accepted work before consuming its results. See
 [Architecture Summary](ArchitectureSummary.md) for the process-wide execution model.

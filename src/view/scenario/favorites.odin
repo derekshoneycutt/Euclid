@@ -98,7 +98,7 @@ scenario_favorite_control :: proc(
             .Focus)
     }
     slots := uianimation.animation_control_layout_slots(
-        geometry.Rectangle(state^.ui_runtime.ui_regions.world_rect), true)
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), true)
     return scenario_favorites_pointer(runtime, slots.favorite, operation)
 }
 
@@ -130,7 +130,7 @@ scenario_favorites_item :: proc(
             return nil
         }
     }
-    projection := &state^.ui_runtime.tree_projection
+    projection := &state^.ui_runtime.library.tree.projection
     index := uilibrary.tree_projection_find(projection, key)
     return &projection^.items[index] if index >= 0 else nil
 }
@@ -253,7 +253,7 @@ scenario_reorder_sample :: proc(runtime: ^Scenario_Runtime, sample: string) -> b
         runtime^.reorder_sample_active = true
         return true
     }
-    motion := &runtime^.state^.ui_runtime.tree_reorder_motion
+    motion := &runtime^.state^.ui_runtime.library.actions.reorder
     if !motion^.active {
         return false
     }
@@ -274,23 +274,26 @@ scenario_reorder_sample :: proc(runtime: ^Scenario_Runtime, sample: string) -> b
     return true
 }
 
+// Resolve the supported action word to its semantic tree command.
+scenario_library_command :: proc(
+    operation: string) -> (viewmodel.Ui_Focus_Command_Kind, bool) {
+    switch operation {
+    case "focus": return .Focus, true
+    case "select": return .Select, true
+    case "expand": return .Expand, true
+    case "collapse": return .Collapse, true
+    }
+    return {}, false
+}
+
 // Apply an admitted semantic tree action while preserving occurrence-specific keyboard focus.
 scenario_library_apply :: proc(
     runtime: ^Scenario_Runtime, item: ^viewmodel.Ui_Tree_Item,
     operation: string, clip: geometry.Rectangle) -> bool {
     focus := runtime^.state^.ui_runtime.semantic_focus
     id := uilibrary.tree_placement_semantic_id(item)
-    kind: viewmodel.Ui_Focus_Command_Kind
-    switch operation {
-    case "focus":
-        kind = .Focus
-    case "select":
-        kind = .Select
-    case "expand":
-        kind = .Expand
-    case "collapse":
-        kind = .Collapse
-    case:
+    kind, valid := scenario_library_command(operation)
+    if !valid {
         return false
     }
     if !uisemantics.semantic_apply_external_action(focus, id, .Focus) {
@@ -304,9 +307,12 @@ scenario_library_apply :: proc(
     params := uilibrary.Tree_List_Params{
         ji = runtime^.state^.julia_interface,
         ui_runtime = &runtime^.state^.ui_runtime,
-        scroll_y = &runtime^.state^.ui_runtime.tree_scroll_y,
+        scroll_y = &runtime^.state^.ui_runtime.library.tree.scroll_y,
         list_panel = clip,
-        visibility = {search = &runtime^.state^.ui_runtime.library_search},
+        visibility = {search = &runtime^.state^.ui_runtime.library.search},
+        reduce_motion =
+            runtime^.state^.ui_runtime.preferences.values.interface.reduce_motion ||
+                runtime^.state^.ui_runtime.platform_reduce_motion,
     }
     _ = uilibrary.tree_apply_semantic_command(params, item, {target = id, kind = kind})
     return true
@@ -326,11 +332,13 @@ scenario_favorites_expand_all :: proc(runtime: ^Scenario_Runtime) -> bool {
     params := uilibrary.Tree_List_Params{
         ji = state^.julia_interface,
         ui_runtime = &state^.ui_runtime,
-        scroll_y = &state^.ui_runtime.tree_scroll_y,
+        scroll_y = &state^.ui_runtime.library.tree.scroll_y,
         list_panel = snapshot^.nodes[index].bounds,
-        visibility = {search = &state^.ui_runtime.library_search},
+        visibility = {search = &state^.ui_runtime.library.search},
+        reduce_motion = state^.ui_runtime.preferences.values.interface.reduce_motion ||
+            state^.ui_runtime.platform_reduce_motion,
     }
-    projection := &state^.ui_runtime.tree_projection
+    projection := &state^.ui_runtime.library.tree.projection
     for item in projection^.items[:projection^.count] {
         if item.first_child != uilibrary.TREE_NO_ITEM {
             item_index := uilibrary.tree_projection_find(projection, item.key)
@@ -358,10 +366,10 @@ scenario_favorites_capacity :: proc(runtime: ^Scenario_Runtime) -> bool {
             eligible += 1
         }
     }
-    projection := &state^.ui_runtime.tree_projection
+    projection := &state^.ui_runtime.library.tree.projection
     snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
     if !projection^.valid || projection^.count != ji^.animation_count + eligible + 2 ||
-        projection^.count != state^.ui_runtime.tree_motion.count ||
+        projection^.count != state^.ui_runtime.library.motion.count ||
         eligible != state^.preferences_runtime.collections_state.entry_count ||
         eligible > collections.MUTATION_CAPACITY ||
         snapshot == nil {
@@ -428,7 +436,7 @@ scenario_favorites_drawer :: proc(
     if item == nil {
         return false
     }
-    motion := runtime^.state^.ui_runtime.tree_actions_motion
+    motion := runtime^.state^.ui_runtime.library.actions.drawer
     opened := motion.open && motion.entry_id == item^.key
     return opened if operation == "actions_open" else !motion.open
 }
@@ -446,7 +454,7 @@ scenario_favorites_placement_assertion :: proc(
         return scenario_favorites_drawer(runtime, operation, argument)
     case "selected":
         item := scenario_favorites_item(runtime, argument)
-        return item != nil && state^.ui_runtime.selected_tree_item_id == item^.key
+        return item != nil && state^.ui_runtime.library.tree.selected_item_id == item^.key
     case "hidden":
         item := scenario_favorites_item(runtime, argument)
         snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
@@ -457,7 +465,7 @@ scenario_favorites_placement_assertion :: proc(
             snapshot, uilibrary.tree_placement_semantic_id(item))
         return index < 0 || .Visible not_in snapshot^.nodes[index].states
     case "selection_cleared":
-        return state^.ui_runtime.selected_tree_item_id == (uuid.Identifier{})
+        return state^.ui_runtime.library.tree.selected_item_id == (uuid.Identifier{})
     case "collapsed", "expanded":
         item := scenario_favorites_item(runtime, argument)
         return item != nil && item^.expanded == (operation == "expanded")
@@ -490,7 +498,7 @@ scenario_favorites_save_feedback :: proc(
     runtime: ^Scenario_Runtime, recovered: bool) -> bool {
     state := runtime^.state
     sections := ui.accordion_sections_for_layout(
-        state^.ui_runtime.current_layout_mode, "", state)
+        state^.ui_runtime.layout.current_layout_mode, "", state)
     indicator := false
     for section in sections.items[:sections.count] {
         indicator = indicator || section.error_indicator &&

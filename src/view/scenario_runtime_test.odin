@@ -34,7 +34,7 @@ scenario_reorder_sampling_is_bounded_and_monotonic :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     runtime := viewscenario.Scenario_Runtime{state = state}
     testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "middle"))
-    state^.ui_runtime.tree_reorder_motion = {active = true, start_seconds = 10}
+    state^.ui_runtime.library.actions.reorder = {active = true, start_seconds = 10}
     testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "unknown"))
     testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "start"))
     frame := viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 20})
@@ -94,8 +94,8 @@ scenario_favorites_unpublished_actions_are_rejected :: proc(t: ^testing.T) {
         &runtime, "press:favorite:Point"))
     testing.expect(t, !viewscenario.scenario_library_placement(
         &runtime, "press:catalogue:Unknown"))
-    state^.ui_runtime.tree_projection.count = 1
-    state^.ui_runtime.tree_projection.items[0].key = node.stable_id
+    state^.ui_runtime.library.tree.projection.count = 1
+    state^.ui_runtime.library.tree.projection.items[0].key = node.stable_id
     testing.expect(t, !viewscenario.scenario_library_placement(
         &runtime, "press:catalogue:Point"))
     testing.expect(t, !runtime.pointer_override)
@@ -116,8 +116,8 @@ scenario_favorites_hidden_and_disabled_rows_reject_input :: proc(t: ^testing.T) 
     ji.animation_count = 1
     state^.julia_interface = &ji
     state^.ui_runtime.semantic_focus = focus
-    state^.ui_runtime.tree_projection.count = 1
-    item := &state^.ui_runtime.tree_projection.items[0]
+    state^.ui_runtime.library.tree.projection.count = 1
+    item := &state^.ui_runtime.library.tree.projection.items[0]
     item^.key = node.stable_id
     runtime := viewscenario.Scenario_Runtime{state = state}
     variants := [?]bool{true, false}
@@ -144,7 +144,7 @@ scenario_runtime_settings_use_control_owner :: proc(t: ^testing.T) {
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles, context.allocator)
     state^.particle_system = particles
-    state^.ui_runtime.settings_preferences = setting_model.default_preferences()
+    state^.ui_runtime.preferences.values = setting_model.default_preferences()
     runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
     command := scenario.Command{kind = .Set_Setting,
@@ -155,7 +155,7 @@ scenario_runtime_settings_use_control_owner :: proc(t: ^testing.T) {
     testing.expect(t, handled && accepted)
     testing.expect_value(t, particles^.use_max_dust_particles, 1400)
     testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 1)
-    testing.expect_value(t, state^.ui_runtime.settings_save_status,
+    testing.expect_value(t, state^.ui_runtime.preferences.save_status,
         preferencesmodel.Settings_Save_Status.Unavailable)
     command.kind = .Assert_Setting
     handled, accepted = viewscenario.scenario_issue_display_action(
@@ -288,7 +288,7 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
 
     testing.expect_value(t,
         viewscenario.scenario_runtime_update(&runtime, 1), scenario.Run_Status.Passed)
-    testing.expect(t, !state^.ui_runtime.simulation_paused)
+    testing.expect(t, !state^.ui_runtime.playback.simulation_paused)
     testing.expect(t, runtime.shutdown_requested)
 
     failed := viewscenario.Scenario_Runtime{
@@ -318,12 +318,12 @@ scenario_runtime_animation_pause_uses_display_owned_state :: proc(t: ^testing.T)
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &pause, &identity)
     testing.expect(t, handled && accepted)
-    testing.expect(t, state^.ui_runtime.animation_policy_paused)
-    testing.expect(t, !state^.ui_runtime.simulation_paused)
+    testing.expect(t, state^.ui_runtime.playback.animation_policy_paused)
+    testing.expect(t, !state^.ui_runtime.playback.simulation_paused)
     handled, accepted = viewscenario.scenario_issue_display_action(
         &runtime, &resume, &identity)
     testing.expect(t, handled && accepted)
-    testing.expect(t, !state^.ui_runtime.animation_policy_paused)
+    testing.expect(t, !state^.ui_runtime.playback.animation_policy_paused)
 }
 
 // Verify emit_dust queues one bounded worker request with scenario correlation.
@@ -454,14 +454,14 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
     state^.julia_interface^.selected_animation = animation
-    state^.ui_runtime.window = {1280, 720}
-    state^.ui_runtime.presentation_visible = true
-    state^.ui_runtime.landscape = {
+    state^.ui_runtime.layout.window = {1280, 720}
+    state^.ui_runtime.presentation.visible = true
+    state^.ui_runtime.layout.landscape = {
         vertical_ratio = f32(900) / 1280,
         horizontal_ratio = f32(500) / 720,
     }
-    state^.ui_runtime.vertical_split_x = 900
-    state^.ui_runtime.horizontal_split_y = 500
+    state^.ui_runtime.layout.vertical_split_x = 900
+    state^.ui_runtime.layout.horizontal_split_y = 500
     runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
 
@@ -469,19 +469,19 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &scroll, &identity)
     testing.expect(t, handled && accepted)
-    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(0))
+    testing.expect_value(t, state^.ui_runtime.presentation.text_scroll_y, f32(0))
     testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
-    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(90))
+    testing.expect_value(t, state^.ui_runtime.presentation.text_scroll_y, f32(90))
 
     splitters := scenario.Command{
         kind = .Set_Splitters, value = 0, secondary_value = 720}
     handled, accepted = viewscenario.scenario_issue_display_action(
         &runtime, &splitters, &identity)
     testing.expect(t, handled && accepted)
-    testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(900))
+    testing.expect_value(t, state^.ui_runtime.layout.vertical_split_x, f32(900))
     testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
-    testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
-    testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(580))
+    testing.expect_value(t, state^.ui_runtime.layout.vertical_split_x, f32(320))
+    testing.expect_value(t, state^.ui_runtime.layout.horizontal_split_y, f32(580))
 }
 
 // Verify portrait scenario splitter mutation ignores vertical and landscape intent.
@@ -489,27 +489,28 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
 scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.ui_runtime.window = {1280, 720}
-    state^.ui_runtime.landscape = {
+    state^.ui_runtime.layout.window = {1280, 720}
+    state^.ui_runtime.layout.landscape = {
         vertical_ratio = f32(900) / 1280,
         horizontal_ratio = f32(500) / 720,
     }
-    state^.ui_runtime.vertical_split_x = 320
-    state^.ui_runtime.horizontal_split_y = 580
-    state^.ui_runtime.current_layout_mode = .Portrait
+    state^.ui_runtime.layout.vertical_split_x = 320
+    state^.ui_runtime.layout.horizontal_split_y = 580
+    state^.ui_runtime.layout.current_layout_mode = .Portrait
     runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
-    landscape := state^.ui_runtime.landscape
+    landscape := state^.ui_runtime.layout.landscape
     splitters := scenario.Command{
         kind = .Set_Splitters, value = 1000, secondary_value = 360}
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &splitters, &identity)
     testing.expect(t, handled && accepted)
     testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
-    testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
-    testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(360))
-    testing.expect_value(t, state^.ui_runtime.portrait.world_height_ratio, f32(0.5))
-    testing.expect_value(t, state^.ui_runtime.landscape, landscape)
+    testing.expect_value(t, state^.ui_runtime.layout.vertical_split_x, f32(320))
+    testing.expect_value(t, state^.ui_runtime.layout.horizontal_split_y, f32(360))
+    testing.expect_value(
+        t, state^.ui_runtime.layout.portrait.world_height_ratio, f32(0.5))
+    testing.expect_value(t, state^.ui_runtime.layout.landscape, landscape)
 }
 
 // Verify portrait startup resolves directly to the selected-title View section.
@@ -521,13 +522,13 @@ runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
     runtime: viewmodel.Euclid_Ui_Runtime_State
     testing.expect(t, init_ui_runtime_fields(&runtime, &settings))
     defer free(runtime.semantic_focus, context.allocator)
-    testing.expect_value(t, runtime.current_layout_mode,
+    testing.expect_value(t, runtime.layout.current_layout_mode,
         viewmodel.Ui_Layout_Mode.Portrait)
-    testing.expect_value(t, runtime.active_accordion_section,
+    testing.expect_value(t, runtime.layout.active_accordion_section,
         viewmodel.Ui_Accordion_Section.View)
-    testing.expect_value(t, runtime.portrait.active_section,
+    testing.expect_value(t, runtime.layout.portrait.active_section,
         viewmodel.Ui_Accordion_Section.View)
-    testing.expect(t, runtime.portrait.entered)
+    testing.expect(t, runtime.layout.portrait.entered)
 }
 
 // Verify a required screenshot keeps the run active until post-presentation completion.
@@ -622,7 +623,7 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
     testing.expect(t, handled && accepted)
     testing.expect_value(t, ji.selected_animation, &nodes[1])
     testing.expect(t, nodes[0].is_expanded && nodes[1].is_selected)
-    testing.expect(t, state^.ui_runtime.tree_reveal_pending)
+    testing.expect(t, state^.ui_runtime.library.tree.reveal_pending)
     testing.expect_value(t, identity.kind, evidence_trace.Correlation_Kind.Animation)
 }
 
@@ -661,7 +662,7 @@ scenario_expect_library_search_mutations :: proc(
     handled, accepted := viewscenario.scenario_issue_library_search_action(
         runtime, &set_command, &identity)
 
-    search := &runtime^.state^.ui_runtime.library_search
+    search := &runtime^.state^.ui_runtime.library.search
     testing.expect(t, handled && accepted)
     testing.expect_value(t,
         string(search^.query[:search^.query_length]), "perpendiculr")
@@ -685,7 +686,7 @@ scenario_expect_library_search_mutations :: proc(
 // Verify clear restores ordinary search state and publishes its exact correlation.
 scenario_expect_library_search_clear :: proc(
     t: ^testing.T, runtime: ^viewscenario.Scenario_Runtime) {
-    search := &runtime^.state^.ui_runtime.library_search
+    search := &runtime^.state^.ui_runtime.library.search
     clear := evidence_trace.Identity{
         kind = .Scenario_Action, id = 19, generation = 1}
     clear_command := scenario.Command{kind = .Clear_Library_Search}
@@ -714,7 +715,7 @@ scenario_library_search_actions_are_correlated :: proc(t: ^testing.T) {
     state^.evidence_session.lanes = evidence_session.ALL_LANES
     state^.evidence_session.required_evidence_complete = true
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
-    state^.ui_runtime.library_search.worker_available = true
+    state^.ui_runtime.library.search.worker_available = true
     runtime := viewscenario.Scenario_Runtime{state = state}
     scenario_expect_library_search_mutations(t, &runtime)
     scenario_expect_library_search_clear(t, &runtime)

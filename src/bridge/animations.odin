@@ -687,9 +687,9 @@ select_animation_programmatically :: proc(
         ancestor^.is_expanded = true
         ancestor = ancestor^.parent
     }
-    state^.ui_runtime.tree_reveal_pending = true
-    state^.ui_runtime.tree_reveal_stable_id = selected^.stable_id
-    state^.ui_runtime.tree_reveal_reason = .Programmatic
+    state^.ui_runtime.library.tree.reveal_pending = true
+    state^.ui_runtime.library.tree.reveal_stable_id = selected^.stable_id
+    state^.ui_runtime.library.tree.reveal_reason = .Programmatic
     return true
 }
 

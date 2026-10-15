@@ -40,23 +40,23 @@ settings_save_note_edit :: proc(state: ^core.Euclid_General_State) {
     runtime := &state^.preferences_runtime
     runtime^.user_data_revision += 1
     if runtime^.settings_store == nil {
-        state^.ui_runtime.settings_save_status = .Unavailable
+        state^.ui_runtime.preferences.save_status = .Unavailable
         return
     }
     if runtime^.settings_save_active {
-        state^.ui_runtime.settings_save_status = .Saving
+        state^.ui_runtime.preferences.save_status = .Saving
         return
     }
     if runtime^.user_data_failure_unresolved {
-        state^.ui_runtime.settings_save_status = .Pending
+        state^.ui_runtime.preferences.save_status = .Pending
         return
     }
-    if state^.ui_runtime.settings_save_status == .Unavailable ||
-        state^.ui_runtime.settings_save_status == .Failed {
+    if state^.ui_runtime.preferences.save_status == .Unavailable ||
+        state^.ui_runtime.preferences.save_status == .Failed {
         runtime^.settings_failure_count = 0
         runtime^.settings_retry_frames = 0
     }
-    state^.ui_runtime.settings_save_status = .Pending
+    state^.ui_runtime.preferences.save_status = .Pending
 }
 
 // Accept one in-memory Favorites edit and retain it for ordered durable replay.
@@ -120,13 +120,13 @@ settings_save_poll :: proc(
     }
     if poll == .Stale_Handle {
         log.error("settings_save_handle_stale")
-        state^.ui_runtime.settings_save_status = .Failed
+        state^.ui_runtime.preferences.save_status = .Failed
         return
     }
     result, joined := taskpool.task_pool_wait(pool, runtime^.settings_save_handle)
     if joined != .Joined {
         log.error("settings_save_join_failed")
-        state^.ui_runtime.settings_save_status = .Failed
+        state^.ui_runtime.preferences.save_status = .Failed
         runtime^.settings_save_active = false
         return
     }
@@ -155,10 +155,10 @@ settings_save_apply_committed_result :: proc(
     runtime: ^preferencesmodel.Settings_Save_Runtime) {
     settings_save_resolve_failure(runtime)
     if runtime^.user_data_failure_unresolved {
-        state^.ui_runtime.settings_save_status = .Failed
+        state^.ui_runtime.preferences.save_status = .Failed
         return
     }
-    state^.ui_runtime.settings_save_status =
+    state^.ui_runtime.preferences.save_status =
         .Saved if !settings_save_has_pending(runtime) else .Pending
 }
 
@@ -173,7 +173,7 @@ settings_save_apply_failed_result :: proc(
         runtime, runtime^.settings_save_payload.user_data_revision, failure)
     status := settings_save_failure_status(
         failure.kind, runtime^.settings_failure_count)
-    state^.ui_runtime.settings_save_status = status
+    state^.ui_runtime.preferences.save_status = status
     if status == .Unavailable {
         settings_save_log_failure(
             "user_data_save_unavailable", runtime^.settings_failure_count, failure)
@@ -273,11 +273,11 @@ settings_save_service :: proc(
     runtime := &state^.preferences_runtime
     settings_save_poll(state, pool)
     if runtime^.settings_store == nil {
-        state^.ui_runtime.settings_save_status = .Unavailable
+        state^.ui_runtime.preferences.save_status = .Unavailable
         return
     }
-    if state^.ui_runtime.settings_save_status == .Unavailable ||
-        state^.ui_runtime.settings_save_status == .Failed {
+    if state^.ui_runtime.preferences.save_status == .Unavailable ||
+        state^.ui_runtime.preferences.save_status == .Failed {
         return
     }
     if runtime^.settings_save_active || !settings_save_has_pending(runtime) {
@@ -306,7 +306,7 @@ settings_save_submit :: proc(
     handle, outcome := taskpool.task_pool_submit(
         pool, settings_save_worker, &runtime^.settings_save_payload, .Worker_Only)
     if outcome != .Queued {
-        state^.ui_runtime.settings_save_status = .Pending
+        state^.ui_runtime.preferences.save_status = .Pending
         return
     }
     runtime^.settings_save_handle = handle
@@ -314,7 +314,7 @@ settings_save_submit :: proc(
     runtime^.settings_failure_count += 1
     state^.preferences_runtime.settings_pending = {}
     state^.preferences_runtime.collection_mutation_count = 0
-    state^.ui_runtime.settings_save_status = .Saving
+    state^.ui_runtime.preferences.save_status = .Saving
     settings_save_record_event(state, .Settings_Save_Submitted)
 }
 
@@ -374,7 +374,7 @@ settings_save_shutdown :: proc(
                 pool, runtime^.settings_save_handle)
             if joined != .Joined {
                 log.error("settings_save_shutdown_join_failed")
-                state^.ui_runtime.settings_save_status = .Failed
+                state^.ui_runtime.preferences.save_status = .Failed
                 return
             }
             runtime^.settings_save_active = false
@@ -384,15 +384,15 @@ settings_save_shutdown :: proc(
             return
         }
         if runtime^.settings_store == nil ||
-            state^.ui_runtime.settings_save_status == .Unavailable ||
-            state^.ui_runtime.settings_save_status == .Failed {
+            state^.ui_runtime.preferences.save_status == .Unavailable ||
+            state^.ui_runtime.preferences.save_status == .Failed {
             return
         }
         runtime^.settings_retry_frames = 0
         settings_save_submit(state, pool)
         if !runtime^.settings_save_active {
             log.error("settings_save_shutdown_admission_failed")
-            state^.ui_runtime.settings_save_status = .Failed
+            state^.ui_runtime.preferences.save_status = .Failed
             return
         }
     }

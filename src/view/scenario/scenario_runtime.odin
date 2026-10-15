@@ -444,7 +444,7 @@ scenario_issue_viewport_action :: proc(
         runtime.pending_ui_mutation = {.View_Scroll, command.value, 0}
         return true, true
     }
-    if !uisplitter.splitter_positions_are_mutable(&runtime.state.ui_runtime,
+    if !uisplitter.splitter_positions_are_mutable(
         capturemodel.gif_capture_view(&runtime.state.gif_capture_status)) {
         return true, false
     }
@@ -457,10 +457,10 @@ scenario_issue_viewport_action :: proc(
 scenario_issue_simulation_policy_action :: proc(
     state: ^core.Euclid_General_State, command: ^scenario.Command) -> (bool, bool) {
     #partial switch command.kind {
-    case .Pause_Simulation: state.ui_runtime.simulation_paused = true
-    case .Resume_Simulation: state.ui_runtime.simulation_paused = false
-    case .Pause_Animation: state.ui_runtime.animation_policy_paused = true
-    case .Resume_Animation: state.ui_runtime.animation_policy_paused = false
+    case .Pause_Simulation: state.ui_runtime.playback.simulation_paused = true
+    case .Resume_Simulation: state.ui_runtime.playback.simulation_paused = false
+    case .Pause_Animation: state.ui_runtime.playback.animation_policy_paused = true
+    case .Resume_Animation: state.ui_runtime.playback.animation_policy_paused = false
     case: return false, false
     }
     return true, true
@@ -470,7 +470,7 @@ scenario_issue_simulation_policy_action :: proc(
 scenario_issue_library_search_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
-    search := &runtime.state^.ui_runtime.library_search
+    search := &runtime.state^.ui_runtime.library.search
     #partial switch command.kind {
     case .Set_Library_Search:
         query := scenario.text_string(&command.text)
@@ -568,7 +568,7 @@ scenario_issue_settings_action :: proc(
     }
     if command.kind == .Assert_Setting {
         actual := setting_model.setting_value(
-            state^.ui_runtime.settings_preferences, command.setting_id)
+            state^.ui_runtime.preferences.values, command.setting_id)
         return true, actual == command.setting_value
     }
     return false, false
@@ -589,7 +589,9 @@ scenario_runtime_apply_pending_ui :: proc(runtime: ^Scenario_Runtime) -> bool {
         applied = uipresentation.set_presentation_scroll_position(
             runtime.state, mutation.value)
     case .Splitters:
-        applied = uisplitter.set_splitter_positions(&runtime.state.ui_runtime,
+        applied = uisplitter.set_splitter_positions(
+            &runtime.state.ui_runtime.layout,
+            &runtime.state.ui_runtime.input.press_owner,
             mutation.value, mutation.secondary_value,
             capturemodel.gif_capture_view(&runtime.state.gif_capture_status))
     }

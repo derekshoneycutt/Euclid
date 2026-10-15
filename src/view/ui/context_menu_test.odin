@@ -18,17 +18,17 @@ context_menu_test_state :: proc(t: ^testing.T) -> ^core.Euclid_General_State {
     state := make_shell_test_state(t)
     runtime := &state^.ui_runtime
     runtime^.semantic_focus = new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
-    runtime^.window = {640, 400}
-    runtime^.presentation_visible = true
-    runtime^.ui_regions.text_rect = {100, 100, 400, 200}
+    runtime^.layout.window = {640, 400}
+    runtime^.presentation.visible = true
+    runtime^.layout.ui_regions.text_rect = {100, 100, 400, 200}
     runtime^.context_menu = {active = true, generation = 1,
         target = uipresentation.presentation_semantic_id(state), count = 2, focused = 0,
         bounds = {120, 120, 160, 72}, pressed_item = -1,
-        viewport = uiwidgets.text_content_panel(runtime^.ui_regions.text_rect),
-        window = runtime^.window}
+        viewport = uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect),
+        window = runtime^.layout.window}
     runtime^.context_menu.items[0] = {command = .Copy, enabled = true}
     runtime^.context_menu.items[1] = {command = .Select_All, enabled = true}
-    uioverlay.context_menu_focus(runtime)
+    uioverlay.context_menu_focus(&runtime^.context_menu, runtime^.semantic_focus)
     return state
 }
 
@@ -49,7 +49,7 @@ context_menu_opens_exact_surface_commands :: proc(t: ^testing.T) {
     state^.dynview.content.presentation_mime = .Text_Latex
     source := "x"
     state^.dynview.content.presentation_bytes = transmute([]u8)source
-    selection := &state^.ui_runtime.dynview_selection
+    selection := &state^.ui_runtime.presentation.selection
     selection^ = {mode = .Atomic_Source, active = true, head = {unit_index = 1}}
     uioverlay.context_menu_open(state,
         uipresentation.presentation_semantic_id(state), {120, 120})
@@ -163,7 +163,9 @@ context_menu_pointer_activation_claims_remaining_text :: proc(t: ^testing.T) {
 context_menu_activation_release_stays_owned :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
-    uioverlay.context_menu_key(&state^.ui_runtime, {kind = .Press, key = .Enter})
+    uioverlay.context_menu_key(
+        &state^.ui_runtime.context_menu, state^.ui_runtime.semantic_focus,
+        {kind = .Press, key = .Enter})
     events := [2]input.Input_Event{
         {kind = .Repeat, key = .Enter}, {kind = .Release, key = .Enter}}
     claims: input.Input_Event_Claim_State
@@ -182,7 +184,7 @@ context_menu_rejects_stale_content_and_geometry :: proc(t: ^testing.T) {
     state^.dynview.content.revision += 1
     testing.expect(t, !uioverlay.context_menu_target_valid(state))
     state^.dynview.content.revision -= 1
-    state^.ui_runtime.window.width += 1
+    state^.ui_runtime.layout.window.width += 1
     testing.expect(t, !uioverlay.context_menu_target_valid(state))
 }
 
@@ -225,7 +227,8 @@ context_menu_disabled_rows_capture_all_buttons :: proc(t: ^testing.T) {
         mouse_pressed = {.Left, .Middle, .Right}, mouse_down = {.Left, .Middle, .Right}}
     routed := uioverlay.context_menu_route_pointer(state, frame, false)
     testing.expect(t, routed.mouse_pressed == {} && routed.mouse_down == {})
-    uioverlay.context_menu_close(&state^.ui_runtime, true)
+    uioverlay.context_menu_close(
+        &state^.ui_runtime.context_menu, state^.ui_runtime.semantic_focus, true)
     frame.mouse_pressed = {}
     frame.mouse_down = {}
     frame.mouse_released = {.Left, .Middle, .Right}
@@ -256,7 +259,7 @@ context_menu_terminal_pointer_priority :: proc(t: ^testing.T) {
         uiterminal.terminal_semantic_id(state))
     testing.expect_value(t, uioverlay.context_menu_pointer_target(state, frame, true),
         viewmodel.Ui_Node_Id{})
-    state^.ui_runtime.ui_press_owner.active = true
+    state^.ui_runtime.input.press_owner.active = true
     testing.expect_value(t, uioverlay.context_menu_pointer_target(state, frame, false),
         viewmodel.Ui_Node_Id{})
     state^.terminal.initialized = false
@@ -272,9 +275,9 @@ context_menu_revokes_invalid_owners :: proc(t: ^testing.T) {
     testing.expect(t, !state^.ui_runtime.context_menu.active)
     testing.expect_value(t, state^.ui_runtime.semantic_focus^.logical_focus,
         viewmodel.Ui_Node_Id{})
-    state^.ui_runtime.presentation_visible = false
+    state^.ui_runtime.presentation.visible = false
     testing.expect(t, !uioverlay.context_menu_target_valid(state))
-    state^.ui_runtime.presentation_visible = true
+    state^.ui_runtime.presentation.visible = true
     animation := bridgemodel.Euclid_Julia_Animation_Interface{node_kind = .Terminal}
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.selected_animation = &animation
@@ -296,7 +299,9 @@ context_menu_tab_traverses_from_origin :: proc(t: ^testing.T) {
         state^.ui_runtime.context_menu.target, {}, .Presentation, 0)
     snapshot^.nodes[1] = semantic_test_node({domain = .Animation_Control, local_id = 1},
         {}, .Animation_Overlay, 0)
-    uioverlay.context_menu_key(&state^.ui_runtime, {kind = .Press, key = .Tab})
+    uioverlay.context_menu_key(
+        &state^.ui_runtime.context_menu, state^.ui_runtime.semantic_focus,
+        {kind = .Press, key = .Tab})
     testing.expect(t, !state^.ui_runtime.context_menu.active)
     testing.expect_value(t, semantic^.logical_focus, snapshot^.nodes[1].id)
 }

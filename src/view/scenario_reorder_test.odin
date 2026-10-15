@@ -44,7 +44,7 @@ scenario_favorites_assertion_fixture :: proc(
     collections.initialize(set)
     id := ji^.animation_head^.stable_id
     assert(collections.favorites_add(set, id, id) == .None)
-    projection := &state^.ui_runtime.tree_projection
+    projection := &state^.ui_runtime.library.tree.projection
     projection^.count = 1
     projection^.items[0].key = id
     return state
@@ -84,13 +84,13 @@ scenario_favorites_drawer_assertions :: proc(t: ^testing.T) {
     state := scenario_favorites_assertion_fixture(&ji)
     defer free(state, context.allocator)
     runtime := viewscenario.Scenario_Runtime{state = state}
-    state^.ui_runtime.tree_actions_motion = {entry_id = node.stable_id, open = true}
+    state^.ui_runtime.library.actions.drawer = {entry_id = node.stable_id, open = true}
     testing.expect(t, viewscenario.scenario_assert_favorites(
         &runtime, "actions_open:favorite:Point"))
     testing.expect(t, !viewscenario.scenario_assert_favorites(
         &runtime, "actions_closed:favorite:Point"))
-    state^.ui_runtime.tree_actions_motion.open = false
-    state^.ui_runtime.tree_actions_motion.height = 16
+    state^.ui_runtime.library.actions.drawer.open = false
+    state^.ui_runtime.library.actions.drawer.height = 16
     testing.expect(t, viewscenario.scenario_assert_favorites(
         &runtime, "actions_closed:favorite:Point"))
     testing.expect(t, !viewscenario.scenario_assert_favorites(

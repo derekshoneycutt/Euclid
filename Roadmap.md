@@ -199,7 +199,7 @@ General features:
     - [X] Favorites/Collection organization
     - [ ] Custom naming in collections
     - [ ] Multiple custom collections
-    - [ ] Custom introduction in collections
+    - [ ] Custom notes in collections
     - [ ] Most viewed (dynamic; non-mutable)
     - [ ] Most recent (dynamic; non-mutable)
 - [ ] Sharing custom collections

@@ -236,9 +236,9 @@ interface_motion_ease :: proc(start_seconds, now_seconds: f64) -> f32 {
 }
 
 // ui_reduced_motion combines explicit interface intent with independent platform policy.
-ui_reduced_motion :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    return runtime^.settings_preferences.interface.reduce_motion ||
-        runtime^.platform_reduce_motion
+ui_reduced_motion :: #force_inline proc(
+    user_reduce_motion, platform_reduce_motion: bool) -> bool {
+    return user_reduce_motion || platform_reduce_motion
 }
 
 // accordion_transition_settle assigns the entire available height without animation.
@@ -310,24 +310,26 @@ accordion_transition_layout :: proc(
 
 // accordion_content_rect returns prepared child geometry, falling back before first frame.
 accordion_content_rect :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
     section: viewmodel.Ui_Accordion_Section) -> geometry.Rectangle {
-    if runtime^.accordion_transition.initialized {
-        return geometry.Rectangle(runtime^.accordion_transition.contents[int(section)])
+    if layout^.accordion_transition.initialized {
+        return geometry.Rectangle(
+            layout^.accordion_transition.contents[int(section)])
     }
-    sections := accordion_section_descriptors(runtime^.current_layout_mode, "")
+    sections := accordion_section_descriptors(layout^.current_layout_mode, "")
     return accordion_layout(
-        geometry.Rectangle(runtime^.ui_regions.accordion_rect), sections, section).content
+        geometry.Rectangle(layout^.ui_regions.accordion_rect), sections, section).content
 }
 
 // accordion_content_clip exposes only the visible part of a selected child's layout.
 accordion_content_clip :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: ^viewmodel.Ui_Layout_State,
     section: viewmodel.Ui_Accordion_Section) -> geometry.Rectangle {
-    if runtime^.accordion_transition.initialized {
-        return geometry.Rectangle(runtime^.accordion_transition.clips[int(section)])
+    if layout^.accordion_transition.initialized {
+        return geometry.Rectangle(
+            layout^.accordion_transition.clips[int(section)])
     }
-    return accordion_content_rect(runtime, section)
+    return accordion_content_rect(layout, section)
 }
 
 // Build one full-width accordion header button.

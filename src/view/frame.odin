@@ -63,6 +63,14 @@ Frame_Draw_Preparation :: struct {
     layout_interaction: ui.Ui_Layout_Interaction_Preparation,
 }
 
+// Sdl_Frame_Update groups the routed input and geometry shared by frame owners.
+Sdl_Frame_Update :: struct {
+    frame_dt: f32,
+    input_frame: input.Input_Frame,
+    routed_frame: input.Input_Frame,
+    ui_geometry: ui.Ui_Geometry_Preparation,
+}
+
 //   - Owns state/window setup and teardown via deferred cleanup calls.
 //   - Resets temp allocator each frame after drawing.
 //
@@ -79,7 +87,7 @@ run_gif_capture_frame :: proc(
         return
     }
     state^.gif_capture.recording_presentations += 1
-    if state^.ui_runtime.simulation_paused {
+    if state^.ui_runtime.playback.simulation_paused {
         state^.gif_capture.paused_presentations += 1
         return
     }
@@ -182,11 +190,11 @@ service_scenario_after_present :: proc(ctx: Window_Frame_Context) {
 apply_sdl_cursor :: proc(
     state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform) {
     kind := native.Sdl_Cursor_Kind.Default
-    if state^.ui_runtime.cursor == .Text {
+    if state^.ui_runtime.input.cursor == .Text {
         kind = .Text
-    } else if state^.ui_runtime.cursor == .Resize_Ew {
+    } else if state^.ui_runtime.input.cursor == .Resize_Ew {
         kind = .Resize_Ew
-    } else if state^.ui_runtime.cursor == .Resize_Ns {
+    } else if state^.ui_runtime.input.cursor == .Resize_Ns {
         kind = .Resize_Ns
     }
     if !native.sdl_platform_set_cursor(platform, kind) {
@@ -219,7 +227,7 @@ route_ui_keyboard_frame :: proc(
     storage: []input.Input_Event) -> input.Input_Frame {
     semantic := state^.ui_runtime.semantic_focus
     event_claims := uisemantics.semantic_route_keyboard(
-        semantic, frame, state^.ui_runtime.interaction_frame.terminal_focused)
+        semantic, frame, state^.ui_runtime.input.interaction_frame.terminal_focused)
     if uisemantics.semantic_focus_moved(semantic) {
         ui.ui_apply_semantic_focus(&state^.ui_runtime, frame,
             uiterminal.is_terminal_selected(state))
@@ -231,7 +239,7 @@ route_ui_keyboard_frame :: proc(
 frame_gif_capture_extents :: proc(
     state: ^core.Euclid_General_State,
     platform: ^native.Sdl_Platform) -> capturemodel.Gif_Capture_Extents {
-    world_rect := state^.ui_runtime.ui_regions.world_rect
+    world_rect := state^.ui_runtime.layout.ui_regions.world_rect
     return {
         logical_width = max(1, int(world_rect.width)),
         logical_height = max(1, int(world_rect.height)),
@@ -272,7 +280,9 @@ prepare_sdl_frame :: proc(
     state: ^core.Euclid_General_State,
     ctx: Window_Frame_Context,
     clock: ^native.Sdl_Frame_Clock,
-    device_frame: input.Input_Frame) -> Frame_Draw_Preparation {
+    device_frame: input.Input_Frame,
+    prepared: ^Frame_Draw_Preparation) {
+    prepared^ = {}
     frame_dt := native.sdl_frame_clock_step(clock)
     service_sdl_frame_runtime(state, ctx, frame_dt, device_frame.sample_time_seconds)
     menu_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
@@ -280,28 +290,47 @@ prepare_sdl_frame :: proc(
         state, ctx, device_frame, frame_dt, menu_event_storage[:])
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
-    uiaccessibility.drain_accessibility_actions(state, ctx.platform)
+    prepare_sdl_frame_owners(state, ctx, Sdl_Frame_Update{
+        frame_dt = frame_dt, input_frame = input_frame,
+        routed_frame = routed_frame, ui_geometry = ui_geometry,
+    }, prepared)
+}
+
+// prepare_sdl_frame_owners updates UI, services, simulation, and accessibility in frame order.
+prepare_sdl_frame_owners :: proc(
+    state: ^core.Euclid_General_State,
+    ctx: Window_Frame_Context,
+    update: Sdl_Frame_Update,
+    prepared: ^Frame_Draw_Preparation) {
+    uiaccessibility.drain_accessibility_actions(
+        state^.ui_runtime.semantic_focus, ctx.platform)
     when core.SCENARIOS_ENABLED {
         if ctx.scenario_runtime != nil {
             viewscenario.scenario_reorder_drain(ctx.scenario_runtime)
         }
     }
-    controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
+    ui.prepare_ui_controls(
+        state, update.routed_frame, update.ui_geometry.splitters,
+        &prepared^.controls)
     if state^.simulation_executor != nil {
         viewpreferences.settings_save_service(state, &state^.simulation_executor^.pool)
     }
-    libraryservice.service_library_search(state, ctx.content_service, frame_dt)
+    libraryservice.service_library_search(state, ctx.content_service, update.frame_dt)
     terminal_frame := terminalservice.terminal_service_update(
-        state, ctx.input_runtime, routed_frame)
+        state, ctx.input_runtime, update.routed_frame)
     apply_sdl_cursor(state, ctx.platform)
-    prepare_sdl_simulation_frame(state, ctx, frame_dt, ui_geometry.compile_dynview)
+    prepare_sdl_simulation_frame(
+        state, ctx, update.frame_dt, update.ui_geometry.compile_dynview)
     layout_interaction := ui.prepare_and_finish_ui_layout(
-        state, routed_frame, terminal_frame)
+        state, update.routed_frame, terminal_frame)
     execute_context_menu_command(state, ctx.input_runtime)
-    uiaccessibility.publish_accessibility_controls(state, ctx.platform)
+    uiaccessibility.publish_accessibility_controls(
+        state^.ui_runtime.semantic_focus, ctx.platform)
     service_scenario_before_present(ctx)
-    return {input_frame, terminal_frame, controls, ui_geometry.splitters,
-        layout_interaction}
+    prepared^.input_frame = update.input_frame
+    prepared^.terminal_frame = terminal_frame
+    prepared^.splitters = update.ui_geometry.splitters
+    prepared^.layout_interaction = layout_interaction
 }
 
 // Step simulation, update drawing audio, and join caches before layout interaction.
@@ -312,8 +341,8 @@ prepare_sdl_simulation_frame :: proc(
     alpha := viewsimulation.accumulate_and_update_systems(state, frame_dt, gif_extents)
     native.sdl_chalk_audio_update(ctx.chalk_audio, &state^.chalk_audio,
         state^.user_drawing_sound_enabled,
-        state^.ui_runtime.simulation_paused ||
-            state^.ui_runtime.animation_policy_paused,
+        state^.ui_runtime.playback.simulation_paused ||
+            state^.ui_runtime.playback.animation_policy_paused,
         frame_dt)
     viewsimulation.run_parallel_frame_preparation_after_ui(state, alpha, compile_dynview)
 }
@@ -323,7 +352,7 @@ encode_sdl_world_geometry :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
     encoder: ^native.Draw_Encoder) {
     _ = native.draw_encoder_push_scissor(
-        encoder, state^.ui_runtime.ui_regions.world_rect)
+        encoder, state^.ui_runtime.layout.ui_regions.world_rect)
     world.draw_encoded_drawing_surface(state, encoder)
     world.draw_encoded_cached_basic_pass(state, encoder, false)
     world.encode_low_particles(state^.particle_system, state, encoder,
@@ -340,20 +369,20 @@ encode_sdl_world_geometry :: proc(
 // encode_sdl_ui_geometry encodes panel geometry and deferred text.
 encode_sdl_ui_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    prepared: Frame_Draw_Preparation) {
-    ui.draw_encoded_panel_geometry(state, encoder, prepared.controls)
+    prepared: ^Frame_Draw_Preparation) {
+    ui.draw_encoded_panel_geometry(state, encoder, &prepared^.controls)
     uianimation.draw_encoded_animation_controls(
-        state, encoder, prepared.controls.animation_controls)
-    uisplitter.draw_encoded_splitters(encoder, prepared.splitters)
-    ui.draw_encoded_panel_text(state, encoder, prepared.controls)
+        state, encoder, prepared^.controls.animation_controls)
+    uisplitter.draw_encoded_splitters(encoder, prepared^.splitters)
+    ui.draw_encoded_panel_text(state, encoder, &prepared^.controls)
     if uiterminal.is_terminal_selected(state) {
         terminalservice.terminal_graphics_set_draw_encoder(state, encoder)
-        ui.draw_encoded_view_content(state, encoder, prepared.terminal_frame,
-            prepared.layout_interaction.presentation)
+        ui.draw_encoded_view_content(state, encoder, prepared^.terminal_frame,
+            prepared^.layout_interaction.presentation)
         terminalservice.terminal_graphics_set_draw_encoder(state, nil)
     } else {
-        ui.draw_encoded_view_content(state, encoder, prepared.terminal_frame,
-            prepared.layout_interaction.presentation)
+        ui.draw_encoded_view_content(state, encoder, prepared^.terminal_frame,
+            prepared^.layout_interaction.presentation)
     }
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
     uioverlay.draw_encoded_tooltip(state, encoder)
@@ -363,7 +392,7 @@ encode_sdl_ui_geometry :: proc(
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.
 encode_sdl_geometry_frame :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
-    prepared: Frame_Draw_Preparation) -> native.Sdl_Frame_Result {
+    prepared: ^Frame_Draw_Preparation) -> native.Sdl_Frame_Result {
     font.cache_frame_begin(&state^.font_cache)
     encoder: native.Draw_Encoder
     _ = native.draw_encoder_begin(&encoder, ctx.draw_runtime^.storage, {
@@ -393,8 +422,9 @@ run_sdl_geometry_frame :: proc(
         finish_window_frame(state, ctx.display_profile, false)
         return false
     }
-    prepared := prepare_sdl_frame(state, ctx, clock, input_frame)
-    result := encode_sdl_geometry_frame(state, ctx, prepared)
+    prepared: Frame_Draw_Preparation
+    prepare_sdl_frame(state, ctx, clock, input_frame, &prepared)
+    result := encode_sdl_geometry_frame(state, ctx, &prepared)
     if result == .Failed {
         log.error("sdl_frame_present_failed")
         finish_window_frame(state, ctx.display_profile, false)
@@ -408,7 +438,7 @@ run_sdl_geometry_frame :: proc(
         service_scenario_after_present(ctx)
     }
     finish_window_frame(state, ctx.display_profile, presented)
-    if state^.ui_runtime.limit_fps {
+    if state^.ui_runtime.rendering.limit_fps {
         native.sdl_delay_until_rate(frame_started_at, u64(simulationmodel.LIMIT_FPS))
     }
     return true
@@ -419,7 +449,7 @@ apply_window_metrics :: proc(
     state: ^core.Euclid_General_State,
     metrics: viewmodel.Ui_Window_Metrics) -> bool {
     runtime := &state^.ui_runtime
-    dimensions_changed := runtime^.window != metrics
+    dimensions_changed := runtime^.layout.window != metrics
     protected := state^.gif_capture_status.gif_capture_phase == .Armed ||
         state^.gif_capture_status.gif_capture_phase == .Recording ||
         state^.gif_capture_status.gif_capture_phase == .Finalizing

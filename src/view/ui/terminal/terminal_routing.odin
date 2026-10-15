@@ -13,6 +13,13 @@ Ui_Terminal_Content_Route_Input :: struct {
     wheel_consumed: bool,
 }
 
+// terminal_cancel_geometry_capture releases the UI-owned Terminal scroll drag.
+terminal_cancel_geometry_capture :: proc(
+    terminal: ^viewmodel.Ui_Terminal_Interaction_State) {
+    terminal^.scroll_dragging = false
+    terminal^.scroll_drag_off = 0
+}
+
 // Return whether Terminal is the active and valid keyboard focus target.
 ui_terminal_effectively_focused :: #force_inline proc(
     logical_focus: viewmodel.Ui_Focus_Target,
@@ -24,11 +31,10 @@ ui_terminal_effectively_focused :: #force_inline proc(
 
 // Refine the static Terminal panel target with prepared scrollbar geometry.
 ui_refine_terminal_scroll_route :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    frame: ^viewmodel.Ui_Interaction_Frame,
     over_track: bool,
     pointer_reserved: bool,
     wheel_present: bool) {
-    frame := &runtime^.interaction_frame
     scrollbar := viewmodel.ui_interaction_target(
         .Scrollbar, .Terminal, UI_TERMINAL_SCROLLBAR_ID)
     if over_track {
@@ -63,18 +69,18 @@ ui_terminal_captured_pointer_fields :: proc(
 
 // Route one resolved frame to Terminal content from the shared interaction result.
 ui_route_terminal_content_frame :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    surface: viewmodel.Ui_Surface_Interaction,
     frame: input.Input_Frame,
     bounds: geometry.Rectangle,
     route: Ui_Terminal_Content_Route_Input) -> input.Input_Frame {
-    if !runtime^.interaction_frame.terminal.pointer {
+    if !surface.pointer {
         fields := ui_terminal_captured_pointer_fields(
             route.local_capture, route.child_capture)
         return input.input_frame_filter_pointer(
             frame, fields, {bounds.x - 1, bounds.y - 1})
     }
     result := frame
-    if route.wheel_consumed || !runtime^.interaction_frame.terminal.wheel {
+    if route.wheel_consumed || !surface.wheel {
         result.mouse_wheel_delta = 0
     }
     return result

@@ -33,8 +33,8 @@ tree_actions_repair_context_focus :: proc(
         semantic^.last_region = .Accordion_Content
         semantic^.last_traversal_order = 3
     }
-    runtime^.tree_actions_last_focus = {}
-    runtime^.tree_actions_reveal_pending = false
+    runtime^.library.actions.last_focus = {}
+    runtime^.library.actions.reveal_pending = false
 }
 
 // tree_actions_focus_toggle preserves input origin when an action becomes unavailable.
@@ -49,7 +49,7 @@ tree_actions_focus_toggle :: proc(
         params, entry_id, TREE_ACTION_TOGGLE)
     semantic^.last_region = .Accordion_Content
     semantic^.last_traversal_order = 4
-    params.ui_runtime^.tree_actions_reveal_pending = true
+    params.ui_runtime^.library.actions.reveal_pending = true
 }
 
 // tree_actions_repair_move_focus retains an interior action or returns to disclosure.
@@ -66,7 +66,7 @@ tree_actions_repair_move_focus :: proc(
         !tree_actions_neighbor_exists(params.collections, entry_id, direction) {
         tree_actions_focus_toggle(params, entry_id)
     }
-    params.ui_runtime^.tree_actions_reveal_pending = true
+    params.ui_runtime^.library.actions.reveal_pending = true
 }
 
 // tree_actions_command_item rejects stale, hidden, or deselected action identities.
@@ -77,15 +77,20 @@ tree_actions_command_item :: proc(
         target.local_id > TREE_ACTION_DOWN ||
         target.generation != params.ji^.content_generation ||
         params.general_state != nil &&
-            params.ui_runtime^.active_accordion_section != .Library {
+            params.ui_runtime^.layout.active_accordion_section != .Library {
         return nil
     }
-    index := tree_projection_find(&params.ui_runtime^.tree_projection, target.stable_id)
+    index := tree_projection_find(
+        &params.ui_runtime^.library.tree.projection, target.stable_id)
     if index == TREE_NO_ITEM {
         return nil
     }
-    item := &params.ui_runtime^.tree_projection.items[index]
-    if !tree_actions_eligible(params, item) {
+    item := &params.ui_runtime^.library.tree.projection.items[index]
+    if !tree_actions_eligible(
+        &params.ui_runtime^.library.tree.projection,
+        params.ui_runtime^.library.tree.selected_item_id,
+        params.visibility.search != nil && params.visibility.search^.active,
+        item) {
         return nil
     }
     return item
@@ -105,7 +110,7 @@ tree_actions_apply_command :: proc(
         return
     }
     action := command.target.local_id
-    motion := &params.ui_runtime^.tree_actions_motion
+    motion := &params.ui_runtime^.library.actions.drawer
     if command.kind == .Dismiss {
         if motion^.entry_id == item^.key && motion^.open {
             tree_actions_toggle(params, item^.key)
@@ -121,7 +126,7 @@ tree_actions_apply_command :: proc(
         _ = tree_actions_move(params, item^.key, direction)
     }
     if command.kind == .Focus {
-        params.ui_runtime^.tree_actions_reveal_pending = true
+        params.ui_runtime^.library.actions.reveal_pending = true
     }
 }
 
@@ -130,7 +135,8 @@ tree_actions_command_visible :: proc(
     params: Tree_List_Params,
     item: ^viewmodel.Ui_Tree_Item,
     action: u64) -> bool {
-    layout := tree_prepare_layout(params)
+    layout: Tree_Prepared_Layout
+    tree_prepare_layout(params, &layout)
     row := tree_layout_find_item(&layout, item)
     if row == nil || !row^.logical || !row^.actions.eligible {
         return false
@@ -187,7 +193,7 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
     runtime := params.ui_runtime
     semantic := runtime^.semantic_focus
     if semantic == nil || semantic^.logical_focus.domain != .Library_Action {
-        runtime^.tree_actions_last_focus = {}
+        runtime^.library.actions.last_focus = {}
         return
     }
     target := semantic^.logical_focus
@@ -195,22 +201,25 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
         tree_actions_repair_context_focus(runtime)
         return
     }
-    if runtime^.tree_actions_last_focus != target {
-        runtime^.tree_actions_reveal_pending = true
-        runtime^.tree_actions_last_focus = target
+    if runtime^.library.actions.last_focus != target {
+        runtime^.library.actions.reveal_pending = true
+        runtime^.library.actions.last_focus = target
     }
     if target.local_id != TREE_ACTION_TOGGLE {
-        motion := &runtime^.tree_actions_motion
+        motion := &runtime^.library.actions.drawer
         direction := collections.Move_Direction.Up if
             target.local_id == TREE_ACTION_UP else .Down
         if !motion^.open || motion^.entry_id != target.stable_id ||
             !tree_actions_neighbor_exists(
                 params.collections, target.stable_id, direction) {
             tree_actions_focus_toggle(params, target.stable_id)
-        } else if runtime^.tree_actions_reveal_pending {
-            index := tree_projection_find(&runtime^.tree_projection, target.stable_id)
+        } else if runtime^.library.actions.reveal_pending {
+            index := tree_projection_find(
+                &runtime^.library.tree.projection, target.stable_id)
             motion^.height = tree_actions_full_height(
-                params, tree_item_depth(params, &runtime^.tree_projection.items[index]))
+                params.list_panel.width, tree_item_depth(
+                    &runtime^.library.tree.projection,
+                    &runtime^.library.tree.projection.items[index]))
             motion^.running = false
         }
     }
@@ -220,7 +229,7 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
 tree_actions_reveal_focus :: proc(
     params: Tree_List_Params, layout: ^Tree_Prepared_Layout) {
     runtime := params.ui_runtime
-    if !runtime^.tree_actions_reveal_pending || runtime^.semantic_focus == nil {
+    if !runtime^.library.actions.reveal_pending || runtime^.semantic_focus == nil {
         return
     }
     target := runtime^.semantic_focus^.logical_focus
@@ -234,7 +243,7 @@ tree_actions_reveal_focus :: proc(
         } else if target.local_id == TREE_ACTION_DOWN {
             bounds = row.actions.move_down_rect
         }
-        if runtime^.tree_reorder_motion.active {
+        if runtime^.library.actions.reorder.active {
             bounds.y += row.canonical_y - row.content_y
         }
         scroll := params.scroll_y^
@@ -245,7 +254,7 @@ tree_actions_reveal_focus :: proc(
         }
         params.scroll_y^ = clamp(scroll, 0,
             max(layout^.content_height - params.list_panel.height, 0))
-        runtime^.tree_actions_reveal_pending = false
+        runtime^.library.actions.reveal_pending = false
         return
     }
 }
@@ -290,7 +299,7 @@ tree_actions_publish_row :: proc(
     toggle := tree_actions_screen_rect(row.actions.toggle_rect, panel, scroll_y)
     clip := tree_row_screen_geometry(row, panel, scroll_y).clip_bounds
     states := tree_actions_control_states(toggle, clip, true)
-    if params.ui_runtime^.tree_actions_motion.open {
+    if params.ui_runtime^.library.actions.drawer.open {
         states += {.Expanded}
     }
     storage: [content.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
@@ -354,7 +363,7 @@ tree_actions_publish :: proc(
 // tree_actions_pointer_focus focuses the exact action press without selecting its row.
 tree_actions_pointer_focus :: proc(
     params: Tree_List_Params, row: Tree_Prepared_Row) {
-    owner := params.ui_runtime^.ui_press_owner
+    owner := params.ui_runtime^.input.press_owner
     if !owner.active || !tree_actions_capture_matches(owner, row.actions) {
         return
     }

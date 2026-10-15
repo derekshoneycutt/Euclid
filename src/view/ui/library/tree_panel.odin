@@ -13,7 +13,6 @@ import treeview "../widgets/treeview"
 import input "../../input"
 import uisemantics "../semantics"
 import theme "../theme"
-import uilayout "../layout"
 import collectionmodel "../../../collections"
 import log "core:log"
 
@@ -45,7 +44,9 @@ Tree_Visible_Row_Context :: struct {
 
 // Tree_Semantic_Context groups current geometry for bounded item registration.
 Tree_Semantic_Context :: struct {
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    tree: ^viewmodel.Ui_Library_Tree_State,
+    reorder: ^viewmodel.Ui_Tree_Reorder_Motion,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     ji: ^bridgemodel.Euclid_Julia_Interface,
     policy: Tree_Visibility_Policy,
     tree_id: viewmodel.Ui_Node_Id,
@@ -86,6 +87,7 @@ Tree_Projection_Walk_Context :: struct {
 Tree_List_Preparation :: struct {
     scroll: uiwidgets.Scroll_Container_Update_Result,
     content_height: f32,
+    cancel_geometry_capture: bool,
     hovered_node: ^viewmodel.Ui_Tree_Item,
     hovered_expander_node: ^viewmodel.Ui_Tree_Item,
     pressed_node: ^viewmodel.Ui_Tree_Item,
@@ -106,12 +108,14 @@ Tree_List_Params :: struct {
     font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
     visibility: Tree_Visibility_Policy,
+    reduce_motion: bool,
 }
 
 // Immutable inputs shared by recursive tree row updates.
 Tree_Walk_Context :: struct {
     ji: ^bridgemodel.Euclid_Julia_Interface,
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    tree: ^viewmodel.Ui_Library_Tree_State,
+    interaction: ^viewmodel.Ui_Shared_Interaction_State,
     panel: geometry.Rectangle,
     scroll_y: f32,
     allow_clicks: bool,
@@ -143,6 +147,12 @@ Tree_Projection_Add_Request :: struct {
     kind: viewmodel.Ui_Tree_Item_Kind,
     parent: int,
     expanded, selectable: bool,
+}
+
+// tree_cancel_geometry_capture ends a tree scrollbar drag invalidated by layout changes.
+tree_cancel_geometry_capture :: proc(tree: ^viewmodel.Ui_Library_Tree_State) {
+    tree^.scroll_dragging = false
+    tree^.scroll_drag_off = 0
 }
 
 // Find one stable placement identity in the bounded display-owned topology.
@@ -265,7 +275,7 @@ tree_projection_prepare :: proc(params: Tree_List_Params) -> bool {
         return false
     }
     runtime := params.ui_runtime
-    old := &runtime^.tree_projection
+    old := &runtime^.library.tree.projection
     if old^.valid && old^.content_generation != params.ji^.content_generation {
         tree_actions_close_context(runtime)
     }
@@ -281,7 +291,7 @@ tree_projection_prepare :: proc(params: Tree_List_Params) -> bool {
     }
     staged.valid = true
     tree_projection_repair_selection(runtime, &staged)
-    runtime^.tree_projection = staged
+    runtime^.library.tree.projection = staged
     tree_actions_reconcile(params)
     return true
 }
@@ -376,21 +386,22 @@ tree_projection_add_animation :: proc(
 tree_projection_repair_selection :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     staged: ^viewmodel.Ui_Tree_Projection) {
-    selected_key := runtime^.selected_tree_item_id
+    selected_key := runtime^.library.tree.selected_item_id
     if selected_key != (uuid.Identifier{}) &&
         tree_projection_find(staged, selected_key) == TREE_NO_ITEM {
-        runtime^.selected_tree_item_id = {}
+        runtime^.library.tree.selected_item_id = {}
     }
     if runtime^.semantic_focus != nil &&
         runtime^.semantic_focus^.active_tree_item != (uuid.Identifier{}) &&
         tree_projection_find(staged,
             runtime^.semantic_focus^.active_tree_item) == TREE_NO_ITEM {
         runtime^.semantic_focus^.active_tree_item = {}
-        runtime^.tree_reveal_pending = false
+        runtime^.library.tree.reveal_pending = false
     }
-    if runtime^.tree_reveal_pending &&
-        tree_projection_find(staged, runtime^.tree_reveal_stable_id) == TREE_NO_ITEM {
-        runtime^.tree_reveal_pending = false
+    if runtime^.library.tree.reveal_pending &&
+        tree_projection_find(
+            staged, runtime^.library.tree.reveal_stable_id) == TREE_NO_ITEM {
+        runtime^.library.tree.reveal_pending = false
     }
 }
 
@@ -593,7 +604,7 @@ draw_encoded_tree_row :: proc(
         ctx.panel.x, row_y, ctx.panel.width, theme.TREE_ROW_HEIGHT}
     if row.y + row.height >= ctx.panel.y &&
         row.y <= ctx.panel.y + ctx.panel.height {
-        if ctx.state^.ui_runtime.selected_tree_item_id == item^.key {
+        if ctx.state^.ui_runtime.library.tree.selected_item_id == item^.key {
             _ = native.draw_encoder_rectangle(
                 ctx.encoder, geometry.Rectangle(row), theme.UI_BORDER_COLOR)
         }
@@ -619,15 +630,15 @@ draw_encoded_tree_row :: proc(
 // draw_encoded_tree_geometry encodes visible catalogue chrome without text.
 draw_encoded_tree_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    prepared: Tree_List_Preparation) {
+    prepared: ^Tree_List_Preparation) {
     draw_encoded_prepared_tree(state, encoder, prepared, false)
-    uiwidgets.draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
+    uiwidgets.draw_encoded_scrollbar(encoder, prepared^.scroll.scrollbar)
 }
 
 // draw_encoded_tree_text emits the visible catalogue labels.
 draw_encoded_tree_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    prepared: Tree_List_Preparation) {
+    prepared: ^Tree_List_Preparation) {
     draw_encoded_prepared_tree(state, encoder, prepared, true)
 }
 
@@ -935,8 +946,9 @@ tree_projection_visible_count_limited :: proc(
 }
 
 // Restore active placement, then selected placement, then the first visible item.
-tree_resolve_active_node :: proc(params: Tree_List_Params) -> ^viewmodel.Ui_Tree_Item {
-    projection := &params.ui_runtime^.tree_projection
+tree_resolve_active_node :: proc(
+    params: Tree_List_Params) -> ^viewmodel.Ui_Tree_Item {
+    projection := &params.ui_runtime^.library.tree.projection
     active_key := uuid.Identifier{}
     if params.ui_runtime^.semantic_focus != nil {
         active_key = params.ui_runtime^.semantic_focus^.active_tree_item
@@ -950,7 +962,7 @@ tree_resolve_active_node :: proc(params: Tree_List_Params) -> ^viewmodel.Ui_Tree
         }
     }
     selected_index := tree_projection_find(
-        projection, params.ui_runtime^.selected_tree_item_id)
+        projection, params.ui_runtime^.library.tree.selected_item_id)
     if selected_index != TREE_NO_ITEM {
         selected := &projection^.items[selected_index]
         if _, visible := tree_projection_visible_row(
@@ -971,9 +983,9 @@ tree_set_active_item :: proc(
     }
     runtime^.semantic_focus^.active_tree_item = item^.key
     if reveal {
-        runtime^.tree_reveal_stable_id = item^.key
-        runtime^.tree_reveal_pending = true
-        runtime^.tree_reveal_reason = .Navigation
+        runtime^.library.tree.reveal_stable_id = item^.key
+        runtime^.library.tree.reveal_pending = true
+        runtime^.library.tree.reveal_reason = .Navigation
     }
 }
 
@@ -987,9 +999,9 @@ tree_set_active_node :: proc(
     }
     runtime^.semantic_focus^.active_tree_item = node^.stable_id
     if reveal {
-        runtime^.tree_reveal_stable_id = node^.stable_id
-        runtime^.tree_reveal_pending = true
-        runtime^.tree_reveal_reason = .Navigation
+        runtime^.library.tree.reveal_stable_id = node^.stable_id
+        runtime^.library.tree.reveal_pending = true
+        runtime^.library.tree.reveal_reason = .Navigation
     }
 }
 
@@ -999,23 +1011,24 @@ tree_semantic_navigation_target :: proc(
     active: ^viewmodel.Ui_Tree_Item,
     kind: viewmodel.Ui_Focus_Command_Kind) -> ^viewmodel.Ui_Tree_Item {
     row, _ := tree_projection_visible_row(
-        &params.ui_runtime^.tree_projection, active, params.visibility)
+        &params.ui_runtime^.library.tree.projection, active, params.visibility)
     count := tree_projection_visible_count(
-        &params.ui_runtime^.tree_projection, params.visibility)
+        &params.ui_runtime^.library.tree.projection, params.visibility)
     #partial switch kind {
     case .Tree_Previous:
         return tree_projection_item_at_row(
-            &params.ui_runtime^.tree_projection, max(row - 1, 0), params.visibility)
+            &params.ui_runtime^.library.tree.projection,
+            max(row - 1, 0), params.visibility)
     case .Tree_Next:
         return tree_projection_item_at_row(
-            &params.ui_runtime^.tree_projection, min(row + 1, count - 1),
+            &params.ui_runtime^.library.tree.projection, min(row + 1, count - 1),
             params.visibility)
     case .Tree_First:
         return tree_projection_item_at_row(
-            &params.ui_runtime^.tree_projection, 0, params.visibility)
+            &params.ui_runtime^.library.tree.projection, 0, params.visibility)
     case .Tree_Last:
         return tree_projection_item_at_row(
-            &params.ui_runtime^.tree_projection, count - 1, params.visibility)
+            &params.ui_runtime^.library.tree.projection, count - 1, params.visibility)
     case:
     }
     return active
@@ -1028,7 +1041,7 @@ tree_apply_parent_command :: proc(
     if active^.first_child != TREE_NO_ITEM && active^.expanded {
         active^.expanded = false
     } else if active^.parent != TREE_NO_ITEM {
-        return &params.ui_runtime^.tree_projection.items[active^.parent]
+        return &params.ui_runtime^.library.tree.projection.items[active^.parent]
     }
     return active
 }
@@ -1038,7 +1051,7 @@ tree_apply_child_command :: proc(
     params: Tree_List_Params,
     active: ^viewmodel.Ui_Tree_Item) -> ^viewmodel.Ui_Tree_Item {
     policy := params.visibility
-    policy.projection = &params.ui_runtime^.tree_projection
+    policy.projection = &params.ui_runtime^.library.tree.projection
     if active^.first_child != TREE_NO_ITEM && !active^.expanded {
         active^.expanded = true
         return active
@@ -1076,12 +1089,12 @@ tree_apply_structure_command :: proc(
 
 // Select one placement while resolving playback only through its canonical target.
 tree_select_item :: proc(params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) {
-    params.ui_runtime^.selected_tree_item_id = item^.key
+    params.ui_runtime^.library.tree.selected_item_id = item^.key
     tree_actions_reconcile(params)
     target := tree_find_stable_id(params.ji, item^.target_animation_id)
     if target != nil {
         set_selected_animation(params.ji, target)
-        params.ui_runtime^.view_text_scroll_y = 0
+        params.ui_runtime^.presentation.text_scroll_y = 0
     }
 }
 
@@ -1122,13 +1135,13 @@ tree_semantic_command_target :: proc(
         return nil
     }
     index := tree_projection_find(
-        &params.ui_runtime^.tree_projection, target.stable_id)
+        &params.ui_runtime^.library.tree.projection, target.stable_id)
     if index == TREE_NO_ITEM {
         return nil
     }
-    item := &params.ui_runtime^.tree_projection.items[index]
+    item := &params.ui_runtime^.library.tree.projection.items[index]
     _, visible := tree_projection_visible_row(
-        &params.ui_runtime^.tree_projection, item, params.visibility)
+        &params.ui_runtime^.library.tree.projection, item, params.visibility)
     return item if visible else nil
 }
 
@@ -1189,19 +1202,20 @@ tree_publish_item_semantics :: proc(
     row := tree_layout_find_item(ctx.layout, publication.item)
     assert(row != nil, "logical tree row absent from prepared layout")
     geometry := tree_reorder_visible_geometry(
-        ctx.runtime, ctx.layout, row^, ctx.panel, ctx.scroll_y)
+        ctx.reorder,
+        ctx.layout, row^, ctx.panel, ctx.scroll_y)
     states := publication.states
     actions := publication.actions
     if !tree_row_is_revealed(row^) {
         states -= {.Visible, .Enabled, .Focusable}
         actions = {}
     }
-    if ctx.runtime^.tree_reorder_motion.active &&
+    if ctx.reorder^.active &&
         geometry.clip_bounds.height <= 0 {
         states -= {.Visible, .Enabled, .Focusable}
         actions = {}
     }
-    _ = uisemantics.semantic_register_control(ctx.runtime^.semantic_focus, {
+    _ = uisemantics.semantic_register_control(ctx.semantic_focus, {
         id = publication.item_id, parent = publication.parent_id,
         role = .Tree_Item, states = states,
         actions = actions, region = .Accordion_Content,
@@ -1240,7 +1254,7 @@ tree_item_semantic_publication :: proc(
     if item^.selectable || item^.first_child != TREE_NO_ITEM {
         states += {.Enabled}
     }
-    if ctx.runtime^.selected_tree_item_id == item^.key {
+    if ctx.tree^.selected_item_id == item^.key {
         states += {.Selected}
     }
     if tree_item_is_effectively_expanded(policy, item^) {
@@ -1291,6 +1305,35 @@ register_tree_semantics :: proc(
     layout: ^Tree_Prepared_Layout) {
     tree_id := tree_semantic_id()
     active_id := tree_placement_semantic_id(active)
+    tree_register_semantic_control(params, scroll, tree_id, active_id)
+    row := 0
+    panel := geometry.Rectangle(scroll.control_geometry.bounds)
+    ctx := Tree_Semantic_Context{
+        tree = &params.ui_runtime^.library.tree,
+        reorder = &params.ui_runtime^.library.actions.reorder,
+        semantic_focus = params.ui_runtime^.semantic_focus,
+        ji = params.ji,
+        policy = params.visibility,
+        tree_id = tree_id,
+        panel = panel,
+        scroll_y = scroll.scroll_y_out,
+        row = &row,
+        layout = layout,
+    }
+    projection := &ctx.tree^.projection
+    for root, steps := projection^.first_root, 0;
+        root != TREE_NO_ITEM && steps < projection^.count;
+        root, steps = projection^.items[root].next_sibling, steps + 1 {
+        register_tree_item_semantics(
+            ctx, projection, &projection^.items[root], 0, projection^.count)
+    }
+}
+
+// tree_register_semantic_control publishes the stable tree container contract.
+tree_register_semantic_control :: proc(
+    params: Tree_List_Params,
+    scroll: uiwidgets.Scroll_Container_Update_Result,
+    tree_id, active_id: viewmodel.Ui_Node_Id) {
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
         id = tree_id, active_descendant = active_id, role = .Tree,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
@@ -1302,17 +1345,6 @@ register_tree_semantics :: proc(
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
         label = params.label,
     })
-    row := 0
-    panel := geometry.Rectangle(scroll.control_geometry.bounds)
-    ctx := Tree_Semantic_Context{params.ui_runtime, params.ji, params.visibility,
-        tree_id, panel, scroll.scroll_y_out, &row, layout}
-    projection := &params.ui_runtime^.tree_projection
-    for root, steps := projection^.first_root, 0;
-        root != TREE_NO_ITEM && steps < projection^.count;
-        root, steps = projection^.items[root].next_sibling, steps + 1 {
-        register_tree_item_semantics(
-            ctx, projection, &projection^.items[root], 0, projection^.count)
-    }
 }
 
 //   Return the smallest clamped scroll that fully reveals one tree row.
@@ -1354,16 +1386,16 @@ apply_pending_tree_reveal :: proc(
     content_height: f32) {
 
     ui_runtime := params.ui_runtime
-    if ui_runtime == nil || !ui_runtime^.tree_reveal_pending {
+    if ui_runtime == nil || !ui_runtime^.library.tree.reveal_pending {
         return
     }
     if !tree_projection_prepare(params) {
         log.error("library_tree_projection_rejected")
         return
     }
-    projection := &ui_runtime^.tree_projection
+    projection := &ui_runtime^.library.tree.projection
     target_index := tree_projection_find(
-        projection, ui_runtime^.tree_reveal_stable_id)
+        projection, ui_runtime^.library.tree.reveal_stable_id)
     tree_expand_reveal_ancestors(projection, target_index)
     target := &projection^.items[target_index] if
         target_index != TREE_NO_ITEM else nil
@@ -1374,12 +1406,12 @@ apply_pending_tree_reveal :: proc(
     }
     params.scroll_y^ = tree_reveal_scroll(
         params.scroll_y^, row, params.list_panel.height, content_height)
-    ui_runtime^.tree_scroll_dragging = false
-    ui_runtime^.tree_scroll_drag_off = 0
-    if uiwidgets.scroll_container_owns_press(&ui_runtime^.ui_press_owner, 1003) {
-        ui_runtime^.ui_press_owner = {}
+    ui_runtime^.library.tree.scroll_dragging = false
+    ui_runtime^.library.tree.scroll_drag_off = 0
+    if uiwidgets.scroll_container_owns_press(&ui_runtime^.input.press_owner, 1003) {
+        ui_runtime^.input.press_owner = {}
     }
-    ui_runtime^.tree_reveal_pending = false
+    ui_runtime^.library.tree.reveal_pending = false
 }
 
 //   Apply selection/expand hits and sync related UI state.
@@ -1393,13 +1425,13 @@ apply_tree_hit :: proc(
         tree_set_active_item(ui_runtime, hit.toggled_node, false)
     }
     if hit.selected_node != nil {
-        ui_runtime^.selected_tree_item_id = hit.selected_node^.key
+        ui_runtime^.library.tree.selected_item_id = hit.selected_node^.key
         target := tree_find_stable_id(ji, hit.selected_node^.target_animation_id)
         if target != nil {
             set_selected_animation(ji, target)
-            ui_runtime^.view_text_scroll_y = 0
-            ui_runtime^.text_scroll_dragging = false
-            ui_runtime^.text_scroll_drag_off = 0
+            ui_runtime^.presentation.text_scroll_y = 0
+            ui_runtime^.presentation.scroll_dragging = false
+            ui_runtime^.presentation.scroll_drag_off = 0
         }
         tree_set_active_item(ui_runtime, hit.selected_node, false)
     }
@@ -1423,7 +1455,7 @@ update_tree_node_expander_hit :: proc(
         scroll_offset = geometry.Vector2(ctx.scroll_offset),
         interaction_space_rect = geometry.Rectangle(ctx.interaction_space_rect),
         interaction_enabled =
-            ctx.allow_clicks && !ctx.ui_runtime.tree_scroll_dragging,
+            ctx.allow_clicks && !ctx.tree.scroll_dragging,
         toggle_triggered = toggle_triggered,
     })
     if expander_result.clicked {
@@ -1457,12 +1489,13 @@ update_tree_node_row :: proc(
         id = tree_placement_press_id(node),
         rect = geometry.Rectangle(row_rect),
         can_expand_pos_y = false,
-        selected = ctx.ui_runtime.selected_tree_item_id == node^.key,
+        selected = ctx.tree.selected_item_id == node^.key,
         mouse = ctx.mouse_input,
         scroll_offset = geometry.Vector2(ctx.scroll_offset),
         interaction_space_rect = geometry.Rectangle(ctx.interaction_space_rect),
-        interaction_enabled = ctx.allow_clicks && !ctx.ui_runtime.tree_scroll_dragging,
-    }, &ctx.ui_runtime.ui_press_owner)
+        interaction_enabled = ctx.allow_clicks &&
+        !ctx.tree.scroll_dragging,
+    }, &ctx.interaction.press_owner)
 
     update_tree_node_expander_hit(ctx, node, icon_rect, list_item_result.clicked, hit)
 
@@ -1479,16 +1512,16 @@ commit_tree_scroll :: proc(
     params: Tree_List_Params,
     scroll: uiwidgets.Scroll_Container_Update_Result) {
     params.scroll_y^ = scroll.scroll_y_out
-    params.ui_runtime.tree_scroll_dragging = scroll.state_out.is_dragging_thumb
-    params.ui_runtime.tree_scroll_drag_off = scroll.state_out.drag_offset_y
+    params.ui_runtime.library.tree.scroll_dragging = scroll.state_out.is_dragging_thumb
+    params.ui_runtime.library.tree.scroll_drag_off = scroll.state_out.drag_offset_y
 }
 
 //   Release completed list-item capture after tree interaction.
 release_tree_list_capture :: proc(params: Tree_List_Params) {
-    if params.ui_runtime.ui_press_owner.active &&
-        params.ui_runtime.ui_press_owner.kind == .List_Item &&
+    if params.ui_runtime.input.press_owner.active &&
+        params.ui_runtime.input.press_owner.kind == .List_Item &&
         uiwidgets.input_frame_left_released(params.mouse_input) {
-        params.ui_runtime.ui_press_owner = {}
+        params.ui_runtime.input.press_owner = {}
     }
 }
 
@@ -1513,7 +1546,7 @@ finish_tree_interaction :: proc(
     active := tree_resolve_active_node(params)
     register_tree_semantics(params, prepared^.scroll, active, &prepared^.layout)
     tree_actions_publish(params, prepared)
-    owner := params.ui_runtime^.ui_press_owner
+    owner := params.ui_runtime^.input.press_owner
     if hit.hovered_node != nil &&
        uiwidgets.input_frame_left_pressed(params.mouse_input) &&
        !(owner.active && tree_actions_control_id_owned(owner.id)) ||
@@ -1528,14 +1561,14 @@ finish_tree_interaction :: proc(
 tree_refresh_hit_preparation :: proc(
     params: Tree_List_Params, hit: Tree_Hit, prepared: ^Tree_List_Preparation) {
     if hit.toggled_node != nil {
-        prepared^.layout = tree_prepare_layout(params)
+        tree_prepare_layout(params, &prepared^.layout)
         tree_refresh_preparation(params, prepared)
-        uilayout.ui_release_geometry_capture(params.ui_runtime)
+        prepared^.cancel_geometry_capture = true
     }
     if hit.actions_toggle_id != (uuid.Identifier{}) ||
        hit.actions_move_id != (uuid.Identifier{}) {
         tree_actions_prepare_focus(params)
-        prepared^.layout = tree_prepare_layout(params)
+        tree_prepare_layout(params, &prepared^.layout)
         tree_actions_reveal_focus(params, &prepared^.layout)
         tree_refresh_preparation(params, prepared)
     }
@@ -1543,10 +1576,10 @@ tree_refresh_hit_preparation :: proc(
 
 // Return the hovered row only while it owns the held primary pointer press.
 tree_pressed_item :: proc(
-    params: Tree_List_Params,
+    owner: viewmodel.Ui_Press_Owner_State,
+    mouse_input: input.Input_Frame,
     hovered: ^viewmodel.Ui_Tree_Item) -> ^viewmodel.Ui_Tree_Item {
-    owner := params.ui_runtime^.ui_press_owner
-    if hovered != nil && uiwidgets.input_frame_left_down(params.mouse_input) &&
+    if hovered != nil && uiwidgets.input_frame_left_down(mouse_input) &&
         owner.active && owner.kind == .List_Item &&
         owner.id == tree_placement_press_id(hovered) {
         return hovered
@@ -1554,39 +1587,41 @@ tree_pressed_item :: proc(
     return nil
 }
 
-//   Resolve tree scrolling and row interaction before rendering.
-prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
+// Resolve tree scrolling and row interaction into caller-owned frame storage.
+prepare_tree_list_panel :: proc(
+    params: Tree_List_Params,
+    prepared: ^Tree_List_Preparation) {
+    prepared^ = {}
     if params.ji == nil ||
         params.ji^.animation_count == 0 &&
             (params.collections == nil || params.collections^.entry_count == 0) {
-        params.ui_runtime^.tree_motion = {}
+        params.ui_runtime^.library.motion = {}
         tree_actions_close_context(params.ui_runtime)
-        return {}
+        return
     }
     if !tree_projection_prepare(params) {
         log.error("library_tree_projection_rejected")
-        return {}
+        return
     }
     tree_actions_reconcile(params)
-    layout := tree_prepare_layout(params)
+    tree_prepare_layout(params, &prepared^.layout)
     _ = tree_apply_semantic_commands(params)
     tree_actions_reconcile(params)
     tree_actions_apply_commands(params)
     tree_actions_prepare_focus(params)
     tree_motion_settle_navigation(params)
-    layout = tree_prepare_layout(params)
-    tree_apply_visual_reveal(params, &layout)
-    tree_actions_reveal_focus(params, &layout)
-    tree_motion_apply_anchor(params, &layout)
-    prepared := Tree_List_Preparation{layout = layout}
-    prepared.scroll = tree_update_scroll(params, layout.content_height)
-    commit_tree_scroll(params, prepared.scroll)
-    tree_motion_release_anchor(params, prepared.scroll)
-    hit := tree_update_prepared_rows(params, &prepared)
-    finish_tree_interaction(params, hit, &prepared)
-    prepared.content_height = prepared.layout.content_height
-    prepared.hovered_node = hit.hovered_node
-    prepared.hovered_expander_node = hit.hovered_expander_node
-    prepared.pressed_node = tree_pressed_item(params, hit.hovered_node)
-    return prepared
+    tree_prepare_layout(params, &prepared^.layout)
+    tree_apply_visual_reveal(params, &prepared^.layout)
+    tree_actions_reveal_focus(params, &prepared^.layout)
+    tree_motion_apply_anchor(params, &prepared^.layout)
+    prepared^.scroll = tree_update_scroll(params, prepared^.layout.content_height)
+    commit_tree_scroll(params, prepared^.scroll)
+    tree_motion_release_anchor(params, prepared^.scroll)
+    hit := tree_update_prepared_rows(params, prepared)
+    finish_tree_interaction(params, hit, prepared)
+    prepared^.content_height = prepared^.layout.content_height
+    prepared^.hovered_node = hit.hovered_node
+    prepared^.hovered_expander_node = hit.hovered_expander_node
+    prepared^.pressed_node = tree_pressed_item(
+        params.ui_runtime^.input.press_owner, params.mouse_input, hit.hovered_node)
 }

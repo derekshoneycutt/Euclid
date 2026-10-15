@@ -38,9 +38,9 @@ tree_favorites_fixture :: proc(
         collections, entry_id, nodes[2].stable_id) == .None)
     return {
         ji = ji, ui_runtime = runtime, collections = collections,
-        collections_revision = 1, scroll_y = &runtime^.tree_scroll_y,
+        collections_revision = 1, scroll_y = &runtime^.library.tree.scroll_y,
         list_panel = {0, 0, 240, 240},
-        visibility = {search = &runtime^.library_search},
+        visibility = {search = &runtime^.library.search},
     }
 }
 
@@ -76,7 +76,7 @@ tree_favorites_actions_publish_owned_localized_controls_and_order :: proc(
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_actions_test_fixture(state, &ji, &nodes)
     _ = tree_actions_test_semantic_frame(t, &params)
-    selected := state^.ui_runtime.selected_tree_item_id
+    selected := state^.ui_runtime.library.tree.selected_item_id
     toggle := uilibrary.tree_actions_semantic_id(params,
         selected, uilibrary.TREE_ACTION_TOGGLE)
     snapshot := uisemantics.semantic_snapshot(semantic)
@@ -115,7 +115,7 @@ tree_favorites_actions_reject_stale_queued_activations :: proc(t: ^testing.T) {
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_actions_test_fixture(state, &ji, &nodes)
     _ = tree_actions_test_semantic_frame(t, &params)
-    selected := state^.ui_runtime.selected_tree_item_id
+    selected := state^.ui_runtime.library.tree.selected_item_id
     toggle := uilibrary.tree_actions_semantic_id(params,
         selected, uilibrary.TREE_ACTION_TOGGLE)
     testing.expect(t,
@@ -129,9 +129,9 @@ tree_favorites_actions_reject_stale_queued_activations :: proc(t: ^testing.T) {
     revision := state^.preferences_runtime.collection_revision
     _ = tree_actions_test_semantic_frame(t, &params)
     testing.expect_value(t, state^.preferences_runtime.collection_revision, revision)
-    state^.ui_runtime.selected_tree_item_id = nodes[0].stable_id
+    state^.ui_runtime.library.tree.selected_item_id = nodes[0].stable_id
     testing.expect(t, uilibrary.tree_actions_command_item(params, toggle) == nil)
-    state^.ui_runtime.selected_tree_item_id = selected
+    state^.ui_runtime.library.tree.selected_item_id = selected
     uilibrary.tree_actions_toggle(params, selected)
     _ = tree_actions_test_semantic_frame(t, &params)
     params.scroll_y^ = 10000
@@ -152,7 +152,7 @@ tree_favorites_singleton_actions_localization_and_disabled_policy :: proc(t: ^te
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_actions_test_fixture(state, &ji, &nodes)
-    selected := state^.ui_runtime.selected_tree_item_id
+    selected := state^.ui_runtime.library.tree.selected_item_id
     testing.expect_value(t, collectionmodel.favorites_remove(params.collections,
         params.collections^.entries[0].id), collectionmodel.Policy_Error.None)
     testing.expect_value(t, collectionmodel.favorites_remove(params.collections,
@@ -175,7 +175,7 @@ tree_favorites_expect_disabled_actions :: proc(
     t: ^testing.T, params: uilibrary.Tree_List_Params) {
     semantic := params.ui_runtime^.semantic_focus
     snapshot := uisemantics.semantic_snapshot(semantic)
-    selected := params.ui_runtime^.selected_tree_item_id
+    selected := params.ui_runtime^.library.tree.selected_item_id
     for action in ([2]u64{uilibrary.TREE_ACTION_UP, uilibrary.TREE_ACTION_DOWN}) {
         id := uilibrary.tree_actions_semantic_id(params, selected, action)
         node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
@@ -203,7 +203,7 @@ tree_favorites_projection_shares_order_expansion_and_search :: proc(t: ^testing.
     assert(collectionmodel.favorites_add(
         &collections, missing_entry, missing_animation) == .None)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    projection := &runtime.tree_projection
+    projection := &runtime.library.tree.projection
     terminal := uilibrary.tree_projection_find(projection, nodes[1].stable_id)
     root := uilibrary.tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
     favorites := uilibrary.tree_projection_find(
@@ -235,19 +235,19 @@ tree_favorites_search_hides_and_restores_the_subtree :: proc(t: ^testing.T) {
     collections: collectionmodel.Set
     params := tree_favorites_fixture(&runtime, &ji, &nodes, &collections)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    projection := &runtime.tree_projection
+    projection := &runtime.library.tree.projection
     root := uilibrary.tree_projection_find(
         projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
     favorites := uilibrary.tree_projection_find(
         projection, collectionmodel.FAVORITES_COLLECTION_ID)
     projection.items[root].expanded = true
     projection.items[favorites].expanded = true
-    runtime.library_search.active = true
-    runtime.library_search.visible_ids[0] = nodes[0].stable_id
-    runtime.library_search.visible_id_count = 1
+    runtime.library.search.active = true
+    runtime.library.search.visible_ids[0] = nodes[0].stable_id
+    runtime.library.search.visible_id_count = 1
     testing.expect_value(t, uilibrary.tree_projection_visible_count(
         projection, params.visibility), 1)
-    runtime.library_search.active = false
+    runtime.library.search.active = false
     testing.expect_value(t, uilibrary.tree_projection_visible_count(
         projection, params.visibility), 6)
 }
@@ -263,25 +263,25 @@ tree_favorites_selection_and_reload_use_canonical_targets :: proc(t: ^testing.T)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     placement_key := collections.entries[0].id
     placement_index := uilibrary.tree_projection_find(
-        &runtime.tree_projection, placement_key)
+        &runtime.library.tree.projection, placement_key)
     uilibrary.tree_select_item(params,
-        &runtime.tree_projection.items[placement_index])
+        &runtime.library.tree.projection.items[placement_index])
     testing.expect_value(t, ji.selected_animation, &nodes[2])
-    testing.expect_value(t, runtime.selected_tree_item_id, placement_key)
+    testing.expect_value(t, runtime.library.tree.selected_item_id, placement_key)
     nodes[2].name = "Reloaded animation"
     ji.content_generation += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     placement_index = uilibrary.tree_projection_find(
-        &runtime.tree_projection, placement_key)
+        &runtime.library.tree.projection, placement_key)
     testing.expect(t, placement_index != uilibrary.TREE_NO_ITEM)
     testing.expect_value(t, uilibrary.tree_item_label(
-        &ji, &runtime.tree_projection.items[placement_index]), "Reloaded animation")
-    testing.expect_value(t, runtime.selected_tree_item_id, placement_key)
+        &ji, &runtime.library.tree.projection.items[placement_index]), "Reloaded animation")
+    testing.expect_value(t, runtime.library.tree.selected_item_id, placement_key)
     testing.expect(t, collectionmodel.favorites_remove(
         &collections, placement_key) == .None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    testing.expect_value(t, runtime.selected_tree_item_id, uuid.Identifier{})
+    testing.expect_value(t, runtime.library.tree.selected_item_id, uuid.Identifier{})
     testing.expect_value(t, ji.selected_animation, &nodes[2])
 }
 
@@ -313,8 +313,8 @@ tree_favorites_projection_rejects_combined_capacity_overflow :: proc(t: ^testing
         collections_revision = 1,
     }
     testing.expect(t, !uilibrary.tree_projection_prepare(params))
-    testing.expect_value(t, runtime.tree_projection.count, 0)
-    testing.expect(t, !runtime.tree_projection.valid)
+    testing.expect_value(t, runtime.library.tree.projection.count, 0)
+    testing.expect(t, !runtime.library.tree.projection.valid)
 }
 
 // Admit exactly 512 combined nodes and preserve the committed projection on the 513th.
@@ -346,12 +346,12 @@ tree_favorites_projection_exact_capacity_is_transactional :: proc(t: ^testing.T)
         ji = &ji, ui_runtime = &runtime, collections = &collections,
         collections_revision = 1}
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    testing.expect_value(t, runtime.tree_projection.count, 512)
+    testing.expect_value(t, runtime.library.tree.projection.count, 512)
     collections.entry_count += 1
     params.collections_revision += 1
     testing.expect(t, !uilibrary.tree_projection_prepare(params))
-    testing.expect_value(t, runtime.tree_projection.count, 512)
-    testing.expect(t, runtime.tree_projection.valid)
+    testing.expect_value(t, runtime.library.tree.projection.count, 512)
+    testing.expect(t, runtime.library.tree.projection.valid)
 }
 
 // Keep expanded Collections and Favorites choices through a temporarily empty projection.
@@ -364,21 +364,21 @@ tree_favorites_expansion_survives_empty_session :: proc(t: ^testing.T) {
     params := tree_favorites_fixture(&runtime, &ji, &nodes, &collections)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     root := uilibrary.tree_projection_find(
-        &runtime.tree_projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+        &runtime.library.tree.projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
     favorites := uilibrary.tree_projection_find(
-        &runtime.tree_projection, collectionmodel.FAVORITES_COLLECTION_ID)
-    runtime.tree_projection.items[root].expanded = true
-    runtime.tree_projection.items[favorites].expanded = true
+        &runtime.library.tree.projection, collectionmodel.FAVORITES_COLLECTION_ID)
+    runtime.library.tree.projection.items[root].expanded = true
+    runtime.library.tree.projection.items[favorites].expanded = true
     entry := collections.entries[0]
     testing.expect_value(t, collectionmodel.favorites_remove(
         &collections, entry.id), collectionmodel.Policy_Error.None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    testing.expect_value(t, runtime.tree_projection.count, len(nodes))
+    testing.expect_value(t, runtime.library.tree.projection.count, len(nodes))
     testing.expect_value(t, collectionmodel.favorites_add(
         &collections, entry.id, entry.animation_id), collectionmodel.Policy_Error.None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    testing.expect(t, runtime.tree_projection.items[root].expanded)
-    testing.expect(t, runtime.tree_projection.items[favorites].expanded)
+    testing.expect(t, runtime.library.tree.projection.items[root].expanded)
+    testing.expect(t, runtime.library.tree.projection.items[favorites].expanded)
 }

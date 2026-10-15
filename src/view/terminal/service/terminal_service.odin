@@ -305,7 +305,7 @@ terminal_service_routed_frame :: proc(
     state: ^core.Euclid_General_State,
     frame: input.Input_Frame) -> input.Input_Frame {
     result := frame
-    interaction := state^.ui_runtime.interaction_frame
+    interaction := state^.ui_runtime.input.interaction_frame
     result.terminal_focus_known = true
     result.terminal_focused = interaction.terminal_focused
     result.terminal_focus_changed = interaction.terminal_focus_changed
@@ -324,7 +324,7 @@ terminal_service_update_visible :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> uiterminal.Terminal_Prepared_Frame {
     bounds := uiterminal.terminal_content_panel(
-        state^.ui_runtime.ui_regions.text_rect)
+        state^.ui_runtime.layout.ui_regions.text_rect)
     terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
     terminal_frame := terminal_service_routed_frame(state, frame)
     prepared := uiterminal.terminal_prepare_frame(
@@ -359,7 +359,8 @@ terminal_service_update :: proc(
         return {}
     }
     terminal_service_request_session(state)
-    if !uipresentation.ui_presentation_is_visible(&state^.ui_runtime) {
+    if !uipresentation.ui_presentation_is_visible(
+        &state^.ui_runtime.presentation) {
         terminal_service_update_hidden(state)
         return {}
     }

@@ -2,7 +2,6 @@ package uiaccessibility
 
 import native "../../native"
 import accessibility "../../../accessibility"
-import core "../../../core"
 import uuid "core:encoding/uuid"
 import log "core:log"
 import viewmodel "../model"
@@ -91,7 +90,8 @@ accessibility_command_kind :: proc(
 
 // apply_accessibility_action converges one validated request with its UI owner.
 apply_accessibility_action :: proc(
-    state: ^core.Euclid_General_State, action: ^native.Sdl_Accessibility_Action) {
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    action: ^native.Sdl_Accessibility_Action) {
     identity := action^.identity
     target := viewmodel.Ui_Node_Id{
         domain = cast(viewmodel.Ui_Node_Domain)identity.owner_domain,
@@ -100,7 +100,6 @@ apply_accessibility_action :: proc(
         generation = identity.generation,
     }
     kind := accessibility_command_kind(action^.kind)
-    semantic := state^.ui_runtime.semantic_focus
     if kind == .Focus {
         target = accessibility_tree_focus_owner(semantic, target)
     }
@@ -121,7 +120,8 @@ apply_accessibility_action :: proc(
 
 // drain_accessibility_actions converges validated native requests with UI commands.
 drain_accessibility_actions :: proc(
-    state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform) {
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    platform: ^native.Sdl_Platform) {
     for {
         action: native.Sdl_Accessibility_Action
         status := native.sdl_platform_drain_accessibility_action(platform, &action)
@@ -131,7 +131,7 @@ drain_accessibility_actions :: proc(
         if status != .Ok {
             continue
         }
-        apply_accessibility_action(state, &action)
+        apply_accessibility_action(semantic, &action)
     }
 }
 
@@ -323,8 +323,8 @@ accessibility_control_input :: proc(
 
 // publish_accessibility_controls projects all committed ordinary controls.
 publish_accessibility_controls :: proc(
-    state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform) {
-    semantic := state^.ui_runtime.semantic_focus
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    platform: ^native.Sdl_Platform) {
     snapshot := uisemantics.semantic_snapshot(semantic)
     root_bounds := accessibility.Bounds{0, 0,
         f64(platform^.metrics.logical_width), f64(platform^.metrics.logical_height)}

@@ -25,7 +25,7 @@ accumulate_and_update_systems :: proc(
     viewtelemetry.update_average_fps(state, clamped_dt)
     projection.screenshake_update(state^.iso_scale, clamped_dt)
 
-    if state^.ui_runtime.simulation_paused {
+    if state^.ui_runtime.playback.simulation_paused {
         julia.publish_available_animation_tick(state)
         audio.set_drawing_activity(&state^.chalk_audio, false)
         state^.accumulator = 0
@@ -68,10 +68,10 @@ run_deterministic_fixed_step :: proc(
 
     state^.current_delta_time = dt
     julia.publish_available_animation_tick(state)
-    if state^.ui_runtime.animation_policy_paused {
+    if state^.ui_runtime.playback.animation_policy_paused {
         audio.set_drawing_activity(&state^.chalk_audio, false)
     }
-    if !state^.ui_runtime.animation_policy_paused {
+    if !state^.ui_runtime.playback.animation_policy_paused {
         julia.schedule_animation_tick(state, dt)
     }
     run_parallel_simulation_step(state^.simulation_executor, dt)

@@ -21,10 +21,10 @@ import uiterminal "terminal"
 // draw_encoded_panel_geometry encodes visible composition backgrounds without text.
 draw_encoded_panel_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    controls: Ui_Control_Preparation) {
-    regions := state^.ui_runtime.ui_regions
-    window := state^.ui_runtime.window
-    if state^.ui_runtime.current_layout_mode == .Portrait {
+    controls: ^Ui_Control_Preparation) {
+    regions := state^.ui_runtime.layout.ui_regions
+    window := state^.ui_runtime.layout.window
+    if state^.ui_runtime.layout.current_layout_mode == .Portrait {
         _ = native.draw_encoder_rectangle(encoder, {0, regions.world_rect.height,
             f32(window.width), f32(window.height) - regions.world_rect.height},
             theme.UI_BACK_COLOR)
@@ -50,9 +50,9 @@ draw_encoded_panel_geometry :: proc(
 // draw_encoded_accordion_content encodes the active section's geometry.
 draw_encoded_accordion_content :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    layout: uiaccordion.Accordion_Layout, controls: Ui_Control_Preparation) {
-    for index in 0..<controls.accordion.sections.count {
-        descriptor := controls.accordion.sections.items[index]
+    layout: uiaccordion.Accordion_Layout, controls: ^Ui_Control_Preparation) {
+    for index in 0..<controls^.accordion.sections.count {
+        descriptor := controls^.accordion.sections.items[index]
         section := descriptor.section
         content := layout.contents[int(section)]
         clip := layout.clips[int(section)]
@@ -69,7 +69,7 @@ draw_encoded_accordion_content :: proc(
 draw_encoded_accordion_child :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
-    controls: Ui_Control_Preparation) {
+    controls: ^Ui_Control_Preparation) {
     _ = native.draw_encoder_rectangle(
         encoder, content, theme.UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
@@ -79,7 +79,7 @@ draw_encoded_accordion_child :: proc(
         uipresentation.draw_encoded_presentation_geometry(
             state, encoder, content)
     case .Library:
-        uilibrary.draw_encoded_tree_geometry(state, encoder, controls.tree)
+        uilibrary.draw_encoded_tree_geometry(state, encoder, &controls^.tree)
     case .Save_Gif:
         uigif.draw_encoded_gif_geometry(encoder, controls.gif)
     case .Settings:
@@ -112,27 +112,27 @@ draw_encoded_accordion_headers :: proc(
 // draw_encoded_accordion_geometry encodes panel chrome while labels stay deferred.
 draw_encoded_accordion_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    controls: Ui_Control_Preparation) {
+    controls: ^Ui_Control_Preparation) {
     runtime := &state^.ui_runtime
-    panel := runtime^.ui_regions.accordion_rect
+    panel := runtime^.layout.ui_regions.accordion_rect
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(panel), worldmodel.BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(panel), 1, theme.UI_BORDER_COLOR)
-    sections := controls.accordion.sections
-    layout := controls.accordion.layout
+    sections := controls^.accordion.sections
+    layout := controls^.accordion.layout
     draw_encoded_accordion_content(state, encoder, layout, controls)
     draw_encoded_accordion_headers(
-        encoder, sections, layout, runtime^.active_accordion_section)
+        encoder, sections, layout, runtime^.layout.active_accordion_section)
 }
 
 
 // draw_encoded_panel_text emits non-presentation labels for the active UI layout.
 draw_encoded_panel_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    controls: Ui_Control_Preparation) {
-    sections := controls.accordion.sections
-    layout := controls.accordion.layout
+    controls: ^Ui_Control_Preparation) {
+    sections := controls^.accordion.sections
+    layout := controls^.accordion.layout
     for index in 0..<sections.count {
         header := layout.headers[index]
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
@@ -163,20 +163,20 @@ draw_encoded_panel_text :: proc(
 draw_encoded_accordion_child_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
-    controls: Ui_Control_Preparation) {
+    controls: ^Ui_Control_Preparation) {
     switch section {
     case .Library:
         uilibrary.draw_encoded_library_search_geometry(
-            state, encoder, controls.library_search)
+            state, encoder, controls^.library_search)
         uilibrary.draw_encoded_library_search_text(
-            state, encoder, controls.library_search)
-        uilibrary.draw_encoded_tree_text(state, encoder, controls.tree)
+            state, encoder, controls^.library_search)
+        uilibrary.draw_encoded_tree_text(state, encoder, &controls^.tree)
     case .Save_Gif:
         uigif.draw_encoded_gif_text(state, encoder,
-            content, controls.gif)
+            content, controls^.gif)
     case .Settings:
         uisettings.draw_encoded_settings_text(
-            state, encoder, controls.settings)
+            state, encoder, controls^.settings)
     case .View:
     }
 }
@@ -185,7 +185,7 @@ draw_encoded_accordion_child_text :: proc(
 draw_encoded_overlay_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
     runtime := &state^.ui_runtime
-    if !runtime^.display_fps {
+    if !runtime^.rendering.display_fps {
         return
     }
     storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
@@ -221,22 +221,22 @@ draw_encoded_view_content :: proc(
     terminal: uiterminal.Terminal_Prepared_Frame,
     presentation: uipresentation.Presentation_Preparation) {
     runtime := &state^.ui_runtime
-    panel := geometry.Rectangle(runtime^.ui_regions.text_rect)
-    clip := uiaccordion.ui_presentation_clip(runtime, panel)
+    panel := geometry.Rectangle(runtime^.layout.ui_regions.text_rect)
+    clip := uiaccordion.ui_presentation_clip(&runtime^.layout, panel)
     if clip.width <= 0 || clip.height <= 0 {
         return
     }
     _ = native.draw_encoder_push_scissor(encoder, clip)
     if uiterminal.is_terminal_selected(state) {
         prepared := terminal
-        if !uipresentation.ui_presentation_is_visible(runtime) {
+        if !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
             prepared = uiterminal.terminal_prepare_visual(
                 state, uiterminal.terminal_content_panel(panel))
         }
         uiterminal.terminal_draw_encoded(state, encoder, prepared)
     } else {
         prepared := presentation
-        if !uipresentation.ui_presentation_is_visible(runtime) {
+        if !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
             prepared = uipresentation.prepare_presentation_visual(state, panel)
         }
         uipresentation.draw_encoded_presentation_text(state, encoder, prepared)
