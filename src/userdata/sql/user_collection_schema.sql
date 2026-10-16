@@ -26,6 +26,14 @@ CREATE TABLE user_collection_entry (
     entry_kind TEXT NOT NULL CHECK (entry_kind IN ('animation', 'group')),
     animation_id BLOB
         CHECK (animation_id IS NULL OR length(animation_id) = 16),
+    custom_name TEXT
+        CHECK (
+            custom_name IS NULL
+            OR (
+                length(CAST(custom_name AS BLOB)) BETWEEN 1 AND 256
+                AND instr(custom_name, char(0)) = 0
+            )
+        ),
     UNIQUE (collection_id, entry_id),
     FOREIGN KEY (collection_id) REFERENCES user_collection(collection_id),
     FOREIGN KEY (collection_id, parent_entry_id)

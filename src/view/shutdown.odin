@@ -14,6 +14,7 @@ import viewcapture "capture"
 import viewscenario "scenario"
 import terminalservice "terminal/service"
 import viewpreferences "preferences"
+import uilibrary "ui/library"
 
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
@@ -23,6 +24,14 @@ shutdown_window_runtime :: proc(
     scenario_runtime: ^viewscenario.Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
     if session.state != nil {
+        if !uilibrary.library_entry_name_flush(session.state) {
+            viewpreferences.settings_save_shutdown(
+                session.state, &session.state^.simulation_executor^.pool)
+            if session.state^.ui_runtime.library.entry_name.active &&
+                session.state^.ui_runtime.library.entry_name.dirty {
+                _ = uilibrary.library_entry_name_flush(session.state)
+            }
+        }
         viewpreferences.settings_save_shutdown(
             session.state, &session.state^.simulation_executor^.pool)
         font.cache_shutdown_service(

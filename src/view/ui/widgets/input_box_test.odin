@@ -187,6 +187,91 @@ input_box_scroll_tracks_caret_navigation :: proc(t: ^testing.T) {
     testing.expect_value(t, state.scroll_x, f32(0))
 }
 
+// Verify compact padding aligns click mapping, Unicode selection, and caret geometry.
+@(test)
+input_box_compact_padding_aligns_utf8_pointer_selection :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := Input_Box_Params{
+        rect = {10, 20, 28, 24}, clip_rect = {0, 0, 80, 60},
+        descriptor = {text = "a界z", mode = .Editable, content_revision = 1},
+        state = &state, pointer_routed = true, padding = .Compact,
+        column_advance = 10,
+        frame = {mouse_position = {23, 32},
+            mouse_pressed = {.Left}, mouse_down = {.Left}},
+    }
+    pressed := input_box_prepare(params, &owner)
+    testing.expect_value(t, state.anchor_byte, len("a"))
+    testing.expect_value(t, pressed.inner,
+        geometry.Rectangle{12, 20, 24, 24})
+    testing.expect_value(t, pressed.caret.x, f32(22))
+
+    params.frame = {mouse_position = {33, 32}, mouse_released = {.Left}}
+    released := input_box_prepare(params, &owner)
+    testing.expect_value(t, state.cursor_byte, len("a界"))
+    testing.expect_value(t, released.text_geometry.anchor_column, 1)
+    testing.expect_value(t, released.text_geometry.cursor_column, 2)
+    testing.expect_value(t, released.selection.x, f32(22))
+    testing.expect_value(t, released.selection.width, f32(10))
+    testing.expect_value(t, released.caret.x, f32(32))
+}
+
+// Verify compact padding keeps a narrow field's end caret inside its reveal range.
+@(test)
+input_box_compact_padding_reveals_caret_with_compact_inset :: proc(t: ^testing.T) {
+    state: viewmodel.Ui_Input_Box_State
+    owner: viewmodel.Ui_Press_Owner_State
+    params := Input_Box_Params{
+        rect = {0, 0, 28, 24}, descriptor = {text = "abcdef",
+            mode = .Read_Only, content_revision = 1},
+        state = &state, padding = .Compact, column_advance = 10,
+    }
+    prepared := input_box_prepare(params, &owner)
+    testing.expect_value(t, state.scroll_x, f32(37))
+    testing.expect_value(t, prepared.inner.width, f32(24))
+    testing.expect_value(t, prepared.caret.x, f32(25))
+}
+
+// Verify compact double-click hit testing selects the intended UTF-8 run.
+@(test)
+input_box_compact_padding_maps_double_click_run :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := Input_Box_Params{
+        rect = {10, 20, 28, 24},
+        descriptor = {text = "界+z", mode = .Editable, content_revision = 1},
+        state = &state, pointer_routed = true, padding = .Compact,
+        column_advance = 10,
+        frame = {mouse_position = {13, 32},
+            mouse_pressed = {.Left}, mouse_down = {.Left},
+            mouse_left_clicks = 2},
+    }
+    prepared := input_box_prepare(params, &owner)
+    testing.expect_value(t, state.anchor_byte, 0)
+    testing.expect_value(t, state.cursor_byte, len("界"))
+    testing.expect_value(t, prepared.selection.x, f32(12))
+    testing.expect_value(t, prepared.selection.width, f32(10))
+}
+
+// Verify default padding preserves the existing Library and GIF inset geometry.
+@(test)
+input_box_default_padding_preserves_existing_inset :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{
+        cursor_byte = len("aé"), anchor_byte = len("a"), content_revision = 1}
+    params := Input_Box_Params{
+        rect = {10, 20, 80, 24}, clip_rect = {5, 6, 100, 90},
+        descriptor = {text = "aéz", mode = .Read_Only, content_revision = 1},
+        state = &state, column_advance = 10,
+    }
+    prepared := input_box_draw_result(params, false)
+    testing.expect_value(t, params.padding, Input_Box_Padding.Default)
+    testing.expect_value(t, prepared.inner,
+        geometry.Rectangle{14, 20, 72, 24})
+    testing.expect_value(t, prepared.text_x, f32(14))
+    testing.expect_value(t, prepared.selection.x, f32(24))
+    testing.expect_value(t, prepared.selection.width, f32(10))
+}
+
 // Verify prepared descriptors expose UTF-8 byte boundaries and codepoint columns.
 @(test)
 input_box_descriptor_projects_utf8_selection_geometry :: proc(t: ^testing.T) {

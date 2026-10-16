@@ -16,6 +16,7 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Searching animations", "No matching animations", "Matching animations: {count}",
     "Matching animations: {count} or more", "Actions for {name}", "Move Up", "Move Down",
     "Unicode completion: {symbol}. Press Right Arrow to insert; Escape to dismiss.",
+    "Favorite name",
     "Display FPS", "Limit FPS",
     "Enable Drawing Sound", "Use SIMD Projection", "Use SIMD Projection (Unavailable)",
     "GPU Dust Instancing", "GPU Dust Instancing (Unavailable)", "Maximum Dust particles",

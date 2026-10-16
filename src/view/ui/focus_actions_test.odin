@@ -8,6 +8,50 @@ import uisemantics "semantics"
 import uilibrary "library"
 import bridgemodel "../../bridge/model"
 import geometry "../../core/geometry"
+import collections "../../collections"
+import uuid "core:encoding/uuid"
+
+// Verify selecting another placement flushes exact text and preserves its owned draft.
+@(test)
+library_entry_name_selection_flush_preserves_exact_text :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_actions_test_fixture(state, &ji, &nodes)
+    entry_id := state^.ui_runtime.library.tree.selected_item_id
+    name := "Compare these"
+    testing.expect(t, uilibrary.library_entry_name_begin(
+        state, entry_id, "Animation"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, name))
+
+    other_id := uuid.Identifier{}
+    other_id[0] = 90
+    other_index := uilibrary.tree_projection_find(
+        &state^.ui_runtime.library.tree.projection, other_id)
+    testing.expect(t, other_index != uilibrary.TREE_NO_ITEM)
+    if other_index == uilibrary.TREE_NO_ITEM {
+        return
+    }
+    uilibrary.tree_select_item(
+        params, &state^.ui_runtime.library.tree.projection.items[other_index])
+
+    entry_index := collections.find_entry(
+        params.collections, entry_id)
+    draft := &state^.ui_runtime.library.entry_name
+    testing.expect(t, entry_index >= 0)
+    if entry_index < 0 {
+        return
+    }
+    testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id,
+        state^.ui_runtime.library.tree.projection.items[other_index].key)
+    testing.expect_value(t,
+        string(params.collections^.entries[entry_index].custom_name[
+            :params.collections^.entries[entry_index].custom_name_length]), name)
+    testing.expect_value(t, string(draft^.value[:draft^.value_length]), name)
+    testing.expect_value(t,
+        string(draft^.accepted_name[:draft^.accepted_name_length]), name)
+}
 
 // Verify tree activity stays separate from selection while actions follow the tree stop.
 @(test)
@@ -33,15 +77,78 @@ semantic_favorites_actions_tab_activation_and_escape :: proc(t: ^testing.T) {
     testing.expect(t, state^.ui_runtime.library.actions.drawer.open)
     testing.expect_value(t, semantic^.logical_focus, toggle)
     tree_actions_test_key(t, &params, .Tab)
-    testing.expect_value(t, semantic^.logical_focus.local_id, uilibrary.TREE_ACTION_DOWN)
+    testing.expect_value(t, semantic^.logical_focus.local_id,
+        uilibrary.TREE_ENTRY_NAME_INPUT)
     tree_actions_test_key(t, &params, .Tab, true)
     testing.expect_value(t, semantic^.logical_focus, toggle)
     tree_actions_test_key(t, &params, .Tab)
+    testing.expect_value(t, semantic^.logical_focus.local_id,
+        uilibrary.TREE_ENTRY_NAME_INPUT)
     tree_actions_test_key(t, &params, .Escape)
     testing.expect(t, !state^.ui_runtime.library.actions.drawer.open)
     testing.expect_value(t, semantic^.logical_focus, toggle)
     tree_actions_test_key(t, &params, .Space)
     testing.expect(t, state^.ui_runtime.library.actions.drawer.open)
+}
+
+// Verify the inline editor publishes placement semantics and owns pointer focus.
+@(test)
+semantic_favorites_name_editor_pointer_focus_and_identity :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    state^.ui_runtime.semantic_focus = semantic
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_actions_test_fixture(state, &ji, &nodes)
+    prepared := tree_actions_test_semantic_frame(t, &params)
+    selected := state^.ui_runtime.library.tree.selected_item_id
+    row := tree_actions_test_row(&prepared.layout, selected)
+    prepared = tree_actions_test_semantic_click(t, &params,
+        uilibrary.tree_actions_screen_rect(
+            row^.actions.toggle_rect, params.list_panel, 0))
+    testing.expect(t, prepared.entry_name_prepared)
+    testing.expect_value(t,
+        semantic^.logical_focus.local_id, uilibrary.TREE_ACTION_TOGGLE)
+    testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected)
+
+    editor_id := uilibrary.tree_actions_semantic_id(
+        params, selected, uilibrary.TREE_ENTRY_NAME_INPUT)
+    tree_actions_test_expect_name_editor_semantics(t, params, selected, editor_id)
+
+    state^.ui_runtime.input.interaction_frame.pointer_target =
+        viewmodel.ui_interaction_target(.Control, .Input_Box,
+            uilibrary.TREE_ENTRY_NAME_INPUT_ID)
+    _ = tree_actions_test_semantic_click(t, &params,
+        prepared.entry_name_input.control_geometry.bounds)
+    testing.expect_value(t, semantic^.logical_focus, editor_id)
+    testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected)
+    testing.expect_value(t, ji.selected_animation, &nodes[1])
+}
+
+// Verify the editable field and its text run have stable parentage and actions.
+tree_actions_test_expect_name_editor_semantics :: proc(
+    t: ^testing.T, params: uilibrary.Tree_List_Params,
+    selected: uuid.Identifier, editor_id: viewmodel.Ui_Node_Id) {
+    text_id := editor_id
+    text_id.local_id = uilibrary.TREE_ENTRY_NAME_TEXT_RUN
+    snapshot := uisemantics.semantic_snapshot(params.ui_runtime^.semantic_focus)
+    editor_index := uisemantics.semantic_node_index(snapshot, editor_id)
+    text_index := uisemantics.semantic_node_index(snapshot, text_id)
+    testing.expect(t, editor_index >= 0 && text_index >= 0)
+    if editor_index < 0 || text_index < 0 {
+        return
+    }
+    editor := snapshot^.nodes[editor_index]
+    text := snapshot^.nodes[text_index]
+    drawer_id := uilibrary.tree_actions_semantic_id(
+        params, selected, uilibrary.TREE_ACTION_DRAWER)
+    testing.expect_value(t, editor.role, viewmodel.Ui_Node_Role.Input)
+    testing.expect_value(t, editor.parent, drawer_id)
+    testing.expect_value(t, text.role, viewmodel.Ui_Node_Role.Text_Run)
+    testing.expect_value(t, text.parent, editor_id)
+    testing.expect(t, .Tab_Stop in editor.states && .Enabled in editor.states)
 }
 
 // Verify interior moves retain action focus and an endpoint returns focus to disclosure.
@@ -61,6 +168,14 @@ semantic_favorites_actions_move_focus_and_boundary :: proc(t: ^testing.T) {
         selected, uilibrary.TREE_ACTION_TOGGLE)
     tree_actions_test_key(t, &params, .Space)
     tree_actions_test_key(t, &params, .Tab)
+    testing.expect_value(t, semantic^.logical_focus.local_id,
+        uilibrary.TREE_ENTRY_NAME_INPUT)
+    tree_actions_test_key(t, &params, .Enter)
+    testing.expect_value(t, semantic^.logical_focus.local_id,
+        uilibrary.TREE_ENTRY_NAME_INPUT)
+    testing.expect_value(t, ji.selected_animation, &nodes[1])
+    tree_actions_test_key(t, &params, .Tab)
+    tree_actions_test_key(t, &params, .Tab)
     down := semantic^.logical_focus
     tree_actions_test_key(t, &params, .Enter)
     testing.expect_value(t, semantic^.logical_focus, down)
@@ -69,8 +184,6 @@ semantic_favorites_actions_move_focus_and_boundary :: proc(t: ^testing.T) {
     testing.expect_value(t,
         semantic^.logical_focus.local_id, uilibrary.TREE_ACTION_TOGGLE)
     testing.expect(t, state^.ui_runtime.library.actions.drawer.open)
-    tree_actions_test_key(t, &params, .Tab)
-    testing.expect_value(t, semantic^.logical_focus.local_id, uilibrary.TREE_ACTION_UP)
     testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected)
 }
 

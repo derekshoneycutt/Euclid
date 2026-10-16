@@ -196,19 +196,20 @@ tree_favorites_projection_shares_order_expansion_and_search :: proc(t: ^testing.
     runtime: viewmodel.Euclid_Ui_Runtime_State
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
-    collections: collectionmodel.Set
-    params := tree_favorites_fixture(&runtime, &ji, &nodes, &collections)
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    params := tree_favorites_fixture(&runtime, &ji, &nodes, collections)
     missing_entry, missing_animation: uuid.Identifier
     missing_entry[0], missing_animation[0] = 92, 99
     assert(collectionmodel.favorites_add(
-        &collections, missing_entry, missing_animation) == .None)
+        collections, missing_entry, missing_animation) == .None)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     projection := &runtime.library.tree.projection
     terminal := uilibrary.tree_projection_find(projection, nodes[1].stable_id)
     root := uilibrary.tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
     favorites := uilibrary.tree_projection_find(
         projection, collectionmodel.FAVORITES_COLLECTION_ID)
-    placement := uilibrary.tree_projection_find(projection, collections.entries[0].id)
+    placement := uilibrary.tree_projection_find(projection, collections^.entries[0].id)
     unavailable := uilibrary.tree_projection_find(projection, missing_entry)
     testing.expect_value(t, projection.items[terminal].next_sibling, root)
     testing.expect_value(t, projection.items[root].first_child, favorites)
@@ -226,14 +227,53 @@ tree_favorites_projection_shares_order_expansion_and_search :: proc(t: ^testing.
         projection, params.visibility), 7)
 }
 
+// Verify labels borrow custom names from the collection owner, not a stack copy.
+@(test)
+tree_favorites_custom_labels_remain_stable_across_resolution :: proc(t: ^testing.T) {
+    runtime: viewmodel.Euclid_Ui_Runtime_State
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    params := tree_favorites_fixture(&runtime, &ji, &nodes, collections)
+
+    second_entry := uuid.Identifier{}
+    second_entry[0] = 92
+    testing.expect_value(t, collectionmodel.favorites_add(
+        collections, second_entry, nodes[0].stable_id), collectionmodel.Policy_Error.None)
+    first_name := "First saved name"
+    second_name := "Second saved name"
+    testing.expect_value(t, collectionmodel.entry_name_set(
+        collections, collections^.entries[0].id,
+        transmute([]u8)first_name, len(first_name)),
+        collectionmodel.Policy_Error.None)
+    testing.expect_value(t, collectionmodel.entry_name_set(
+        collections, second_entry,
+        transmute([]u8)second_name, len(second_name)),
+        collectionmodel.Policy_Error.None)
+    testing.expect(t, uilibrary.tree_projection_prepare(params))
+
+    first_index := uilibrary.tree_projection_find(
+        &runtime.library.tree.projection, collections^.entries[0].id)
+    second_index := uilibrary.tree_projection_find(
+        &runtime.library.tree.projection, second_entry)
+    first := uilibrary.tree_item_label(
+        &ji, &runtime.library.tree.projection.items[first_index], collections)
+    second := uilibrary.tree_item_label(
+        &ji, &runtime.library.tree.projection.items[second_index], collections)
+    testing.expect_value(t, second, "Second saved name")
+    testing.expect_value(t, first, "First saved name")
+}
+
 // Verify search hides Favorites without losing its explicit expansion state.
 @(test)
 tree_favorites_search_hides_and_restores_the_subtree :: proc(t: ^testing.T) {
     runtime: viewmodel.Euclid_Ui_Runtime_State
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
-    collections: collectionmodel.Set
-    params := tree_favorites_fixture(&runtime, &ji, &nodes, &collections)
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    params := tree_favorites_fixture(&runtime, &ji, &nodes, collections)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     projection := &runtime.library.tree.projection
     root := uilibrary.tree_projection_find(
@@ -258,10 +298,11 @@ tree_favorites_selection_and_reload_use_canonical_targets :: proc(t: ^testing.T)
     runtime: viewmodel.Euclid_Ui_Runtime_State
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
-    collections: collectionmodel.Set
-    params := tree_favorites_fixture(&runtime, &ji, &nodes, &collections)
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    params := tree_favorites_fixture(&runtime, &ji, &nodes, collections)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    placement_key := collections.entries[0].id
+    placement_key := collections^.entries[0].id
     placement_index := uilibrary.tree_projection_find(
         &runtime.library.tree.projection, placement_key)
     uilibrary.tree_select_item(params,
@@ -278,7 +319,7 @@ tree_favorites_selection_and_reload_use_canonical_targets :: proc(t: ^testing.T)
         &ji, &runtime.library.tree.projection.items[placement_index]), "Reloaded animation")
     testing.expect_value(t, runtime.library.tree.selected_item_id, placement_key)
     testing.expect(t, collectionmodel.favorites_remove(
-        &collections, placement_key) == .None)
+        collections, placement_key) == .None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     testing.expect_value(t, runtime.library.tree.selected_item_id, uuid.Identifier{})
@@ -295,11 +336,12 @@ tree_favorites_projection_rejects_combined_capacity_overflow :: proc(t: ^testing
     ji.animation_head = &node
     ji.animation_count = 1
     ji.content_generation = 1
-    collections: collectionmodel.Set
-    collectionmodel.initialize(&collections)
-    collections.entry_count = viewmodel.UI_TREE_NODE_CAPACITY
-    for index in 0..<collections.entry_count {
-        entry := &collections.entries[index]
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    collectionmodel.initialize(collections)
+    collections^.entry_count = viewmodel.UI_TREE_NODE_CAPACITY
+    for index in 0..<collections^.entry_count {
+        entry := &collections^.entries[index]
         entry.id[0] = 128
         entry.id[1] = byte(index + 1)
         entry.id[2] = byte((index + 1) >> 8)
@@ -309,7 +351,7 @@ tree_favorites_projection_rejects_combined_capacity_overflow :: proc(t: ^testing
         entry.sibling_order = i64(index)
     }
     params := uilibrary.Tree_List_Params{
-        ji = &ji, ui_runtime = &runtime, collections = &collections,
+        ji = &ji, ui_runtime = &runtime, collections = collections,
         collections_revision = 1,
     }
     testing.expect(t, !uilibrary.tree_projection_prepare(params))
@@ -327,11 +369,12 @@ tree_favorites_projection_exact_capacity_is_transactional :: proc(t: ^testing.T)
     ji.animation_head = &node
     ji.animation_count = 1
     ji.content_generation = 1
-    collections: collectionmodel.Set
-    collectionmodel.initialize(&collections)
-    collections.entry_count = viewmodel.UI_TREE_NODE_CAPACITY - 3
-    for index in 0..=collections.entry_count {
-        entry := &collections.entries[index]
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    collectionmodel.initialize(collections)
+    collections^.entry_count = viewmodel.UI_TREE_NODE_CAPACITY - 3
+    for index in 0..=collections^.entry_count {
+        entry := &collections^.entries[index]
         entry.id[0] = 128
         entry.id[1] = byte(index + 1)
         entry.id[2] = byte((index + 1) >> 8)
@@ -343,11 +386,11 @@ tree_favorites_projection_exact_capacity_is_transactional :: proc(t: ^testing.T)
         entry.sibling_order = i64(index)
     }
     params := uilibrary.Tree_List_Params{
-        ji = &ji, ui_runtime = &runtime, collections = &collections,
+        ji = &ji, ui_runtime = &runtime, collections = collections,
         collections_revision = 1}
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     testing.expect_value(t, runtime.library.tree.projection.count, 512)
-    collections.entry_count += 1
+    collections^.entry_count += 1
     params.collections_revision += 1
     testing.expect(t, !uilibrary.tree_projection_prepare(params))
     testing.expect_value(t, runtime.library.tree.projection.count, 512)
@@ -360,8 +403,9 @@ tree_favorites_expansion_survives_empty_session :: proc(t: ^testing.T) {
     runtime: viewmodel.Euclid_Ui_Runtime_State
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
-    collections: collectionmodel.Set
-    params := tree_favorites_fixture(&runtime, &ji, &nodes, &collections)
+    collections := new(collectionmodel.Set, context.allocator)
+    defer free(collections, context.allocator)
+    params := tree_favorites_fixture(&runtime, &ji, &nodes, collections)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     root := uilibrary.tree_projection_find(
         &runtime.library.tree.projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
@@ -369,14 +413,14 @@ tree_favorites_expansion_survives_empty_session :: proc(t: ^testing.T) {
         &runtime.library.tree.projection, collectionmodel.FAVORITES_COLLECTION_ID)
     runtime.library.tree.projection.items[root].expanded = true
     runtime.library.tree.projection.items[favorites].expanded = true
-    entry := collections.entries[0]
+    entry := collections^.entries[0]
     testing.expect_value(t, collectionmodel.favorites_remove(
-        &collections, entry.id), collectionmodel.Policy_Error.None)
+        collections, entry.id), collectionmodel.Policy_Error.None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     testing.expect_value(t, runtime.library.tree.projection.count, len(nodes))
     testing.expect_value(t, collectionmodel.favorites_add(
-        &collections, entry.id, entry.animation_id), collectionmodel.Policy_Error.None)
+        collections, entry.id, entry.animation_id), collectionmodel.Policy_Error.None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
     testing.expect(t, runtime.library.tree.projection.items[root].expanded)

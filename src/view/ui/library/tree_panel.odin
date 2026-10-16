@@ -48,6 +48,7 @@ Tree_Semantic_Context :: struct {
     reorder: ^viewmodel.Ui_Tree_Reorder_Motion,
     semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     ji: ^bridgemodel.Euclid_Julia_Interface,
+    collections: ^collectionmodel.Set,
     policy: Tree_Visibility_Policy,
     tree_id: viewmodel.Ui_Node_Id,
     panel: geometry.Rectangle,
@@ -91,6 +92,9 @@ Tree_List_Preparation :: struct {
     hovered_node: ^viewmodel.Ui_Tree_Item,
     hovered_expander_node: ^viewmodel.Ui_Tree_Item,
     pressed_node: ^viewmodel.Ui_Tree_Item,
+    entry_name_input: uiwidgets.Input_Box_Result,
+    entry_name_params: uiwidgets.Input_Box_Params,
+    entry_name_prepared: bool,
     layout: Tree_Prepared_Layout,
 }
 
@@ -139,7 +143,17 @@ Encoded_Tree_Walk_Context :: struct {
     content_y: ^f32,
     visibility: Tree_Visibility_Policy,
     pressed_node: ^viewmodel.Ui_Tree_Item,
+    entry_name_input: ^uiwidgets.Input_Box_Result,
+    entry_name_params: ^uiwidgets.Input_Box_Params,
+    entry_name_prepared: bool,
+    reorder_foreground_index: int,
+    reorder_occlusion: geometry.Rectangle,
     render_only: bool,
+}
+
+Tree_Entry_Name_Input_Geometry :: struct {
+    rect: geometry.Rectangle,
+    clip: geometry.Rectangle,
 }
 
 Tree_Projection_Add_Request :: struct {
@@ -277,7 +291,9 @@ tree_projection_prepare :: proc(params: Tree_List_Params) -> bool {
     runtime := params.ui_runtime
     old := &runtime^.library.tree.projection
     if old^.valid && old^.content_generation != params.ji^.content_generation {
-        tree_actions_close_context(runtime)
+        if !tree_actions_close_context(runtime, params.general_state) {
+            return false
+        }
     }
     if old^.valid && old^.content_generation == params.ji^.content_generation &&
         old^.collections_revision == params.collections_revision {
@@ -552,7 +568,8 @@ tree_find_stable_id :: proc(
 // tree_item_label resolves a frame-borrowed label without storing content pointers.
 tree_item_label :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,
-    item: ^viewmodel.Ui_Tree_Item) -> string {
+    item: ^viewmodel.Ui_Tree_Item,
+    collections: ^collectionmodel.Set = nil) -> string {
     if item == nil {
         return ""
     }
@@ -560,6 +577,16 @@ tree_item_label :: proc(
     case .Collections: return "Collections"
     case .Collection: return "Favorites"
     case .Placement:
+        if collections != nil {
+            entry_index := collectionmodel.find_entry(collections, item^.key)
+            if entry_index >= 0 {
+                entry := &collections^.entries[entry_index]
+                if entry^.custom_name_length > 0 &&
+                    entry^.custom_name_length <= len(entry^.custom_name) {
+                    return string(entry^.custom_name[:entry^.custom_name_length])
+                }
+            }
+        }
         target := tree_find_stable_id(ji, item^.target_animation_id)
         return target^.name if target != nil else "Unavailable animation"
     case .Animation:
@@ -1089,6 +1116,11 @@ tree_apply_structure_command :: proc(
 
 // Select one placement while resolving playback only through its canonical target.
 tree_select_item :: proc(params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) {
+    draft := &params.ui_runtime^.library.entry_name
+    if draft^.active && draft^.entry_id != item^.key &&
+        !library_entry_name_flush(params.general_state, draft^.entry_id) {
+        return
+    }
     params.ui_runtime^.library.tree.selected_item_id = item^.key
     tree_actions_reconcile(params)
     target := tree_find_stable_id(params.ji, item^.target_animation_id)
@@ -1113,14 +1145,46 @@ tree_apply_semantic_command :: proc(
         return active
     }
     target := tree_semantic_navigation_target(params, active, command.kind)
+    draft := &params.ui_runtime^.library.entry_name
+    hides_editor := draft^.active && target != nil &&
+        target^.expanded && (command.kind == .Toggle ||
+            command.kind == .Collapse || command.kind == .Tree_Parent) &&
+        tree_entry_name_is_descendant(params, target, draft^.entry_id)
+    if hides_editor && !library_entry_name_flush(
+        params.general_state, draft^.entry_id) {
+        return active
+    }
     target = tree_apply_structure_command(params, target, command.kind)
     if command.kind == .Select && active^.selectable {
         tree_select_item(params, active)
     }
+
     if target != nil {
         tree_set_active_item(params.ui_runtime, target, true)
     }
     return target
+}
+
+// tree_entry_name_is_descendant tests one bounded parent chain by placement UUID.
+tree_entry_name_is_descendant :: proc(
+    params: Tree_List_Params, ancestor: ^viewmodel.Ui_Tree_Item,
+    entry_id: uuid.Identifier) -> bool {
+    if ancestor == nil {
+        return false
+    }
+    projection := &params.ui_runtime^.library.tree.projection
+    entry_index := tree_projection_find(projection, entry_id)
+    if entry_index == TREE_NO_ITEM {
+        return false
+    }
+    for parent, steps := projection^.items[entry_index].parent, 0;
+        parent != TREE_NO_ITEM && steps < projection^.count;
+        parent, steps = projection^.items[parent].parent, steps + 1 {
+        if &projection^.items[parent] == ancestor {
+            return true
+        }
+    }
+    return false
 }
 
 // Resolve semantic item IDs against the current combined projection.
@@ -1273,7 +1337,7 @@ tree_item_semantic_publication :: proc(
     }
     position, size := tree_item_set_facts(projection, policy, item)
     return {
-        item = item, label = tree_item_label(ctx.ji, item),
+        item = item, label = tree_item_label(ctx.ji, item, ctx.collections),
         depth = depth, item_id = item_id, parent_id = parent_id,
         states = states, actions = actions, position = position, size = size,
     }
@@ -1313,6 +1377,7 @@ register_tree_semantics :: proc(
         reorder = &params.ui_runtime^.library.actions.reorder,
         semantic_focus = params.ui_runtime^.semantic_focus,
         ji = params.ji,
+        collections = params.collections,
         policy = params.visibility,
         tree_id = tree_id,
         panel = panel,
@@ -1530,31 +1595,56 @@ finish_tree_interaction :: proc(
     params: Tree_List_Params,
     hit: Tree_Hit,
     prepared: ^Tree_List_Preparation) {
-    if hit.toggled_node != nil {
-        tree_motion_anchor(params, hit.toggled_node, &prepared^.layout)
+    gated_hit := hit
+    tree_entry_name_gate_hit(params, &gated_hit)
+    if gated_hit.toggled_node != nil {
+        tree_motion_anchor(params, gated_hit.toggled_node, &prepared^.layout)
     }
-    apply_tree_hit(params.ji, params.ui_runtime, hit)
-    if hit.actions_toggle_id != (uuid.Identifier{}) {
-        tree_actions_toggle(params, hit.actions_toggle_id)
+
+    apply_tree_hit(params.ji, params.ui_runtime, gated_hit)
+    if gated_hit.actions_toggle_id != (uuid.Identifier{}) {
+        tree_actions_toggle(params, gated_hit.actions_toggle_id)
     }
-    if hit.actions_move_id != (uuid.Identifier{}) {
-        _ = tree_actions_move(params, hit.actions_move_id, hit.actions_move_direction)
+    if gated_hit.actions_move_id != (uuid.Identifier{}) {
+        _ = tree_actions_move(params, gated_hit.actions_move_id,
+            gated_hit.actions_move_direction)
         tree_actions_refresh_projection(params)
     }
     tree_actions_reconcile(params)
-    tree_refresh_hit_preparation(params, hit, prepared)
+    tree_refresh_hit_preparation(params, gated_hit, prepared)
     active := tree_resolve_active_node(params)
     register_tree_semantics(params, prepared^.scroll, active, &prepared^.layout)
     tree_actions_publish(params, prepared)
     owner := params.ui_runtime^.input.press_owner
-    if hit.hovered_node != nil &&
+    if gated_hit.hovered_node != nil &&
        uiwidgets.input_frame_left_pressed(params.mouse_input) &&
        !(owner.active && tree_actions_control_id_owned(owner.id)) ||
-       hit.selected_node != nil || hit.toggled_node != nil {
+       gated_hit.selected_node != nil || gated_hit.toggled_node != nil {
         _ = uisemantics.semantic_request_pointer_focus(
             params.ui_runtime^.semantic_focus, tree_semantic_id())
     }
     release_tree_list_capture(params)
+}
+
+// tree_entry_name_gate_hit preserves a dirty draft before selection or branch retirement.
+tree_entry_name_gate_hit :: proc(
+    params: Tree_List_Params, hit: ^Tree_Hit) {
+    draft := &params.ui_runtime^.library.entry_name
+    if !draft^.active {
+        return
+    }
+    if hit^.selected_node != nil &&
+        hit^.selected_node^.key != draft^.entry_id &&
+        !library_entry_name_flush(params.general_state, draft^.entry_id) {
+        hit^ = {}
+        return
+    }
+    if hit^.toggled_node != nil && hit^.toggled_node^.expanded &&
+        tree_entry_name_is_descendant(params, hit^.toggled_node, draft^.entry_id) &&
+        !library_entry_name_flush(params.general_state, draft^.entry_id) {
+        hit^.toggled_node = nil
+        hit^.hovered_expander_node = nil
+    }
 }
 
 // tree_refresh_hit_preparation settles changed topology before final semantic publication.
@@ -1596,7 +1686,7 @@ prepare_tree_list_panel :: proc(
         params.ji^.animation_count == 0 &&
             (params.collections == nil || params.collections^.entry_count == 0) {
         params.ui_runtime^.library.motion = {}
-        tree_actions_close_context(params.ui_runtime)
+        _ = tree_actions_close_context(params.ui_runtime, params.general_state)
         return
     }
     if !tree_projection_prepare(params) {

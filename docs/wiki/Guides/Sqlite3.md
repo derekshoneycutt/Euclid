@@ -213,7 +213,8 @@ follow the source map below into the query compiler, worker, and coordinator.
 
 The user database is not the packaged catalogue with writes enabled. It is a separate
 durable file owned by the user-data subsystem. Today its schema is deliberately small:
-one `user_setting` row per known preference, keyed by namespace and key.
+one `user_setting` row per known preference, keyed by namespace and key, plus ordered
+collection placements with an optional per-placement display name.
 
 ```mermaid
 erDiagram
@@ -238,6 +239,7 @@ erDiagram
         integer sibling_order
         text entry_kind
         blob animation_id
+        text custom_name
     }
     USER_COLLECTION ||--o{ USER_COLLECTION_ENTRY : contains
     USER_COLLECTION_ENTRY ||--o{ USER_COLLECTION_ENTRY : nests
@@ -316,6 +318,7 @@ the substrate rather than in consumer schema policy.
 | Known preference identities, defaults, and validation | [`src/settings/`](../../../src/settings/) |
 | User database schema, path, admission, and transactions | [`src/userdata/`](../../../src/userdata/) |
 | Startup preference loading and overrides | [`launch.odin`](../../../src/app/launch.odin) |
+| Placement-name bounds, rename mutation, and inline draft admission | [`model.odin`](../../../src/collections/model.odin), [`entry_name.odin`](../../../src/view/ui/library/entry_name.odin) |
 | Runtime saves and shutdown drain | [`settings_save.odin`](../../../src/view/preferences/settings_save.odin), [`shutdown.odin`](../../../src/view/shutdown.odin) |
 
 The tests beside these modules cover substrate mechanics, database admission,

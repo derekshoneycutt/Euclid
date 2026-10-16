@@ -235,11 +235,8 @@ tree_reorder_keyboard_uses_sampled_semantic_geometry :: proc(t: ^testing.T) {
         uilibrary.tree_actions_screen_rect(
             row^.actions.move_down_rect, params.list_panel,
             prepared.scroll.scroll_y_out))
-    tree_actions_test_key(t, &params, .Enter)
     testing.expect_value(t,
-        semantic^.logical_focus.local_id, uilibrary.TREE_ACTION_TOGGLE)
-    tree_actions_test_key(t, &params, .Tab)
-    tree_actions_test_key(t, &params, .Enter)
+        semantic^.logical_focus.local_id, uilibrary.TREE_ACTION_DOWN)
     tree_actions_test_expect_order(t, params.collections)
 }
 

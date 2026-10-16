@@ -27,6 +27,7 @@ import terminalservice "terminal/service"
 import uiaccessibility "ui/accessibility"
 import viewpreferences "preferences"
 import libraryservice "ui/library/service"
+import uilibrary "ui/library"
 import viewsimulation "simulation"
 import inputbackend "input/backend"
 import viewtelemetry "telemetry"
@@ -312,6 +313,7 @@ prepare_sdl_frame_owners :: proc(
     ui.prepare_ui_controls(
         state, update.routed_frame, update.ui_geometry.splitters,
         &prepared^.controls)
+    uilibrary.library_entry_name_service(state, update.frame_dt)
     if state^.simulation_executor != nil {
         viewpreferences.settings_save_service(state, &state^.simulation_executor^.pool)
     }

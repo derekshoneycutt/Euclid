@@ -119,11 +119,14 @@ prepare_active_accordion_controls :: proc(
 prepare_active_library_controls :: proc(
     state: ^core.Euclid_General_State, frame, routed: input.Input_Frame,
     content: geometry.Rectangle, result: ^Ui_Control_Preparation) {
-    library_frame := ui_input_box_keyboard_frame(
+    search_frame := ui_input_box_keyboard_frame(
         state^.ui_runtime.input.interaction_frame.effective_focus,
         routed, frame, uilibrary.LIBRARY_SEARCH_INPUT_ID)
     result^.library_search = uilibrary.prepare_library_search(
-        state, content, library_frame)
+        state, content, search_frame)
+    tree_frame := ui_input_box_keyboard_frame(
+        state^.ui_runtime.input.interaction_frame.effective_focus,
+        routed, frame, uilibrary.TREE_ENTRY_NAME_INPUT_ID)
     uilibrary.prepare_tree_list_panel({
         label = viewmessages.shell_message(state, .Library_Tree_Accessible_Label),
         general_state = state,
@@ -132,7 +135,7 @@ prepare_active_library_controls :: proc(
         collections_revision = state^.preferences_runtime.collection_revision,
         ui_runtime = &state^.ui_runtime,
         list_panel = result^.library_search.layout.tree,
-        mouse_input = library_frame,
+        mouse_input = tree_frame,
         scroll_y = &state^.ui_runtime.library.tree.scroll_y,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
@@ -155,17 +158,18 @@ prepare_ui_controls :: proc(
     _ = uisemantics.semantic_begin(state^.ui_runtime.semantic_focus)
     uioverlay.tooltip_frame_begin(&state^.ui_runtime.tooltip)
     uisplitter.register_splitter_semantics(state^.ui_runtime.semantic_focus, splitters)
+    resolved_frame := ui_guard_library_entry_name_focus(state, frame)
     animation_frame := ui_animation_control_input_frame(
-        frame, state^.ui_runtime.input.interaction_frame)
+        resolved_frame, state^.ui_runtime.input.interaction_frame)
     routed_frame := ui_accordion_input_frame(
-        frame, state^.ui_runtime.input.interaction_frame.accordion)
+        resolved_frame, state^.ui_runtime.input.interaction_frame.accordion)
     result^.animation_controls = uianimation.prepare_animation_controls(
         state, animation_frame)
     accordion_panel := state^.ui_runtime.layout.ui_regions.accordion_rect
     result^.accordion = prepare_accordion_view(
         state, geometry.Rectangle(accordion_panel), routed_frame)
     child_frame := ui_clip_accordion_child_frame(&state^.ui_runtime, routed_frame)
-    prepare_active_accordion_controls(state, frame, child_frame,
+    prepare_active_accordion_controls(state, resolved_frame, child_frame,
         geometry.Rectangle(result^.accordion.layout.content), result)
     prepare_outgoing_accordion_controls(state, result)
     if state^.ui_runtime.layout.current_layout_mode == .Portrait {
@@ -176,12 +180,73 @@ prepare_ui_controls :: proc(
             uiregions.layout_terminal_rect(state^.ui_runtime.layout.ui_regions.text_rect)
     }
     uioverlay.tooltip_frame_resolve(&state^.ui_runtime.tooltip, {
-        now_seconds = frame.sample_time_seconds,
-        window_focused = frame.window_focused,
+        now_seconds = resolved_frame.sample_time_seconds,
+        window_focused = resolved_frame.window_focused,
         suppressed = state^.gif_capture_status.gif_capture_phase == .Recording ||
             state^.ui_runtime.context_menu.active,
-        dismiss = uioverlay.tooltip_escape_pressed(frame),
+        dismiss = uioverlay.tooltip_escape_pressed(resolved_frame),
     })
+}
+
+// ui_guard_library_entry_name_focus rejects a blur whose pending name cannot be saved.
+ui_guard_library_entry_name_focus :: proc(
+    state: ^core.Euclid_General_State,
+    frame: input.Input_Frame) -> input.Input_Frame {
+    runtime := &state^.ui_runtime
+    draft := &runtime^.library.entry_name
+    semantic := runtime^.semantic_focus
+    if !draft^.active || !draft^.dirty || semantic == nil {
+        return frame
+    }
+    editor_id := viewmodel.Ui_Node_Id{
+        domain = .Library_Action, local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
+        stable_id = draft^.entry_id,
+        generation = state^.julia_interface.content_generation,
+    }
+    pointer_pressed := uiwidgets.input_frame_left_pressed(frame)
+    mouse := uiwidgets.input_frame_mouse_position(frame)
+    pointer_inside := pointer_pressed &&
+        geometry.rectangle_contains(draft^.rect, mouse) &&
+        geometry.rectangle_contains(draft^.clip_rect, mouse)
+    pointer_blur := pointer_pressed && !pointer_inside
+    focus_blur := semantic^.logical_focus != editor_id && !pointer_inside
+    if !pointer_blur && !focus_blur {
+        return frame
+    }
+    if uilibrary.library_entry_name_flush(state, draft^.entry_id) {
+        return frame
+    }
+    return ui_retain_library_entry_name_focus(state, frame)
+}
+
+// Keep a rejected dirty edit focused until its save can be admitted.
+ui_retain_library_entry_name_focus :: proc(
+    state: ^core.Euclid_General_State,
+    frame: input.Input_Frame) -> input.Input_Frame {
+    runtime := &state^.ui_runtime
+    semantic := runtime^.semantic_focus
+    draft := &runtime^.library.entry_name
+    editor_id := viewmodel.Ui_Node_Id{
+        domain = .Library_Action, local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
+        stable_id = draft^.entry_id,
+        generation = state^.julia_interface.content_generation,
+    }
+    semantic^.logical_focus = editor_id
+    semantic^.focus_origin = .Keyboard
+    semantic^.last_region = .Accordion_Content
+    semantic^.last_traversal_order =
+        uilibrary.LIBRARY_ENTRY_NAME_INPUT_TRAVERSAL_ORDER
+    semantic^.command_count = 0
+    runtime^.input.interaction.logical_focus = {
+        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+    runtime^.input.interaction_frame.logical_focus = {
+        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+    runtime^.input.interaction_frame.effective_focus = {
+        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+    filtered := input.input_frame_filter_pointer(frame, {.Screen_Position})
+    filtered.events = frame.events[:0]
+    ui_apply_semantic_focus(runtime, filtered, uiterminal.is_terminal_selected(state))
+    return filtered
 }
 
 // ui_accordion_child_owns_capture excludes header, splitter, and landscape View captures.

@@ -15,6 +15,7 @@ import log "core:log"
 import uuid "core:encoding/uuid"
 
 TREE_ACTION_CONTROL_ID_BASE :: -100000
+TREE_ENTRY_NAME_INPUT_ID :: 6411
 TREE_ACTION_DRAWER_PADDING :: f32(4)
 TREE_ACTION_BUTTON_GAP :: f32(4)
 TREE_ACTION_BUTTON_HEIGHT :: f32(24)
@@ -47,10 +48,21 @@ tree_actions_cancel_context_capture :: proc(
     }
 }
 
-// tree_actions_close_context discards drawer state and cancels its owned gesture.
-tree_actions_close_context :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+// tree_actions_close_context flushes an owned name before discarding drawer state.
+tree_actions_close_context :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    state: ^core.Euclid_General_State = nil) -> bool {
     if runtime == nil {
-        return
+        return true
+    }
+    if state != nil {
+        if !library_entry_name_flush(state) {
+            return false
+        }
+    } else if runtime^.library.entry_name.active &&
+        runtime^.library.entry_name.dirty {
+        log.error("library_actions_close_blocked_by_unflushed_name")
+        return false
     }
     if runtime^.input.press_owner.active &&
         tree_actions_control_id_owned(runtime^.input.press_owner.id) {
@@ -60,6 +72,8 @@ tree_actions_close_context :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) 
     runtime^.library.actions.drawer = {}
     runtime^.library.actions.reorder = {}
     runtime^.library.actions.press_entry = {}
+    runtime^.library.entry_name = {}
+    return true
 }
 
 // tree_actions_eligible admits only the selected Favorites placement in its visible path.
@@ -114,12 +128,12 @@ tree_actions_reconcile :: proc(params: Tree_List_Params) {
             runtime^.library.tree.selected_item_id,
             params.visibility.search != nil && params.visibility.search^.active,
             &runtime^.library.tree.projection.items[owner]) {
-        tree_actions_close_context(runtime)
+        _ = tree_actions_close_context(runtime, params.general_state)
         return
     }
     if params.general_state != nil &&
         params.general_state^.ui_runtime.layout.active_accordion_section != .Library {
-        tree_actions_close_context(runtime)
+        _ = tree_actions_close_context(runtime, params.general_state)
     }
 }
 
@@ -205,13 +219,23 @@ tree_actions_toggle :: proc(params: Tree_List_Params, entry_id: uuid.Identifier)
     if motion^.entry_id != entry_id {
         motion^ = {entry_id = entry_id}
     }
-    motion^.open = !motion^.open
+    opening := !motion^.open
+    if !opening && !library_entry_name_flush(params.general_state, entry_id) {
+        return
+    }
+    motion^.open = opening
     motion^.start_height = motion^.height
     motion^.start_seconds = params.mouse_input.sample_time_seconds
     motion^.running = !params.reduce_motion
     if !motion^.open {
         params.ui_runtime^.library.actions.reorder = {}
         tree_actions_focus_toggle(params, entry_id)
+        params.ui_runtime^.library.entry_name = {}
+    } else if params.general_state != nil {
+        _ = library_entry_name_begin(params.general_state, entry_id,
+            tree_item_label(params.ji,
+                &params.ui_runtime^.library.tree.projection.items[index],
+                params.collections))
     }
 }
 
@@ -526,6 +550,9 @@ tree_actions_move :: proc(
     direction: collections.Move_Direction) -> bool {
     state := params.general_state
     if !tree_actions_move_is_admitted(params, entry_id) {
+        return false
+    }
+    if !library_entry_name_flush(state, entry_id) {
         return false
     }
     mutation, failure := collections.make_sibling_move(

@@ -34,6 +34,26 @@ scenario_favorites_actions_are_bounded :: proc(t: ^testing.T) {
     }
 }
 
+// Verify name-editor text has its own bounded action without weakening Terminal typing.
+@(test)
+scenario_library_name_text_is_bounded :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"type_library_name\":\"A name with α\"}\n", &program),
+        Parse_Error.None)
+    testing.expect_value(t, program.count, 1)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Type_Library_Name)
+    testing.expect_value(t, text_string(&program.commands[0].text), "A name with α")
+    invalid := [?]string{
+        "{\"type_library_name\":\"\"}",
+        "{\"type_library_name\":\"name\",\"shutdown\":true}",
+        "{\"type\":\"terminal text\",\"type_library_name\":\"name\"}",
+    }
+    for source in invalid {
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
 // Verify transition predicates distinguish concurrent motion from settled tree geometry.
 @(test)
 scenario_tree_motion_predicates :: proc(t: ^testing.T) {

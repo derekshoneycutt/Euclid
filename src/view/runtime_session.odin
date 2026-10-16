@@ -47,7 +47,7 @@ when !core.SCENARIOS_ENABLED {
 // Carry app-resolved settings and borrowed store ownership into the view session.
 Session_Startup_Inputs :: struct {
     preferences: setting_model.Preferences,
-    collections: collections.Set,
+    collections: ^collections.Set,
     user_store: ^user_data.Store,
 }
 
@@ -78,15 +78,10 @@ Session_Shape_Storage :: struct {
 session_startup_inputs :: proc(
     startup: ^Session_Startup_Inputs) -> Session_Startup_Inputs {
     if startup != nil {
-        resolved := startup^
-        if resolved.collections.collection_count == 0 {
-            collections.initialize(&resolved.collections)
-        }
-        return resolved
+        return startup^
     }
     defaults: Session_Startup_Inputs
     defaults.preferences = setting_model.default_preferences()
-    collections.initialize(&defaults.collections)
     return defaults
 }
 
@@ -294,14 +289,18 @@ session_finalize_presentation :: proc(
 session_apply_startup_preferences :: proc(
     state: ^core.Euclid_General_State,
     preferences: setting_model.Preferences,
-    collection_state: collections.Set,
+    collection_state: ^collections.Set,
     store: ^user_data.Store) {
     if state == nil || state^.particle_system == nil {
         return
     }
     state^.ui_runtime.preferences.values = preferences
     state^.preferences_runtime.settings_store = store
-    state^.preferences_runtime.collections_state = collection_state
+    if collection_state != nil {
+        state^.preferences_runtime.collections_state = collection_state^
+    } else {
+        collections.initialize(&state^.preferences_runtime.collections_state)
+    }
     state^.ui_runtime.preferences.store_available = store != nil
     state^.ui_runtime.preferences.save_status =
         .Saved if store != nil else .Unavailable

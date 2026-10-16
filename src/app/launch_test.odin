@@ -28,16 +28,17 @@ launch_test_id :: proc(value: u8) -> uuid.Identifier {
 
 // Save one Favorite fixture before exercising the startup loader.
 launch_test_save_favorite :: proc(store: ^user_data.Store) -> bool {
-    snapshot: collections.Set
-    collections.initialize(&snapshot)
-    snapshot.entries[0] = {
+    snapshot := new(collections.Set, context.allocator)
+    defer free(snapshot, context.allocator)
+    collections.initialize(snapshot)
+    snapshot^.entries[0] = {
         id = launch_test_id(1),
         collection_id = collections.FAVORITES_COLLECTION_ID,
         kind = .Animation,
         animation_id = launch_test_id(2),
     }
-    snapshot.entry_count = 1
-    return user_data.store_replace_collections(store, &snapshot).kind == .None
+    snapshot^.entry_count = 1
+    return user_data.store_replace_collections(store, snapshot).kind == .None
 }
 
 // Create an isolated durable path for coordinator/store integration tests.
@@ -407,13 +408,14 @@ launch_loads_saved_collections_before_runtime_handoff :: proc(t: ^testing.T) {
         fmt.tprintf("--user-db=%s", path.filename),
     })
     preferences: setting_model.Preferences
-    loaded_collections: collections.Set
+    loaded_collections := new(collections.Set, context.allocator)
+    defer free(loaded_collections, context.allocator)
     opened := false
     testing.expect(t, launch_prepare_preferences(
-        launch, &preferences, &store, &opened, &loaded_collections))
+        launch, &preferences, &store, &opened, loaded_collections))
     testing.expect(t, opened)
-    testing.expect_value(t, loaded_collections.entry_count, 1)
-    testing.expect_value(t, loaded_collections.entries[0].id, launch_test_id(1))
+    testing.expect_value(t, loaded_collections^.entry_count, 1)
+    testing.expect_value(t, loaded_collections^.entries[0].id, launch_test_id(1))
     testing.expect_value(t, user_data.store_close(&store).kind,
         user_data.Store_Error_Kind.None)
 }

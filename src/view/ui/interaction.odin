@@ -193,6 +193,14 @@ ui_accordion_hover_target :: proc(
         return viewmodel.ui_interaction_target(
             .Control, .Input_Box, uilibrary.LIBRARY_SEARCH_INPUT_ID)
     }
+    if child_visible && uilibrary.library_entry_name_visible(runtime) &&
+        geometry.rectangle_contains(runtime^.library.entry_name.rect,
+            geometry.Vector2(mouse)) &&
+        geometry.rectangle_contains(runtime^.library.entry_name.clip_rect,
+            geometry.Vector2(mouse)) {
+        return viewmodel.ui_interaction_target(
+            .Control, .Input_Box, uilibrary.TREE_ENTRY_NAME_INPUT_ID)
+    }
     if geometry.rectangle_contains(
         geometry.Rectangle(runtime^.layout.ui_regions.accordion_rect), mouse) {
         return viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
@@ -212,6 +220,11 @@ ui_route_logical_focus :: proc(
     }
     if result.kind == .Input_Box && result.id == uilibrary.LIBRARY_SEARCH_INPUT_ID &&
         !uilibrary.library_search_visible(runtime) {
+        result = {}
+    }
+    if result.kind == .Input_Box &&
+        result.id == uilibrary.TREE_ENTRY_NAME_INPUT_ID &&
+        !uilibrary.library_entry_name_visible(runtime) {
         result = {}
     }
     terminal_present := input.terminal_present
@@ -236,7 +249,9 @@ ui_valid_capture_owner :: proc(
         owner.id == uigif.GIF_PATH_INPUT_BOX_ID &&
         uigif.gif_path_input_visible(runtime, capture_view) ||
         owner.id == uilibrary.LIBRARY_SEARCH_INPUT_ID &&
-        uilibrary.library_search_visible(runtime) {
+        uilibrary.library_search_visible(runtime) ||
+        owner.id == uilibrary.TREE_ENTRY_NAME_INPUT_ID &&
+        uilibrary.library_entry_name_visible(runtime) {
         return owner
     }
     runtime^.input.press_owner = {}

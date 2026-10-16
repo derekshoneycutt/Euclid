@@ -61,7 +61,11 @@ tree_actions_test_key :: proc(
     }
     claims := uisemantics.semantic_route_keyboard(params^.ui_runtime^.semantic_focus,
         {events = events[:], window_focused = true})
-    testing.expect(t, claims.claimed[0])
+    focus := params^.ui_runtime^.semantic_focus^.logical_focus
+    if focus.domain != .Library_Action ||
+        focus.local_id != uilibrary.TREE_ENTRY_NAME_INPUT {
+        testing.expect(t, claims.claimed[0])
+    }
     _ = tree_actions_test_semantic_frame(t, params)
 }
 

@@ -13,6 +13,13 @@ import theme "../theme"
 import uisemantics "../semantics"
 
 INPUT_BOX_TEXT_INSET :: f32(4)
+INPUT_BOX_COMPACT_TEXT_INSET :: f32(2)
+
+// Input_Box_Padding selects the shared text inset for an input box.
+Input_Box_Padding :: enum {
+    Default,
+    Compact,
+}
 
 // Input_Box_Run_Kind defines the three homogeneous double-click selection classes.
 Input_Box_Run_Kind :: enum {
@@ -32,6 +39,8 @@ Input_Box_Params :: struct {
     frame: input.Input_Frame,
     focused: bool,
     pointer_routed: bool,
+    defer_semantics: bool,
+    padding: Input_Box_Padding,
     column_advance: f32,
     font: view_font.Font_Face,
     resolver: view_font.Font_Resolver,
@@ -75,6 +84,14 @@ Input_Box_Result :: struct {
     suggestion_accepted: bool,
     unicode_completion: Unicode_Completion,
     unicode_hint: geometry.Rectangle,
+}
+
+// input_box_text_inset resolves the horizontal inset used by every input surface.
+input_box_text_inset :: #force_inline proc(params: Input_Box_Params) -> f32 {
+    if params.padding == .Compact {
+        return INPUT_BOX_COMPACT_TEXT_INSET
+    }
+    return INPUT_BOX_TEXT_INSET
 }
 
 // input_box_clamp_boundary clamps one byte offset to a UTF-8 codepoint boundary.
@@ -421,7 +438,8 @@ input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
     if params.column_advance <= 0 {
         return 0
     }
-    local_x := x - params.rect.x - INPUT_BOX_TEXT_INSET + params.state^.scroll_x
+    local_x := x - params.rect.x - input_box_text_inset(params) +
+        params.state^.scroll_x
     column := int(max(f32(0), local_x) / params.column_advance + 0.5)
     return input_box_column_boundary(params.descriptor.text, column)
 }
@@ -481,7 +499,7 @@ input_box_begin_selection :: proc(params: Input_Box_Params) {
         state^.cursor_byte = len(params.descriptor.text)
     } else if clicks == 2 {
         local_x := params.frame.mouse_position.x - params.rect.x -
-            INPUT_BOX_TEXT_INSET + state^.scroll_x
+            input_box_text_inset(params) + state^.scroll_x
         column := 0
         if params.column_advance > 0 {
             column = int(max(f32(0), local_x) / params.column_advance)
@@ -525,7 +543,8 @@ input_box_update_pointer :: proc(
 // input_box_reveal_cursor clamps horizontal scrolling around the active caret.
 input_box_reveal_cursor :: proc(
     params: Input_Box_Params, align_end: bool) {
-    visible_width := max(f32(0), params.rect.width - INPUT_BOX_TEXT_INSET * 2)
+    inset := input_box_text_inset(params)
+    visible_width := max(f32(0), params.rect.width - inset * 2)
     text := params.descriptor.text
     if input_box_unicode_enabled(params) &&
         len(input_box_unicode_candidate(params.state, text).text) > 0 {
@@ -576,8 +595,17 @@ input_box_prepare :: proc(
     result.submit_requested = update.submit_requested
     result.tab_requested = update.tab_requested
     result.suggestion_accepted = update.suggestion_accepted
-    input_box_publish_semantics(resolved, owner, &result)
+    if !params.defer_semantics {
+        input_box_publish_semantics(resolved, owner, &result)
+    }
     return result
+}
+
+// input_box_publish_prepared_semantics publishes a control after its parent nodes exist.
+input_box_publish_prepared_semantics :: proc(
+    params: Input_Box_Params, owner: ^viewmodel.Ui_Press_Owner_State,
+    result: ^Input_Box_Result) {
+    input_box_publish_semantics(params, owner, result)
 }
 
 // input_box_result_descriptor projects current bounded selection into the descriptor.
@@ -595,8 +623,9 @@ input_box_result_descriptor :: proc(params: Input_Box_Params) ->
 input_box_draw_result :: proc(
     params: Input_Box_Params, hovered: bool) -> Input_Box_Result {
     inner := params.rect
-    inner.x += INPUT_BOX_TEXT_INSET
-    inner.width = max(f32(0), inner.width - INPUT_BOX_TEXT_INSET * 2)
+    inset := input_box_text_inset(params)
+    inner.x += inset
+    inner.width = max(f32(0), inner.width - inset * 2)
     candidate: Unicode_Completion
     if input_box_unicode_enabled(params) {
         candidate = input_box_unicode_candidate(params.state, params.descriptor.text)

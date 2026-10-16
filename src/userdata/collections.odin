@@ -3,11 +3,13 @@ package userdata
 import sqlite "../sqlite"
 import collections "../collections"
 import uuid "core:encoding/uuid"
+import "core:unicode/utf8"
 
 // Admit the persisted collection topology before a store becomes available.
 store_verify_collection_admission :: proc(store: ^Store) -> Store_Error {
-    staged: collections.Set
-    return store_load_collections(store, &staged)
+    staged := new(collections.Set, context.temp_allocator)
+    defer free(staged, context.temp_allocator)
+    return store_load_collections(store, staged)
 }
 
 // Load collection and entry rows from one validated SQLite snapshot.
@@ -21,12 +23,13 @@ store_load_collections :: proc(
     if !store_sqlite_error_is_clear(begin_error) {
         return {kind = .Read, sqlite_error = begin_error}
     }
-    staged: collections.Set
-    failure := store_read_collection_rows(store, &staged)
+    staged := new(collections.Set, context.temp_allocator)
+    defer free(staged, context.temp_allocator)
+    failure := store_read_collection_rows(store, staged)
     if store_error_is_clear(failure) {
-        failure = store_read_collection_entry_rows(store, &staged)
+        failure = store_read_collection_entry_rows(store, staged)
     }
-    if store_error_is_clear(failure) && collections.validate(&staged) != .None {
+    if store_error_is_clear(failure) && collections.validate(staged) != .None {
         failure = {kind = .Invalid_Schema}
     }
     if !store_error_is_clear(failure) {
@@ -36,7 +39,7 @@ store_load_collections :: proc(
     if !store_sqlite_error_is_clear(commit_error) {
         return store_rollback_failure(store, .Read, commit_error)
     }
-    destination^ = staged
+    destination^ = staged^
     return {}
 }
 
@@ -77,20 +80,21 @@ store_apply_collection_mutations :: proc(
     if len(mutations) == 0 {
         return {}
     }
-    snapshot: collections.Set
-    read_error := store_read_collection_rows(store, &snapshot)
+    snapshot := new(collections.Set, context.temp_allocator)
+    defer free(snapshot, context.temp_allocator)
+    read_error := store_read_collection_rows(store, snapshot)
     if !store_error_is_clear(read_error) {
         return read_error.sqlite_error
     }
-    read_error = store_read_collection_entry_rows(store, &snapshot)
+    read_error = store_read_collection_entry_rows(store, snapshot)
     if !store_error_is_clear(read_error) {
         return read_error.sqlite_error
     }
-    if collections.validate(&snapshot) != .None {
+    if collections.validate(snapshot) != .None {
         return sqlite.sqlite_make_validation_error(.Column, .Invalid_State)
     }
     for mutation in mutations {
-        if collections.apply_mutation(&snapshot, mutation) != .None {
+        if collections.apply_mutation(snapshot, mutation) != .None {
             return sqlite.sqlite_make_validation_error(.Bind, .Invalid_Argument)
         }
     }
@@ -98,7 +102,7 @@ store_apply_collection_mutations :: proc(
     if !store_sqlite_error_is_clear(write_error) {
         return write_error
     }
-    return store_apply_collection_snapshot(store, &snapshot)
+    return store_apply_collection_snapshot(store, snapshot)
 }
 
 // Read bounded collection rows without retaining SQLite-owned memory.
@@ -259,7 +263,42 @@ store_decode_collection_entry :: proc(
     result.value.animation_id = animation_id.value
     result.valid = animation_id.valid
     result.failure = animation_id.failure
+    if !store_sqlite_error_is_clear(result.failure) || !result.valid {
+        return result
+    }
+    result.valid, result.failure = store_decode_nullable_entry_name(
+        statement, 6, &result.value)
     return result
+}
+
+// Decode a nullable optional entry name and reject malformed stored text.
+store_decode_nullable_entry_name :: proc(
+    statement: ^sqlite.Statement,
+    column: int,
+    value: ^collections.Entry) -> (bool, sqlite.Error) {
+    switch sqlite.column_type(statement, column) {
+    case .Null:
+        return true, {}
+    case .Text:
+        count, failure := sqlite.column_text_copy(
+            statement, column, value^.custom_name[:])
+        if !store_sqlite_error_is_clear(failure) {
+            return false, failure
+        }
+        if count == 0 || !utf8.valid_string(string(value^.custom_name[:count])) {
+            return false, {}
+        }
+        for character in value^.custom_name[:count] {
+            if character == 0 {
+                return false, {}
+            }
+        }
+        value^.custom_name_length = count
+        return true, {}
+    case .Invalid, .Integer, .Float, .Blob:
+        return false, {}
+    }
+    return false, {}
 }
 
 // Decode placement, collection, and nullable parent UUID fields.
@@ -399,35 +438,74 @@ store_insert_collection_entry :: proc(
     statement: ^sqlite.Statement,
     value: ^collections.Entry) -> sqlite.Error {
     failure := sqlite.statement_reset(statement)
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.statement_bind_blob(statement, 1, value^.id[:])
-    }
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.statement_bind_blob(statement, 2, value^.collection_id[:])
-    }
-    if store_sqlite_error_is_clear(failure) &&
-        value^.parent_entry_id != (uuid.Identifier{}) {
-        failure = sqlite.statement_bind_blob(statement, 3, value^.parent_entry_id[:])
-    } else if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.statement_bind_null(statement, 3)
-    }
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.statement_bind_i64(statement, 4, value^.sibling_order)
-    }
-    if store_sqlite_error_is_clear(failure) {
-        kind := value^.kind == .Animation ? "animation" : "group"
-        failure = sqlite.statement_bind_text(statement, 5, kind)
-    }
-    if store_sqlite_error_is_clear(failure) &&
-        value^.animation_id != (uuid.Identifier{}) {
-        failure = sqlite.statement_bind_blob(statement, 6, value^.animation_id[:])
-    } else if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.statement_bind_null(statement, 6)
-    }
+    failure = store_bind_collection_entry_identity(statement, value, failure)
+    failure = store_bind_collection_entry_values(statement, value, failure)
     if store_sqlite_error_is_clear(failure) {
         _, failure = sqlite.statement_step(statement)
     }
     return store_reset_preserving(statement, failure)
+}
+
+// Bind collection and parent identities plus sibling order for one entry row.
+store_bind_collection_entry_identity :: proc(
+    statement: ^sqlite.Statement,
+    value: ^collections.Entry, failure: sqlite.Error) -> sqlite.Error {
+    result := failure
+    if store_sqlite_error_is_clear(result) {
+        result = sqlite.statement_bind_blob(statement, 1, value^.id[:])
+    }
+    if store_sqlite_error_is_clear(result) {
+        result = sqlite.statement_bind_blob(statement, 2, value^.collection_id[:])
+    }
+    result = store_bind_nullable_entry_uuid(
+        statement, 3, value^.parent_entry_id, result)
+    if store_sqlite_error_is_clear(result) {
+        result = sqlite.statement_bind_i64(statement, 4, value^.sibling_order)
+    }
+    return result
+}
+
+// Bind entry kind, optional animation identity, and optional custom name.
+store_bind_collection_entry_values :: proc(
+    statement: ^sqlite.Statement,
+    value: ^collections.Entry, failure: sqlite.Error) -> sqlite.Error {
+    result := failure
+    if store_sqlite_error_is_clear(result) {
+        kind := value^.kind == .Animation ? "animation" : "group"
+        result = sqlite.statement_bind_text(statement, 5, kind)
+    }
+    result = store_bind_nullable_entry_uuid(
+        statement, 6, value^.animation_id, result)
+    result = store_bind_nullable_entry_name(statement, 7, value, result)
+    return result
+}
+
+// Bind one nullable entry UUID to a prepared statement column.
+store_bind_nullable_entry_uuid :: proc(
+    statement: ^sqlite.Statement, column: int,
+    value: uuid.Identifier, failure: sqlite.Error) -> sqlite.Error {
+    if !store_sqlite_error_is_clear(failure) {
+        return failure
+    }
+    if value != (uuid.Identifier{}) {
+        identifier := value
+        return sqlite.statement_bind_blob(statement, column, identifier[:])
+    }
+    return sqlite.statement_bind_null(statement, column)
+}
+
+// Bind one optional placement name, preserving absence as SQL NULL.
+store_bind_nullable_entry_name :: proc(
+    statement: ^sqlite.Statement, column: int,
+    value: ^collections.Entry, failure: sqlite.Error) -> sqlite.Error {
+    if !store_sqlite_error_is_clear(failure) {
+        return failure
+    }
+    if value^.custom_name_length > 0 {
+        return sqlite.statement_bind_text(statement, column,
+            string(value^.custom_name[:value^.custom_name_length]))
+    }
+    return sqlite.statement_bind_null(statement, column)
 }
 
 // Execute one store-owned parameterless statement and return its first failure.

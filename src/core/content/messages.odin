@@ -36,6 +36,7 @@ Content_Message_Id :: enum u16 {
     Library_Move_Up = 1113,
     Library_Move_Down = 1114,
     Library_Unicode_Completion = 1115,
+    Library_Entry_Name = 1116,
     Settings_Display_Fps = 1201,
     Settings_Limit_Fps = 1202,
     Settings_Drawing_Sound = 1203,
@@ -105,7 +106,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 87
+CONTENT_SHIPPED_MESSAGE_COUNT :: 88
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -133,6 +134,7 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1113, "ui.library.move_up"},
     {1114, "ui.library.move_down"},
     {1115, "ui.library.unicode_completion"},
+    {1116, "ui.library.entry_name"},
     {1201, "ui.settings.display_fps"},
     {1202, "ui.settings.limit_fps"},
     {1203, "ui.settings.drawing_sound"},

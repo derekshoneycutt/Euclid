@@ -17,6 +17,7 @@ import testing "core:testing"
 import thread "core:thread"
 import time "core:time"
 import viewpreferences "preferences"
+import uilibrary "ui/library"
 
 Settings_Save_Test_Gate :: struct {
     mutex: sync.Mutex,
@@ -132,23 +133,74 @@ settings_save_test_expect_dust_limit :: proc(
     testing.expect_value(t, preferences.drawing.dust_limit, 1400)
 }
 
+// Assert one persisted Favorites placement name from a committed store.
+settings_save_test_expect_entry_name :: proc(
+    t: ^testing.T, store: ^user_data.Store, expected: string) {
+    snapshot := new(collections.Set, context.allocator)
+    defer free(snapshot, context.allocator)
+    testing.expect_value(t, user_data.store_load_collections(store, snapshot).kind,
+        user_data.Store_Error_Kind.None)
+    testing.expect_value(t, snapshot^.entries[0].custom_name_length, len(expected))
+    testing.expect_value(t,
+        string(snapshot^.entries[0].custom_name[:len(expected)]), expected)
+}
+
+// Assert that one newer name edit remains owned and unadmitted after an older save.
+settings_save_test_expect_dirty_entry_name :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    entry_id: uuid.Identifier, revision: u64) {
+    draft := &state^.ui_runtime.library.entry_name
+    testing.expect(t, draft^.active && draft^.dirty)
+    testing.expect_value(t, draft^.entry_id, entry_id)
+    testing.expect_value(t, draft^.revision, revision)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 0)
+}
+
+// Prepare a named pending save before orderly display shutdown.
+settings_save_test_prepare_named_shutdown :: proc(
+    t: ^testing.T, store: ^user_data.Store) -> (
+        ^app_core.Euclid_General_State, ^app_core.Simulation_Executor) {
+    state := settings_save_test_state()
+    executor := new(app_core.Simulation_Executor, context.allocator)
+    state^.simulation_executor = executor
+    testing.expect(t, taskpool.task_pool_init(&executor^.pool, 1, 3))
+    state^.preferences_runtime.settings_store = store
+    state^.ui_runtime.preferences.store_available = true
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(71)
+    add := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = entry_id,
+        animation_id = settings_save_test_id(72),
+    }
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, add),
+        collections.Mutation_Error.None)
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Start here"))
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
+        .Drawing_Dust_Limit, setting_model.integer_value(1400))
+    return state, executor
+}
+
 // Finish one save, verify acknowledgement, and return its persisted collections.
 settings_save_test_finish_collection_save :: proc(
     t: ^testing.T,
     state: ^app_core.Euclid_General_State,
     pool: ^taskpool.Task_Pool,
     store: ^user_data.Store,
-    expected_count: int) -> collections.Set {
+    expected_count: int) -> ^collections.Set {
     viewpreferences.settings_save_service(state, pool)
     testing.expect(t, settings_save_test_wait_terminal(state, pool))
     testing.expect_value(t, state^.preferences_runtime.collection_mutation_count, 0)
     settings_save_expect_committed_preferences(t, store)
     viewpreferences.settings_save_shutdown(state, pool)
-    snapshot: collections.Set
+    snapshot := new(collections.Set, context.allocator)
     testing.expect_value(t,
-        user_data.store_load_collections(store, &snapshot).kind,
+        user_data.store_load_collections(store, snapshot).kind,
         user_data.Store_Error_Kind.None)
-    testing.expect_value(t, snapshot.entry_count, expected_count)
+    testing.expect_value(t, snapshot^.entry_count, expected_count)
     return snapshot
 }
 
@@ -180,10 +232,11 @@ settings_save_test_reopen_favorites :: proc(
         user_data.Store_Error_Kind.None)
     testing.expect_value(t, user_data.store_open(store, path).kind,
         user_data.Store_Error_Kind.None)
-    reopened: collections.Set
-    testing.expect_value(t, user_data.store_load_collections(store, &reopened).kind,
+    reopened := new(collections.Set, context.allocator)
+    defer free(reopened, context.allocator)
+    testing.expect_value(t, user_data.store_load_collections(store, reopened).kind,
         user_data.Store_Error_Kind.None)
-    settings_save_test_expect_favorites_order(t, &reopened, expected)
+    settings_save_test_expect_favorites_order(t, reopened, expected)
     testing.expect_value(t, user_data.store_close(store).kind,
         user_data.Store_Error_Kind.None)
 }
@@ -338,8 +391,9 @@ settings_save_commits_ordered_collection_mutations :: proc(t: ^testing.T) {
     first_id, third_id := settings_save_test_enqueue_ordered_mutations(t, state)
     snapshot := settings_save_test_finish_collection_save(
         t, state, &pool, &store, 2)
+    defer free(snapshot, context.allocator)
     settings_save_test_expect_favorites_order(
-        t, &snapshot, []uuid.Identifier{third_id, first_id})
+        t, snapshot, []uuid.Identifier{third_id, first_id})
     taskpool.task_pool_destroy(&pool)
     settings_save_test_reopen_favorites(
         t, &store, path.filename, []uuid.Identifier{third_id, first_id})
@@ -368,7 +422,8 @@ settings_save_retains_newer_collection_edits_until_acknowledged :: proc(t: ^test
     testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
     snapshot := settings_save_test_finish_collection_save(
         t, state, &pool, &store, 3)
-    settings_save_test_expect_favorites_order(t, &snapshot, []uuid.Identifier{
+    defer free(snapshot, context.allocator)
+    settings_save_test_expect_favorites_order(t, snapshot, []uuid.Identifier{
         second_id, third_id, first.entry_id,
     })
     testing.expect_value(t,
@@ -679,15 +734,16 @@ settings_save_retry_requeues_collection_operations_in_order :: proc(t: ^testing.
 settings_save_test_expect_replay :: proc(
     t: ^testing.T, mutations: []collections.Mutation,
     expected_entry: uuid.Identifier) {
-    replay: collections.Set
-    collections.initialize(&replay)
+    replay := new(collections.Set, context.allocator)
+    defer free(replay, context.allocator)
+    collections.initialize(replay)
     for mutation in mutations {
         testing.expect_value(t,
-            collections.apply_mutation(&replay, mutation),
+            collections.apply_mutation(replay, mutation),
             collections.Mutation_Error.None)
     }
-    testing.expect_value(t, replay.entry_count, 1)
-    testing.expect_value(t, replay.entries[0].id, expected_entry)
+    testing.expect_value(t, replay^.entry_count, 1)
+    testing.expect_value(t, replay^.entries[0].id, expected_entry)
 }
 
 // Fill the queue with one active operation and the remaining pending edits.
@@ -803,17 +859,10 @@ settings_save_window_shutdown_flushes_before_font_pool_teardown :: proc(t: ^test
     testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
         user_data.Store_Error_Kind.None)
     defer user_data.store_close(&store)
-    state := settings_save_test_state()
+    state, executor := settings_save_test_prepare_named_shutdown(t, &store)
     defer free(state, context.allocator)
-    executor := new(app_core.Simulation_Executor, context.allocator)
     defer free(executor, context.allocator)
-    state^.simulation_executor = executor
-    testing.expect(t, taskpool.task_pool_init(&executor^.pool, 1, 3))
     defer taskpool.task_pool_destroy(&executor^.pool)
-    state^.preferences_runtime.settings_store = &store
-    state^.ui_runtime.preferences.store_available = true
-    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
-        .Drawing_Dust_Limit, setting_model.integer_value(1400))
     testing.expect(t, font.cache_request(&state^.font_cache, .Bold))
     testing.expect_value(t, shutdown_window_runtime({state = state}), 0)
     testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)
@@ -825,4 +874,176 @@ settings_save_window_shutdown_flushes_before_font_pool_teardown :: proc(t: ^test
         state^.preferences_runtime.settings_save_payload.worker_thread_id !=
             state^.preferences_runtime.settings_save_payload.owner_thread_id)
     settings_save_test_expect_dust_limit(t, &store)
+    settings_save_test_expect_entry_name(t, &store, "Start here")
+}
+
+// Verify an older joined batch cannot clear a newer unadmitted name draft.
+@(test)
+settings_save_completion_preserves_newer_entry_name_draft :: proc(t: ^testing.T) {
+    path := settings_save_test_path(t)
+    defer settings_save_test_path_destroy(path)
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    defer user_data.store_close(&store)
+    pool: taskpool.Task_Pool
+    testing.expect(t, taskpool.task_pool_init(&pool, 1, 2))
+    defer taskpool.task_pool_destroy(&pool)
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    state^.preferences_runtime.settings_store = &store
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(81)
+    add := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = entry_id,
+        animation_id = settings_save_test_id(82),
+    }
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, add),
+        collections.Mutation_Error.None)
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
+        .Rendering_Vsync, setting_model.boolean_value(false))
+    viewpreferences.settings_save_service(state, &pool)
+    testing.expect(t, state^.preferences_runtime.settings_save_active)
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Newer"))
+    viewpreferences.settings_save_service(state, &pool)
+    settings_save_test_expect_dirty_entry_name(t, state, entry_id, u64(2))
+    testing.expect(t, uilibrary.library_entry_name_flush(state))
+    viewpreferences.settings_save_shutdown(state, &pool)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 5)
+    settings_save_test_expect_entry_name(t, &store, "Newer")
+}
+
+// Verify edits debounce exactly once and are normalized before admission.
+@(test)
+library_entry_name_debounce_normalizes_and_admits :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(31)
+    testing.expect_value(t, collections.favorites_add(
+        &state^.preferences_runtime.collections_state, entry_id,
+        settings_save_test_id(32)), collections.Policy_Error.None)
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id,
+        "\tStart here\u2003"))
+    uilibrary.library_entry_name_service(state, 0.399)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 0)
+    testing.expect(t, state^.ui_runtime.library.entry_name.dirty)
+    uilibrary.library_entry_name_service(state, 0.001)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 10)
+    testing.expect_value(t,
+        string(state^.preferences_runtime.collections_state.entries[0].custom_name[:10]),
+        "Start here")
+    testing.expect(t, !state^.ui_runtime.library.entry_name.dirty)
+    testing.expect_value(t, state^.preferences_runtime.collection_revision, u64(1))
+}
+
+// Opening without edits is inert; explicitly matching canonical text is still an override.
+@(test)
+library_entry_name_untouched_and_explicit_canonical_override :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(41)
+    testing.expect_value(t, collections.favorites_add(
+        &state^.preferences_runtime.collections_state, entry_id,
+        settings_save_test_id(42)), collections.Policy_Error.None)
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    uilibrary.library_entry_name_service(state, 1)
+    testing.expect_value(t, state^.preferences_runtime.collection_revision, u64(0))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_flush(state))
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 5)
+    testing.expect_value(t, state^.preferences_runtime.collection_revision, u64(1))
+}
+
+// A full save queue retains the rejected draft rather than rebinding its owner.
+@(test)
+library_entry_name_admission_failure_retains_draft :: proc(t: ^testing.T) {
+    path := settings_save_test_path(t)
+    defer settings_save_test_path_destroy(path)
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    defer user_data.store_close(&store)
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    state^.preferences_runtime.settings_store = &store
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(51)
+    testing.expect_value(t, collections.favorites_add(
+        &state^.preferences_runtime.collections_state, entry_id,
+        settings_save_test_id(52)), collections.Policy_Error.None)
+    second_entry_id := settings_save_test_id(53)
+    testing.expect_value(t, collections.favorites_add(
+        &state^.preferences_runtime.collections_state, second_entry_id,
+        settings_save_test_id(54)), collections.Policy_Error.None)
+    state^.preferences_runtime.collection_mutation_count = collections.MUTATION_CAPACITY
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Start"))
+    testing.expect(t, !uilibrary.library_entry_name_flush(state))
+    testing.expect(t, state^.ui_runtime.library.entry_name.active)
+    testing.expect(t, state^.ui_runtime.library.entry_name.dirty)
+    state^.ui_runtime.library.actions.drawer = {entry_id = entry_id, open = true}
+    testing.expect(t, !uilibrary.tree_actions_close_context(&state^.ui_runtime, state))
+    testing.expect(t, state^.ui_runtime.library.actions.drawer.open)
+    testing.expect_value(t,
+        state^.ui_runtime.library.entry_name.last_admission_error,
+        collections.Mutation_Error.Capacity)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 0)
+    testing.expect_value(t, state^.preferences_runtime.collection_revision, u64(0))
+    testing.expect(t, !uilibrary.library_entry_name_begin(state, second_entry_id, "Other"))
+    testing.expect_value(t, state^.ui_runtime.library.entry_name.entry_id, entry_id)
+}
+
+// Closing the drawer admits the draft before retiring its editor context.
+@(test)
+library_entry_name_context_close_flushes_before_retirement :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(55)
+    testing.expect_value(t, collections.favorites_add(
+        &state^.preferences_runtime.collections_state, entry_id,
+        settings_save_test_id(56)), collections.Policy_Error.None)
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Start"))
+    state^.ui_runtime.library.actions.drawer = {entry_id = entry_id, open = true}
+    testing.expect(t, uilibrary.tree_actions_close_context(&state^.ui_runtime, state))
+    testing.expect(t, !state^.ui_runtime.library.entry_name.active)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entries[0].custom_name_length, 5)
+    testing.expect_value(t,
+        string(state^.preferences_runtime.collections_state.entries[0].custom_name[:5]),
+        "Start")
+    testing.expect(t, !state^.ui_runtime.library.actions.drawer.open)
+}
+
+// Removing an edited Favorite discards its unaccepted draft without a rename mutation.
+@(test)
+library_entry_name_removed_owner_is_retired :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    collections.initialize(&state^.preferences_runtime.collections_state)
+    entry_id := settings_save_test_id(61)
+    testing.expect_value(t, collections.favorites_add(
+        &state^.preferences_runtime.collections_state, entry_id,
+        settings_save_test_id(62)), collections.Policy_Error.None)
+    testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
+    testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Start"))
+    mutation := collections.Mutation{kind = .Remove_Favorite, entry_id = entry_id}
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, mutation),
+        collections.Mutation_Error.None)
+    testing.expect(t, !state^.ui_runtime.library.entry_name.active)
+    testing.expect_value(t,
+        state^.preferences_runtime.collections_state.entry_count, 0)
 }

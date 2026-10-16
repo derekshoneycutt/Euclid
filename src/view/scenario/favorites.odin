@@ -30,6 +30,47 @@ scenario_favorites_split :: proc(text: string) -> (string, string) {
     return text, ""
 }
 
+// Compare one custom placement name using `address|expected` scenario syntax.
+scenario_favorites_name_matches :: proc(
+    runtime: ^Scenario_Runtime, text: string) -> bool {
+    address, expected := scenario_favorites_split_on(text, '|')
+    if address == text {
+        return false
+    }
+    item := scenario_favorites_item(runtime, address)
+    if item == nil {
+        return false
+    }
+    set := &runtime^.state^.preferences_runtime.collections_state
+    entry_index := collections.find_entry(set, item^.key)
+    if entry_index < 0 {
+        return false
+    }
+    entry := &set^.entries[entry_index]
+    actual := string(entry.custom_name[:entry.custom_name_length])
+    return actual == expected
+}
+
+// Split one bounded scenario string at its first requested delimiter.
+scenario_favorites_split_on :: proc(
+    text: string, delimiter: rune) -> (string, string) {
+    for value, index in text {
+        if value == delimiter {
+            return text[:index], text[index + 1:]
+        }
+    }
+    return text, ""
+}
+
+// Confirm the published Favorite editor is the ordinary effective input owner.
+scenario_favorites_name_editor_focused :: proc(
+    ui: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    focus := ui^.input.interaction_frame.effective_focus
+    return uilibrary.library_entry_name_visible(ui) &&
+        focus.kind == .Input_Box &&
+        focus.id == uilibrary.TREE_ENTRY_NAME_INPUT_ID
+}
+
 // Override only scenario-authored pointer facts through the ordinary UI input path.
 scenario_pointer_frame :: proc(
     runtime: ^Scenario_Runtime, frame: input.Input_Frame) -> input.Input_Frame {
@@ -160,11 +201,28 @@ scenario_library_placement :: proc(
     if item == nil {
         return false
     }
+    if operation == "name_press" || operation == "name_release" {
+        return scenario_library_name_pointer(runtime, item, operation)
+    }
     if operation == "actions_focus" || operation == "actions_open" ||
         operation == "move_up" || operation == "move_down" {
         return scenario_reorder_control(runtime, item, operation)
     }
     return scenario_library_published_action(runtime, item, operation)
+}
+
+// Route pointer focus to the published placement-owned name input.
+scenario_library_name_pointer :: proc(
+    runtime: ^Scenario_Runtime, item: ^viewmodel.Ui_Tree_Item,
+    operation: string) -> bool {
+    draft := &runtime^.state^.ui_runtime.library.entry_name
+    if !draft^.active || draft^.entry_id != item^.key ||
+        draft^.rect.width <= 0 || draft^.rect.height <= 0 {
+        return false
+    }
+    pointer_operation := "press" if operation == "name_press" else "release"
+    return scenario_favorites_pointer(
+        runtime, draft^.rect, pointer_operation)
 }
 
 // scenario_library_published_action admits pointer and semantic actions on published tree rows.
@@ -528,7 +586,35 @@ scenario_assert_favorites :: proc(
     case "failure_retained", "recovered":
         return scenario_favorites_save_feedback(runtime, operation == "recovered")
     case:
+        if handled, accepted := scenario_favorites_name_assertion(
+            runtime, operation, argument); handled {
+            return accepted
+        }
         return scenario_favorites_placement_assertion(runtime, operation, argument)
+    }
+}
+
+// Evaluate persisted-name, draft, and inline name-editor focus assertions.
+scenario_favorites_name_assertion :: proc(
+    runtime: ^Scenario_Runtime, operation, argument: string) -> (bool, bool) {
+    draft := &runtime^.state^.ui_runtime.library.entry_name
+    switch operation {
+    case "name":
+        return true, scenario_favorites_name_matches(runtime, argument)
+    case "draft":
+        return true, draft^.active &&
+            string(draft^.value[:draft^.value_length]) == argument
+    case "name_editor_focused":
+        return true, scenario_favorites_name_editor_focused(
+            &runtime^.state^.ui_runtime)
+    case "name_editor_active":
+        return true, draft^.active
+    case "name_editor_input_focus":
+        focus := runtime^.state^.ui_runtime.input.interaction_frame.effective_focus
+        return true, focus.kind == .Input_Box &&
+            focus.id == uilibrary.TREE_ENTRY_NAME_INPUT_ID
+    case:
+        return false, false
     }
 }
 

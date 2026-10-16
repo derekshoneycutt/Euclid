@@ -101,11 +101,12 @@ launch_run_session :: proc(
     launch: Launch_Configuration,
     settings: ^core.Euclid_Run_Settings) -> int {
     resolved: setting_model.Preferences
-    collection_state: collections.Set
+    collection_state := new(collections.Set, context.allocator)
+    defer free(collection_state, context.allocator)
     store: user_data.Store
     store_opened := false
     if !launch_prepare_preferences(
-        launch, &resolved, &store, &store_opened, &collection_state) {
+        launch, &resolved, &store, &store_opened, collection_state) {
         return 1
     }
     return launch_run_view(
@@ -116,7 +117,7 @@ launch_run_session :: proc(
 launch_run_view :: proc(
     settings: ^core.Euclid_Run_Settings,
     preferences: setting_model.Preferences,
-    collection_state: collections.Set,
+    collection_state: ^collections.Set,
     store: ^user_data.Store,
     store_opened: ^bool) -> int {
     launch_apply_preferences(settings, preferences)

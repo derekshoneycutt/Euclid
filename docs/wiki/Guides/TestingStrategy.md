@@ -93,6 +93,7 @@ events such as screenshot completion that do not match the initiating action's i
 | Wait for progress or verify an observation | `wait_event`, `wait_state`, `assert_state`, `assert_focus` |
 | Exercise viewport or input behavior | `set_view_scroll`, `set_splitters`, `key`, `contact_dust` |
 | Verify exact Library search text | `{"assert_library_search":"α"}` (nonempty, exact UTF-8 text) |
+| Type into an open Favorite name editor | `{"type_library_name":"α"}` (requires input focus on that editor) |
 | Capture or retain evidence | `screenshot`, `start_gif`, `checkpoint`, `allocation_checkpoint`, `assert_allocation_baseline` |
 | End a run safely | `assert_no_bad_frees`, `shutdown` |
 

@@ -3,6 +3,7 @@ package viewmodel
 import dynviewmodel "../../../dynview/model"
 import geometry "../../../core/geometry"
 import settings "../../../settings"
+import collections "../../../collections"
 import uuid "core:encoding/uuid"
 import preferencesmodel "../../preferences/model"
 import worldmodel "../../world/model"
@@ -698,11 +699,31 @@ Ui_Library_Actions_State :: struct {
     reveal_pending: bool,
 }
 
+// Ui_Library_Entry_Name_Draft owns one bounded placement-name edit between frames.
+Ui_Library_Entry_Name_Draft :: struct {
+    entry_id: uuid.Identifier,
+    rect: geometry.Rectangle,
+    clip_rect: geometry.Rectangle,
+    value: [collections.ENTRY_NAME_MAX_BYTES]u8,
+    value_length: int,
+    accepted_name: [collections.ENTRY_NAME_MAX_BYTES]u8,
+    accepted_name_length: int,
+    input: Ui_Input_Box_State,
+    revision: u64,
+    debounce_remaining_seconds: f64,
+    last_admission_error: collections.Mutation_Error,
+    active: bool,
+    edit_intent: bool,
+    dirty: bool,
+    admission_failed: bool,
+}
+
 // Ui_Library_State composes bounded Library state under one owner.
 Ui_Library_State :: struct {
     tree: Ui_Library_Tree_State,
     motion: Ui_Tree_Motion,
     actions: Ui_Library_Actions_State,
+    entry_name: Ui_Library_Entry_Name_Draft,
     search: Library_Search_State,
 }
 

@@ -147,6 +147,11 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
                 LocalizedContent.MessageArgument("symbol", LocalizedContent.TextArgument)]),
         "Unicode completion: {symbol}. Press Right Arrow to insert; Escape to dismiss."),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1116), "ui.library.entry_name",
+            "Accessible label for the inline Favorite custom-name field.",
+            LocalizedContent.MessageArgument[]),
+        "Favorite name"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1219), "ui.settings.reduce_motion",
             "Interface-only reduced motion checkbox; system requests also apply.",
             LocalizedContent.MessageArgument[]),

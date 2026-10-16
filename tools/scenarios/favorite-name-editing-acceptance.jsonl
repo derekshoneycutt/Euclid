@@ -1,0 +1,62 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_favorites":"empty"}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"favorite_control":"press"}
+{"favorite_control":"release"}
+{"assert_favorites":"order:Point"}
+{"select_animation":"Line","as":"line"}
+{"wait_event":"animation_selected","correlation":"line","timeout_ms":10000}
+{"favorite_control":"press"}
+{"favorite_control":"release"}
+{"assert_favorites":"order:Point:Line"}
+{"library_placement":"expand:collections"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"expand:favorites"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"press:favorite:Point"}
+{"library_placement":"release:favorite:Point"}
+{"wait_event":"animation_selected","timeout_ms":10000}
+{"assert_favorites":"remember_playback:Point"}
+{"clear_library_search":true}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"focus:favorite:Point"}
+{"key":"tab"}
+{"key":"enter"}
+{"assert_favorites":"actions_open:favorite:Point"}
+{"assert_favorites":"name_editor_active"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"name_press:favorite:Point"}
+{"library_placement":"name_release:favorite:Point"}
+{"assert_favorites":"name_editor_input_focus"}
+{"key":{"name":"a","ctrl":true}}
+{"type_library_name":"First α name"}
+{"assert_favorites":"draft:First α name"}
+{"assert_favorites":"playing:Point"}
+{"library_placement":"press:favorite:Line"}
+{"library_placement":"release:favorite:Line"}
+{"wait_event":"animation_selected","timeout_ms":10000}
+{"assert_favorites":"name:favorite:Point|First α name"}
+{"assert_favorites":"selected:favorite:Line"}
+{"library_placement":"press:favorite:Point"}
+{"library_placement":"release:favorite:Point"}
+{"wait_event":"animation_selected","timeout_ms":10000}
+{"assert_favorites":"name:favorite:Point|First α name"}
+{"assert_favorites":"remember_playback:Point"}
+{"library_placement":"focus:favorite:Point"}
+{"key":"tab"}
+{"key":"enter"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"name_press:favorite:Point"}
+{"library_placement":"name_release:favorite:Point"}
+{"key":{"name":"a","ctrl":true}}
+{"type_library_name":"Revised Ω name"}
+{"key":"enter"}
+{"assert_favorites":"name:favorite:Point|Revised Ω name"}
+{"key":{"name":"a","ctrl":true}}
+{"key":"backspace"}
+{"key":"enter"}
+{"assert_favorites":"name:favorite:Point|"}
+{"assert_favorites":"playing:Point"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -197,7 +197,7 @@ General features:
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
     - [X] Favorites/Collection organization
-    - [ ] Custom naming in collections
+    - [X] Custom naming in collections
     - [ ] Multiple custom collections
     - [ ] Custom notes in collections
     - [ ] Most viewed (dynamic; non-mutable)

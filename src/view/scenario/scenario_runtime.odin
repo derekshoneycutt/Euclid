@@ -84,6 +84,7 @@ Scenario_Key_Name :: struct {name: string, key: input.Input_Key}
 
 // Supported deterministic portable keys.
 SCENARIO_KEY_NAMES :: [?]Scenario_Key_Name{
+    {"a", .A},
     {"escape", .Escape}, {"enter", .Enter}, {"space", .Space}, {"tab", .Tab},
     {"backspace", .Backspace}, {"delete", .Delete},
     {"left", .Left}, {"right", .Right}, {"up", .Up}, {"down", .Down},
@@ -241,12 +242,37 @@ scenario_issue_terminal_text :: proc(
         !scenario_terminal_input_available(runtime.state) {
         return false
     }
+    return scenario_inject_text_events(runtime, text)
+}
+
+// Inject text only while the visible Favorites name editor owns input focus.
+scenario_issue_library_name_text :: proc(
+    runtime: ^Scenario_Runtime, text: string) -> bool {
+    if runtime == nil || runtime.state == nil || runtime.input_runtime == nil {
+        return false
+    }
+    ui := &runtime.state^.ui_runtime
+    draft := &ui^.library.entry_name
+    if !scenario_favorites_name_editor_focused(&runtime.state^.ui_runtime) {
+        log.errorf(
+            "scenario_library_name_text_rejected_focus active=%v selected=%v drawer_open=%v",
+            draft^.active,
+            ui^.library.tree.selected_item_id == draft^.entry_id,
+            ui^.library.actions.drawer.open)
+        return false
+    }
+    return scenario_inject_text_events(runtime, text)
+}
+
+// Convert one bounded UTF-8 payload to ordinary next-frame text events.
+scenario_inject_text_events :: proc(
+    runtime: ^Scenario_Runtime, text: string) -> bool {
     events: [scenario.SCENARIO_TEXT_CAPACITY]input.Input_Event
     count := 0
     offset := 0
     for offset < len(text) {
         codepoint, width := utf8.decode_rune(text[offset:])
-        if width == 0 {
+        if width == 0 || count >= len(events) {
             return false
         }
         events[count] = {kind = .Text, codepoint = codepoint}
@@ -764,14 +790,29 @@ scenario_issue_particle_action :: proc(
     }
 }
 
+// Route one Terminal text, Library name text, or key injection command.
+scenario_issue_input_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    text: string) -> (bool, bool) {
+    #partial switch command.kind {
+    case .Type_Text: return true, scenario_issue_terminal_text(runtime, text)
+    case .Type_Library_Name:
+        return true, scenario_issue_library_name_text(runtime, text)
+    case .Key: return true, scenario_issue_key(runtime, command)
+    case: return false, false
+    }
+}
+
 // Route one generic scenario command through ordinary Euclid request state and APIs.
 scenario_issue_generic_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     text := scenario.text_string(&command.text)
+    if handled, accepted := scenario_issue_input_action(
+        runtime, command, text); handled {
+        return handled, accepted
+    }
     #partial switch command.kind {
-    case .Type_Text: return true, scenario_issue_terminal_text(runtime, text)
-    case .Key: return true, scenario_issue_key(runtime, command)
     case .Assert_Focus:
         return true, ui.semantic_focus_matches_name(
             runtime.state^.ui_runtime.semantic_focus, text)

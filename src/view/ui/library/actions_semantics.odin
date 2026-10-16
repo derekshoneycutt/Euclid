@@ -8,13 +8,16 @@ import log "core:log"
 import native "../../native"
 import viewmessages "../../messages"
 import viewmodel "../model"
+import uiwidgets "../widgets"
 import uisemantics "../semantics"
 import theme "../theme"
 
 TREE_ACTION_TOGGLE :: u64(1)
 TREE_ACTION_UP :: u64(2)
 TREE_ACTION_DOWN :: u64(3)
-TREE_ACTION_DRAWER :: u64(4)
+TREE_ACTION_DRAWER :: u64(8)
+TREE_ENTRY_NAME_INPUT :: u64(5)
+TREE_ENTRY_NAME_TEXT_RUN :: u64(6)
 
 // tree_actions_semantic_id qualifies controls by placement and content lifetime.
 tree_actions_semantic_id :: proc(
@@ -74,7 +77,8 @@ tree_actions_command_item :: proc(
     params: Tree_List_Params,
     target: viewmodel.Ui_Node_Id) -> ^viewmodel.Ui_Tree_Item {
     if target.domain != .Library_Action || target.local_id < TREE_ACTION_TOGGLE ||
-        target.local_id > TREE_ACTION_DOWN ||
+        target.local_id > TREE_ACTION_DOWN &&
+            target.local_id != TREE_ENTRY_NAME_INPUT ||
         target.generation != params.ji^.content_generation ||
         params.general_state != nil &&
             params.ui_runtime^.layout.active_accordion_section != .Library {
@@ -91,6 +95,11 @@ tree_actions_command_item :: proc(
         params.ui_runtime^.library.tree.selected_item_id,
         params.visibility.search != nil && params.visibility.search^.active,
         item) {
+        return nil
+    }
+    if target.local_id == TREE_ENTRY_NAME_INPUT &&
+        (!params.ui_runtime^.library.actions.drawer.open ||
+         params.ui_runtime^.library.actions.drawer.entry_id != item^.key) {
         return nil
     }
     return item
@@ -121,7 +130,8 @@ tree_actions_apply_command :: proc(
         command.kind == .Expand && !motion^.open ||
         command.kind == .Collapse && motion^.open) {
         tree_actions_toggle(params, item^.key)
-    } else if action != TREE_ACTION_TOGGLE && command.kind == .Activate {
+    } else if action != TREE_ACTION_TOGGLE &&
+        action != TREE_ENTRY_NAME_INPUT && command.kind == .Activate {
         direction := collections.Move_Direction.Up if action == TREE_ACTION_UP else .Down
         _ = tree_actions_move(params, item^.key, direction)
     }
@@ -147,11 +157,27 @@ tree_actions_command_visible :: proc(
         clip := tree_row_screen_geometry(row^, params.list_panel, params.scroll_y^)
         return geometry.rectangles_intersect(bounds, clip.clip_bounds)
     }
+    if action == TREE_ENTRY_NAME_INPUT {
+        if !row^.actions.open {
+            return false
+        }
+        row_geometry := tree_row_screen_geometry(
+            row^, params.list_panel, params.scroll_y^)
+        bounds := tree_actions_label_clip(
+            row^.actions, row_geometry.bounds, row_geometry.clip_bounds)
+        return geometry.rectangles_intersect(bounds, row_geometry.clip_bounds)
+    }
     if !row^.actions.open {
         return false
     }
+    return tree_actions_move_command_visible(params, row, action)
+}
+
+// tree_actions_move_command_visible admits only an enabled, clipped move button.
+tree_actions_move_command_visible :: proc(
+    params: Tree_List_Params, row: ^Tree_Prepared_Row, action: u64) -> bool {
     direction := collections.Move_Direction.Up if action == TREE_ACTION_UP else .Down
-    if !tree_actions_neighbor_exists(params.collections, item^.key, direction) {
+    if !tree_actions_neighbor_exists(params.collections, row^.item^.key, direction) {
         return false
     }
     bounds := row^.actions.move_up_rect if action == TREE_ACTION_UP else
@@ -168,9 +194,13 @@ tree_actions_apply_commands :: proc(params: Tree_List_Params) {
         return
     }
     for command in semantic^.commands[:semantic^.command_count] {
-        if command.target.domain == .Library_Action {
-            tree_actions_apply_command(params, command)
-            tree_actions_refresh_projection(params)
+        if command.target.domain == .Library_Action &&
+            command.target.local_id != TREE_ENTRY_NAME_TEXT_RUN {
+            if command.target.local_id != TREE_ENTRY_NAME_INPUT ||
+                command.kind == .Dismiss {
+                tree_actions_apply_command(params, command)
+                tree_actions_refresh_projection(params)
+            }
         }
     }
 }
@@ -206,22 +236,35 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
         runtime^.library.actions.last_focus = target
     }
     if target.local_id != TREE_ACTION_TOGGLE {
-        motion := &runtime^.library.actions.drawer
-        direction := collections.Move_Direction.Up if
-            target.local_id == TREE_ACTION_UP else .Down
-        if !motion^.open || motion^.entry_id != target.stable_id ||
-            !tree_actions_neighbor_exists(
-                params.collections, target.stable_id, direction) {
-            tree_actions_focus_toggle(params, target.stable_id)
-        } else if runtime^.library.actions.reveal_pending {
-            index := tree_projection_find(
-                &runtime^.library.tree.projection, target.stable_id)
-            motion^.height = tree_actions_full_height(
-                params.list_panel.width, tree_item_depth(
-                    &runtime^.library.tree.projection,
-                    &runtime^.library.tree.projection.items[index]))
-            motion^.running = false
+        if target.local_id == TREE_ENTRY_NAME_INPUT {
+            motion := &runtime^.library.actions.drawer
+            if !motion^.open || motion^.entry_id != target.stable_id {
+                tree_actions_focus_toggle(params, target.stable_id)
+            }
+            return
         }
+        tree_actions_prepare_move_focus(params, target)
+    }
+}
+
+// tree_actions_prepare_move_focus preserves only currently enabled move-button focus.
+tree_actions_prepare_move_focus :: proc(
+    params: Tree_List_Params, target: viewmodel.Ui_Node_Id) {
+    runtime := params.ui_runtime
+    motion := &runtime^.library.actions.drawer
+    direction := collections.Move_Direction.Up if
+        target.local_id == TREE_ACTION_UP else .Down
+    if !motion^.open || motion^.entry_id != target.stable_id ||
+        !tree_actions_neighbor_exists(params.collections, target.stable_id, direction) {
+        tree_actions_focus_toggle(params, target.stable_id)
+    } else if runtime^.library.actions.reveal_pending {
+        index := tree_projection_find(
+            &runtime^.library.tree.projection, target.stable_id)
+        motion^.height = tree_actions_full_height(
+            params.list_panel.width, tree_item_depth(
+                &runtime^.library.tree.projection,
+                &runtime^.library.tree.projection.items[index]))
+        motion^.running = false
     }
 }
 
@@ -238,7 +281,10 @@ tree_actions_reveal_focus :: proc(
             continue
         }
         bounds := row.actions.toggle_rect
-        if target.local_id == TREE_ACTION_UP {
+        if target.local_id == TREE_ENTRY_NAME_INPUT {
+            bounds = {row.actions.label_clip.x, row.content_y,
+                row.actions.label_clip.width, theme.TREE_ROW_HEIGHT}
+        } else if target.local_id == TREE_ACTION_UP {
             bounds = row.actions.move_up_rect
         } else if target.local_id == TREE_ACTION_DOWN {
             bounds = row.actions.move_down_rect
@@ -286,7 +332,7 @@ tree_actions_publish_button :: proc(
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
         id = id, parent = parent,
         role = .Button, states = states, actions = actions,
-        region = .Accordion_Content, traversal_order = u16(id.local_id + 3),
+        region = .Accordion_Content, traversal_order = u16(id.local_id + 4),
         bounds = bounds.bounds, clip_bounds = bounds.clip_bounds, label = label,
     })
 }
@@ -305,7 +351,8 @@ tree_actions_publish_row :: proc(
     storage: [content.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     label := viewmessages.shell_format(params.general_state, .Library_Actions_For,
         []content.Content_Format_Argument{{name = "name",
-            value = tree_item_label(params.ji, row.item)}}, storage[:])
+            value = tree_item_label(params.ji, row.item, params.collections)}},
+        storage[:])
     drawer_id := tree_actions_semantic_id(params, entry_id, TREE_ACTION_DRAWER)
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
         id = tree_actions_semantic_id(params, entry_id, TREE_ACTION_TOGGLE),
@@ -357,6 +404,14 @@ tree_actions_publish :: proc(
                 prepared^.scroll.view_rect, prepared^.scroll.scroll_y_out)
             tree_actions_pointer_focus(params, row)
         }
+    }
+    if prepared^.entry_name_prepared {
+        draft := &params.ui_runtime^.library.entry_name
+        input_params := library_entry_name_input_params(
+            params, draft^.entry_id, draft^.rect, draft^.clip_rect, {})
+        uiwidgets.input_box_publish_prepared_semantics(
+            input_params, &params.ui_runtime^.input.press_owner,
+            &prepared^.entry_name_input)
     }
 }
 

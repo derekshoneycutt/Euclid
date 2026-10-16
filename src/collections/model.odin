@@ -1,11 +1,13 @@
 package collections
 
 import uuid "core:encoding/uuid"
+import "core:unicode/utf8"
 
 COLLECTION_CAPACITY :: 512
 ENTRY_CAPACITY :: 512
 MUTATION_CAPACITY :: 512
 COLLECTION_NAME_MAX_BYTES :: 256
+ENTRY_NAME_MAX_BYTES :: 256
 FAVORITES_COLLECTION_ID :: uuid.Identifier{
     0x45, 0x55, 0x43, 0x4c, 0x49, 0x44, 0x00, 0x00,
     0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -42,6 +44,8 @@ Entry :: struct {
     sibling_order: i64,
     kind: Entry_Kind,
     animation_id: uuid.Identifier,
+    custom_name: [ENTRY_NAME_MAX_BYTES]u8,
+    custom_name_length: int,
 }
 
 // Bounded, pointer-free snapshot of user collection placements.
@@ -86,27 +90,32 @@ Policy_Error :: enum u8 {
     Not_Adjacent,
     No_Neighbor,
     Invalid_Direction,
+    Invalid_Name,
 }
 
 Mutation_Kind :: enum u8 {
     Add_Favorite,
     Remove_Favorite,
     Reorder_Siblings,
+    Set_Entry_Name,
 }
 
-// One immutable structural operation retaining placement identities across retry.
+// One immutable collection operation retaining placement identity across retry.
 Mutation :: struct {
     kind: Mutation_Kind,
     entry_id: uuid.Identifier,
     animation_id: uuid.Identifier,
     sibling_entry_id: uuid.Identifier,
     direction: Move_Direction,
+    custom_name: [ENTRY_NAME_MAX_BYTES]u8,
+    custom_name_length: int,
 }
 
 Mutation_Error :: enum u8 {
     None,
     Invalid_Kind,
     Invalid_Entry,
+    Invalid_Name,
     Policy,
     Capacity,
 }
@@ -186,7 +195,7 @@ validate_collection_fields :: proc(collection: ^Collection) -> Validation_Error 
 validate_entry :: proc(set: ^Set, index: int) -> Validation_Error {
     entry := &set.entries[index]
     if entry.id == (uuid.Identifier{}) || entry.sibling_order < 0 ||
-        !entry_kind_is_valid(entry^) {
+        !entry_kind_is_valid(entry^) || !entry_custom_name_is_valid(entry) {
         return .Invalid_Entry
     }
     collection_index := find_collection(set, entry.collection_id)
@@ -364,6 +373,27 @@ make_sibling_move :: proc(
     }, .None
 }
 
+// Capture a bounded optional name update addressed to one placement identity.
+make_entry_name_mutation :: proc(
+    entry_id: uuid.Identifier, name: string) -> (Mutation, Mutation_Error) {
+    if entry_id == (uuid.Identifier{}) {
+        return {}, .Invalid_Entry
+    }
+    name_bytes := transmute([]u8)name
+    if !entry_name_bytes_are_valid(name_bytes, len(name)) {
+        return {}, .Invalid_Name
+    }
+    mutation := Mutation{
+        kind = .Set_Entry_Name,
+        entry_id = entry_id,
+        custom_name_length = len(name),
+    }
+    if len(name) > 0 {
+        copy(mutation.custom_name[:len(name)], name_bytes)
+    }
+    return mutation, .None
+}
+
 // Enumerate ordered backing-array indexes into caller-owned storage.
 ordered_siblings :: proc(
     set: ^Set,
@@ -420,33 +450,121 @@ ordered_siblings_scope_validate :: proc(
 apply_mutation :: proc(set: ^Set, mutation: Mutation) -> Mutation_Error {
     switch mutation.kind {
     case .Add_Favorite:
-        if mutation.entry_id == (uuid.Identifier{}) ||
-            mutation.animation_id == (uuid.Identifier{}) {
-            return .Invalid_Entry
-        }
-        if favorites_add(set, mutation.entry_id, mutation.animation_id) != .None {
-            return .Policy
-        }
-        return .None
+        return apply_add_favorite_mutation(set, mutation)
     case .Remove_Favorite:
-        if mutation.entry_id == (uuid.Identifier{}) {
-            return .Invalid_Entry
-        }
-        if favorites_remove(set, mutation.entry_id) != .None {
-            return .Policy
-        }
-        return .None
+        return apply_remove_favorite_mutation(set, mutation)
     case .Reorder_Siblings:
-        if mutation.entry_id == (uuid.Identifier{}) ||
-            mutation.sibling_entry_id == (uuid.Identifier{}) {
-            return .Invalid_Entry
-        }
-        if sibling_move_apply(set, mutation) != .None {
-            return .Policy
-        }
-        return .None
+        return apply_reorder_mutation(set, mutation)
+    case .Set_Entry_Name:
+        return apply_entry_name_mutation(set, mutation)
     }
     return .Invalid_Kind
+}
+
+// Apply one validated Favorites addition mutation.
+apply_add_favorite_mutation :: proc(
+    set: ^Set, mutation: Mutation) -> Mutation_Error {
+    if mutation.entry_id == (uuid.Identifier{}) ||
+        mutation.animation_id == (uuid.Identifier{}) {
+        return .Invalid_Entry
+    }
+    if favorites_add(set, mutation.entry_id, mutation.animation_id) != .None {
+        return .Policy
+    }
+    return .None
+}
+
+// Apply one Favorites removal mutation.
+apply_remove_favorite_mutation :: proc(
+    set: ^Set, mutation: Mutation) -> Mutation_Error {
+    if mutation.entry_id == (uuid.Identifier{}) {
+        return .Invalid_Entry
+    }
+    if favorites_remove(set, mutation.entry_id) != .None {
+        return .Policy
+    }
+    return .None
+}
+
+// Apply one sibling reorder mutation.
+apply_reorder_mutation :: proc(
+    set: ^Set, mutation: Mutation) -> Mutation_Error {
+    if mutation.entry_id == (uuid.Identifier{}) ||
+        mutation.sibling_entry_id == (uuid.Identifier{}) {
+        return .Invalid_Entry
+    }
+    if sibling_move_apply(set, mutation) != .None {
+        return .Policy
+    }
+    return .None
+}
+
+// Validate and apply one placement-name mutation.
+apply_entry_name_mutation :: proc(
+    set: ^Set, mutation: Mutation) -> Mutation_Error {
+    if mutation.entry_id == (uuid.Identifier{}) {
+        return .Invalid_Entry
+    }
+    name := mutation.custom_name
+    if !entry_name_bytes_are_valid(name[:], mutation.custom_name_length) {
+        return .Invalid_Name
+    }
+    if entry_name_set(
+        set, mutation.entry_id, name[:], mutation.custom_name_length) != .None {
+        return .Policy
+    }
+    return .None
+}
+
+// Set or clear one placement name without changing its identity or topology.
+entry_name_set :: proc(
+    set: ^Set, entry_id: uuid.Identifier,
+    name: []u8, name_length: int) -> Policy_Error {
+    if validate(set) != .None {
+        return .Invalid_Set
+    }
+    if entry_id == (uuid.Identifier{}) {
+        return .Invalid_Identity
+    }
+    if !entry_name_bytes_are_valid(name, name_length) {
+        return .Invalid_Name
+    }
+    entry_index := find_entry(set, entry_id)
+    if entry_index < 0 {
+        return .Missing_Entry
+    }
+    collection_index := find_collection(set, set.entries[entry_index].collection_id)
+    if set.collections[collection_index].is_read_only {
+        return .Read_Only
+    }
+    set.entries[entry_index].custom_name = {}
+    if name_length > 0 {
+        copy(set.entries[entry_index].custom_name[:name_length], name[:name_length])
+    }
+    set.entries[entry_index].custom_name_length = name_length
+    return .None
+}
+
+// Validate an optional entry name's bounded UTF-8 byte representation.
+entry_name_bytes_are_valid :: proc(
+    name: []u8, name_length: int) -> bool {
+    if name_length < 0 || name_length > ENTRY_NAME_MAX_BYTES ||
+        name_length > len(name) {
+        return false
+    }
+    if name_length == 0 {
+        return true
+    }
+    value := string(name[:name_length])
+    if !utf8.valid_string(value) {
+        return false
+    }
+    for character in name[:name_length] {
+        if character == 0 {
+            return false
+        }
+    }
+    return true
 }
 
 // Initialize a valid empty snapshot containing the system Favorites collection.
@@ -595,6 +713,12 @@ entry_kind_is_valid :: proc(entry: Entry) -> bool {
         return entry.animation_id == (uuid.Identifier{})
     }
     return false
+}
+
+// Validate the optional custom name stored on one entry record.
+entry_custom_name_is_valid :: proc(entry: ^Entry) -> bool {
+    return entry_name_bytes_are_valid(
+        entry^.custom_name[:], entry^.custom_name_length)
 }
 
 // Reject sibling positions duplicated within one collection parent scope.

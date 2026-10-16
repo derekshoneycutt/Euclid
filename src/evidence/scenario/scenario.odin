@@ -73,6 +73,7 @@ Command_Kind :: enum u8 {
     Reload_Runtime,
     Inject_Reload_Failure,
     Type_Text,
+    Type_Library_Name,
     Key,
     Pause_Simulation,
     Resume_Simulation,
@@ -302,6 +303,7 @@ Raw_Command :: struct {
     select_animation : string,
     inject_reload_failure : string,
     type_text : string `json:"type"`,
+    type_library_name : string,
     screenshot : string,
     start_gif : string,
     set_library_search : string,
@@ -803,7 +805,7 @@ runner_update_command :: proc(
          .Clear_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown, .Set_Setting,
-         .Favorite_Control, .Library_Placement:
+         .Favorite_Control, .Library_Placement, .Type_Library_Name:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -842,18 +844,7 @@ runner_update :: proc(
         if !runner_update_command(runner, command, frame) {
             return runner.status
         }
-        frame_boundary := command.kind == .Wait_Event ||
-            command.kind == .Wait_State ||
-            command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
-            command.kind == .Key || command.kind == .Set_View_Content ||
-            command.kind == .Set_Library_Search ||
-            command.kind == .Apply_Library_Search_Suggestion ||
-            command.kind == .Clear_Library_Search ||
-            command.kind == .Emit_Dust || command.kind == .Contact_Dust ||
-            command.kind == .Kick_Dust ||
-            command.kind == .Set_View_Scroll ||
-            command.kind == .Set_Splitters ||
-            command.kind == .Favorite_Control || command.kind == .Library_Placement
+        frame_boundary := command_kind_ends_frame(command.kind)
         runner.step += 1
         runner.deadline_ns = 0
         if frame_boundary && runner.step < runner.program.count {
@@ -862,6 +853,20 @@ runner_update :: proc(
     }
     runner.status = .Passed
     return runner.status
+}
+
+// Report whether a completed command must yield so its effect reaches the next frame.
+command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
+    #partial switch kind {
+    case .Wait_Event, .Wait_State, .Wait_Terminal_Contains, .Type_Text,
+        .Type_Library_Name, .Key, .Set_View_Content, .Set_Library_Search,
+        .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
+        .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
+        .Favorite_Control, .Library_Placement:
+        return true
+    case:
+        return false
+    }
 }
 
 //   Select one nonempty text-bearing raw command field.
@@ -919,6 +924,14 @@ raw_favorites_command_select :: proc(raw: Raw_Command, command: ^Command) -> int
     return selected
 }
 
+// Select populated Terminal or Library name typing fields.
+raw_typing_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
+    selected := raw_text_command_select(raw.type_text, .Type_Text, command)
+    selected += raw_text_command_select(
+        raw.type_library_name, .Type_Library_Name, command)
+    return selected
+}
+
 // Select all populated fields, retaining exact-one-action validation.
 raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected := 0
@@ -927,7 +940,7 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
         raw.select_animation, .Select_Animation, command)
     selected += raw_text_command_select(
         raw.inject_reload_failure, .Inject_Reload_Failure, command)
-    selected += raw_text_command_select(raw.type_text, .Type_Text, command)
+    selected += raw_typing_command_select(raw, command)
     selected += raw_text_command_select(
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
@@ -1130,7 +1143,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
-         .Type_Text, .Key,
+         .Type_Text, .Type_Library_Name, .Key,
          .Pause_Simulation, .Resume_Simulation,
          .Pause_Animation, .Resume_Animation,
          .Set_Library_Search,

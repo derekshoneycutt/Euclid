@@ -67,8 +67,10 @@ settings_save_collection_mutation :: proc(
         return .Invalid_Entry
     }
     runtime := &state^.preferences_runtime
-    staged := runtime^.collections_state
-    mutation_error := collections.apply_mutation(&staged, mutation)
+    staged := new(collections.Set, context.temp_allocator)
+    defer free(staged, context.temp_allocator)
+    staged^ = runtime^.collections_state
+    mutation_error := collections.apply_mutation(staged, mutation)
     if mutation_error != .None {
         return mutation_error
     }
@@ -81,7 +83,12 @@ settings_save_collection_mutation :: proc(
             collections.MUTATION_CAPACITY {
         return .Capacity
     }
-    runtime^.collections_state = staged
+    runtime^.collections_state = staged^
+    if mutation.kind == .Remove_Favorite &&
+        state^.ui_runtime.library.entry_name.active &&
+        state^.ui_runtime.library.entry_name.entry_id == mutation.entry_id {
+        state^.ui_runtime.library.entry_name = {}
+    }
     runtime^.collection_revision += 1
     if runtime^.settings_store != nil {
         runtime^.collection_mutations[runtime^.collection_mutation_count] = mutation

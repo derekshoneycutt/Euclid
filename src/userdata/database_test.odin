@@ -496,11 +496,12 @@ userdata_combined_commit_is_atomic_for_settings_and_collections :: proc(t: ^test
     testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
         Store_Error_Kind.None)
     testing.expect(t, !preferences.rendering.vsync)
-    snapshot: collections.Set
-    testing.expect_value(t, store_load_collections(&store, &snapshot).kind,
+    snapshot := new(collections.Set, context.allocator)
+    defer free(snapshot, context.allocator)
+    testing.expect_value(t, store_load_collections(&store, snapshot).kind,
         Store_Error_Kind.None)
-    testing.expect_value(t, snapshot.entry_count, 1)
-    testing.expect_value(t, snapshot.entries[0].id, add_mutation.entry_id)
+    testing.expect_value(t, snapshot^.entry_count, 1)
+    testing.expect_value(t, snapshot^.entries[0].id, add_mutation.entry_id)
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
 }
 
@@ -553,10 +554,11 @@ userdata_test_seed_favorites :: proc(
 // Verify a rejected transaction preserved saved order and preferences.
 userdata_test_expect_failed_reorder_unchanged :: proc(
     t: ^testing.T, store: ^Store, additions: [3]collections.Mutation) {
-    snapshot: collections.Set
-    testing.expect_value(t, store_load_collections(store, &snapshot).kind,
+    snapshot := new(collections.Set, context.allocator)
+    defer free(snapshot, context.allocator)
+    testing.expect_value(t, store_load_collections(store, snapshot).kind,
         Store_Error_Kind.None)
-    userdata_test_expect_favorites_order(t, &snapshot,
+    userdata_test_expect_favorites_order(t, snapshot,
         []uuid.Identifier{
             additions[0].entry_id, additions[1].entry_id, additions[2].entry_id,
         },
@@ -657,16 +659,168 @@ userdata_collection_mutation_moves_round_trip_after_reopen :: proc(
 
     testing.expect_value(t,
         store_open(&store, fixture.path).kind, Store_Error_Kind.None)
-    reopened: collections.Set
-    testing.expect_value(t, store_load_collections(&store, &reopened).kind,
+    reopened := new(collections.Set, context.allocator)
+    defer free(reopened, context.allocator)
+    testing.expect_value(t, store_load_collections(&store, reopened).kind,
         Store_Error_Kind.None)
-    userdata_test_expect_favorites_order(t, &reopened,
+    userdata_test_expect_favorites_order(t, reopened,
         []uuid.Identifier{c.entry_id, a.entry_id, d.entry_id},
         []uuid.Identifier{c.animation_id, a.animation_id, d.animation_id})
     preferences := settings.default_preferences()
     testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
         Store_Error_Kind.None)
     testing.expect(t, !preferences.rendering.vsync)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Open a test database and add one Favorites placement for entry-name persistence tests.
+userdata_test_open_favorites_entry :: proc(
+    t: ^testing.T, store: ^Store, path: string, entry_id: uuid.Identifier) {
+    testing.expect_value(t, store_open(store, path).kind, Store_Error_Kind.None)
+    add := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = entry_id,
+        animation_id = userdata_test_id(82),
+    }
+    testing.expect_value(t,
+        store_commit_user_data(store, {}, []collections.Mutation{add}).outcome,
+        Commit_Outcome.Committed)
+}
+
+// Assert whether a persisted placement name is represented by SQL NULL.
+userdata_test_expect_entry_name_null :: proc(
+    t: ^testing.T, store: ^Store, expected_null: bool) {
+    stored_null, valid := userdata_test_integer_query(
+        &store^.connection,
+        "SELECT custom_name IS NULL FROM user_collection_entry "+
+        "WHERE entry_id=X'00000000000000000000000000000051'")
+    testing.expect(t, valid)
+    testing.expect_value(t, stored_null, i64(expected_null ? 1 : 0))
+}
+
+// Persist a maximum-length Unicode name across close and reopen.
+@(test)
+userdata_collection_entry_name_round_trip :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    entry_id := userdata_test_id(81)
+    store: Store
+    userdata_test_open_favorites_entry(t, &store, fixture.path, entry_id)
+    name_bytes: [collections.ENTRY_NAME_MAX_BYTES]u8
+    for index in 0..<254 {
+        name_bytes[index] = 'x'
+    }
+    name_bytes[254] = 0xc3
+    name_bytes[255] = 0xa9
+    name := string(name_bytes[:])
+    set_name, name_error := collections.make_entry_name_mutation(entry_id, name)
+    testing.expect_value(t, name_error, collections.Mutation_Error.None)
+    testing.expect_value(t,
+        store_commit_user_data(&store, {}, []collections.Mutation{set_name}).outcome,
+        Commit_Outcome.Committed)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    loaded := new(collections.Set, context.allocator)
+    defer free(loaded, context.allocator)
+    testing.expect_value(t, store_load_collections(&store, loaded).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, loaded^.entries[0].id, entry_id)
+    testing.expect_value(t, loaded^.entries[0].custom_name_length,
+        collections.ENTRY_NAME_MAX_BYTES)
+    testing.expect_value(t, string(loaded^.entries[0].custom_name[:]), name)
+    userdata_test_expect_entry_name_null(t, &store, false)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Clear a persisted placement name and verify SQL stores absence as NULL.
+@(test)
+userdata_collection_entry_name_clear_stores_null :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    entry_id := userdata_test_id(81)
+    store: Store
+    userdata_test_open_favorites_entry(t, &store, fixture.path, entry_id)
+    set_name, _ := collections.make_entry_name_mutation(entry_id, "Custom")
+    testing.expect_value(t,
+        store_commit_user_data(&store, {}, []collections.Mutation{set_name}).outcome,
+        Commit_Outcome.Committed)
+    clear_name, clear_error := collections.make_entry_name_mutation(entry_id, "")
+    testing.expect_value(t, clear_error, collections.Mutation_Error.None)
+    testing.expect_value(t,
+        store_commit_user_data(&store, {}, []collections.Mutation{clear_name}).outcome,
+        Commit_Outcome.Committed)
+    loaded := new(collections.Set, context.allocator)
+    defer free(loaded, context.allocator)
+    testing.expect_value(t, store_load_collections(&store, loaded).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, loaded^.entries[0].custom_name_length, 0)
+    userdata_test_expect_entry_name_null(t, &store, true)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Reject malformed stored UTF-8 while preserving the validated snapshot boundary.
+@(test)
+userdata_collection_entry_name_rejects_invalid_stored_utf8 :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    store: Store
+    userdata_test_open_favorites_entry(
+        t, &store, fixture.path, userdata_test_id(81))
+    loaded := new(collections.Set, context.allocator)
+    defer free(loaded, context.allocator)
+    testing.expect_value(t, store_exec(&store,
+        "UPDATE user_collection_entry SET custom_name=CAST(X'FF' AS TEXT) "+
+        "WHERE entry_id=X'00000000000000000000000000000051'").result,
+        raw.Result.Ok)
+    testing.expect_value(t, store_load_collections(&store, loaded).kind,
+        Store_Error_Kind.Read)
+    testing.expect_value(t, store_exec(&store,
+        "UPDATE user_collection_entry SET custom_name=NULL "+
+        "WHERE entry_id=X'00000000000000000000000000000051'").result,
+        raw.Result.Ok)
+    testing.expect_value(t, store_load_collections(&store, loaded).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Roll back every operation when a later mutation in the same batch is invalid.
+@(test)
+userdata_collection_entry_name_batch_rolls_back_atomically :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    entry_id := userdata_test_id(81)
+    store: Store
+    userdata_test_open_favorites_entry(t, &store, fixture.path, entry_id)
+    set_name, _ := collections.make_entry_name_mutation(entry_id, "Custom")
+    invalid := collections.Mutation{
+        kind = .Remove_Favorite,
+        entry_id = userdata_test_id(99),
+    }
+    rollback := store_commit_user_data(
+        &store, {}, []collections.Mutation{set_name, invalid})
+    testing.expect_value(t, rollback.outcome, Commit_Outcome.Not_Committed)
+    loaded := new(collections.Set, context.allocator)
+    defer free(loaded, context.allocator)
+    testing.expect_value(t, store_load_collections(&store, loaded).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, loaded^.entries[0].custom_name_length, 0)
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
 }
 
@@ -828,14 +982,15 @@ userdata_v1_migration_preserves_settings_and_seeds_favorites :: proc(t: ^testing
 
     store: Store
     testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
-    snapshot: collections.Set
-    testing.expect_value(t, store_load_collections(&store, &snapshot).kind,
+    snapshot := new(collections.Set, context.allocator)
+    defer free(snapshot, context.allocator)
+    testing.expect_value(t, store_load_collections(&store, snapshot).kind,
         Store_Error_Kind.None)
-    testing.expect_value(t, snapshot.collection_count, 1)
-    testing.expect_value(t, snapshot.collections[0].role, collections.Role.Favorites)
+    testing.expect_value(t, snapshot^.collection_count, 1)
+    testing.expect_value(t, snapshot^.collections[0].role, collections.Role.Favorites)
     testing.expect_value(t,
-        snapshot.collections[0].id, collections.FAVORITES_COLLECTION_ID)
-    testing.expect(t, !snapshot.collections[0].is_read_only)
+        snapshot^.collections[0].id, collections.FAVORITES_COLLECTION_ID)
+    testing.expect(t, !snapshot^.collections[0].is_read_only)
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
 
     inspect: sqlite.Connection
@@ -915,10 +1070,10 @@ userdata_failed_v1_migration_rolls_back_schema_and_version :: proc(t: ^testing.T
 }
 
 // Build a bounded persistence fixture with Favorites and a nested read-only group.
-userdata_test_collection_snapshot :: proc() -> collections.Set {
-    snapshot: collections.Set
-    userdata_test_collection_records(&snapshot)
-    userdata_test_collection_entries(&snapshot)
+userdata_test_collection_snapshot :: proc() -> ^collections.Set {
+    snapshot := new(collections.Set, context.allocator)
+    userdata_test_collection_records(snapshot)
+    userdata_test_collection_entries(snapshot)
     return snapshot
 }
 
@@ -981,11 +1136,20 @@ userdata_test_save_and_reopen :: proc(
     userdata_expect_constraint(t, &store,
         "INSERT INTO user_collection_entry VALUES (" +
         "X'00000000000000000000000000000099', " +
-        "X'00000000000000000000000000000098', NULL, 0, 'group', NULL)")
+        "X'00000000000000000000000000000098', NULL, 0, 'group', NULL, NULL)")
     userdata_expect_constraint(t, &store,
         "UPDATE user_collection SET is_read_only=1 WHERE system_role='favorites'")
     testing.expect_value(t, store_replace_collections(&store, snapshot).kind,
         Store_Error_Kind.None)
+    userdata_expect_constraint(t, &store,
+        "UPDATE user_collection_entry SET custom_name='' "+
+        "WHERE entry_id=X'0000000000000000000000000000002D'")
+    userdata_expect_constraint(t, &store,
+        "UPDATE user_collection_entry SET custom_name=printf('%0257d', 0) "+
+        "WHERE entry_id=X'0000000000000000000000000000002D'")
+    userdata_expect_constraint(t, &store,
+        "UPDATE user_collection_entry SET custom_name='a'||char(0)||'b' "+
+        "WHERE entry_id=X'0000000000000000000000000000002D'")
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
     testing.expect_value(t, store_open(reopened, path).kind, Store_Error_Kind.None)
 }
@@ -1019,13 +1183,15 @@ userdata_collection_snapshot_round_trips_after_reopen :: proc(t: ^testing.T) {
     }
     defer os.remove_all(fixture.directory)
     snapshot := userdata_test_collection_snapshot()
+    defer free(snapshot, context.allocator)
     root_id := userdata_test_id(42)
     animation_id := userdata_test_id(44)
     reopened: Store
-    userdata_test_save_and_reopen(t, fixture.path, &snapshot, &reopened)
-    loaded: collections.Set
-    testing.expect_value(t, store_load_collections(&reopened, &loaded).kind,
+    userdata_test_save_and_reopen(t, fixture.path, snapshot, &reopened)
+    loaded := new(collections.Set, context.allocator)
+    defer free(loaded, context.allocator)
+    testing.expect_value(t, store_load_collections(&reopened, loaded).kind,
         Store_Error_Kind.None)
-    userdata_test_expect_collection_snapshot(t, &loaded, root_id, animation_id)
+    userdata_test_expect_collection_snapshot(t, loaded, root_id, animation_id)
     testing.expect_value(t, store_close(&reopened).kind, Store_Error_Kind.None)
 }

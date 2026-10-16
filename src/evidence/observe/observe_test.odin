@@ -82,21 +82,23 @@ observe_test_independent_capture_owner :: proc(t: ^testing.T) {
 // Verify persistence evidence is copied from its owner even without a UI projection.
 @(test)
 observe_test_independent_persistence_owner :: proc(t: ^testing.T) {
-    runtime := preferencesmodel.Settings_Save_Runtime{
+    runtime := new(preferencesmodel.Settings_Save_Runtime, context.allocator)
+    defer free(runtime, context.allocator)
+    runtime^ = preferencesmodel.Settings_Save_Runtime{
         settings_pending = {count = 2},
         settings_save_active = true,
         settings_save_commit_count = 3,
         settings_save_failure_count = 4,
         settings_save_owner_execution_count = 5,
     }
-    source := Display_Source{preferences_runtime = &runtime}
+    source := Display_Source{preferences_runtime = runtime}
     result := display(&source)
     testing.expect(t, result.settings_save_active)
     testing.expect_value(t, result.settings_pending_count, 2)
     testing.expect_value(t, result.settings_save_commit_count, u64(3))
     testing.expect_value(t, result.settings_save_failure_count, u64(4))
     testing.expect_value(t, result.settings_save_owner_execution_count, u64(5))
-    testing.expect_value(t, runtime.settings_pending.count, 2)
+    testing.expect_value(t, runtime^.settings_pending.count, 2)
 }
 
 // Verify the display copies only initialized branch motion and retained visual geometry.
