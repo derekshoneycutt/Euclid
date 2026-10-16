@@ -22,6 +22,7 @@ Tooltip_Offer :: struct {
     owner: viewmodel.Ui_Node_Id,
     source: viewmodel.Ui_Tooltip_Source,
     anchor: geometry.Rectangle,
+    prefer_above: bool,
     text: string,
 }
 
@@ -59,6 +60,7 @@ tooltip_offer :: proc(tooltip: ^viewmodel.Ui_Tooltip_State, offer: Tooltip_Offer
     tooltip^.offer.owner = offer.owner
     tooltip^.offer.source = offer.source
     tooltip^.offer.anchor = geometry.Rectangle(offer.anchor)
+    tooltip^.offer.prefer_above = offer.prefer_above
     tooltip_copy_text(&tooltip^.offer, offer.text)
 }
 
@@ -138,11 +140,10 @@ tooltip_frame_resolve :: proc(
     }
 }
 
-// tooltip_place positions a tooltip below its anchor, flipping above and clamping
-// so the result stays inside the window margins whenever it fits.
+// tooltip_place positions a tooltip relative to its anchor and clamps to window margins.
 tooltip_place :: proc(
     anchor: geometry.Rectangle, size: geometry.Vector2,
-    window: geometry.Rectangle) -> geometry.Rectangle {
+    window: geometry.Rectangle, prefer_above: bool = false) -> geometry.Rectangle {
     left_limit := window.x + TOOLTIP_WINDOW_MARGIN
     right_limit := window.x + window.width - TOOLTIP_WINDOW_MARGIN - size.x
     x := anchor.x + (anchor.width - size.x) * 0.5
@@ -152,7 +153,11 @@ tooltip_place :: proc(
     below := anchor.y + anchor.height + TOOLTIP_ANCHOR_GAP
     above := anchor.y - TOOLTIP_ANCHOR_GAP - size.y
     y := below
-    if below + size.y > bottom_limit {
+    if prefer_above && above >= top_limit {
+        y = above
+    } else if prefer_above && below + size.y <= bottom_limit {
+        y = below
+    } else if below + size.y > bottom_limit || (prefer_above && above < top_limit) {
         y = above
         if above < top_limit {
             room_below := bottom_limit - below
@@ -181,7 +186,8 @@ draw_encoded_tooltip :: proc(
     window := state^.ui_runtime.layout.window
     box := tooltip_place(geometry.Rectangle(tooltip^.shown.anchor),
         {width + TOOLTIP_PADDING_X * 2, TOOLTIP_HEIGHT},
-        {0, 0, f32(window.width), f32(window.height)})
+        {0, 0, f32(window.width), f32(window.height)},
+        tooltip^.shown.prefer_above)
     draw_encoded_tooltip_panel(encoder, box)
     viewtext.draw_encoded_label(
         &state^.font_cache, encoder, text, box.x + TOOLTIP_PADDING_X,

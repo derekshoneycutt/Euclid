@@ -246,6 +246,7 @@ prepare_animation_control_button :: proc(
         source = uioverlay.tooltip_control_source(
             &runtime^.input, runtime^.semantic_focus, owner, descriptor.id),
         anchor = descriptor.rect,
+        prefer_above = true,
         text = descriptor.label,
     })
     return result

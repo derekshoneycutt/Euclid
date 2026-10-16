@@ -223,7 +223,7 @@ Final tasks:
   - [X] PIC dust particle physics
   - [X] FreeType/Harfbuzz font rendering
   - [X] Core expand/collapse animations
-  - [ ] UI Shadows
+  - [X] UI Shadows
   - [ ] Major view text animations
   - [ ] Extended overall look/feel animations
   - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)

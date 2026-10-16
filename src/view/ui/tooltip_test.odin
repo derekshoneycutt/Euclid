@@ -38,7 +38,8 @@ tooltip_test_frame :: proc(
     uioverlay.tooltip_frame_resolve(tooltip, resolved)
 }
 
-// Verify placement prefers below, flips above near the bottom, and clamps horizontally.
+// Verify default placement prefers below, flips above near the bottom, and
+// clamps horizontally.
 @(test)
 tooltip_place_prefers_below_and_flips_above :: proc(t: ^testing.T) {
     size := geometry.Vector2{80, 22}
@@ -54,6 +55,19 @@ tooltip_place_prefers_below_and_flips_above :: proc(t: ^testing.T) {
     testing.expect_value(t, right.x, f32(400) - uioverlay.TOOLTIP_WINDOW_MARGIN - 80)
 }
 
+// Verify above preference and the below fallback when the preferred side cannot fit.
+@(test)
+tooltip_place_prefers_above_with_fallback :: proc(t: ^testing.T) {
+    size := geometry.Vector2{80, 22}
+    above := uioverlay.tooltip_place(
+        {100, 100, 24, 24}, size, TOOLTIP_TEST_WINDOW, true)
+    testing.expect_value(t, above, geometry.Rectangle{72, 72, 80, 22})
+
+    below := uioverlay.tooltip_place(
+        {100, 10, 24, 24}, size, TOOLTIP_TEST_WINDOW, true)
+    testing.expect_value(t, below, geometry.Rectangle{72, 40, 80, 22})
+}
+
 // Verify an anchor with no room on either side clamps into the window margins.
 @(test)
 tooltip_place_clamps_when_neither_side_fits :: proc(t: ^testing.T) {
@@ -64,6 +78,24 @@ tooltip_place_clamps_when_neither_side_fits :: proc(t: ^testing.T) {
 
     oversized := uioverlay.tooltip_place({10, 10, 20, 20}, {500, 22}, window)
     testing.expect_value(t, oversized.x, uioverlay.TOOLTIP_WINDOW_MARGIN)
+}
+
+// Verify preferred-side placement remains inside the window when neither side fits.
+@(test)
+tooltip_place_clamps_preferred_side_when_neither_fits :: proc(t: ^testing.T) {
+    window := geometry.Rectangle{0, 0, 200, 60}
+    box := uioverlay.tooltip_place({10, 10, 20, 40}, {40, 22}, window, true)
+    testing.expect_value(t, box.y, f32(34))
+}
+
+// Verify placement preference is preserved from the current offer to the shown tooltip.
+@(test)
+tooltip_offer_preserves_placement_preference :: proc(t: ^testing.T) {
+    tooltip: viewmodel.Ui_Tooltip_State
+    offer := tooltip_test_offer(1, .Keyboard)
+    offer.prefer_above = true
+    tooltip_test_frame(&tooltip, offer, 1.0)
+    testing.expect(t, tooltip.shown.prefer_above)
 }
 
 // Tooltip chrome uses the shared high shadow without changing its box or clipping.

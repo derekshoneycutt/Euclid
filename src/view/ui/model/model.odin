@@ -494,6 +494,7 @@ Ui_Tooltip_Content :: struct {
     owner: Ui_Node_Id,
     source: Ui_Tooltip_Source,
     anchor: geometry.Rectangle,
+    prefer_above: bool,
     text: [UI_TOOLTIP_TEXT_CAPACITY]u8,
     text_length: int,
 }
