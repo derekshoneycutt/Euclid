@@ -13,6 +13,7 @@
 {"assert_focus":"animation_pause"}
 {"wait_state":"tooltip_visible","timeout_ms":5000}
 {"key":"tab"}
+{"key":"tab"}
 {"assert_focus":"accordion_library"}
 {"wait_state":"tooltip_hidden","timeout_ms":5000}
 {"assert_no_bad_frees":true}

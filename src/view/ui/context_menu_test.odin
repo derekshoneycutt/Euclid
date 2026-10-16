@@ -12,6 +12,8 @@ import uipresentation "presentation"
 import uioverlay "overlay"
 import uiterminal "terminal"
 import uiwidgets "widgets"
+import native "../native"
+import theme "theme"
 
 // context_menu_test_state supplies owned localization and bounded semantic storage.
 context_menu_test_state :: proc(t: ^testing.T) -> ^core.Euclid_General_State {
@@ -199,6 +201,32 @@ context_menu_placement_and_opening_chords :: proc(t: ^testing.T) {
             {kind = .Press, key = .F10, modifiers = {.Shift}}))
     testing.expect(t, !uioverlay.context_menu_opening_key({kind = .Press, key = .F10}))
     testing.expect(t, !uioverlay.context_menu_opening_key({kind = .Repeat, key = .Menu}))
+}
+
+// The high shadow remains outside the menu content scissor and restores the stack.
+@(test)
+context_menu_shadow_precedes_content_scissor :: proc(t: ^testing.T) {
+    state := context_menu_test_state(t)
+    defer context_menu_test_destroy(state)
+    state^.ui_runtime.context_menu.count = 0
+    vertices: [64]native.Draw_Vertex
+    indices: [256]u32
+    batches: [4]native.Draw_Batch
+    commands: [4]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {640, 400}, {640, 400}))
+
+    uioverlay.draw_encoded_context_menu(state, &encoder)
+    testing.expect_value(t, encoder.scissor_count, 1)
+    testing.expect_value(t, encoder.statistics.scissor_overflows, u32(0))
+    testing.expect_value(t, batches[0].scissor,
+        native.Draw_Scissor{0, 0, 640, 400})
+    testing.expect_value(t, batches[1].scissor,
+        native.Draw_Scissor{120, 120, 160, 72})
+    testing.expect_value(t, vertices[20].color,
+        theme.UI_COMPONENT_BACKGROUND_COLOR)
 }
 
 // Verify bounded descriptor admission rejects overflow without changing existing rows.

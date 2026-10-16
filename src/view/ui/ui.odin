@@ -41,6 +41,10 @@ draw_encoded_panel_geometry :: proc(
         regions.world_rect.x + regions.world_rect.width, 0,
         f32(window.width) - regions.world_rect.width, f32(window.height),
     }, theme.UI_BACK_COLOR)
+    if state^.julia_interface != nil {
+        _ = uiwidgets.surface_shadow_draw(
+            encoder, geometry.Rectangle(regions.text_rect), .Low)
+    }
     uipresentation.draw_encoded_presentation_geometry(
         state, encoder, regions.text_rect)
     draw_encoded_accordion_geometry(state, encoder, controls)
@@ -115,6 +119,8 @@ draw_encoded_accordion_geometry :: proc(
     controls: ^Ui_Control_Preparation) {
     runtime := &state^.ui_runtime
     panel := runtime^.layout.ui_regions.accordion_rect
+    _ = uiwidgets.surface_shadow_draw(
+        encoder, geometry.Rectangle(panel), .Low)
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(panel), worldmodel.BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(

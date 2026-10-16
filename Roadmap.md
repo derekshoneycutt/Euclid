@@ -226,6 +226,7 @@ Final tasks:
   - [ ] UI Shadows
   - [ ] Major view text animations
   - [ ] Extended overall look/feel animations
+  - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity

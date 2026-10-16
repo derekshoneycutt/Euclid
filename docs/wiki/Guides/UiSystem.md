@@ -11,6 +11,7 @@
 1. [Widgets: Shared Interaction Building Blocks](#widgets-shared-interaction-building-blocks)
 1. [How A Frame Becomes A UI](#how-a-frame-becomes-a-ui)
 1. [Layout And Panel Composition](#layout-and-panel-composition)
+    1. [Surface Elevation](#surface-elevation)
 1. [Input, Capture, And Focus](#input-capture-and-focus)
 1. [Choose A Route By Task](#choose-a-route-by-task)
 1. [Changing The UI](#changing-the-ui)
@@ -288,6 +289,17 @@ Useful layout entry points:
 When changing a region, follow all of its consumers. A split change can affect world
 projection, presentation wrapping, Terminal geometry, pointer routing, accessibility
 bounds, and the source area used for GIF capture.
+
+### Surface Elevation
+
+UI surface elevation is a shared visual policy: docked panels, floating animation
+controls, and transient overlays use low, medium, and high presets. The policy lives
+in [`theme/elevation.odin`](../../../src/view/ui/theme/elevation.odin); the UI adapter
+and bounded native mesh are owned by
+[`surface_shadow.odin`](../../../src/view/ui/widgets/surface_shadow.odin) and
+[`draw_shadow.odin`](../../../src/view/native/draw_shadow.odin). Apply a shadow at the
+owning container's draw site immediately before its surface; shadows do not change
+layout, clipping, or hit geometry.
 
 ## Input, Capture, And Focus
 

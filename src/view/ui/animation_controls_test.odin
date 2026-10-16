@@ -235,9 +235,77 @@ animation_controls_draw_separate_matching_panels :: proc(t: ^testing.T) {
             }
         }
         testing.expect_value(t, panels, int(8 if eligible else 4))
-        testing.expect_value(t, vertices[0].position,
-            geometry.Vector2{prepared.slots.panel.x, prepared.slots.panel.y})
+        testing.expect_value(t,
+            animation_controls_shadow_vertex_count(vertices[:encoder.vertex_count]),
+            int(40 if eligible else 20))
+        testing.expect(t, animation_controls_shadow_origin_present(
+            vertices[:encoder.vertex_count], prepared.slots.panel))
+        testing.expect_value(t, animation_controls_shadow_origin_present(
+            vertices[:encoder.vertex_count], prepared.slots.favorite_panel), eligible)
     }
+}
+
+// animation_controls_shadow_vertex_count counts vertices owned by shadow tint.
+animation_controls_shadow_vertex_count :: proc(vertices: []native.Draw_Vertex) -> int {
+    count := 0
+    for vertex in vertices {
+        if vertex.color[0] == theme.UI_SHADOW_TINT[0] &&
+            vertex.color[1] == theme.UI_SHADOW_TINT[1] &&
+            vertex.color[2] == theme.UI_SHADOW_TINT[2] {
+            count += 1
+        }
+    }
+    return count
+}
+
+// animation_controls_shadow_origin_present locates the shadow's contact ring.
+animation_controls_shadow_origin_present :: proc(
+    vertices: []native.Draw_Vertex, panel: geometry.Rectangle) -> bool {
+    origin := geometry.Vector2{panel.x, panel.y}
+    for vertex in vertices {
+        if vertex.color[0] == theme.UI_SHADOW_TINT[0] &&
+            vertex.color[1] == theme.UI_SHADOW_TINT[1] &&
+            vertex.color[2] == theme.UI_SHADOW_TINT[2] &&
+            vertex.color[3] == 0 &&
+            vertex.position == origin {
+            return true
+        }
+    }
+    return false
+}
+
+// Hidden controls and Favorites do not publish their backing shadows.
+@(test)
+animation_controls_shadows_follow_independent_visibility :: proc(t: ^testing.T) {
+    ji: bridgemodel.Euclid_Julia_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    state, store := animation_controls_test_state(t, &ji, &animation)
+    defer {
+        free(store, context.allocator)
+        destroy_shell_test_state(state)
+    }
+    vertices: [1024]native.Draw_Vertex
+    indices: [2048]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    prepared := uianimation.prepare_animation_controls(state, {})
+
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {640, 480}, {640, 480}))
+    prepared.visible = false
+    uianimation.draw_encoded_animation_controls(state, &encoder, prepared)
+    testing.expect_value(t, encoder.vertex_count, 0)
+
+    prepared = uianimation.prepare_animation_controls(state, {})
+    prepared.favorite_visible = false
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {640, 480}, {640, 480}))
+    uianimation.draw_encoded_animation_controls(state, &encoder, prepared)
+    testing.expect_value(t,
+        animation_controls_shadow_vertex_count(vertices[:encoder.vertex_count]), 20)
 }
 
 // Rounded hover backing stays inside the existing control hit rectangle.

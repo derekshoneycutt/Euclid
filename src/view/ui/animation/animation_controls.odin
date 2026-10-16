@@ -584,6 +584,7 @@ draw_encoded_animation_control_backing :: proc(
 // Draw matching background and border chrome for either animation-control group.
 draw_encoded_animation_control_panel :: proc(
     encoder: ^native.Draw_Encoder, panel: geometry.Rectangle) {
+    _ = uiwidgets.surface_shadow_draw(encoder, panel, .Medium)
     _ = native.draw_encoder_rectangle(encoder, panel, theme.UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(encoder, panel, 1, theme.UI_BORDER_COLOR)
 }

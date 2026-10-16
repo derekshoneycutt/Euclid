@@ -564,6 +564,7 @@ draw_encoded_context_menu :: proc(
     if !menu^.active {
         return
     }
+    _ = uiwidgets.surface_shadow_draw(encoder, menu^.bounds, .High)
     _ = native.draw_encoder_push_scissor(encoder, menu^.bounds)
     _ = native.draw_encoder_rectangle(
         encoder, menu^.bounds, theme.UI_COMPONENT_BACKGROUND_COLOR)

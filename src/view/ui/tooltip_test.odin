@@ -5,6 +5,8 @@ import geometry "../../core/geometry"
 import testing "core:testing"
 import viewmodel "model"
 import uioverlay "overlay"
+import native "../native"
+import theme "theme"
 
 TOOLTIP_TEST_WINDOW :: geometry.Rectangle{0, 0, 400, 300}
 
@@ -62,6 +64,31 @@ tooltip_place_clamps_when_neither_side_fits :: proc(t: ^testing.T) {
 
     oversized := uioverlay.tooltip_place({10, 10, 20, 20}, {500, 22}, window)
     testing.expect_value(t, oversized.x, uioverlay.TOOLTIP_WINDOW_MARGIN)
+}
+
+// Tooltip chrome uses the shared high shadow without changing its box or clipping.
+@(test)
+tooltip_panel_shadow_preserves_bounds_and_scissor :: proc(t: ^testing.T) {
+    vertices: [64]native.Draw_Vertex
+    indices: [256]u32
+    batches: [4]native.Draw_Batch
+    commands: [4]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {400, 300}, {800, 600}))
+    box := uioverlay.tooltip_place({100, 100, 24, 24}, {80, 22},
+        TOOLTIP_TEST_WINDOW)
+
+    uioverlay.draw_encoded_tooltip_panel(&encoder, box)
+    testing.expect_value(t, vertices[20].position,
+        geometry.Vector2{box.x, box.y})
+    testing.expect_value(t, vertices[20].color,
+        theme.UI_COMPONENT_BACKGROUND_COLOR)
+    testing.expect_value(t, encoder.scissor_count, 1)
+    testing.expect_value(t, encoder.statistics.scissor_overflows, u32(0))
+    testing.expect_value(t, batches[0].scissor,
+        native.Draw_Scissor{0, 0, 800, 600})
 }
 
 // Verify bounded text storage never splits a UTF-8 codepoint.

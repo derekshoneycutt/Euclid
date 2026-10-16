@@ -8,6 +8,7 @@ import geometry "../../../core/geometry"
 import viewmodel "../model"
 import viewtext "../text"
 import theme "../theme"
+import uiwidgets "../widgets"
 
 TOOLTIP_HOVER_DELAY_SECONDS :: f64(0.5)
 TOOLTIP_WARM_SECONDS :: f64(0.35)
@@ -181,9 +182,16 @@ draw_encoded_tooltip :: proc(
     box := tooltip_place(geometry.Rectangle(tooltip^.shown.anchor),
         {width + TOOLTIP_PADDING_X * 2, TOOLTIP_HEIGHT},
         {0, 0, f32(window.width), f32(window.height)})
-    _ = native.draw_encoder_rectangle(encoder, box, theme.UI_COMPONENT_BACKGROUND_COLOR)
-    _ = native.draw_encoder_rectangle_outline(encoder, box, 1, theme.UI_BORDER_COLOR)
+    draw_encoded_tooltip_panel(encoder, box)
     viewtext.draw_encoded_label(
         &state^.font_cache, encoder, text, box.x + TOOLTIP_PADDING_X,
         box.y + (box.height - theme.TREE_FONT_SIZE) * 0.5)
+}
+
+// draw_encoded_tooltip_panel places high elevation beneath unchanged box chrome.
+draw_encoded_tooltip_panel :: proc(
+    encoder: ^native.Draw_Encoder, box: geometry.Rectangle) {
+    _ = uiwidgets.surface_shadow_draw(encoder, box, .High)
+    _ = native.draw_encoder_rectangle(encoder, box, theme.UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(encoder, box, 1, theme.UI_BORDER_COLOR)
 }

@@ -28,6 +28,7 @@ import uilibrary "library"
 import uiterminal "terminal"
 import uisplitter "layout/splitter"
 import uipresentation "presentation"
+import native "../native"
 
 // make_baseline_layout_state builds only the default landscape layout component.
 make_baseline_layout_state :: proc() -> viewmodel.Ui_Layout_State {
@@ -39,6 +40,149 @@ make_baseline_layout_state :: proc() -> viewmodel.Ui_Layout_State {
             .Landscape, viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT,
             worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT),
     }
+}
+
+// ui_test_shadow_vertex_count counts vertices emitted by the shared shadow tint.
+ui_test_shadow_vertex_count :: proc(vertices: []native.Draw_Vertex) -> int {
+    count := 0
+    for vertex in vertices {
+        if vertex.color[0] == theme.UI_SHADOW_TINT[0] &&
+            vertex.color[1] == theme.UI_SHADOW_TINT[1] &&
+            vertex.color[2] == theme.UI_SHADOW_TINT[2] {
+            count += 1
+        }
+    }
+    return count
+}
+
+// ui_test_shadow_origin_present locates a panel's zero-alpha contact origin.
+ui_test_shadow_origin_present :: proc(
+    vertices: []native.Draw_Vertex, panel: geometry.Rectangle) -> bool {
+    origin := geometry.Vector2{panel.x, panel.y}
+    for vertex in vertices {
+        if vertex.color[0] == theme.UI_SHADOW_TINT[0] &&
+            vertex.color[1] == theme.UI_SHADOW_TINT[1] &&
+            vertex.color[2] == theme.UI_SHADOW_TINT[2] &&
+            vertex.color[3] == 0 &&
+            vertex.position == origin {
+            return true
+        }
+    }
+    return false
+}
+
+// Verify logical elevation presets increase together and low support fits gutters.
+@(test)
+ui_shadow_presets_form_ordered_family_with_bounded_low_support :: proc(
+    t: ^testing.T) {
+    low := theme.UI_ELEVATION_LOW
+    medium := theme.UI_ELEVATION_MEDIUM
+    high := theme.UI_ELEVATION_HIGH
+    low_distance := low.cast_offset.x * low.cast_offset.x +
+        low.cast_offset.y * low.cast_offset.y
+    medium_distance := medium.cast_offset.x * medium.cast_offset.x +
+        medium.cast_offset.y * medium.cast_offset.y
+    high_distance := high.cast_offset.x * high.cast_offset.x +
+        high.cast_offset.y * high.cast_offset.y
+    testing.expect(t, low_distance < medium_distance)
+    testing.expect(t, medium_distance < high_distance)
+    testing.expect(t, low.feather < medium.feather)
+    testing.expect(t, medium.feather < high.feather)
+    low_outer_expansion := low.feather +
+        min(low.contact_offset.x, low.contact_offset.y) * 0.5
+    testing.expect(t,
+        low.cast_offset.x + low_outer_expansion <= theme.TREE_PANEL_PADDING)
+    testing.expect(t,
+        low.cast_offset.y + low_outer_expansion <= theme.TREE_PANEL_PADDING)
+}
+
+// Verify shadow vertices remain logical pixels while physical scissors scale.
+@(test)
+ui_shadow_geometry_uses_logical_pixels_at_multiple_scales :: proc(t: ^testing.T) {
+    vertices: [64]native.Draw_Vertex
+    indices: [256]u32
+    batches: [2]native.Draw_Batch
+    commands: [2]native.Draw_Command
+    encoder: native.Draw_Encoder
+    physical_extents := [2][2]u32{{100, 100}, {200, 200}}
+    expected_scissors := [2]native.Draw_Scissor{
+        {1, 2, 11, 12}, {2, 4, 22, 24},
+    }
+    logical_positions: [native.DRAW_SHADOW_VERTEX_COUNT]geometry.Vector2
+    for physical_extent, scale_index in physical_extents {
+        testing.expect(t, native.draw_encoder_begin(&encoder,
+            {vertices[:], indices[:], batches[:], commands[:], nil},
+            {100, 100}, physical_extent))
+        testing.expect(t, native.draw_encoder_push_scissor(
+            &encoder, {1.25, 2.25, 10.5, 11.5}))
+        testing.expect(t, uiwidgets.surface_shadow_draw(
+            &encoder, {10.25, 20.5, 30.5, 18.25}, .Low))
+        testing.expect_value(t, encoder.vertex_count, native.DRAW_SHADOW_VERTEX_COUNT)
+        testing.expect_value(t, encoder.index_count, native.DRAW_SHADOW_INDEX_COUNT)
+        testing.expect_value(t, batches[0].scissor, expected_scissors[scale_index])
+        for vertex, index in vertices[:encoder.vertex_count] {
+            if scale_index == 0 {
+                logical_positions[index] = vertex.position
+            } else {
+                testing.expect_value(t, vertex.position, logical_positions[index])
+            }
+        }
+        testing.expect(t, native.draw_encoder_pop_scissor(&encoder))
+        testing.expect_value(t, encoder.scissor_count, 1)
+    }
+}
+
+// ui_test_docked_shadow_mode verifies each layout's intended shadow owners.
+ui_test_docked_shadow_mode :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    mode: viewmodel.Ui_Layout_Mode) {
+    controls: Ui_Control_Preparation
+    vertices: [256]native.Draw_Vertex
+    indices: [512]u32
+    batches: [8]native.Draw_Batch
+    commands: [8]native.Draw_Command
+    encoder: native.Draw_Encoder
+    layout := state^.ui_runtime.layout
+    layout.current_layout_mode = mode
+    layout.ui_regions = uiregions.compute_ui_regions(
+        mode, f32(layout.window.width), f32(layout.window.height), 640, 360)
+    state^.ui_runtime.layout = layout
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {f32(layout.window.width), f32(layout.window.height)},
+        {u32(layout.window.width), u32(layout.window.height)}))
+    draw_encoded_panel_geometry(state, &encoder, &controls)
+    regions := layout.ui_regions
+    shadow_count := 20
+    separate_surface_visible := mode == .Landscape &&
+        state^.julia_interface != nil
+    if separate_surface_visible {
+        shadow_count = 40
+        testing.expect(t, ui_test_shadow_origin_present(
+            vertices[:encoder.vertex_count], regions.text_rect))
+    } else {
+        testing.expect(t, !ui_test_shadow_origin_present(
+            vertices[:encoder.vertex_count], regions.text_rect))
+    }
+    testing.expect_value(t,
+        ui_test_shadow_vertex_count(vertices[:encoder.vertex_count]), shadow_count)
+    testing.expect(t, ui_test_shadow_origin_present(
+        vertices[:encoder.vertex_count], regions.accordion_rect))
+    testing.expect_value(t, encoder.scissor_count, 1)
+}
+
+// Verify landscape adds one View shadow and both layouts elevate the accordion once.
+@(test)
+ui_docked_panel_shadows_match_surface_ownership :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    ji: bridgemodel.Euclid_Julia_Interface
+    state^.julia_interface = &ji
+    state^.ui_runtime.layout = make_baseline_layout_state()
+    ui_test_docked_shadow_mode(t, state, .Landscape)
+    ui_test_docked_shadow_mode(t, state, .Portrait)
+    state^.julia_interface = nil
+    ui_test_docked_shadow_mode(t, state, .Landscape)
 }
 
 // ui_test_update_splitters binds a composed fixture to the narrow splitter boundary.
