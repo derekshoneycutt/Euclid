@@ -280,6 +280,9 @@ Terminal_Prompt_Draw :: struct {
     position: geometry.Vector2,
     exclusions: Terminal_Prompt_Shape_Exclusions,
     theme: Terminal_Draw_Theme,
+    highlights: []protocol.Highlight_Run,
+    source_offset: int,
+    palette: ^termpalette.Terminal_Palette_State,
 }
 
 // Complete state for drawing one single-line prompt and its overlays.
@@ -339,6 +342,10 @@ Terminal_Prompt_Text_Draw :: struct {
     position: geometry.Vector2,
     exclusions: Terminal_Prompt_Shape_Exclusions,
     color: Color,
+    highlights: []protocol.Highlight_Run,
+    source_offset: int,
+    palette: ^termpalette.Terminal_Palette_State,
+    theme: Terminal_Draw_Theme,
 }
 
 // Complete state for one bounded shaped prompt span.

@@ -1,0 +1,29 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"α = \"Unicode é\";\nprintln(α, \" highlight-\" * \"accepted\") # Julia source"}
+{"wait_event":"terminal_live_highlight_published","timeout_ms":10000}
+{"screenshot":".build/terminal-highlighting-live.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"enter"}
+{"wait_event":"terminal_history_highlight_published","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"highlight-accepted","timeout_ms":10000}
+{"type":"println(\"live α\", 42) # still editable"}
+{"wait_event":"terminal_live_highlight_published","timeout_ms":10000}
+{"key":{"name":"left","shift":true}}
+{"key":{"name":"left","shift":true}}
+{"screenshot":".build/terminal-highlighting-history-selection.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"terminal_session_ready","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"println(\"new session\", 13)"}
+{"wait_event":"terminal_live_highlight_published","timeout_ms":10000}
+{"key":"enter"}
+{"wait_event":"terminal_history_highlight_published","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"new session13","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

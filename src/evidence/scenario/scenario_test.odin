@@ -8,6 +8,22 @@ import settings "../../settings"
 
 import "core:testing"
 
+// Highlight waits use the same additive vocabulary as recorded display publications.
+@(test)
+scenario_test_highlight_event_names :: proc(t: ^testing.T) {
+    names := [?]string{"terminal_live_highlight_published",
+        "terminal_history_highlight_published", "terminal_highlight_discarded",
+        "terminal_highlight_failed"}
+    kinds := [?]trace.Kind{.Terminal_Live_Highlight_Published,
+        .Terminal_History_Highlight_Published, .Terminal_Highlight_Discarded,
+        .Terminal_Highlight_Failed}
+    for name, index in names {
+        kind, ok := event_kind(name)
+        testing.expect(t, ok)
+        testing.expect_value(t, kind, kinds[index])
+    }
+}
+
 // Parse bounded Favorites actions while rejecting empty payloads and combined actions.
 @(test)
 scenario_favorites_actions_are_bounded :: proc(t: ^testing.T) {

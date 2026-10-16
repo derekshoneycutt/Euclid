@@ -236,6 +236,7 @@ terminal_service_dispatch_observation :: proc(
         if terminal_service_generation_matches(
             state, payload.animation_generation) {
             state^.terminal.julia_session_ready = false
+            terminalview.terminal_highlight_invalidate(&state^.terminal)
             return true
         }
     }
@@ -249,6 +250,7 @@ terminal_service_dispatch_egress :: proc(
     return terminal_tick_dispatch_egress(state, message) ||
         terminal_service_dispatch_evaluation(state, message) ||
         terminal_service_dispatch_completion_result(state, message) ||
+        terminal_highlight_dispatch(state, message) ||
         terminal_service_dispatch_input(state, message) ||
         terminal_service_dispatch_observation(state, message)
 }
@@ -337,6 +339,7 @@ terminal_service_update_visible :: proc(
     update.geometry_change = prepared.geometry_change
     terminal_service_apply_submission(state, update.submission)
     terminal_service_send_completion(state, update.completion)
+    terminal_highlight_service_update(state, prepared, frame.sample_time_seconds)
     _ = terminalview.terminal_publish_clipboard_actions(
         &state^.terminal, state^.terminal.output_producer,
         {write = terminal_service_write_clipboard})

@@ -28,6 +28,7 @@ Terminal_View_Position :: struct {
 Terminal_Graphics_Lifecycle_Proc :: proc(
     user_data: rawptr, pool: ^taskpool.Task_Pool)
 
+// TODO : This looks like hell lmfao, reconsider this struct or clean it up or something
 // Terminal_State owns the display-thread terminal runtime for one animation generation.
 Terminal_State :: struct {
     animation_generation: u64,
@@ -85,6 +86,7 @@ Terminal_State :: struct {
     completion_preview_end: int,
     completion_preview_storage: []u8,
     completion_preview_insertion: string,
+    highlighting: ^Terminal_Highlighting,
 }
 
 // Terminal_Tick_Publisher owns one generation-scoped bounded tick stream.

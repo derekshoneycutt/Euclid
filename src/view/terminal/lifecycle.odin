@@ -164,6 +164,11 @@ terminal_construct_candidate :: proc(
         terminal_rollback_init(term, history)
         return false
     }
+    if !terminal_highlight_init(term, allocator) {
+        terminal_output_destroy(term)
+        terminal_rollback_init(term, history)
+        return false
+    }
     return true
 }
 
@@ -517,6 +522,7 @@ terminal_destroy_semantics :: proc(term: ^viewterminalmodel.Terminal_State) {
     terminal_log_teardown(term)
     terminal_log_shell_index_teardown(term)
     terminal_log_clipboard_teardown(term)
+    terminal_highlight_destroy(term)
 
     if term.history != nil {
         termhist.termhist_destroy(term.history)
@@ -658,6 +664,7 @@ terminal_continue_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
         return
     }
 
+    terminal_highlight_remove_latest(term)
     terminal_restore_output_checkpoint(term)
     term.pending_eval_request_id = 0
     source := term.pending_eval_source
@@ -888,6 +895,7 @@ terminal_update :: proc(
         term, request.frame, request.font, request.bounds)
     terminal_update_clipboard_copy(term, request.frame, focused)
     completion := terminal_apply_keyboard_update(term, keyboard, request.now)
+    terminal_highlight_observe_live(term, request.now)
     return {
         submission = keyboard.submission,
         completion = completion,
@@ -927,9 +935,14 @@ terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     }
     history_tag := terminal_history_tag_for_mode(term.input_mode)
 
+    terminal_highlight_begin_submission(term, text)
     terminal_append_submitted_input(term, text, prompt_style)
-    termhist.termhist_accept_current(
-        term.history, history_tag, term.collecting_continuation)
+    if termhist.termhist_accept_current(
+        term.history, history_tag, term.collecting_continuation) {
+        terminal_highlight_end_submission(term)
+    } else if term.highlighting != nil {
+        term.highlighting.recording = false
+    }
     return text
 }
 
@@ -937,6 +950,7 @@ terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
 terminal_append_submitted_line :: proc(
     term: ^viewterminalmodel.Terminal_State, prefix, line: string,
     prompt_style, input_style: termgrid.Cell_Style) {
+    terminal_highlight_record_line(term, line)
     termgrid.grid_set_style(&term.output_grid, prompt_style)
     termgrid.grid_write(&term.output_grid, prefix)
     termgrid.grid_set_style(&term.output_grid, input_style)

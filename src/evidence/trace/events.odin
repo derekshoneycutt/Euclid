@@ -57,6 +57,7 @@ Correlation_Kind :: enum u8 {
     Scenario_Action = 9,
     Text = 10,
     Attachment = 11,
+    Terminal_Highlight = 12,
 }
 
 // Stable semantic occurrence identifiers serialized by schema version.
@@ -146,6 +147,12 @@ Kind :: enum u16 {
     Animation_Frame_Presented = 375,
     Animation_Playback_Completed = 376,
     Library_Search_Committed = 377,
+    // Display-validated source publication: counts are source bytes and accepted runs.
+    Terminal_Live_Highlight_Published = 378,
+    Terminal_History_Highlight_Published = 379,
+    // Rejected publication or failed service outcome: request.reason identifies failure.
+    Terminal_Highlight_Discarded = 380,
+    Terminal_Highlight_Failed = 381,
 
     // Rich checkpoint storage (420-459).
     Checkpoint_Requested = 420,

@@ -157,7 +157,7 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
-  - [ ] Julia syntax highlighting
+  - [X] Julia syntax highlighting
   - [ ] History explorer Julia-REPL style
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
   - [ ] Improved input after full input system migration (IME, etc.)
@@ -205,22 +205,27 @@ General features:
 - [ ] Sharing custom collections
   - [ ] Export/import files
   - [ ] In-network (ip-2-ip) custom collection sharing
-- [ ] Full input system
+- [ ] Full input/accessibility system
   - [X] Comprehensive mouse/keyboard focus system
   - [X] Basic initial accesibility support
   - [ ] Additional accessibility support
 
 Final tasks:
 
+- [X] Generated Code Wiki
 - [X] Final optimizations
   - [X] Dedicated Julia thread for Julia module isolation
   - [X] Julia Actor Model infrastructure
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
+- [ ] Render polishes
   - [X] Shader-based particle drawing
   - [X] PIC dust particle physics
   - [X] FreeType/Harfbuzz font rendering
-- [X] Generated Code Wiki
+  - [X] Core expand/collapse animations
+  - [ ] UI Shadows
+  - [ ] Major view text animations
+  - [ ] Extended overall look/feel animations
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity

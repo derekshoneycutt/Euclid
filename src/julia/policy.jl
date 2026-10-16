@@ -27,6 +27,11 @@ export CancelTerminalSessionRequested, CompletionActorStopped
 export CompletionDuplicateRequest, CompletionFailed, CompletionFailureReason
 export CompletionInternalFailure, CompletionMailboxFull, CompletionRequested
 export CompletionResolved, CompletionRuntimeStopped, CompletionService
+export HighlightIdentity, HighlightRequested, HighlightResolved, HighlightFailed
+export HighlightFailureReason, HighlightMailboxFull, HighlightActorStopped
+export HighlightRuntimeStopped, HighlightInternalFailure, HighlightDuplicateRequest
+export HighlightInvalidRequest, HighlightService, HIGHLIGHT_MAILBOX_CAPACITY
+export highlight_request_key, valid_highlight_request
 export EngineCommandAccepted, EngineCommandCompleted, EngineCommandRejected
 export EngineDecisionDefaulted, EngineEventCommitted, EngineEventKind
 export EngineExternalFact, EvaluationCompleted, EvaluationExitRequested
@@ -69,6 +74,7 @@ include("policy/animation_program_actor.jl")
 include("policy/animation_supervisor.jl")
 include("policy/hotkey_controller.jl")
 include("policy/completion_service.jl")
+include("policy/highlighting_service.jl")
 include("policy/shell_interpolation_service.jl")
 include("policy/shell_session.jl")
 include("policy/terminal_process_service.jl")

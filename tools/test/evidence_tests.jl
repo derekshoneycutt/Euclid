@@ -78,6 +78,14 @@ end
     @test all(operation -> operation in payloads.assert_favorites.operations,
         ["same_placement", "actions_open", "actions_closed"])
     @test EuclidEvidence.EVENT_NAMES[UInt16(562)] == "settings_save_failed"
+    @test EuclidEvidence.CORRELATION_KIND_NAMES[UInt8(12)] == "terminal_highlight"
+    for (id, name) in (
+        (378, "terminal_live_highlight_published"),
+        (379, "terminal_history_highlight_published"),
+        (380, "terminal_highlight_discarded"), (381, "terminal_highlight_failed"))
+        @test EuclidEvidence.EVENT_NAMES[UInt16(id)] == name
+        @test name in EuclidEvidence.scenario_schema().events
+    end
 end
 
 @testset "evidence bundle inspection" begin

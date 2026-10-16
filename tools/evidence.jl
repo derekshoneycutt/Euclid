@@ -32,7 +32,7 @@ const CORRELATION_KIND_NAMES = Dict{UInt8,String}(
     0 => "none", 1 => "runtime_request", 2 => "animation",
     3 => "animation_tick", 4 => "scene_batch", 5 => "fixed_step",
     6 => "task", 7 => "capture", 8 => "checkpoint",
-    9 => "scenario_action", 10 => "text")
+    9 => "scenario_action", 10 => "text", 12 => "terminal_highlight")
 
 const EVENT_NAMES = Dict{UInt16,String}(
     0 => "unknown", 1 => "session_started", 2 => "session_configured",
@@ -64,6 +64,9 @@ const EVENT_NAMES = Dict{UInt16,String}(
     373 => "terminal_session_ready", 374 => "terminal_raster_published",
     375 => "animation_frame_presented", 376 => "animation_playback_completed",
     377 => "library_search_committed",
+    378 => "terminal_live_highlight_published",
+    379 => "terminal_history_highlight_published",
+    380 => "terminal_highlight_discarded", 381 => "terminal_highlight_failed",
     420 => "checkpoint_requested",
     421 => "checkpoint_stored", 422 => "checkpoint_unavailable",
     423 => "checkpoint_evicted", 460 => "scenario_started",
@@ -77,7 +80,7 @@ const EVENT_NAMES = Dict{UInt16,String}(
     562 => "settings_save_failed")
 
 const POINT_EVENT_KINDS = Set(UInt16[180, 181, 182])
-const REQUEST_EVENT_KINDS = Set(UInt16[65, 122, 123])
+const REQUEST_EVENT_KINDS = Set(UInt16[65, 122, 123, 380, 381])
 const HANDLE_EVENT_KINDS = Set(UInt16[421, 423])
 
 const SCENARIO_ACTIONS = [
@@ -114,6 +117,8 @@ const SCENARIO_EVENTS = [
     "constraint_solve_completed", "presentation_cleared",
     "presentation_superseded", "dynview_published",
     "library_search_committed",
+    "terminal_live_highlight_published", "terminal_history_highlight_published",
+    "terminal_highlight_discarded", "terminal_highlight_failed",
     "frame_presented",
     "capture_completed", "gif_completed", "checkpoint_stored",
     "runtime_shutdown_complete", "settings_save_submitted",

@@ -17,7 +17,7 @@ import "core:time"
 
 JULIA_REQUEST_CAPACITY :: 16
 JULIA_EVENT_CAPACITY :: 16
-JULIA_REQUEST_LINK_POOL_CAPACITY :: 64 * 1024
+JULIA_REQUEST_LINK_POOL_CAPACITY :: 256 * 1024
 JULIA_EVENT_LINK_POOL_CAPACITY :: 640 * 1024
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: 32
 HARNESS_SCENARIO_NAME_CAPACITY :: 256
@@ -235,6 +235,7 @@ Julia_Host_Ingress :: union {
     protocol.Terminal_Session_Closed,
     protocol.Evaluation_Requested,
     protocol.Completion_Requested,
+    protocol.Highlight_Requested,
     protocol.Terminal_Interactive_Input,
     protocol.Terminal_Geometry_Accepted,
     protocol.Terminal_Capabilities_Accepted,
@@ -256,6 +257,8 @@ Julia_Host_Egress :: union {
     protocol.Evaluation_Completed,
     protocol.Completion_Result,
     protocol.Completion_Failed,
+    protocol.Highlight_Result,
+    protocol.Highlight_Failed,
     protocol.Terminal_Input_Acquired,
     protocol.Terminal_Input_Released,
     protocol.Terminal_Geometry_Observed,

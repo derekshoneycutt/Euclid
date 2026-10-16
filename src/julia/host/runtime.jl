@@ -20,6 +20,7 @@ mutable struct HostSessionRuntime
     context_module::Module
     phase::HostSessionPhase
     completion_service::EuclidActorRuntime.ActorId
+    highlight_service::EuclidActorRuntime.ActorId
     evaluator::EuclidActorRuntime.ActorId
     shell_interpolation_service::EuclidActorRuntime.ActorId
     shell_session::EuclidActorRuntime.ActorId
@@ -46,6 +47,7 @@ mutable struct HostRuntime
     hotkey_controller::EuclidActorRuntime.ActorId
     session::HostSessionRuntime
     completion_function::Any
+    highlight_function::Any
     interpolation_function::Any
     completion_mailbox_capacity::Int
     logger::AbstractLogger
@@ -73,7 +75,7 @@ struct HostPumpStatus
 end
 
 const HOST_SESSION_PROPERTIES = (
-    :completion_service, :evaluator, :shell_interpolation_service,
+    :completion_service, :highlight_service, :evaluator, :shell_interpolation_service,
     :shell_session, :terminal_process_service, :tick_service,
     :terminal_container_service, :evaluator_state, :terminal_process_state,
     :tick_service_state, :terminal_container_state, :euclid_repl_runtime)
@@ -119,19 +121,32 @@ function bind_session_interpolation(interpolation_function, context_module::Modu
     return source -> evaluate_shell_interpolation(source; context_module)
 end
 
-"""Create every user-facing actor for one Julia session generation."""
-function create_host_session!(
-    actors::EuclidActorRuntime.ActorRuntime, state_ptr::Ptr{Cvoid},
-    generation::UInt64,
-    completion_function, interpolation_function,
-    completion_mailbox_capacity::Int)::HostSessionRuntime
-    context_module, euclid_repl_runtime = create_session_module(
-        generation, state_ptr)
+"""Create independent bounded editor services, binding completion to the session module."""
+function spawn_session_editor_services!(
+    actors::EuclidActorRuntime.ActorRuntime, context_module::Module,
+    completion_function, highlight_function, completion_mailbox_capacity::Int)
     bound_completion = bind_session_completion(
         completion_function, context_module)
     completion_service = EuclidActorRuntime.spawn!(
         actors, CompletionService(bound_completion);
         mailbox_capacity=completion_mailbox_capacity)
+    highlight_service = EuclidActorRuntime.spawn!(
+        actors, HighlightService(highlight_function);
+        mailbox_capacity=HIGHLIGHT_MAILBOX_CAPACITY)
+    return completion_service, highlight_service
+end
+
+"""Create every user-facing actor for one Julia session generation."""
+function create_host_session!(
+    actors::EuclidActorRuntime.ActorRuntime, state_ptr::Ptr{Cvoid},
+    generation::UInt64,
+    completion_function, highlight_function, interpolation_function,
+    completion_mailbox_capacity::Int)::HostSessionRuntime
+    context_module, euclid_repl_runtime = create_session_module(
+        generation, state_ptr)
+    completion_service, highlight_service = spawn_session_editor_services!(
+        actors, context_module, completion_function, highlight_function,
+        completion_mailbox_capacity)
     evaluator_state = Evaluator(EuclidReplEvaluation.create_eval_runtime(
         context_module; session_generation=generation))
     evaluator = EuclidActorRuntime.spawn!(actors, evaluator_state)
@@ -156,7 +171,7 @@ function create_host_session!(
         actors, terminal_container_state)
     return HostSessionRuntime(
         generation, context_module, HostSessionActive,
-        completion_service, evaluator, shell_interpolation_service,
+        completion_service, highlight_service, evaluator, shell_interpolation_service,
         shell_session, terminal_process_service, tick_service,
         terminal_container_service, evaluator_state, terminal_process_state,
         tick_service_state, terminal_container_state, euclid_repl_runtime)
@@ -181,6 +196,7 @@ function create_host_runtime(
     animation_implementation_loader=(_id -> throw(ArgumentError(
         "animation implementation loader is unavailable"))),
     completion_function=complete_input,
+    highlight_function=EuclidReplEvaluation.SyntaxHighlighting.highlight_source,
     interpolation_function=evaluate_shell_interpolation,
     completion_mailbox_capacity::Integer=64,
     actor_runtime::Union{Nothing,EuclidActorRuntime.ActorRuntime}=nothing,
@@ -200,13 +216,13 @@ function create_host_runtime(
             terminal_controller))
     EuclidActorRuntime.send!(actors, hotkey_controller, RegisterHotkeys())
     session = create_host_session!(
-        actors, states, session_generation, completion_function,
+        actors, states, session_generation, completion_function, highlight_function,
         interpolation_function, Int(completion_mailbox_capacity))
     runtime = HostRuntime(
         states, actors, animation_supervisor, animation_supervisor_state,
         false, 0, UInt64(0),
         terminal_controller, hotkey_controller, session,
-        completion_function, interpolation_function,
+        completion_function, highlight_function, interpolation_function,
         Int(completion_mailbox_capacity),
         logger, 0, false, HostShutdownRunning)
     send_animation_supervisor_for_host(runtime, StartAnimationSupervisor()) ===

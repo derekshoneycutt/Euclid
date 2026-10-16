@@ -5,6 +5,19 @@ import trace "../trace"
 
 import "core:testing"
 
+// Highlight event names are explicit while preserving the fixed version-one envelope.
+@(test)
+jsonl_test_highlight_event_names :: proc(t: ^testing.T) {
+    testing.expect_value(t, event_kind_name(.Terminal_Live_Highlight_Published),
+        "terminal.live_highlight_published")
+    testing.expect_value(t, event_kind_name(.Terminal_History_Highlight_Published),
+        "terminal.history_highlight_published")
+    testing.expect_value(t, event_kind_name(.Terminal_Highlight_Discarded),
+        "terminal.highlight_discarded")
+    testing.expect_value(t, event_kind_name(.Terminal_Highlight_Failed),
+        "terminal.highlight_failed")
+}
+
 // Verify the exact version-one typed JSONL envelope and stable event spelling.
 @(test)
 jsonl_test_representative_event_contract :: proc(t: ^testing.T) {

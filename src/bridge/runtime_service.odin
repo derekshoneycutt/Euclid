@@ -54,6 +54,9 @@ Julia_Runtime_Host :: struct {
     terminal_shutdown: ^julialib.jl_value_t,
     terminal_take_evaluation: ^julialib.jl_value_t,
     terminal_take_completion: ^julialib.jl_value_t,
+    terminal_ingest_highlight: ^julialib.jl_value_t,
+    terminal_take_highlight: ^julialib.jl_value_t,
+    terminal_highlight_identity_type: ^julialib.jl_value_t,
     terminal_take_session_lifecycle: ^julialib.jl_value_t,
     terminal_ingest_tick_configuration: ^julialib.jl_value_t,
     terminal_ingest_tick_pulse: ^julialib.jl_value_t,
@@ -1751,6 +1754,10 @@ destroy_julia_ingress_message :: proc(
               complete_ok {
         communication_link_free_bytes(&service^.request_link,
             transmute([]u8)request.code)
+    } else if request, highlight_ok := message^.(protocol.Highlight_Requested);
+              highlight_ok {
+        communication_link_free_bytes(&service^.request_link,
+            transmute([]u8)request.source)
     } else if request, harness_ok := message^.(bridgemodel.Harness_Scenario_Requested);
               harness_ok {
         communication_link_free_bytes(&service^.request_link,
@@ -2042,6 +2049,8 @@ destroy_julia_egress_message :: proc(
     } else if result, result_ok := message^.(protocol.Completion_Result); result_ok {
         communication_link_free_bytes(&service^.event_link,
             transmute([]u8)result.insertion)
+    } else if result, highlight_ok := message^.(protocol.Highlight_Result); highlight_ok {
+        destroy_highlight_result_storage(service, result)
     } else if ready, ready_ok := message^.(protocol.Terminal_Session_Ready); ready_ok {
         communication_link_free_bytes(&service^.event_link,
             transmute([]u8)ready.banner)
@@ -2408,6 +2417,8 @@ terminal_ingress_has_dynamic_payload :: proc(
         return true
     case protocol.Completion_Requested:
         return true
+    case protocol.Highlight_Requested:
+        return true
     }
     return false
 }
@@ -2539,6 +2550,8 @@ terminal_egress_has_dynamic_payload :: proc(
     case protocol.Terminal_Output_Batch:
         return true
     case protocol.Completion_Result:
+        return true
+    case protocol.Highlight_Result:
         return true
     case protocol.Terminal_Session_Ready:
         return true
@@ -2979,6 +2992,10 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, "terminal_host_ingest_completion_preview")
     host^.terminal_ingest_completion_candidates = julialib.jl_get_function(
         main_module, "terminal_host_ingest_completion_candidates")
+    host^.terminal_ingest_highlight = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_highlight")
+    host^.terminal_highlight_identity_type = julialib.jl_get_global(
+        main_module, julialib.jl_symbol("NativeHighlightIdentity"))
     host^.terminal_pump = julialib.jl_get_function(main_module, "terminal_host_pump")
     host^.terminal_shutdown = julialib.jl_get_function(
         main_module, "terminal_host_shutdown")
@@ -3006,6 +3023,8 @@ bind_julia_terminal_egress_callbacks :: proc(
         main_module, "terminal_host_take_evaluation")
     host^.terminal_take_completion = julialib.jl_get_function(
         main_module, "terminal_host_take_completion")
+    host^.terminal_take_highlight = julialib.jl_get_function(
+        main_module, "terminal_host_take_highlight")
     host^.terminal_take_session_lifecycle = julialib.jl_get_function(
         main_module, "terminal_host_take_session_lifecycle")
     host^.terminal_take_tick_stream = julialib.jl_get_function(
@@ -3023,6 +3042,9 @@ julia_terminal_callbacks_complete :: proc(host: ^Julia_Runtime_Host) -> bool {
         host^.terminal_pump != nil &&
         host^.terminal_shutdown != nil && host^.terminal_take_evaluation != nil &&
         host^.terminal_take_completion != nil &&
+        host^.terminal_ingest_highlight != nil &&
+        host^.terminal_take_highlight != nil &&
+        host^.terminal_highlight_identity_type != nil &&
         host^.terminal_take_session_lifecycle != nil &&
         host^.terminal_ingest_tick_configuration != nil &&
         host^.terminal_ingest_tick_pulse != nil &&
@@ -3055,6 +3077,9 @@ report_missing_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) {
         " shutdown=", host^.terminal_shutdown != nil,
         " evaluation=", host^.terminal_take_evaluation != nil,
         " completion=", host^.terminal_take_completion != nil,
+        " highlight_ingest=", host^.terminal_ingest_highlight != nil,
+        " highlight_take=", host^.terminal_take_highlight != nil,
+        " highlight_identity=", host^.terminal_highlight_identity_type != nil,
         " lifecycle=", host^.terminal_take_session_lifecycle != nil,
         " animation_tick=", host^.animation_tick != nil,
         " animation_tick_payload=", host^.animation_tick_payload_type != nil,
@@ -3761,6 +3786,15 @@ julia_terminal_emit_completions :: proc(
     }
 }
 
+// Publish ready lifecycle, tick, and editor outcomes before ordered evaluation output.
+julia_terminal_emit_ready_commands :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
+    return julia_terminal_emit_session_lifecycle(service, host) &&
+        julia_terminal_emit_tick_stream(service, host) &&
+        julia_terminal_emit_completions(service, host) &&
+        julia_terminal_emit_highlights(service, host)
+}
+
 //   Pump bounded Julia Terminal work and publish every ready evaluation command.
 julia_terminal_service :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
@@ -3772,13 +3806,7 @@ julia_terminal_service :: proc(
         print_julia_exception("terminal_host_pump")
         return false
     }
-    if !julia_terminal_emit_session_lifecycle(service, host) {
-        return false
-    }
-    if !julia_terminal_emit_tick_stream(service, host) {
-        return false
-    }
-    if !julia_terminal_emit_completions(service, host) {
+    if !julia_terminal_emit_ready_commands(service, host) {
         return false
     }
     for {
@@ -3817,6 +3845,8 @@ julia_terminal_dispatch_ingress :: proc(
         return julia_terminal_ingest_evaluation(host, payload)
     case protocol.Completion_Requested:
         return julia_terminal_ingest_completion(host, payload)
+    case protocol.Highlight_Requested:
+        return julia_terminal_ingest_highlight(host, payload)
     case protocol.Tick_Stream_Configuration_Acknowledged:
         return julia_terminal_ingest_tick_configuration(host, payload)
     case protocol.Tick_Pulse:

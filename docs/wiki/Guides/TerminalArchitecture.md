@@ -236,6 +236,8 @@ a link, but parser code does not call the operating system directly.
 | Actor runtime and policy types | `src/julia/policy.jl`, `src/julia/policy/` |
 | Evaluation adapter and streaming output | `src/julia/eval.jl`, `src/julia/eval/` |
 | Completion | `src/julia/eval/completion.jl` |
+| Julia syntax and face resolution | [`eval/highlighting.jl`](../../../src/julia/eval/highlighting.jl) |
+| Session highlighting actor | [`policy/highlighting_service.jl`](../../../src/julia/policy/highlighting_service.jl) |
 | Shell interpolation | `src/julia/interpolation.jl` |
 | Public terminal capabilities and process API | `src/julia/terminal.jl` |
 | Euclid drawing helpers | `src/julia/euclidrepl.jl` |
@@ -248,6 +250,8 @@ a link, but parser code does not call the operating system directly.
 | --- | --- |
 | Display orchestration and Julia publication | `src/view/terminal/service/terminal_service.odin` |
 | Terminal state, editing, selection, and rendering | `src/view/terminal/` |
+| Source highlighting requests and history cache | [`highlighting.odin`](../../../src/view/terminal/highlighting.odin), [`highlighting_history.odin`](../../../src/view/terminal/highlighting_history.odin) |
+| Native source-style rendering | [`highlighting_render.odin`](../../../src/view/terminal/highlighting_render.odin) |
 | Input polling and physical-key encoding | `src/view/input/` |
 | VT interpreter and response generation | `src/terminal/emulator/` |
 | Primary, alternate, and scrollback grids | `src/terminal/grid/` |
@@ -423,6 +427,25 @@ keyboard input edits the display-owned prompt only while Terminal has effective 
 During the lease, focused encoded terminal bytes go to the evaluator's interactive
 input adapter. Session close sends an interrupt when necessary before draining the
 evaluator.
+
+### Julia Syntax Highlighting
+
+Highlighting decorates Normal-mode Julia source, both in the editable prompt and in
+submitted history. It is separate from evaluation and from the VT rendition of ordinary
+output. Julia 1.13 owns syntax classification and standard `faces.toml` resolution;
+the display owns source text, retained styles, and native drawing.
+
+The display debounces live edits and requests visible history through an independent
+session actor. Results carry bounded UTF-8 style runs and are accepted only when the
+request, session, source revision, face generation, and exact source still match.
+Stale replies cannot overwrite newer input or reused history entries. Failure or
+capacity exhaustion leaves plain text without blocking editing or evaluation.
+
+Historical source retains its identity, not submission-time colors. The renderer
+validates source against visible cells and applies accepted styles to frame-local
+copies, preserving the underlying VT grid. Prompt prefixes, completion, selection,
+and cursor remain separate layers. Faces load lazily; changing the face generation
+invalidates cached styles, but does not provide filesystem watching.
 
 ## Output, Emulation, And Rendering
 
@@ -706,6 +729,7 @@ Use the narrowest registered suite for the owner being changed:
 | --- | --- |
 | Julia actors, evaluation, completion, or lifecycle | Julia runtime tests |
 | Terminal editing, selection, rendering, and geometry | Terminal view and UI tests |
+| Live and historical Julia highlighting | Adapter, cache, and renderer tests; [highlighting acceptance scenario](../../../tools/scenarios/terminal-highlighting-acceptance.jsonl) |
 | VT/DEC parsing, modes, OSC, DCS, APC, and queries | Emulator and input-encoding tests |
 | Grid, scrollback, and reflow | Termgrid tests |
 | PTY/ConPTY and shell behavior | Terminal session and shell tests |

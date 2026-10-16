@@ -146,4 +146,16 @@ function terminal_host_take_tick_stream(host::EuclidRuntimeHost)
     return EuclidHost.take_tick_stream_for_host(host.reactor)
 end
 
+const NativeHighlightIdentity = EuclidPolicy.HighlightIdentity
+
+"""Register one source-correlated highlight request on the sole Julia owner thread."""
+function terminal_host_ingest_highlight(
+    host::EuclidRuntimeHost, identity::NativeHighlightIdentity, source::String)
+    return EuclidHost.ingest_highlight_for_host(host.reactor, identity, source)
+end
+
+"""Return one complete highlight command for native-owned transport copying."""
+terminal_host_take_highlight(host::EuclidRuntimeHost) =
+    EuclidHost.take_highlight_for_host(host.reactor)
+
 const EUCLID_RUNTIME_API_LOADED = true

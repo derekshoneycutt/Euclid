@@ -11,6 +11,7 @@ import utf8 "core:unicode/utf8"
 Termhist_Entry :: struct {
     text: []u8,
     tag: int,
+    id: u64,
 }
 
 // Termhist_Font_Weight selects a supplied JuliaMono weight for one text run.
@@ -54,6 +55,7 @@ Termhist_State :: struct {
 
     cursor: int,
     content_revision: u64,
+    next_entry_id: u64,
 }
 
 //   Allocate every slice required by one history state.
@@ -360,8 +362,9 @@ termhist_accept_current :: proc(
             return false
         }
         old_text := state.history[state.history_len - 1].text
+        state.next_entry_id += 1
         state.history[state.history_len - 1] =
-            Termhist_Entry{text = entry_text, tag = tag}
+            Termhist_Entry{text = entry_text, tag = tag, id = state.next_entry_id}
         delete(old_text, state.allocator)
         termhist_clear(state)
         return true
@@ -458,7 +461,9 @@ termhist_history_push :: proc(
         return false
     }
 
-    state.history[state.history_len] = Termhist_Entry{text = entry_text, tag = tag}
+    state.next_entry_id += 1
+    state.history[state.history_len] = Termhist_Entry{
+        text = entry_text, tag = tag, id = state.next_entry_id}
     state.history_len += 1
     state.history_index = state.history_len
     return true

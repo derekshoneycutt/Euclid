@@ -11,6 +11,8 @@ using ..EuclidReplEvaluation: complete_input, interactive_write!
 using ..EuclidShellInterpolation: evaluate_shell_interpolation
 
 export HostCompletionCommand, HostEvaluationCommand, HostPumpStatus, HostRuntime
+export HostHighlightCommand, NativeHighlightRun
+export ingest_highlight_for_host, take_highlight_for_host
 export HostSessionLifecycleCommand, HostSessionPhase, HostSessionRuntime
 export HostShutdownPhase
 export HostDiagnosticLogger, host_diagnostic_logger, @host_log
@@ -55,7 +57,7 @@ include("host/logging.jl")
 include("host/runtime.jl")
 include("host/ingress.jl")
 include("host/egress.jl")
+include("host/highlighting.jl")
 include("host/lifecycle.jl")
 
 end
-

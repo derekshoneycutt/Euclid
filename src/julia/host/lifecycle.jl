@@ -14,6 +14,7 @@ function session_actors_stopped(
     actor_runtime = runtime.actors
     return !EuclidActorRuntime.is_live(
         actor_runtime, session.completion_service) &&
+        !EuclidActorRuntime.is_live(actor_runtime, session.highlight_service) &&
         !EuclidActorRuntime.is_live(actor_runtime, session.evaluator) &&
         !EuclidActorRuntime.is_live(
             actor_runtime, session.shell_interpolation_service) &&
@@ -28,7 +29,8 @@ end
 """Return whether outgoing work still belongs to the closing user session."""
 function session_outgoing_pending(runtime::HostRuntime)::Bool
     command_type = Union{
-        CompletionResolved,CompletionFailed,ShellInterpolationResolved,
+        CompletionResolved,CompletionFailed,HighlightResolved,HighlightFailed,
+        ShellInterpolationResolved,
         BeginTerminalSessionRequested,CancelTerminalSessionRequested,
         AbandonTerminalSessionRequested,TerminalProcessLaunchRequested,
         TerminalOutputBatch,EvaluationCompleted,EvaluationIncomplete,
@@ -75,6 +77,7 @@ function close_session_for_host(
     reject_pending_for_shutdown!(runtime)
     EuclidActorRuntime.stop!(
         runtime.actors, session.completion_service)
+    EuclidActorRuntime.stop!(runtime.actors, session.highlight_service)
     EuclidActorRuntime.stop!(
         runtime.actors, session.shell_interpolation_service)
     EuclidActorRuntime.send!(
@@ -99,7 +102,7 @@ function start_session_for_host(
     generation > previous.generation || return false
     runtime.session = create_host_session!(
         runtime.actors, runtime.state_ptr,
-        generation, runtime.completion_function,
+        generation, runtime.completion_function, runtime.highlight_function,
         runtime.interpolation_function, runtime.completion_mailbox_capacity)
     EuclidActorRuntime.emit!(
         runtime.actors, JuliaSessionStarted(generation))
@@ -206,6 +209,10 @@ function reject_pending_for_shutdown!(runtime::HostRuntime)::Nothing
             EuclidActorRuntime.resolve_request!(runtime.actors, key)
             EuclidActorRuntime.emit!(runtime.actors,
                 CompletionFailed(UInt64(key), CompletionRuntimeStopped))
+        elseif pending.owner == runtime.highlight_service
+            request = pending.value::HighlightRequested
+            EuclidActorRuntime.resolve_request!(runtime.actors, key)
+            fail_highlight!(runtime, request.identity, HighlightRuntimeStopped)
         elseif pending.owner == runtime.shell_interpolation_service
             request = pending.value::ShellInterpolationRequested
             @host_log(
@@ -232,6 +239,7 @@ end
 """Stop every generation-scoped Terminal service after animation policy stops."""
 function stop_session_services!(runtime::HostRuntime)::Nothing
     EuclidActorRuntime.stop!(runtime.actors, runtime.completion_service)
+    EuclidActorRuntime.stop!(runtime.actors, runtime.highlight_service)
     EuclidActorRuntime.stop!(
         runtime.actors, runtime.shell_interpolation_service)
     EuclidActorRuntime.send!(

@@ -1144,6 +1144,19 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
+                "view-terminal-highlight-storage",
+                "src/view/terminal/highlighting.odin",
+                "terminal_highlight_init",
+                :custom,
+                "One fixed-capacity source/run cache and provenance workspace is allocated per Terminal generation from its owner allocator, freed at Terminal teardown before generation reset, and never grows during edits or frames.";
+                operation="new",
+                target="model.Terminal_Highlighting",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "terminal-history-entry-growth",
                 "src/terminal/history/termhist.odin",
                 "termhist_ensure_history_capacity",
@@ -1433,6 +1446,19 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             # Communication links own one bounded TLSF pool and reclaim transferred data.
+            ReviewedAllocationPolicy(
+                "bridge-terminal-highlight-result-runs",
+                "src/bridge/terminal_highlighting.odin",
+                "allocate_highlight_result",
+                :custom,
+                "Validated runs are bounded by the highlight protocol and copied into the fixed egress TLSF pool; allocation failure rolls back the envelope and source, and the Julia producer reclaims runs after display return or failed publication.";
+                operation="make",
+                target="[]protocol.Highlight_Run",
+                allocator_source="pool_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "bridge-communication-link-backing",
                 "src/bridge/communication_link.odin",
@@ -2150,6 +2176,14 @@ AnalysisSettings(
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_completion", :julia,
             "terminal_host_take_completion",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_highlight", :julia,
+            "terminal_host_ingest_highlight",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_highlight", :julia,
+            "terminal_host_take_highlight",
             "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_session_lifecycle", :julia,

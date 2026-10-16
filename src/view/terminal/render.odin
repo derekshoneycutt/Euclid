@@ -290,15 +290,14 @@ terminal_draw_output_rows :: proc(
     for index in 0..<draw.layout.line_count {
         line_position := geometry.Vector2{
             draw.origin.x, draw.origin.y + f32(index) * draw.layout.line_height}
+        if line_position.y + draw.layout.line_height < draw.layout.padded_bounds.y ||
+            line_position.y >
+                draw.layout.padded_bounds.y + draw.layout.padded_bounds.height {
+            continue
+        }
         if cells, ok := terminal_output_row(term, index); ok {
-            shaping_allowed := true
-            if term.view_selection_active {
-                line_text := terminal_line_text(term, index)
-                span := terminal_selection_span_for_line(
-                    draw.layout.selection.start, draw.layout.selection.end,
-                    index, len(line_text))
-                shaping_allowed = !span.has_selection
-            }
+            shaping_allowed := terminal_output_row_shaping_allowed(
+                term, index, draw.layout.selection)
             row := Terminal_Shaped_Output_Context{
                 encoder = draw.encoder,
                 resolver = font_resolver,
@@ -308,7 +307,9 @@ terminal_draw_output_rows :: proc(
                 column_width = terminal_column_width(draw.layout.regular),
                 theme = draw.layout.theme,
             }
-            terminal_draw_output_row(row, shaping_allowed)
+            if !terminal_draw_syntax_history_row(term, index, row, shaping_allowed) {
+                terminal_draw_output_row(row, shaping_allowed)
+            }
             if draw.hyperlink_hover.kind != .None &&
                 draw.hyperlink_hover.line == index {
                 terminal_draw_link_hover(row, draw.hyperlink_hover)
@@ -862,8 +863,7 @@ terminal_draw_single_line_prompt :: proc(
     cursor := termhist.termhist_cursor(request.term.history) +
         len(request.prompt_prefix)
     terminal_draw_prompt_base({
-        encoder = request.layout.encoder,
-        resolver = request.resolver,
+        encoder = request.layout.encoder, resolver = request.resolver,
         current_text = request.current_text,
         prompt_prefix = request.prompt_prefix,
         prompt_color = terminal_prompt_draw_color(request.term.input_mode),
@@ -871,6 +871,8 @@ terminal_draw_single_line_prompt :: proc(
         exclusions = terminal_prompt_shape_exclusions(
             request.current_text, request.prompt_prefix, cursor, selection),
         theme = request.layout.theme,
+        highlights = terminal_live_highlight_runs(request.term),
+        palette = &request.term.output_interpreter.title_state.palette,
     })
     terminal_draw_completion_preview(request.term, {
         encoder = request.layout.encoder,
@@ -911,6 +913,11 @@ terminal_draw_prompt :: proc(
     if strings.index_byte(current_text, '\n') >= 0 {
         terminal_draw_prompt_lines(
             term, font_resolver, layout.encoder, prompt_position, layout.theme)
+        for line in 0..<terminal_live_input_line_count(term) {
+            terminal_draw_line_selection(term, font_resolver,
+                layout.line_count + line, layout,
+                {prompt_position.x, prompt_position.y + f32(line)*layout.line_height})
+        }
         terminal_draw_multiline_prompt_cursor(
             term, font_resolver, regular, prompt_position, layout)
         return
@@ -956,8 +963,7 @@ terminal_draw_prompt_line :: proc(
         selection_end = len(line_text)
     }
     terminal_draw_prompt_base({
-        encoder = request.encoder,
-        resolver = request.resolver,
+        encoder = request.encoder, resolver = request.resolver,
         current_text = line_text,
         prompt_prefix = prefix,
         prompt_color = request.prompt_color,
@@ -969,6 +975,9 @@ terminal_draw_prompt_line :: proc(
             selection_end = selection_end,
         },
         theme = request.theme,
+        highlights = terminal_live_highlight_runs(request.term),
+        source_offset = request.line_start,
+        palette = &request.term.output_interpreter.title_state.palette,
     })
     return line_end + 1
 }
@@ -1130,6 +1139,10 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
             request.position.x + prompt_width, request.position.y},
         exclusions = request.exclusions,
         color = request.theme.default_foreground,
+        highlights = request.highlights,
+        source_offset = request.source_offset,
+        palette = request.palette,
+        theme = request.theme,
     })
 }
 
@@ -1208,6 +1221,12 @@ terminal_draw_prompt_text :: proc(request: Terminal_Prompt_Text_Draw) {
 
     segment_start := 0
     for segment_start < len(request.current_text) {
+        if len(request.highlights) > 0 {
+            segment_end := terminal_syntax_segment_end(request, segment_start)
+            terminal_draw_syntax_segment(request, segment_start, segment_end)
+            segment_start = segment_end
+            continue
+        }
         excluded := terminal_prompt_byte_excluded(
             segment_start, request.exclusions)
         segment_end := terminal_codepoint_end(

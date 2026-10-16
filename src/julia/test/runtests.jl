@@ -9,6 +9,10 @@ using Test
         include("euclidrepl_tests.jl")
     end
 
+    @testset "Syntax Highlighting Adapter" begin
+        include("highlighting_tests.jl")
+    end
+
     @testset "Bridge Helpers" begin
         include("bridge_helpers_tests.jl")
     end
@@ -35,6 +39,10 @@ using Test
 
     @testset "Runtime Host" begin
         include("runtime_host_tests.jl")
+    end
+
+    @testset "Highlighting Service" begin
+        include("highlighting_service_tests.jl")
     end
 
     @testset "Code Wiki Odin" begin
