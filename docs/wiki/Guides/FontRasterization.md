@@ -140,6 +140,15 @@ before investigating atlas pixels.
 - **Failures must not become plausible blank output.** Face or atlas preparation can
   fail, and publication is a distinct step. When diagnosing missing text, check both
   the preparation result and whether the matching atlas was successfully published.
+- **Ink sampling follows prepared and displayed geometry.** Worker preparation derives
+  bounded coverage-weighted points from each glyph bitmap; those points are published
+  and retired with the glyph's raster generation. Dynview maps them through the ordinary
+  snapped glyph placement, while colored procedural geometry is sampled from the shared
+  draw encoder. A fixed deterministic reservoir owns the last successfully presented
+  document samples, so it retains neither layout pointers nor atlas storage. The
+  display-owned presentation coordinator copies those values into its bounded
+  pane-local dust state before the old presentation snapshot is retired; the effect
+  never borrows glyph metadata or layout memory.
 
 The implementation and its tests define the current details. This guide is an entry
 point to the font path and the design reasons behind its boundaries; it is not a second

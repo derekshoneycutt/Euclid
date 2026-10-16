@@ -123,7 +123,8 @@ function parsed_odin_symbol(
     comment_lines::Vector{String})
 
     signature = strip_odin_location_suffix(String(declaration))
-    separator = something(findfirst("::", signature), findfirst(":=", signature), nothing)
+    # Leftmost declaration colon; also covers typed constants (`NAME : Type : value`).
+    separator = findfirst(r"::|:=|:", signature)
     separator === nothing && error("Malformed Odin declaration: $declaration")
     name = strip(signature[firstindex(signature):first(separator) - 1])
     kind = odin_declaration_kind(signature)
@@ -237,7 +238,7 @@ end
 function find_odin_declaration_line(lines::Vector{String}, name::String)
     for (index, line) in pairs(lines)
         startswith(line, name) || continue
-        separator = something(findfirst("::", line), findfirst(":=", line), nothing)
+        separator = findfirst(r"::|:=|:", line)
         separator === nothing && continue
         strip(line[firstindex(line):first(separator) - 1]) == name && return index
     end

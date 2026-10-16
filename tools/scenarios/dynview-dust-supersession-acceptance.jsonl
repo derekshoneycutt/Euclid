@@ -1,0 +1,37 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_state":"dynview_enabled","timeout_ms":10000}
+{"set_setting":{"key":"interface.reduce_motion","value":false}}
+{"select_animation":"Proposition I","as":"warmup"}
+{"wait_event":"animation_selected","correlation":"warmup","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"warmup","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"set_arrival_style":"falling_ink"}
+{"select_animation":"Axiom I,1","as":"superseded"}
+{"select_animation":"Cₙ","as":"superseding"}
+{"wait_event":"animation_selected","correlation":"superseding","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"superseding","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":15000}
+{"select_animation":"Axiom I,1","as":"cancelled"}
+{"wait_event":"animation_selected","correlation":"cancelled","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"cancelled","timeout_ms":10000}
+{"wait_state":"presentation_arrival_active","timeout_ms":10000}
+{"set_arrival_style":"immediate"}
+{"assert_state":"presentation_arrival_idle"}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-cancelled.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_arrival_style":"falling_ink"}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"select_animation":"Proposition I","as":"cycle-out"}
+{"wait_event":"dynview_published","correlation":"cycle-out","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"select_animation":"Axiom I,1","as":"cycle-back"}
+{"wait_event":"dynview_published","correlation":"cycle-back","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

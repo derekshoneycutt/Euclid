@@ -104,7 +104,13 @@ draw_presentation_dynview :: proc(
         state = state, runtime = runtime, panel = params.panel,
         font = params.font, font_size = params.metrics.font_size,
     }
+    native.draw_encoder_set_ink_sink(params.encoder, {
+        user_data = &state^.font_cache,
+        record = view_font.cache_ink_capture_sample,
+    })
+    defer native.draw_encoder_set_ink_sink(params.encoder, {})
     if dynlayout.document_layout_is_authoritative(runtime) {
+        view_font.cache_ink_capture_mark_drawn(&state^.font_cache)
         draw_document_layout(ctx, params.scroll_y, params.metrics.padding)
         return true
     }
@@ -114,6 +120,7 @@ draw_presentation_dynview :: proc(
     if !runtime^.compile_cache.layout_is_valid {
         return false
     }
+    view_font.cache_ink_capture_mark_drawn(&state^.font_cache)
     draw_cached_layout(ctx, params.scroll_y, params.metrics.padding)
     _ = ui_runtime
     return true

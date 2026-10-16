@@ -12,6 +12,7 @@ import "core:thread"
 import "core:time"
 import vmem "core:mem/virtual"
 import geometry "../../core/geometry"
+import color "../../core/color"
 
 Codepoint_Resolver_Test_Result :: struct {
     ascii : Font_Glyph_Resolve_Status,
@@ -1466,6 +1467,22 @@ view_test_font_flags_map_to_cache_keys :: proc(t: ^testing.T) {
     }
 }
 
+// Verify prepared samples transfer into generation storage without borrowing.
+font_test_seed_coverage_record_transfer :: proc(
+    t: ^testing.T, prepared: ^Prepared_Font) {
+    entry: Font_Cache_Entry
+    testing.expect(t, prepared.glyphs[33].coverage_sample_count > 0)
+    testing.expect(t, font_generation_seed_records_init(
+        &entry, prepared, context.allocator))
+    transferred := entry.canonical_raster.glyphs[4]
+    testing.expect_value(t, transferred.coverage_sample_count,
+        prepared.glyphs[33].coverage_sample_count)
+    prepare_destroy(prepared)
+    testing.expect_value(t, entry.canonical_raster.glyphs[4].coverage_samples,
+        transferred.coverage_samples)
+    font_generation_glyphs_destroy(&entry)
+}
+
 // Verify CPU preparation reproduces the production Regular seed contract.
 @(test)
 view_test_prepare_regular :: proc(t: ^testing.T) {
@@ -1500,8 +1517,7 @@ view_test_prepare_regular :: proc(t: ^testing.T) {
     testing.expect_value(t, prepared.glyphs[13].glyph_id, u32(5933))
     testing.expect_value(t, prepared.glyphs[33].glyph_id, u32(4))
     testing.expect_value(t, prepared.glyphs[33].advance_x, i32(16))
-
-    prepare_destroy(&prepared)
+    font_test_seed_coverage_record_transfer(t, &prepared)
     testing.expect_value(t, prepared.glyph_count, i32(0))
     testing.expect_value(t, len(prepared.atlas_pixels), 0)
 }
@@ -1608,9 +1624,88 @@ view_test_prepare_glyph_page :: proc(t: ^testing.T) {
     for glyph, index in first.glyphs {
         testing.expect_value(t, glyph.glyph_id, glyph_ids[index])
         testing.expect_value(t, first.rectangles[index], second.rectangles[index])
+        testing.expect_value(t, glyph.coverage_sample_count,
+            second.glyphs[index].coverage_sample_count)
+        testing.expect_value(t, glyph.coverage_samples,
+            second.glyphs[index].coverage_samples)
     }
     prepare_destroy(&first)
     prepare_destroy(&second)
+}
+
+// Verify ink capture is deterministic, bounded, and promoted only on request.
+@(test)
+view_test_visible_ink_capture_reservoir_is_bounded_and_repeatable :: proc(
+    t: ^testing.T) {
+    first, second: Font_Cache
+    color_value := color.Color_RGBA8{20, 40, 60, 255}
+    testing.expect(t, cache_ink_capture_init(&first, context.allocator))
+    testing.expect(t, cache_ink_capture_init(&second, context.allocator))
+    defer cache_ink_capture_destroy(&first)
+    defer cache_ink_capture_destroy(&second)
+    cache_ink_capture_begin(&first)
+    cache_ink_capture_begin(&second)
+    for index in 0..<(FONT_VISIBLE_INK_SAMPLE_CAPACITY+1000) {
+        position := geometry.Vector2{f32(index), f32(index%31)}
+        cache_ink_capture_sample(&first, position, color_value, u8(index%255+1))
+        cache_ink_capture_sample(&second, position, color_value, u8(index%255+1))
+    }
+    testing.expect_value(t,
+        first.visible_ink_counts[first.visible_ink_capture_index],
+        FONT_VISIBLE_INK_SAMPLE_CAPACITY)
+    testing.expect_value(t, first.visible_ink_seen_count,
+        u64(FONT_VISIBLE_INK_SAMPLE_CAPACITY+1000))
+    font_test_expect_visible_ink_snapshots_match(t, &first, &second)
+    cache_ink_capture_mark_drawn(&first)
+    cache_ink_capture_publish(&first)
+    testing.expect_value(t, len(cache_visible_ink_samples(&first)),
+        FONT_VISIBLE_INK_SAMPLE_CAPACITY)
+    testing.expect_value(t, len(cache_visible_ink_samples(&second)), 0)
+}
+
+// Verify frames without a structured presentation keep the last drawn ink until discard.
+@(test)
+view_test_visible_ink_survives_undrawn_frames_until_discard :: proc(
+    t: ^testing.T) {
+    cache: Font_Cache
+    testing.expect(t, cache_ink_capture_init(&cache, context.allocator))
+    defer cache_ink_capture_destroy(&cache)
+    cache_ink_capture_begin(&cache)
+    cache_ink_capture_sample(&cache, {4, 8}, {20, 40, 60, 255}, 255)
+    cache_ink_capture_mark_drawn(&cache)
+    cache_ink_capture_publish(&cache)
+
+    cache_ink_capture_begin(&cache)
+    cache_ink_capture_publish(&cache)
+    samples := cache_visible_ink_samples(&cache)
+    testing.expect_value(t, len(samples), 1)
+    if len(samples) == 1 {
+        testing.expect_value(t, samples[0].position, geometry.Vector2{4, 8})
+    }
+
+    cache_ink_capture_discard(&cache)
+    testing.expect_value(t, len(cache_visible_ink_samples(&cache)), 0)
+}
+
+// Compare deterministic snapshots and verify samples span the complete stream.
+font_test_expect_visible_ink_snapshots_match :: proc(
+    t: ^testing.T, first, second: ^Font_Cache) {
+
+    minimum_x, maximum_x := f32(max(f32)), f32(0)
+    for index in 0..<FONT_VISIBLE_INK_SAMPLE_CAPACITY {
+        sample_offset := first.visible_ink_capture_index*
+            FONT_VISIBLE_INK_SAMPLE_CAPACITY+index
+        second_sample_offset := second.visible_ink_capture_index*
+            FONT_VISIBLE_INK_SAMPLE_CAPACITY+index
+        sample := first.visible_ink_samples[sample_offset]
+        testing.expect_value(t,
+            sample,
+            second.visible_ink_samples[second_sample_offset])
+        minimum_x = min(minimum_x, sample.position.x)
+        maximum_x = max(maximum_x, sample.position.x)
+    }
+    testing.expect(t, minimum_x < f32(FONT_VISIBLE_INK_SAMPLE_CAPACITY))
+    testing.expect(t, maximum_x >= f32(FONT_VISIBLE_INK_SAMPLE_CAPACITY))
 }
 
 // Verify glyph-page cancellation clears partial compact-page ownership.

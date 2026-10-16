@@ -10,6 +10,10 @@ import taskpool "../../taskpool"
 import runtime "base:runtime"
 import testing "core:testing"
 import thread "core:thread"
+import viewfont "../font"
+import geometry "../../core/geometry"
+import uidust "../../particles/ui_dust"
+import uipresentation "../ui/presentation"
 
 // Presentation_Test_Fixture owns the heap-backed state used by Phase 4 tests.
 Presentation_Test_Fixture :: struct {
@@ -169,6 +173,224 @@ presentation_admission_is_bounded_and_clears_visible_state :: proc(t: ^testing.T
     free(returned)
 }
 
+// Verify accepted replacement copies the last presented samples into owned dust.
+@(test)
+presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    testing.expect(t, viewfont.cache_ink_capture_init(
+        &state^.font_cache, context.allocator))
+    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    viewfont.cache_ink_capture_begin(&state^.font_cache)
+    viewfont.cache_ink_capture_sample(
+        &state^.font_cache, {20, 30}, {240, 160, 80, 255}, 255)
+    viewfont.cache_ink_capture_sample(
+        &state^.font_cache, {40, 50}, {80, 160, 240, 255}, 192)
+    viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
+    viewfont.cache_ink_capture_publish(&state^.font_cache)
+    bytes := []u8{'$', 'x', '$'}
+    message := presentation_test_message(state, 13, bytes)
+    content, _ := message^.(bridgemodel.View_Content_Ready)
+
+    presentation_admit(state, presentation, message, content)
+
+    testing.expect_value(t, presentation^.dust.particle_count, 2)
+    testing.expect_value(t, presentation^.dust.particles.pos_x[0], f32(20))
+    testing.expect_value(t, presentation^.dust.particles.pos_y[0], f32(30))
+    state^.ui_runtime.preferences.values.interface.reduce_motion = true
+    next := presentation_test_message(state, 14, bytes)
+    next_content, _ := next^.(bridgemodel.View_Content_Ready)
+    presentation_admit(state, presentation, next, next_content)
+    testing.expect_value(t, presentation^.dust.particle_count, 0)
+    testing.expect(t, !presentation^.dust.incoming_active)
+}
+
+// Verify outgoing dust remains active while replacement content is blank.
+@(test)
+presentation_departure_survives_blank_frame_and_scroll_reset :: proc(
+    t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    state^.ui_runtime.presentation.visible = true
+    viewport := geometry.Rectangle{10, 20, 200, 120}
+    uidust.ui_dust_validate_context(&presentation^.dust, {
+        visible = true, viewport = viewport, scroll_y = 40, visual_signature = 1,
+    })
+    uidust.ui_dust_begin_departure(&presentation^.dust, 23)
+    testing.expect(t, uidust.ui_dust_emit(
+        &presentation^.dust, {30, 50}, {240, 160, 80, 255}, 255, 1))
+    blank_frame := uipresentation.Presentation_Preparation{
+        scroll = {view_rect = viewport, scroll_y_out = 0},
+    }
+
+    presentation_effects_update(state, presentation, 0.016, blank_frame, 1)
+
+    testing.expect_value(t, presentation^.dust.particle_count, 1)
+    testing.expect(t, presentation^.dust.particles.pos_y[0] > 50)
+}
+
+// Publish one drawn ink frame so the visible-ink serial advances.
+presentation_test_publish_ink :: proc(
+    state: ^core.Euclid_General_State, positions: []geometry.Vector2) {
+    viewfont.cache_ink_capture_begin(&state^.font_cache)
+    for position in positions {
+        viewfont.cache_ink_capture_sample(
+            &state^.font_cache, position, {80, 160, 240, 255}, 255)
+    }
+    viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
+    viewfont.cache_ink_capture_publish(&state^.font_cache)
+}
+
+// Verify falling ink waits for new samples, targets them, and retains ink.
+@(test)
+presentation_formation_targets_first_new_ink :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    testing.expect(t, viewfont.cache_ink_capture_init(
+        &state^.font_cache, context.allocator))
+    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    presentation_test_publish_ink(state, {{5, 5}})
+    state^.ui_runtime.presentation.visible = true
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 50, .Falling_Ink)
+    presentation^.arrival_ink_serial =
+        viewfont.cache_visible_ink_serial(&state^.font_cache)
+    frame := uipresentation.Presentation_Preparation{
+        scroll = {view_rect = {0, 0, 200, 120}},
+    }
+
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    testing.expect(t, uidust.ui_dust_arrival_awaiting_targets(&presentation^.dust))
+    testing.expect_value(t, presentation^.dust.arrival_count, 0)
+
+    presentation_test_publish_ink(state, {{30, 40}, {60, 70}})
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    testing.expect(t, !uidust.ui_dust_arrival_awaiting_targets(&presentation^.dust))
+    testing.expect_value(t, presentation^.dust.arrival_count, 2)
+    testing.expect_value(t, presentation^.dust.arrivals.target_x[0], f32(30))
+    testing.expect_value(t, presentation^.dust.arrivals.target_y[1], f32(70))
+    testing.expect_value(t,
+        len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 2)
+}
+
+// Verify draw-in bins new ink into reveal rows and emits contact accents.
+@(test)
+presentation_formation_draws_in_first_new_ink :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    testing.expect(t, viewfont.cache_ink_capture_init(
+        &state^.font_cache, context.allocator))
+    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    state^.ui_runtime.presentation.visible = true
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 52, .Draw_In)
+    presentation^.arrival_ink_serial =
+        viewfont.cache_visible_ink_serial(&state^.font_cache)
+    frame := uipresentation.Presentation_Preparation{
+        scroll = {view_rect = {0, 0, 200, 120}},
+    }
+
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(0))
+    presentation_test_publish_ink(state, {{30, 20}, {90, 20}, {40, 80}})
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+
+    testing.expect(t, uidust.ui_dust_reveal_active(&presentation^.dust))
+    testing.expect_value(t, presentation^.dust.reveal_row_count, 2)
+    testing.expect_value(t, presentation^.dust.reveal_rows[0].right, f32(90))
+    testing.expect_value(t, presentation^.dust.arrival_count, 3)
+    testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
+}
+
+// Verify content without visible ink degrades falling ink to the fade.
+@(test)
+presentation_formation_without_ink_uses_fade :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    testing.expect(t, viewfont.cache_ink_capture_init(
+        &state^.font_cache, context.allocator))
+    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    state^.ui_runtime.presentation.visible = true
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 51, .Falling_Ink)
+    presentation^.arrival_ink_serial =
+        viewfont.cache_visible_ink_serial(&state^.font_cache)
+    presentation_test_publish_ink(state, {})
+    frame := uipresentation.Presentation_Preparation{
+        scroll = {view_rect = {0, 0, 200, 120}},
+    }
+
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+
+    testing.expect_value(t, presentation^.dust.incoming_style,
+        uidust.Ui_Dust_Arrival_Style.Fade)
+    testing.expect_value(t, presentation^.dust.arrival_count, 0)
+    testing.expect(t, uidust.ui_dust_incoming_alpha(&presentation^.dust) > 0)
+}
+
+// Verify the arrival override defaults to the product style, cancels an active
+// arrival without disturbing departure dust, and is reported by observation.
+@(test)
+presentation_arrival_style_override_cancels_active_arrival :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    presentation := fixture.presentation
+    testing.expect_value(t, presentation_arrival_style(presentation),
+        uidust.UI_DUST_ARRIVAL_STYLE)
+    testing.expect_value(t, presentation_arrival_style(nil),
+        uidust.Ui_Dust_Arrival_Style.Falling_Ink)
+    presentation^.dust.particle_count = 3
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 53, .Falling_Ink)
+    testing.expect(t, presentation_effects_observe(presentation).arrival_active)
+
+    presentation_set_arrival_style(presentation, .Draw_In)
+
+    effects := presentation_effects_observe(presentation)
+    testing.expect_value(t, presentation_arrival_style(presentation),
+        uidust.Ui_Dust_Arrival_Style.Draw_In)
+    testing.expect_value(t, effects.arrival_selection,
+        uidust.Ui_Dust_Arrival_Style.Draw_In)
+    testing.expect(t, !effects.arrival_active)
+    testing.expect_value(t, effects.departure_particle_count, 3)
+    testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
+}
+
+// Verify selection consumes drawn ink as dust while reset retires every effect.
+@(test)
+presentation_selection_departs_and_reset_settles :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, service, presentation :=
+        fixture.state, fixture.service, fixture.presentation
+    testing.expect(t, viewfont.cache_ink_capture_init(
+        &state^.font_cache, context.allocator))
+    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    viewfont.cache_ink_capture_begin(&state^.font_cache)
+    viewfont.cache_ink_capture_sample(
+        &state^.font_cache, {20, 30}, {240, 160, 80, 255}, 255)
+    viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
+    viewfont.cache_ink_capture_publish(&state^.font_cache)
+    presentation_sync_lifecycle(state, presentation)
+    selected: bridgemodel.Euclid_Julia_Animation_Interface
+    state^.julia_interface^.current_animation = &selected
+    service^.animation_generation += 1
+
+    presentation_sync_lifecycle(state, presentation)
+    testing.expect_value(t, presentation^.dust.particle_count, 1)
+    testing.expect(t, !presentation^.suppress_next_departure)
+    testing.expect_value(t,
+        len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 0)
+
+    service^.animation_generation += 1
+    presentation_sync_lifecycle(state, presentation)
+    testing.expect_value(t, presentation^.dust.particle_count, 0)
+    testing.expect(t, presentation^.suppress_next_departure)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+}
+
 //   Verify a miss publishes after poll/join and its exact repeat uses the cache.
 @(test)
 presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
@@ -187,6 +409,8 @@ presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
     testing.expect(t, !presentation^.active.submitted)
     testing.expect(t, service^.published_view_snapshot_index >= 0)
     testing.expect(t, state^.dynview.compile_cache.math_program_count > 0)
+    testing.expect(t, presentation^.dust.incoming_active)
+    testing.expect_value(t, presentation^.dust.incoming_generation, u64(21))
     returned, first_returned := bridge.communication_link_try_take_return(
         &service^.event_link)
     testing.expect(t, first_returned && returned == first)
@@ -228,6 +452,7 @@ presentation_rejected_tex_publishes_exact_literal :: proc(t: ^testing.T) {
     testing.expect_value(t, literal.kind, dynviewmodel.Dynview_Command_Kind.Text_Run)
     testing.expect_value(t, state^.dynview.content.presentation_mime,
         presentation_model.Presentation_Mime.Text_Latex)
+    testing.expect(t, !presentation^.dust.incoming_active)
     testing.expect(t, presentation_test_bytes_equal(
         state^.dynview.content.presentation_bytes, source_bytes))
     testing.expect(t, presentation_test_bytes_equal(
@@ -247,6 +472,7 @@ presentation_lifecycle_change_cancels_stale_parse :: proc(t: ^testing.T) {
     state, service, presentation :=
         fixture.state, fixture.service, fixture.presentation
     presentation_sync_lifecycle(state, presentation)
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 40, .Fade)
     source_bytes := []u8{'$', '\\', 'f', 'r', 'a', 'c', '{', '1', '}', '{', '2', '}', '$'}
     message := presentation_test_message(state, 41, source_bytes)
     content, _ := message^.(bridgemodel.View_Content_Ready)
@@ -259,6 +485,8 @@ presentation_lifecycle_change_cancels_stale_parse :: proc(t: ^testing.T) {
     testing.expect_value(t, service^.published_view_snapshot_index, -1)
     testing.expect_value(t, len(state^.dynview.content.commands), 0)
     testing.expect(t, presentation^.active.cancellation_requested)
+    testing.expect(t, !presentation^.dust.incoming_active)
+    testing.expect_value(t, presentation^.dust.particle_count, 0)
     testing.expect_value(t, presentation^.newest_generation, 0)
     presentation_test_wait_for_idle(state, presentation)
     testing.expect_value(t, service^.published_view_snapshot_index, -1)

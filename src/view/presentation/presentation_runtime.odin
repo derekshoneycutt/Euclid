@@ -9,8 +9,15 @@ import dyncore "../../dynview/core"
 import dynparse "../../dynview/parse"
 import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
+import observe "../../evidence/observe"
 import taskpool "../../taskpool"
 import terminalservice "../terminal/service"
+import viewfont "../font"
+import uidust "../../particles/ui_dust"
+import uipresentation "../ui/presentation"
+import uiterminal "../ui/terminal"
+import geometry "../../core/geometry"
+import log "core:log"
 
 // Presentation_Operation retains one producer envelope through parse task join.
 Presentation_Operation :: struct {
@@ -33,8 +40,15 @@ Presentation_Runtime :: struct {
     newest_generation: u64,
     observed_runtime_generation: u64,
     observed_animation_generation: u64,
+    observed_animation: rawptr,
     lifecycle_observed: bool,
+    suppress_next_departure: bool,
     staging: ^dynviewmodel.Dynview_System,
+    dust: uidust.Ui_Dust_System,
+    // Ink publication serial at arrival start; later frames supply falling targets.
+    arrival_ink_serial: u64,
+    // Debug-scenario arrival override; nil uses the fixed product style.
+    arrival_style: Maybe(uidust.Ui_Dust_Arrival_Style),
 }
 
 // Presentation_Parse_Request retains one classified exact parse operation.
@@ -179,6 +193,7 @@ presentation_sync_lifecycle :: proc(
     if !runtime^.lifecycle_observed {
         runtime^.observed_runtime_generation = service^.runtime_generation
         runtime^.observed_animation_generation = service^.animation_generation
+        runtime^.observed_animation = presentation_current_animation(state)
         runtime^.lifecycle_observed = true
         return
     }
@@ -186,8 +201,7 @@ presentation_sync_lifecycle :: proc(
         runtime^.observed_animation_generation == service^.animation_generation {
         return
     }
-    runtime^.observed_runtime_generation = service^.runtime_generation
-    runtime^.observed_animation_generation = service^.animation_generation
+    presentation_lifecycle_effects(state, runtime)
     bridge.release_published_view_snapshot(state, service)
     superseded := runtime^.newest_generation != 0
     preserve_pending := presentation_pending_matches_current(state, runtime)
@@ -204,6 +218,43 @@ presentation_sync_lifecycle :: proc(
             service^.animation_generation, runtime^.newest_generation)
     }
     runtime^.newest_generation = 0
+}
+
+// presentation_lifecycle_effects records a lifecycle commit and applies its dust policy.
+// Selection breaks the last drawn text into dust; reset and reload retire every effect
+// and the retained ink, and suppress the next admitted replacement.
+presentation_lifecycle_effects :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
+    service := state^.julia_runtime_service
+    animation := presentation_current_animation(state)
+    selected := runtime^.observed_runtime_generation == service^.runtime_generation &&
+        animation != runtime^.observed_animation
+    runtime^.observed_runtime_generation = service^.runtime_generation
+    runtime^.observed_animation_generation = service^.animation_generation
+    runtime^.observed_animation = animation
+    if selected {
+        presentation_effects_begin_departure(
+            state, runtime, service^.animation_generation)
+    } else {
+        presentation_effects_retire(state, runtime)
+    }
+}
+
+// presentation_effects_retire drops dust, the incoming fade, and retained ink so the
+// next admitted replacement appears without breaking stale text.
+presentation_effects_retire :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
+    runtime^.suppress_next_departure = true
+    uidust.ui_dust_settle(&runtime^.dust)
+    viewfont.cache_ink_capture_discard(&state^.font_cache)
+}
+
+// presentation_current_animation returns the selected animation identity, or nil.
+presentation_current_animation :: proc(state: ^core.Euclid_General_State) -> rawptr {
+    if state == nil || state^.julia_interface == nil {
+        return nil
+    }
+    return state^.julia_interface^.current_animation
 }
 
 //   Report whether pre-completion lifecycle content became current at generation commit.
@@ -231,6 +282,13 @@ presentation_admit :: proc(
     }
     superseded := runtime^.newest_generation != 0
     runtime^.newest_generation = content.presentation_generation
+    if runtime^.suppress_next_departure {
+        uidust.ui_dust_cancel_arrival(&runtime^.dust)
+        runtime^.suppress_next_departure = false
+    } else {
+        presentation_effects_begin_departure(
+            state, runtime, content.presentation_generation)
+    }
     bridge.release_published_view_snapshot(state, service)
     presentation_record_event(state, .Presentation_Cleared,
         content.animation_generation, content.presentation_generation, content.origin)
@@ -412,9 +470,161 @@ presentation_materialize :: proc(
         published := bridge.publish_presentation_snapshot(
             state, runtime^.staging, request)
         if published && request.document != nil {
+            if presentation_reduced_motion_enabled(state) {
+                uidust.ui_dust_settle(&runtime^.dust)
+            } else {
+                uidust.ui_dust_begin_arrival(
+                    &runtime^.dust, request.content.presentation_generation,
+                    presentation_arrival_style(runtime))
+                runtime^.arrival_ink_serial =
+                    viewfont.cache_visible_ink_serial(&state^.font_cache)
+            }
             presentation_record_semantic_published(state, request.content)
+        } else if published {
+            uidust.ui_dust_cancel_arrival(&runtime^.dust)
         }
     }
+}
+
+// presentation_arrival_style returns the style the next accepted document uses.
+presentation_arrival_style :: proc(
+    runtime: ^Presentation_Runtime) -> uidust.Ui_Dust_Arrival_Style {
+    if runtime == nil {
+        return uidust.UI_DUST_ARRIVAL_STYLE
+    }
+    return runtime^.arrival_style.? or_else uidust.UI_DUST_ARRIVAL_STYLE
+}
+
+// presentation_set_arrival_style overrides the arrival style for later documents.
+// Any active arrival is cancelled so its content appears whole immediately; the
+// current document is not replayed and outgoing dust continues undisturbed.
+presentation_set_arrival_style :: proc(
+    runtime: ^Presentation_Runtime, style: uidust.Ui_Dust_Arrival_Style) {
+    if runtime == nil {
+        return
+    }
+    runtime^.arrival_style = style
+    uidust.ui_dust_cancel_arrival(&runtime^.dust)
+}
+
+// presentation_effects_observe copies pointer-free dust facts for display evidence.
+presentation_effects_observe :: proc(
+    runtime: ^Presentation_Runtime) -> observe.Presentation_Effects {
+    if runtime == nil {
+        return {arrival_selection = uidust.UI_DUST_ARRIVAL_STYLE}
+    }
+    dust := &runtime^.dust
+    return {
+        arrival_selection = presentation_arrival_style(runtime),
+        arrival_style = dust.incoming_style,
+        arrival_active = dust.incoming_active,
+        arrival_awaiting_targets = dust.incoming_awaiting_targets,
+        arrival_particle_count = dust.arrival_count,
+        departure_particle_count = dust.particle_count,
+    }
+}
+
+// presentation_effects_begin_departure breaks the last drawn ink into dust.
+// Samples are evenly strided across the bounded snapshot and then consumed so the
+// same ink never departs twice; without samples, any dust already falling
+// continues and only the incoming fade is cancelled.
+presentation_effects_begin_departure :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
+    generation: u64) {
+    if presentation_reduced_motion_enabled(state) {
+        uidust.ui_dust_settle(&runtime^.dust)
+        viewfont.cache_ink_capture_discard(&state^.font_cache)
+        return
+    }
+    samples := viewfont.cache_visible_ink_samples(&state^.font_cache)
+    if len(samples) == 0 {
+        uidust.ui_dust_cancel_arrival(&runtime^.dust)
+        return
+    }
+    visible_alpha := uidust.ui_dust_incoming_alpha(&runtime^.dust)
+    uidust.ui_dust_begin_departure(&runtime^.dust, generation)
+    count := min(len(samples), uidust.UI_DUST_MAX_PARTICLES)
+    for index in 0..<count {
+        sample := samples[((2*index + 1)*len(samples))/(2*count)]
+        _ = uidust.ui_dust_emit(&runtime^.dust, sample.position,
+            sample.color, sample.coverage, visible_alpha)
+    }
+    viewfont.cache_ink_capture_discard(&state^.font_cache)
+    log.debugf("dynview_dust_departure samples=%d particles=%d",
+        len(samples), runtime^.dust.particle_count)
+}
+
+// presentation_effects_begin_formation seeds falling ink or draw-in from the first
+// presented frame of newly published content. Draw-in bins every sample into its
+// reveal rows before emitting sparse accents. The retained ink stays published for
+// a later departure; content without visible ink degrades to the fade.
+presentation_effects_begin_formation :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
+    if !uidust.ui_dust_arrival_awaiting_targets(&runtime^.dust) ||
+        viewfont.cache_visible_ink_serial(&state^.font_cache) ==
+            runtime^.arrival_ink_serial {
+        return
+    }
+    samples := viewfont.cache_visible_ink_samples(&state^.font_cache)
+    if len(samples) == 0 {
+        uidust.ui_dust_arrival_use_fade(&runtime^.dust)
+        return
+    }
+    for sample in samples {
+        uidust.ui_dust_reveal_include(&runtime^.dust, sample.position)
+    }
+    uidust.ui_dust_begin_formation(&runtime^.dust)
+    count := min(len(samples), uidust.ui_dust_arrival_budget(&runtime^.dust))
+    for index in 0..<count {
+        sample := samples[((2*index + 1)*len(samples))/(2*count)]
+        _ = uidust.ui_dust_emit_arrival(
+            &runtime^.dust, sample.position, sample.color, sample.coverage)
+    }
+}
+
+// presentation_effects_update advances visual effects under the effective motion policy.
+presentation_effects_update :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
+    delta_seconds: f32, presentation: uipresentation.Presentation_Preparation,
+    visual_signature: u64) {
+    if state == nil || runtime == nil {
+        return
+    }
+    resetting := state^.julia_interface != nil &&
+        state^.julia_interface^.pending_animation_reset
+    reloading := state^.julia_runtime_service != nil &&
+        state^.julia_runtime_service^.reload_state != .Idle
+    if resetting || reloading {
+        presentation_effects_retire(state, runtime)
+        return
+    }
+    presentation_effects_begin_formation(state, runtime)
+    visual_presentation := presentation
+    if visual_presentation.scroll.view_rect.width <= 0 ||
+        visual_presentation.scroll.view_rect.height <= 0 {
+        panel := geometry.Rectangle(state^.ui_runtime.layout.ui_regions.text_rect)
+        visual_presentation = uipresentation.prepare_presentation_visual(state, panel)
+    }
+    visible := state^.ui_runtime.presentation.visible &&
+        !uiterminal.is_terminal_selected(state)
+    viewport := geometry.Rectangle(visual_presentation.scroll.view_rect)
+    uidust.ui_dust_validate_context(
+        &runtime^.dust, {
+            visible = visible,
+            reduced_motion = presentation_reduced_motion_enabled(state),
+            viewport = viewport,
+            scroll_y = presentation.scroll.scroll_y_out,
+            visual_signature = visual_signature,
+        })
+    uidust.ui_dust_advance(&runtime^.dust, delta_seconds)
+}
+
+// presentation_reduced_motion_enabled combines the user and platform policies.
+presentation_reduced_motion_enabled :: #force_inline proc(
+    state: ^core.Euclid_General_State) -> bool {
+    return state != nil &&
+        (state^.ui_runtime.preferences.values.interface.reduce_motion ||
+         state^.ui_runtime.platform_reduce_motion)
 }
 
 //   Match producer identities against the current display-owned runtime selection.

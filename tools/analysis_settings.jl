@@ -1856,6 +1856,22 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "view-font-visible-ink-samples",
+                "src/view/font/font.odin",
+                "cache_ink_capture_init",
+                :custom,
+                "Fixed double-buffered visible-ink sample storage sized by " *
+                    "FONT_VISIBLE_INK_SAMPLE_CAPACITY, allocated once at font cache " *
+                    "initialization and released by cache_ink_capture_destroy during " *
+                    "cache teardown. Frame capture and publication never grow it.";
+                operation="make",
+                target="[]Font_Ink_Sample",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "view-font-harfbuzz-ownership-test-arena",
                 "src/view/font/font_test.odin",
                 "view_test_harfbuzz_owns_source_and_bounds_output",

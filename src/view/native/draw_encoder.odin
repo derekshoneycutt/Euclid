@@ -10,6 +10,13 @@ DRAW_CIRCLE_SEGMENTS :: 32
 DRAW_POLYLINE_FAN_SEGMENTS :: 12
 DRAW_POLYLINE_POINT_EPSILON :: 0.001
 DRAW_POLYLINE_MITER_EPSILON :: 0.0001
+// Logical spacing between ink samples on solid geometry, near glyph cell pitch.
+DRAW_INK_GEOMETRY_SPACING :: f32(3)
+// Upper bound on ink samples recorded for one solid triangle.
+DRAW_INK_TRIANGLE_SAMPLE_MAX :: 48
+// R2 sequence increments (inverse plastic number powers) for even triangle coverage.
+DRAW_INK_R2_ALPHA_X :: f32(0.7548776662)
+DRAW_INK_R2_ALPHA_Y :: f32(0.5698402910)
 
 // Draw_Pipeline selects one immutable native 2D graphics pipeline.
 Draw_Pipeline :: enum u8 {
@@ -263,6 +270,17 @@ Draw_Custom_Storage :: struct {
     dust_expanded_draws: []Dust_Draw,
 }
 
+// Draw_Ink_Sample_Handler receives one independent visible-ink point.
+Draw_Ink_Sample_Handler :: #type proc(
+    user_data: rawptr, position: geometry.Vector2,
+    tint: color.Color_RGBA8, coverage: u8)
+
+// Draw_Ink_Sink routes draw-adjacent ink samples to a display-owned collector.
+Draw_Ink_Sink :: struct {
+    user_data: rawptr,
+    record: Draw_Ink_Sample_Handler,
+}
+
 // Draw_Storage borrows fixed-capacity frame buffers from the display owner.
 Draw_Storage :: struct {
     vertices: []Draw_Vertex,
@@ -298,9 +316,76 @@ Draw_Encoder :: struct {
     dust_instancing_enabled: bool,
     logical_extent: geometry.Vector2,
     physical_extent: [2]u32,
+    ink_sink: Draw_Ink_Sink,
     scissors: [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
     scissor_count: int,
     statistics: Draw_Encoder_Statistics,
+}
+
+// Install or remove the optional sink used by a single structured draw pass.
+draw_encoder_set_ink_sink :: proc(
+    encoder: ^Draw_Encoder, sink: Draw_Ink_Sink) {
+    if encoder != nil {
+        encoder^.ink_sink = sink
+    }
+}
+
+// Record one physically clipped, pixel-snapped sample for visible ink capture.
+draw_encoder_record_ink_sample :: #force_inline proc(
+    encoder: ^Draw_Encoder, position: geometry.Vector2,
+    tint: color.Color_RGBA8, coverage: u8) {
+    if encoder == nil || encoder^.ink_sink.record == nil || coverage == 0 {
+        return
+    }
+    scissor := draw_encoder_physical_scissor(encoder)
+    scale_x := f64(encoder^.physical_extent[0])/f64(encoder^.logical_extent.x)
+    scale_y := f64(encoder^.physical_extent[1])/f64(encoder^.logical_extent.y)
+    pixel_x := f64(position.x)*scale_x
+    pixel_y := f64(position.y)*scale_y
+    if math.is_nan(pixel_x) || math.is_inf(pixel_x) ||
+        math.is_nan(pixel_y) || math.is_inf(pixel_y) ||
+        pixel_x < f64(scissor.x) ||
+        pixel_x >= f64(scissor.x)+f64(scissor.width) ||
+        pixel_y < f64(scissor.y) ||
+        pixel_y >= f64(scissor.y)+f64(scissor.height) {
+        return
+    }
+    snapped := geometry.Vector2{
+        f32((math.floor(pixel_x)+0.5)/scale_x),
+        f32((math.floor(pixel_y)+0.5)/scale_y),
+    }
+    encoder^.ink_sink.record(encoder^.ink_sink.user_data, snapped, tint, coverage)
+}
+
+// draw_encoder_triangle_ink_count sizes one solid triangle's ink samples so thin
+// strokes match glyph sample pitch along their length and fills match it by area.
+draw_encoder_triangle_ink_count :: proc(a, b, c: geometry.Vector2) -> int {
+    longest := f32(math.sqrt(f64(max(draw_polyline_distance_squared(a, b),
+        draw_polyline_distance_squared(b, c), draw_polyline_distance_squared(c, a)))))
+    area := abs((b.x - a.x)*(c.y - a.y) - (c.x - a.x)*(b.y - a.y)) / 2
+    wanted := max(longest / DRAW_INK_GEOMETRY_SPACING,
+        area / (DRAW_INK_GEOMETRY_SPACING*DRAW_INK_GEOMETRY_SPACING))
+    if math.is_nan(wanted) || math.is_inf(wanted) {
+        return 1
+    }
+    return clamp(int(math.ceil(wanted)), 1, DRAW_INK_TRIANGLE_SAMPLE_MAX)
+}
+
+// draw_encoder_record_triangle_ink records deterministic, evenly spread ink
+// samples covering one solid triangle. Points follow an R2 low-discrepancy
+// sequence folded into the triangle, so no random state is consumed.
+draw_encoder_record_triangle_ink :: proc(
+    encoder: ^Draw_Encoder, a, b, c: geometry.Vector2, tint: color.Color_RGBA8) {
+    count := draw_encoder_triangle_ink_count(a, b, c)
+    for index in 0..<count {
+        u := math.mod(0.5 + DRAW_INK_R2_ALPHA_X*f32(index), 1)
+        v := math.mod(0.5 + DRAW_INK_R2_ALPHA_Y*f32(index), 1)
+        if u + v > 1 {
+            u, v = 1 - u, 1 - v
+        }
+        draw_encoder_record_ink_sample(encoder,
+            a + (b - a)*u + (c - a)*v, tint, 255)
+    }
 }
 
 // draw_encoder_record_curve_reduction accumulates bounded projected point counts.
@@ -539,7 +624,7 @@ draw_encoder_finish_dust :: proc(
     encoder: ^Draw_Encoder, count: int) -> bool {
     encoder^.command_count += 1
     encoder^.statistics.commands = u32(encoder^.command_count)
-    encoder^.statistics.dust_instances = u32(count)
+    encoder^.statistics.dust_instances += u32(count)
     encoder^.statistics.dust_draws += 1
     encoder^.statistics.dust_expanded_vertices =
         u32(encoder^.dust_expanded_vertex_count)
@@ -553,13 +638,14 @@ draw_encoder_commit_instanced_dust :: proc(
         return false
     }
     draw_index := encoder^.dust_draw_count
-    encoder^.dust_draws[draw_index] = {first = 0, count = u32(count),
+    encoder^.dust_draws[draw_index] = {
+        first = u32(encoder^.dust_instance_count), count = u32(count),
         texture = texture, scissor = draw_encoder_physical_scissor(encoder),
         viewport_extent = {encoder^.logical_extent.x,
             encoder^.logical_extent.y}}
     encoder^.commands[encoder^.command_count] = {
         kind = .Dust_Instanced, index = u32(draw_index)}
-    encoder^.dust_instance_count = count
+    encoder^.dust_instance_count += count
     encoder^.dust_draw_count += 1
     return true
 }
@@ -567,33 +653,45 @@ draw_encoder_commit_instanced_dust :: proc(
 // draw_encoder_commit_expanded_dust admits one CPU-expanded dust command.
 draw_encoder_commit_expanded_dust :: proc(
     encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
+    first_vertex := encoder^.dust_expanded_vertex_count
     vertex_count := count * DUST_EXPANDED_VERTICES_PER_INSTANCE
-    if vertex_count > len(encoder^.dust_expanded_vertices) ||
+    if vertex_count > len(encoder^.dust_expanded_vertices) - first_vertex ||
         encoder^.dust_expanded_draw_count >= len(encoder^.dust_expanded_draws) {
         encoder^.statistics.dust_overflows += 1
         return false
     }
+    staging := draw_encoder_dust_staging(encoder)
     for index in 0..<count {
-        first := index * DUST_EXPANDED_VERTICES_PER_INSTANCE
+        first := first_vertex + index * DUST_EXPANDED_VERTICES_PER_INSTANCE
         draw_encoder_expand_dust(encoder^.dust_expanded_vertices[
-            first:first + DUST_EXPANDED_VERTICES_PER_INSTANCE],
-            encoder^.dust_instances[index])
+            first:first + DUST_EXPANDED_VERTICES_PER_INSTANCE], staging[index])
     }
     draw_index := encoder^.dust_expanded_draw_count
-    encoder^.dust_expanded_draws[draw_index] = {first = 0,
+    encoder^.dust_expanded_draws[draw_index] = {first = u32(first_vertex),
         count = u32(vertex_count), texture = texture,
         scissor = draw_encoder_physical_scissor(encoder)}
     encoder^.commands[encoder^.command_count] = {
         kind = .Dust_Expanded, index = u32(draw_index)}
-    encoder^.dust_expanded_vertex_count = vertex_count
+    encoder^.dust_expanded_vertex_count += vertex_count
     encoder^.dust_expanded_draw_count += 1
     return true
 }
 
-// draw_encoder_commit_dust atomically appends one full prepared dust prefix.
+// draw_encoder_dust_staging returns the unused instance tail for the next batch.
+// Callers fill a prefix of the returned slice and then commit that prefix.
+// Expanded commits convert staging to vertices at once and leave it reusable.
+draw_encoder_dust_staging :: proc(encoder: ^Draw_Encoder) -> []Dust_Instance {
+    if encoder == nil {
+        return nil
+    }
+    return encoder^.dust_instances[encoder^.dust_instance_count:]
+}
+
+// draw_encoder_commit_dust atomically appends one prepared staging prefix.
 draw_encoder_commit_dust :: proc(
     encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
-    if encoder == nil || count < 0 || count > len(encoder^.dust_instances) ||
+    if encoder == nil || count < 0 ||
+        count > len(encoder^.dust_instances) - encoder^.dust_instance_count ||
         texture == nil || encoder^.command_count >= len(encoder^.commands) {
         if encoder != nil {
             encoder^.statistics.dust_overflows += 1
@@ -638,6 +736,14 @@ draw_encoder_commit :: proc(
     batch^.index_count += u32(len(relative_indices))
     encoder^.statistics.vertices = u32(encoder^.vertex_count)
     encoder^.statistics.indices = u32(encoder^.index_count)
+    if encoder^.ink_sink.record != nil {
+        for triangle in 0..<len(relative_indices)/3 {
+            draw_encoder_record_triangle_ink(encoder,
+                positions[relative_indices[triangle*3]],
+                positions[relative_indices[triangle*3+1]],
+                positions[relative_indices[triangle*3+2]], draw_color)
+        }
+    }
     return true
 }
 

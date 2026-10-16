@@ -51,6 +51,7 @@ Prepared_Font_Allocation_Mode :: fontmodel.Prepared_Font_Allocation_Mode
 Prepared_Glyph :: fontmodel.Prepared_Glyph
 Prepared_Rectangle :: fontmodel.Prepared_Rectangle
 Prepared_Font :: fontmodel.Prepared_Font
+Font_Glyph_Coverage_Cell :: fontmodel.Font_Glyph_Coverage_Cell
 
 //   Query an optional caller-owned cancellation capability.
 prepare_cancellation_requested :: proc(
@@ -579,7 +580,7 @@ prepare_initialize_atlas :: proc(
 prepare_render_glyphs :: proc(
     face: ^Font_Freetype_Face, prepared: ^Prepared_Font,
     cancellation: Font_Prepare_Cancellation) -> bool {
-    for glyph, index in prepared.glyphs {
+    for &glyph, index in prepared.glyphs {
         if prepare_cancellation_requested(cancellation) {
             return false
         }
@@ -592,8 +593,61 @@ prepare_render_glyphs :: proc(
             bitmap, prepared.rectangles[index], prepared) {
             return false
         }
+        prepare_sample_freetype_bitmap(bitmap, &glyph)
     }
     return true
+}
+
+// Summarize each nonempty bitmap cell as one deterministic coverage sample.
+prepare_sample_freetype_bitmap :: proc(
+    bitmap: Font_Freetype_Bitmap, glyph: ^Prepared_Glyph) {
+    if glyph == nil || bitmap.width == 0 || bitmap.rows == 0 ||
+        bitmap.width > u32(max(u16)) || bitmap.rows > u32(max(u16)) {
+        return
+    }
+    pitch := int(abs(bitmap.pitch))
+    if pitch < int(bitmap.width) {
+        return
+    }
+    for cell_y in 0..<4 {
+        y0 := int(bitmap.rows)*cell_y/4
+        y1 := int(bitmap.rows)*(cell_y+1)/4
+        for cell_x in 0..<4 {
+            x0 := int(bitmap.width)*cell_x/4
+            x1 := int(bitmap.width)*(cell_x+1)/4
+            prepare_sample_bitmap_cell(bitmap, glyph, pitch, {x0, x1, y0, y1})
+        }
+    }
+}
+
+// Record one coverage-weighted centroid when its bitmap cell contains ink.
+prepare_sample_bitmap_cell :: proc(
+    bitmap: Font_Freetype_Bitmap, glyph: ^Prepared_Glyph, pitch: int,
+    cell: Font_Glyph_Coverage_Cell) {
+    coverage_sum, weighted_x, weighted_y := u64(0), u64(0), u64(0)
+    for y in cell.y0..<cell.y1 {
+        source_y := y
+        if bitmap.pitch < 0 {
+            source_y = int(bitmap.rows)-y-1
+        }
+        for x in cell.x0..<cell.x1 {
+            coverage := u64(bitmap.pixels[source_y*pitch+x])
+            coverage_sum += coverage
+            weighted_x += coverage*u64(x)
+            weighted_y += coverage*u64(y)
+        }
+    }
+    if coverage_sum == 0 ||
+        int(glyph.coverage_sample_count) >= FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY {
+        return
+    }
+    glyph.coverage_samples[int(glyph.coverage_sample_count)] = {
+        x = u16(weighted_x/coverage_sum),
+        y = u16(weighted_y/coverage_sum),
+        coverage = u8(coverage_sum/u64(max(
+            1, (cell.x1-cell.x0)*(cell.y1-cell.y0)))),
+    }
+    glyph.coverage_sample_count += 1
 }
 
 //   Mark the atlas validation corner after every glyph is complete.

@@ -1,0 +1,29 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_state":"dynview_enabled","timeout_ms":10000}
+{"set_setting":{"key":"interface.reduce_motion","value":false}}
+{"select_animation":"Proposition I","as":"warmup"}
+{"wait_event":"animation_selected","correlation":"warmup","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"warmup","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"set_arrival_style":"falling_ink"}
+{"select_animation":"Axiom I,1","as":"falling"}
+{"wait_event":"animation_selected","correlation":"falling","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"falling","timeout_ms":10000}
+{"wait_state":"presentation_arrival_particles","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-falling-ink.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-falling-ink-settled.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_arrival_style":"draw_in"}
+{"select_animation":"Proposition I","as":"draw-in"}
+{"wait_event":"animation_selected","correlation":"draw-in","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"draw-in","timeout_ms":10000}
+{"wait_state":"presentation_arrival_particles","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-draw-in.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-draw-in-settled.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

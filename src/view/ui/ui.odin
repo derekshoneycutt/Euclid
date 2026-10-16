@@ -225,7 +225,8 @@ draw_encoded_focus_outline :: proc(
 draw_encoded_view_content :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     terminal: uiterminal.Terminal_Prepared_Frame,
-    presentation: uipresentation.Presentation_Preparation) {
+    presentation: uipresentation.Presentation_Preparation,
+    effects: uipresentation.Presentation_Effects_Draw_Params) {
     runtime := &state^.ui_runtime
     panel := geometry.Rectangle(runtime^.layout.ui_regions.text_rect)
     clip := uiaccordion.ui_presentation_clip(&runtime^.layout, panel)
@@ -242,10 +243,16 @@ draw_encoded_view_content :: proc(
         uiterminal.terminal_draw_encoded(state, encoder, prepared)
     } else {
         prepared := presentation
-        if !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
+        if !prepared.active ||
+            !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
             prepared = uipresentation.prepare_presentation_visual(state, panel)
         }
         uipresentation.draw_encoded_presentation_text(state, encoder, prepared)
+        if uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
+            uipresentation.presentation_draw_effects(
+                encoder, effects.dust, prepared.scroll.view_rect,
+                effects.dust_atlas)
+        }
     }
     _ = native.draw_encoder_pop_scissor(encoder)
 }

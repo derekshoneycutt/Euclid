@@ -22,6 +22,7 @@ import viewmessages "messages"
 import world "world"
 import uisemantics "ui/semantics"
 import viewpresentation "presentation"
+import uipresentation "ui/presentation"
 import viewscenario "scenario"
 import terminalservice "terminal/service"
 import uiaccessibility "ui/accessibility"
@@ -172,7 +173,7 @@ service_scenario_before_present :: proc(ctx: Window_Frame_Context) {
     when core.SCENARIOS_ENABLED {
         if ctx.scenario_runtime != nil {
             _ = viewscenario.scenario_runtime_update_current(
-                ctx.scenario_runtime, ctx.input_runtime)
+                ctx.scenario_runtime, ctx.input_runtime, ctx.presentation)
         }
     }
 }
@@ -323,8 +324,8 @@ prepare_sdl_frame_owners :: proc(
     apply_sdl_cursor(state, ctx.platform)
     prepare_sdl_simulation_frame(
         state, ctx, update.frame_dt, update.ui_geometry.compile_dynview)
-    layout_interaction := ui.prepare_and_finish_ui_layout(
-        state, update.routed_frame, terminal_frame)
+    layout_interaction := prepare_sdl_layout_and_effects(
+        state, ctx, update, terminal_frame)
     execute_context_menu_command(state, ctx.input_runtime)
     uiaccessibility.publish_accessibility_controls(
         state^.ui_runtime.semantic_focus, ctx.platform)
@@ -333,6 +334,46 @@ prepare_sdl_frame_owners :: proc(
     prepared^.terminal_frame = terminal_frame
     prepared^.splitters = update.ui_geometry.splitters
     prepared^.layout_interaction = layout_interaction
+}
+
+// prepare_sdl_layout_and_effects resolves UI layout, then advances presentation
+// effects against that frame's Presentation viewport.
+prepare_sdl_layout_and_effects :: proc(
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
+    update: Sdl_Frame_Update, terminal_frame: uiterminal.Terminal_Prepared_Frame) ->
+    ui.Ui_Layout_Interaction_Preparation {
+    layout_interaction := ui.prepare_and_finish_ui_layout(
+        state, update.routed_frame, terminal_frame)
+    update_sdl_presentation_effects(
+        state, ctx, update.frame_dt, layout_interaction.presentation)
+    return layout_interaction
+}
+
+// update_sdl_presentation_effects advances the display-owned transition lifecycle.
+update_sdl_presentation_effects :: proc(
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
+    delta_seconds: f32,
+    presentation: uipresentation.Presentation_Preparation) {
+    viewpresentation.presentation_effects_update(
+        state, ctx.presentation, delta_seconds, presentation,
+        presentation_visual_signature(state, ctx.platform))
+}
+
+// presentation_visual_signature invalidates effects after font or scale changes.
+presentation_visual_signature :: proc(
+    state: ^core.Euclid_General_State,
+    platform: ^native.Sdl_Platform) -> u64 {
+    if state == nil || platform == nil {
+        return 0
+    }
+    signature := u64(platform^.scene_width)*0x9e3779b185ebca87 +
+        u64(platform^.scene_height)*0xc2b2ae3d27d4eb4f +
+        u64(platform^.metrics.logical_width)*0x165667b19e3779f9 +
+        u64(platform^.metrics.logical_height)
+    for entry in state^.font_cache.entries {
+        signature = signature*0x100000001b3 + entry.generation
+    }
+    return signature
 }
 
 // Step simulation, update drawing audio, and join caches before layout interaction.
@@ -370,8 +411,16 @@ encode_sdl_world_geometry :: proc(
 
 // encode_sdl_ui_geometry encodes panel geometry and deferred text.
 encode_sdl_ui_geometry :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
+    encoder: ^native.Draw_Encoder,
     prepared: ^Frame_Draw_Preparation) {
+    effects: uipresentation.Presentation_Effects_Draw_Params
+    if ctx.presentation != nil {
+        effects.dust = &ctx.presentation^.dust
+    }
+    if ctx.draw_runtime != nil {
+        effects.dust_atlas = ctx.draw_runtime^.dust_atlas.handle
+    }
     ui.draw_encoded_panel_geometry(state, encoder, &prepared^.controls)
     uianimation.draw_encoded_animation_controls(
         state, encoder, prepared^.controls.animation_controls)
@@ -380,11 +429,11 @@ encode_sdl_ui_geometry :: proc(
     if uiterminal.is_terminal_selected(state) {
         terminalservice.terminal_graphics_set_draw_encoder(state, encoder)
         ui.draw_encoded_view_content(state, encoder, prepared^.terminal_frame,
-            prepared^.layout_interaction.presentation)
+            prepared^.layout_interaction.presentation, effects)
         terminalservice.terminal_graphics_set_draw_encoder(state, nil)
     } else {
         ui.draw_encoded_view_content(state, encoder, prepared^.terminal_frame,
-            prepared^.layout_interaction.presentation)
+            prepared^.layout_interaction.presentation, effects)
     }
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
     uioverlay.draw_encoded_tooltip(state, encoder)
@@ -404,8 +453,9 @@ encode_sdl_geometry_frame :: proc(
     native.draw_encoder_enable_strokes(&encoder, ctx.draw_runtime^.stroke_ready)
     native.draw_encoder_enable_dust_instancing(
         &encoder, ctx.draw_runtime^.dust_ready)
+    font.cache_ink_capture_begin(&state^.font_cache)
     encode_sdl_world_geometry(state, ctx, &encoder)
-    encode_sdl_ui_geometry(state, &encoder, prepared)
+    encode_sdl_ui_geometry(state, ctx, &encoder, prepared)
     result := native.sdl_platform_present_draw(
         ctx.platform, ctx.draw_runtime, &encoder,
         native.to_sdl_color(worldmodel.BACKGROUND_COLOR))
@@ -434,6 +484,7 @@ run_sdl_geometry_frame :: proc(
     }
     presented := result == .Presented
     if presented {
+        font.cache_ink_capture_publish(&state^.font_cache)
         viewtelemetry.publish_draw_frame_observation(state, ctx.draw_runtime)
         viewtelemetry.report_draw_frame_telemetry(state, ctx.draw_runtime)
         run_gif_capture_frame(state, ctx.framebuffer_operations)

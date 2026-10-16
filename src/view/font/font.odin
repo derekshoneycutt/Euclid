@@ -2,6 +2,7 @@ package font
 
 import "../../files"
 import geometry "../../core/geometry"
+import color "../../core/color"
 import fontmodel "model"
 
 import "core:mem"
@@ -16,6 +17,8 @@ FONT_SEED_CODEPOINT_CAPACITY :: fontmodel.FONT_SEED_CODEPOINT_CAPACITY
 
 // Maximum face glyphs admitted to one prepared atlas page.
 FONT_GLYPH_PAGE_REQUEST_CAPACITY :: 256
+FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY :: fontmodel.FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY
+FONT_VISIBLE_INK_SAMPLE_CAPACITY :: fontmodel.FONT_VISIBLE_INK_SAMPLE_CAPACITY
 
 // Number of indexed font variants through the final `Font_Key` value.
 FONT_KEY_COUNT :: fontmodel.FONT_KEY_COUNT
@@ -56,6 +59,8 @@ Font_Shaping_Telemetry :: fontmodel.Font_Shaping_Telemetry
 Font_Raster_Request :: fontmodel.Font_Raster_Request
 Font_Glyph_State :: fontmodel.Font_Glyph_State
 Font_Glyph_Record :: fontmodel.Font_Glyph_Record
+Font_Glyph_Coverage_Sample :: fontmodel.Font_Glyph_Coverage_Sample
+Font_Ink_Sample :: fontmodel.Font_Ink_Sample
 Font_Raster_Instance :: fontmodel.Font_Raster_Instance
 Font_Glyph_Page :: fontmodel.Font_Glyph_Page
 Font_Texture :: fontmodel.Font_Texture
@@ -81,6 +86,7 @@ Resolved_Glyph :: struct {
     canonical_raster_ascent: f32,
     raster_slot_index: i32,
     raster_slot_incarnation: u64,
+    coverage_samples: []Font_Glyph_Coverage_Sample,
 }
 
 // Exact raster identity selected for one complete glyph run.
@@ -932,6 +938,8 @@ font_generation_seed_records_init :: proc(
             offset_x = glyph.offset_x,
             offset_y = glyph.offset_y,
             advance_x = glyph.advance_x,
+            coverage_samples = glyph.coverage_samples,
+            coverage_sample_count = glyph.coverage_sample_count,
             state = .Resident,
         }
     }
@@ -1127,6 +1135,11 @@ cache_init :: proc(
     assert(cache != nil)
     cache^ = {}
     cache.texture_operations = operations
+    if !cache_ink_capture_init(cache, context.allocator) {
+        log.error("font_ink_capture_storage_init_failed")
+        cache^ = {}
+        return false
+    }
     cache_source_paths_init(cache)
     required_keys := [?]Font_Key{.Regular, .Math_Regular}
     ready := true
@@ -1174,6 +1187,7 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     }
     cache_raster_metadata_allocator_destroy(cache)
     cache_preparation_arena_destroy(cache)
+    cache_ink_capture_destroy(cache)
     cache^ = {}
 }
 
@@ -1334,10 +1348,10 @@ font_generation_resolve_glyph :: proc(
         raster.glyphs[glyph_id].state != .Resident {
         return {}, false
     }
-    glyph := raster.glyphs[glyph_id]
+    glyph := &raster.glyphs[glyph_id]
     texture := raster.texture
-    if glyph.page_index > 0 {
-        page_index := int(glyph.page_index) - 1
+    if glyph^.page_index > 0 {
+        page_index := int(glyph^.page_index) - 1
         if page_index >= int(raster.page_count) {
             return {}, false
         }
@@ -1345,19 +1359,20 @@ font_generation_resolve_glyph :: proc(
     }
     return {
         texture = texture,
-        source = glyph.rectangle,
-        offset_x = glyph.offset_x,
-        offset_y = glyph.offset_y,
-        advance_x = glyph.advance_x,
+        source = glyph^.rectangle,
+        offset_x = glyph^.offset_x,
+        offset_y = glyph^.offset_y,
+        advance_x = glyph^.advance_x,
         glyph_id = glyph_id,
         canonical_advance_x = font_generation_canonical_advance(
-            entry, raster, glyph_id, glyph.advance_x),
+            entry, raster, glyph_id, glyph^.advance_x),
         raster_pixel_height = i32(raster.identity.pixel_height),
         raster_ascent = raster.raster_ascent,
         canonical_pixel_height = u32(JULIA_MONO_FONT_SIZE),
         canonical_raster_ascent = entry.raster_ascent,
         raster_slot_index = raster_slot_index,
         raster_slot_incarnation = raster.identity.slot_incarnation,
+        coverage_samples = glyph^.coverage_samples[:int(glyph^.coverage_sample_count)],
     }, true
 }
 
@@ -1761,6 +1776,8 @@ cache_publish_glyph_records :: proc(
             offset_x = glyph.offset_x,
             offset_y = glyph.offset_y,
             advance_x = glyph.advance_x,
+            coverage_samples = glyph.coverage_samples,
+            coverage_sample_count = glyph.coverage_sample_count,
             page_index = u16(page_index + 1),
             state = .Resident,
         }
@@ -1864,6 +1881,128 @@ cache_terminal_resolver :: proc(cache: ^Font_Cache) -> Font_Resolver {
         record_shape_fallback = cache_terminal_record_shape_fallback,
         workspace = cache.shaped_glyphs[:],
     }
+}
+
+// Begin a bounded capture for the next structured presentation frame.
+cache_ink_capture_init :: proc(
+    cache: ^Font_Cache, allocator: mem.Allocator) -> bool {
+    if cache == nil || cache.visible_ink_samples != nil {
+        return false
+    }
+    samples, allocation_error := make(
+        []Font_Ink_Sample, 2*FONT_VISIBLE_INK_SAMPLE_CAPACITY, allocator)
+    if allocation_error != nil {
+        return false
+    }
+    cache.visible_ink_samples = samples
+    cache.visible_ink_allocator = allocator
+    return true
+}
+
+// Release the cache-owned fixed sample buffers.
+cache_ink_capture_destroy :: proc(cache: ^Font_Cache) {
+    if cache == nil || cache.visible_ink_samples == nil {
+        return
+    }
+    delete(cache.visible_ink_samples, cache.visible_ink_allocator)
+    cache.visible_ink_samples = nil
+    cache.visible_ink_allocator = {}
+    cache.visible_ink_counts = {}
+}
+
+// Begin a bounded capture for the next structured presentation frame.
+cache_ink_capture_begin :: proc(cache: ^Font_Cache) {
+    if cache == nil {
+        return
+    }
+    assert(len(cache.visible_ink_samples) ==
+        2*FONT_VISIBLE_INK_SAMPLE_CAPACITY)
+    cache.visible_ink_capture_index = 1-cache.visible_ink_active_index
+    cache.visible_ink_counts[cache.visible_ink_capture_index] = 0
+    cache.visible_ink_seen_count = 0
+    cache.visible_ink_random_state = 0x9e3779b97f4a7c15
+    cache.visible_ink_capture_drawn = false
+}
+
+// Record that the structured presentation drew this frame, even with no visible ink.
+cache_ink_capture_mark_drawn :: proc(cache: ^Font_Cache) {
+    if cache == nil {
+        return
+    }
+    cache.visible_ink_capture_drawn = true
+}
+
+// Retain a deterministic reservoir sample without borrowing draw or font storage.
+cache_ink_capture_sample :: proc(
+    user_data: rawptr, position: geometry.Vector2,
+    tint: color.Color_RGBA8, coverage: u8) {
+    cache := cast(^Font_Cache)user_data
+    if cache == nil || coverage == 0 {
+        return
+    }
+    cache.visible_ink_seen_count += 1
+    capture_index := cache.visible_ink_capture_index
+    count := &cache.visible_ink_counts[capture_index]
+    slot := -1
+    if count^ < FONT_VISIBLE_INK_SAMPLE_CAPACITY {
+        slot = count^
+        count^ += 1
+    } else {
+        cache.visible_ink_random_state =
+            cache.visible_ink_random_state*6364136223846793005 + 1442695040888963407
+        candidate := cache.visible_ink_random_state % cache.visible_ink_seen_count
+        if candidate < u64(FONT_VISIBLE_INK_SAMPLE_CAPACITY) {
+            slot = int(candidate)
+        }
+    }
+    if slot >= 0 {
+        cache.visible_ink_samples[
+            capture_index*FONT_VISIBLE_INK_SAMPLE_CAPACITY+slot] = {
+            position = position,
+            color = cast([4]u8)tint,
+            coverage = coverage,
+        }
+    }
+}
+
+// Publish the staged samples only after the frame reaches the display.
+// Frames that drew no structured presentation keep the last drawn ink, so
+// content released before a transition commits can still break into dust.
+cache_ink_capture_publish :: proc(cache: ^Font_Cache) {
+    if cache == nil || !cache.visible_ink_capture_drawn {
+        return
+    }
+    cache.visible_ink_active_index = cache.visible_ink_capture_index
+    cache.visible_ink_publish_serial += 1
+}
+
+// Identify the latest published structured-ink frame. A larger value than one
+// recorded at content publication proves the samples belong to that content.
+cache_visible_ink_serial :: proc(cache: ^Font_Cache) -> u64 {
+    if cache == nil {
+        return 0
+    }
+    return cache.visible_ink_publish_serial
+}
+
+// Forget the published ink once a transition consumed or retired it.
+cache_ink_capture_discard :: proc(cache: ^Font_Cache) {
+    if cache == nil {
+        return
+    }
+    cache.visible_ink_counts[cache.visible_ink_active_index] = 0
+}
+
+// Borrow independent samples from the most recently presented Dynview frame.
+cache_visible_ink_samples :: proc(cache: ^Font_Cache) -> []Font_Ink_Sample {
+    if cache == nil || len(cache.visible_ink_samples) !=
+        2*FONT_VISIBLE_INK_SAMPLE_CAPACITY {
+        return nil
+    }
+    index := cache.visible_ink_active_index
+    start := index*FONT_VISIBLE_INK_SAMPLE_CAPACITY
+    return cache.visible_ink_samples[
+        start:start+cache.visible_ink_counts[index]]
 }
 
 // Adapt raster request selection to the cache-backed frame resolver.
@@ -2232,4 +2371,3 @@ cache_glyph_extents_generation :: proc(
     return harfbuzz_glyph_extents(
         &cache^.entries[int(key)].shaping, glyph_id)
 }
-

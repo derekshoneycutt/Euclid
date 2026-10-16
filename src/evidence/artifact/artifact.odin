@@ -244,7 +244,7 @@ artifact_state_json :: proc(
         "\"vertical_split_x\":%g,\"horizontal_split_y\":%g," +
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
-        "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s,%s}}\n",
+        "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s,%s,%s}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
         state.animation_policy_paused, state.runtime_lifecycle, state.runtime_generation,
         state.active_runtime_request_id, state.failed_runtime_request_count,
@@ -259,7 +259,20 @@ artifact_state_json :: proc(
         artifact_colored_draw_state_json(state),
         artifact_terminal_graphics_state_json(state),
         artifact_simulation_state_json(simulation), artifact_settings_state_json(state),
-        artifact_accordion_state_json(state), artifact_tree_state_json(state))
+        artifact_accordion_state_json(state), artifact_tree_state_json(state),
+        artifact_presentation_effects_state_json(state.presentation_effects))
+}
+
+// Serialize pane-local Dynview dust counts and the selected and active arrival styles.
+artifact_presentation_effects_state_json :: proc(
+    effects: observe.Presentation_Effects) -> string {
+    return fmt.tprintf("\"presentation_effects\":{{\"arrival_selection\":\"%v\"," +
+        "\"arrival_style\":\"%v\",\"arrival_active\":%v," +
+        "\"arrival_awaiting_targets\":%v,\"arrival_particle_count\":%d," +
+        "\"departure_particle_count\":%d}}",
+        effects.arrival_selection, effects.arrival_style, effects.arrival_active,
+        effects.arrival_awaiting_targets, effects.arrival_particle_count,
+        effects.departure_particle_count)
 }
 
 // Serialize current tree motion count and fractional visual scroll geometry.

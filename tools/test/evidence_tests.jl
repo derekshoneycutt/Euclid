@@ -66,6 +66,10 @@ end
     @test EuclidEvidence.capabilities().trace_event_bytes == 64
     @test "set_setting" in EuclidEvidence.scenario_schema().actions
     @test "assert_setting" in EuclidEvidence.scenario_schema().actions
+    @test "set_arrival_style" in EuclidEvidence.scenario_schema().actions
+    @test EuclidEvidence.scenario_schema().action_payloads.set_arrival_style.styles ==
+        ["immediate", "fade", "falling_ink", "draw_in"]
+    @test "presentation_effects_settled" in EuclidEvidence.scenario_schema().states
     @test EuclidEvidence.scenario_schema().action_payloads.set_setting.required ==
         ["key", "value"]
     @test "settings_save_committed" in EuclidEvidence.scenario_schema().events

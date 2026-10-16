@@ -7,6 +7,87 @@ import "core:testing"
 import color "../../core/color"
 import geometry "../../core/geometry"
 
+Draw_Ink_Sample_Test_State :: struct {
+    count: int,
+    position: geometry.Vector2,
+    tint: color.Color_RGBA8,
+    coverage: u8,
+    low: geometry.Vector2,
+    high: geometry.Vector2,
+}
+
+// Retain one emitted sample for draw-encoder contract assertions.
+draw_encoder_test_record_ink :: proc(
+    user_data: rawptr, position: geometry.Vector2,
+    tint: color.Color_RGBA8, coverage: u8) {
+    state := cast(^Draw_Ink_Sample_Test_State)user_data
+    if state^.count == 0 {
+        state^.low, state^.high = position, position
+    }
+    state^.low = {min(state^.low.x, position.x), min(state^.low.y, position.y)}
+    state^.high = {max(state^.high.x, position.x), max(state^.high.y, position.y)}
+    state^.count += 1
+    state^.position = position
+    state^.tint = tint
+    state^.coverage = coverage
+}
+
+// Verify colored geometry samples are snapped and clipped to the active pane.
+@(test)
+draw_encoder_test_ink_sink_captures_clipped_triangle :: proc(t: ^testing.T) {
+    vertices: [3]Draw_Vertex
+    indices: [3]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    state := Draw_Ink_Sample_Test_State{}
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {200, 200}))
+    testing.expect(t, draw_encoder_push_scissor(&encoder, {10, 10, 20, 20}))
+    draw_encoder_set_ink_sink(&encoder, {
+        user_data = &state, record = draw_encoder_test_record_ink,
+    })
+
+    tint := color.Color_RGBA8{120, 80, 40, 255}
+    testing.expect(t, draw_encoder_triangle(
+        &encoder, {10, 10}, {30, 10}, {10, 30}, tint))
+    draw_encoder_record_ink_sample(&encoder, {5, 5}, tint, 255)
+
+    testing.expect_value(t, state.count, draw_encoder_triangle_ink_count(
+        {10, 10}, {30, 10}, {10, 30}))
+    testing.expect(t, state.count > 1)
+    testing.expect_value(t, state.tint, tint)
+    testing.expect_value(t, state.coverage, u8(255))
+    testing.expect(t, state.low.x >= 10 && state.low.y >= 10)
+    testing.expect(t, state.high.x < 30 && state.high.y < 30)
+}
+
+// Verify a thin rule is sampled along its full length near glyph pitch.
+@(test)
+draw_encoder_test_ink_sink_spans_thin_line :: proc(t: ^testing.T) {
+    vertices: [4]Draw_Vertex
+    indices: [6]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    state := Draw_Ink_Sample_Test_State{}
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    draw_encoder_set_ink_sink(&encoder, {
+        user_data = &state, record = draw_encoder_test_record_ink,
+    })
+
+    testing.expect(t, draw_encoder_line(
+        &encoder, {10, 50}, {90, 50}, 1, {200, 200, 200, 255}))
+
+    testing.expect(t, f32(state.count) >= 2 * 80 / DRAW_INK_GEOMETRY_SPACING)
+    testing.expect(t, state.low.x < 10 + DRAW_INK_GEOMETRY_SPACING)
+    testing.expect(t, state.high.x > 90 - DRAW_INK_GEOMETRY_SPACING)
+    testing.expect(t, state.low.y >= 49 && state.high.y <= 51)
+}
+
 // Verify adjacent colored rectangles share one ordered indexed batch.
 @(test)
 draw_encoder_test_rectangles_merge_adjacent_batch :: proc(t: ^testing.T) {
@@ -562,4 +643,44 @@ draw_encoder_test_dust_expanded_fallback_is_capacity_safe :: proc(t: ^testing.T)
     testing.expect_value(t, vertices[0].position, geometry.Vector2{8, 18})
     testing.expect_value(t, vertices[0].texcoord,
         geometry.Vector2{f32(1.0 / 3.0), f32(1.0 / 3.0)})
+}
+
+// Verify world and pane dust batches append into disjoint instance or vertex ranges.
+// Expanded mode consumes staging immediately, so its bound is vertex capacity.
+@(test)
+draw_encoder_test_dust_batches_append_in_both_modes :: proc(t: ^testing.T) {
+    for instanced in ([2]bool{true, false}) {
+        commands: [2]Draw_Command
+        instances: [3]Dust_Instance
+        vertices: [18]Draw_Vertex
+        draws: [2]Dust_Draw
+        custom := Draw_Custom_Storage{dust_instances = instances[:],
+            dust_draws = draws[:], dust_expanded_vertices = vertices[:],
+            dust_expanded_draws = draws[:]}
+        encoder: Draw_Encoder
+        testing.expect(t, draw_encoder_begin(&encoder,
+            {commands = commands[:], custom = &custom}, {100, 100}, {100, 100}))
+        draw_encoder_enable_dust_instancing(&encoder, instanced)
+        staging := draw_encoder_dust_staging(&encoder)
+        staging[0] = {center_diameter = {10, 20, 4}, color = {1, 1, 1, 1}}
+        staging[1] = {center_diameter = {30, 40, 4}, color = {1, 1, 1, 1}}
+        testing.expect(t, draw_encoder_commit_dust(&encoder, 2, rawptr(uintptr(1))))
+        staging = draw_encoder_dust_staging(&encoder)
+        staging[0] = {center_diameter = {50, 60, 2}, color = {1, 1, 1, 1}}
+        testing.expect(t, draw_encoder_commit_dust(&encoder, 1, rawptr(uintptr(1))))
+        testing.expect(t, !draw_encoder_commit_dust(&encoder, 1, rawptr(uintptr(1))))
+        if instanced {
+            testing.expect_value(t, len(draw_encoder_dust_staging(&encoder)), 0)
+            testing.expect_value(t, instances[0].center_diameter.x, f32(10))
+            testing.expect_value(t, instances[2].center_diameter.x, f32(50))
+            testing.expect_value(t, commands[1], Draw_Command{.Dust_Instanced, 1})
+            testing.expect_value(t, draws[1].first, u32(2))
+            testing.expect_value(t, draws[1].count, u32(1))
+        } else {
+            testing.expect_value(t, commands[1], Draw_Command{.Dust_Expanded, 1})
+            testing.expect_value(t, encoder.dust_expanded_vertex_count, 18)
+            testing.expect_value(t, draws[1].first, u32(12))
+            testing.expect_value(t, vertices[12].position, geometry.Vector2{49, 59})
+        }
+    }
 }

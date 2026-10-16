@@ -28,6 +28,7 @@ import viewevidence "../evidence"
 import libraryservice "../ui/library/service"
 import uiterminal "../ui/terminal"
 import uipresentation "../ui/presentation"
+import viewpresentation "../presentation"
 import uisplitter "../ui/layout/splitter"
 import uilibrary "../ui/library"
 import uisettings "../ui/settings"
@@ -53,6 +54,8 @@ Scenario_Runtime :: struct {
     capture: capture.Coordinator,
     state: ^core.Euclid_General_State,
     input_runtime: ^input.Input_Runtime,
+    // Session-owned presentation runtime borrowed for the current update only.
+    presentation: ^viewpresentation.Presentation_Runtime,
     framebuffer_operations: capturemodel.Framebuffer_Capture_Operations,
     next_action_id: u64,
     presented_frame: u64,
@@ -191,23 +194,30 @@ scenario_runtime_record_terminal :: proc(
 // Advance the display scenario using its owner's current monotonic clock.
 scenario_runtime_update_current :: proc(
     runtime: ^Scenario_Runtime,
-    input_runtime: ^input.Input_Runtime) -> scenario.Run_Status {
-    return scenario_runtime_update(runtime, u64(i64(time.tick_since({}))), input_runtime)
+    input_runtime: ^input.Input_Runtime,
+    presentation: ^viewpresentation.Presentation_Runtime = nil) -> scenario.Run_Status {
+    return scenario_runtime_update(
+        runtime, u64(i64(time.tick_since({}))), input_runtime, presentation)
 }
 
 // Advance a scenario using an explicit monotonic timestamp for deterministic tests.
+// The optional presentation runtime is display-owned and borrowed only for this call.
 scenario_runtime_update :: proc(
     runtime: ^Scenario_Runtime, now_ns: u64,
-    input_runtime: ^input.Input_Runtime = nil) -> scenario.Run_Status {
+    input_runtime: ^input.Input_Runtime = nil,
+    presentation: ^viewpresentation.Presentation_Runtime = nil) -> scenario.Run_Status {
     if runtime == nil || runtime.state == nil {
         return .Failed
     }
     state := runtime.state
     runtime.input_runtime = input_runtime
+    runtime.presentation = presentation
+    defer runtime.presentation = nil
     status := scenario.runner_update(&runtime.runner, {
         now_ns = now_ns,
         events = state.evidence_session.events[:state.evidence_session.event_count],
-        display = viewevidence.observe_display_state(state),
+        display = viewevidence.observe_display_state(
+            state, viewpresentation.presentation_effects_observe(presentation)),
         actions = {
             user_data = rawptr(runtime),
             issue = scenario_runtime_issue,
@@ -574,15 +584,36 @@ scenario_issue_display_action :: proc(
         runtime, command, identity); handled {
         return handled, accepted
     }
+    return scenario_issue_owner_action(runtime, command, identity)
+}
+
+//   Route presentation overrides, checkpoints, and shutdown to their display owners.
+scenario_issue_owner_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
     #partial switch command.kind {
+    case .Set_Arrival_Style:
+        return true, scenario_issue_arrival_style_action(runtime, command)
     case .Checkpoint:
-        return true, scenario_issue_checkpoint_action(state, identity)
+        return true, scenario_issue_checkpoint_action(runtime.state, identity)
     case .Shutdown:
         runtime.shutdown_requested = true
         return true, true
     case:
         return false, false
     }
+}
+
+// Apply a debug arrival-style override through the borrowed presentation owner.
+// The action is rejected when no presentation runtime is bound to this update.
+scenario_issue_arrival_style_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command) -> bool {
+    if runtime.presentation == nil {
+        return false
+    }
+    viewpresentation.presentation_set_arrival_style(
+        runtime.presentation, command.arrival_style)
+    return true
 }
 
 // Route typed setting edits through control policy and assertions through preference intent.

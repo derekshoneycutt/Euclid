@@ -1,0 +1,27 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_state":"dynview_enabled","timeout_ms":10000}
+{"set_setting":{"key":"interface.reduce_motion","value":false}}
+{"select_animation":"Proposition I","as":"warmup"}
+{"wait_event":"animation_selected","correlation":"warmup","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"warmup","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"set_arrival_style":"immediate"}
+{"select_animation":"Axiom I,1","as":"immediate"}
+{"wait_event":"animation_selected","correlation":"immediate","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"immediate","timeout_ms":10000}
+{"assert_state":"presentation_arrival_idle"}
+{"screenshot":".build/dynview-dust-immediate.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"set_arrival_style":"fade"}
+{"select_animation":"Proposition I","as":"fade"}
+{"wait_event":"animation_selected","correlation":"fade","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"fade","timeout_ms":10000}
+{"wait_state":"presentation_dust_active","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-fade-departure.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-fade-settled.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

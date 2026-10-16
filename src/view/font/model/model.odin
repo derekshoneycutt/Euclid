@@ -48,6 +48,12 @@ FONT_SEED_CODEPOINT_CAPACITY :: 512
 // Maximum glyphs retained by one bounded shaping workspace.
 FONT_SHAPED_GLYPH_CAPACITY :: 4096
 
+// Maximum deterministic coverage samples retained for one prepared glyph.
+FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY :: 16
+
+// Maximum independent ink samples retained from one presented document.
+FONT_VISIBLE_INK_SAMPLE_CAPACITY :: 8192
+
 Font_Weight :: enum {
     Light,
     Regular,
@@ -292,13 +298,34 @@ Font_Glyph_State :: enum u8 {
     Capacity_Blocked,
 }
 
+// Font_Glyph_Coverage_Sample is one coverage-weighted glyph-local ink point.
+Font_Glyph_Coverage_Sample :: struct {
+    x: u16,
+    y: u16,
+    coverage: u8,
+}
+
 Font_Glyph_Record :: struct {
     rectangle: geometry.Rectangle,
     offset_x: i32,
     offset_y: i32,
     advance_x: i32,
+    coverage_samples: [FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY]Font_Glyph_Coverage_Sample,
+    coverage_sample_count: u8,
     page_index: u16,
     state: Font_Glyph_State,
+}
+
+// Font_Ink_Sample is an owned logical-space sample from visible Dynview ink.
+Font_Ink_Sample :: struct {
+    position: geometry.Vector2,
+    color: [4]u8,
+    coverage: u8,
+}
+
+// Font_Glyph_Coverage_Cell bounds one deterministic raster-sampling region.
+Font_Glyph_Coverage_Cell :: struct {
+    x0, x1, y0, y1: int,
 }
 
 Font_Raster_Instance_State :: enum u8 {
@@ -409,6 +436,8 @@ Prepared_Glyph :: struct {
     advance_x: i32,
     bitmap_width: i32,
     bitmap_height: i32,
+    coverage_samples: [FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY]Font_Glyph_Coverage_Sample,
+    coverage_sample_count: u8,
 }
 
 Prepared_Rectangle :: struct {
@@ -530,4 +559,14 @@ Font_Cache :: struct {
     shaped_glyphs: [FONT_SHAPED_GLYPH_CAPACITY]Shaped_Glyph,
     texture_operations: Font_Texture_Operations,
     raster_budget: Font_Raster_Budget,
+    visible_ink_samples: []Font_Ink_Sample,
+    visible_ink_allocator: runtime.Allocator,
+    visible_ink_counts: [2]int,
+    visible_ink_active_index: int,
+    visible_ink_capture_index: int,
+    visible_ink_seen_count: u64,
+    visible_ink_random_state: u64,
+    visible_ink_capture_drawn: bool,
+    // Counts presented frames whose structured ink was published.
+    visible_ink_publish_serial: u64,
 }

@@ -6,6 +6,7 @@ import viewterminalmodel "../../view/terminal/model"
 import bridgemodel "../../bridge/model"
 import dynviewmodel "../../dynview/model"
 import particlemodel "../../particles/model"
+import uidust "../../particles/ui_dust"
 import shapemodel "../../shapes/model"
 import allocation_evidence "../allocation"
 import evidence_trace "../trace"
@@ -36,6 +37,20 @@ Trace_State :: struct {
     next_sequence : u64,
 }
 
+// Pointer-free snapshot of pane-local Dynview presentation dust.
+//
+// The presentation owner copies these scalars at a display-thread boundary; the
+// selection is the style the next accepted document arrives with, while
+// arrival_style reports the active, possibly degraded, arrival.
+Presentation_Effects :: struct {
+    arrival_selection: uidust.Ui_Dust_Arrival_Style,
+    arrival_style: uidust.Ui_Dust_Arrival_Style,
+    arrival_active: bool,
+    arrival_awaiting_targets: bool,
+    arrival_particle_count: int,
+    departure_particle_count: int,
+}
+
 // Pointer-free snapshot of state authoritative to the display owner.
 //
 // Optional subsystem fields remain zero when their backing service or system
@@ -61,6 +76,7 @@ Display :: struct {
     tree_scroll_y: f32,
     interface_reduce_motion: bool,
     presentation_visible: bool,
+    presentation_effects: Presentation_Effects,
     // Fixed-step simulation clock and display-owned pause control.
     fixed_step : u64,
     simulation_time : f32,
@@ -176,6 +192,7 @@ Display_Source :: struct {
     ui_playback: ^viewmodel.Ui_Playback_Control_State,
     ui_tooltip: ^viewmodel.Ui_Tooltip_State,
     ui_platform_reduce_motion: bool,
+    presentation_effects: Presentation_Effects,
     preferences_runtime: ^preferencesmodel.Settings_Save_Runtime,
     telemetry: ^telemetrymodel.Runtime,
     gif_capture : ^capturemodel.Gif_Capture_Session,
@@ -377,6 +394,7 @@ observe_display_settings :: proc(
     if source.ui_presentation != nil {
         result^.presentation_visible = source.ui_presentation.visible
     }
+    result^.presentation_effects = source.presentation_effects
     observe_display_tree(source.ui_library, result)
 }
 

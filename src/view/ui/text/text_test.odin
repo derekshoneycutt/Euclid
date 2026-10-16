@@ -5,6 +5,7 @@ import color "../../../core/color"
 import view_font "../../font"
 import native "../../native"
 import testing "core:testing"
+import geometry "../../../core/geometry"
 
 Codepoint_Resolver_Test_State :: struct {
     requested_codepoint: rune,
@@ -14,6 +15,24 @@ Codepoint_Resolver_Test_State :: struct {
 Cached_Glyph_Resolver_Test_State :: struct {
     calls: int,
     reject_glyph_id: u32,
+}
+
+Text_Ink_Capture_Test_State :: struct {
+    count: int,
+    position: geometry.Vector2,
+    color: color.Color_RGBA8,
+    coverage: u8,
+}
+
+// Retain one mapped glyph sample for text-placement assertions.
+text_test_record_ink_sample :: proc(
+    user_data: rawptr, position: geometry.Vector2,
+    tint: color.Color_RGBA8, coverage: u8) {
+    state := cast(^Text_Ink_Capture_Test_State)user_data
+    state^.count += 1
+    state^.position = position
+    state^.color = tint
+    state^.coverage = coverage
 }
 
 // Verify shared UI glyph emission records linear texture filtering.
@@ -45,6 +64,47 @@ text_test_resolved_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
 
     testing.expect_value(t, encoder.batch_count, 1)
     testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
+}
+
+// Verify cached coverage follows the snapped glyph quad and keeps its tint.
+@(test)
+text_test_glyph_coverage_samples_follow_rendered_placement :: proc(
+    t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    capture := Text_Ink_Capture_Test_State{}
+    samples := [1]view_font.Font_Glyph_Coverage_Sample{{2, 3, 128}}
+    tint := color.Color_RGBA8{20, 40, 60, 200}
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {200, 200}))
+    native.draw_encoder_set_ink_sink(&encoder, {
+        user_data = &capture, record = text_test_record_ink_sample,
+    })
+
+    ui_text_draw_resolved_glyph({
+        encoder = &encoder,
+        resolved = {
+            texture = {handle = rawptr(uintptr(1)), width = 32, height = 32},
+            source = {width = 8, height = 10},
+            raster_pixel_height = 32,
+            raster_ascent = 24,
+            canonical_pixel_height = 32,
+            canonical_raster_ascent = 24,
+            coverage_samples = samples[:],
+        },
+        position = {10, 20},
+        font_size = 32,
+        color = tint,
+    })
+
+    testing.expect_value(t, capture.count, 1)
+    testing.expect_value(t, capture.position, geometry.Vector2{12.75, 23.75})
+    testing.expect_value(t, capture.color, tint)
+    testing.expect_value(t, capture.coverage, u8(128))
 }
 
 // Verify bitmap metrics use raster height while HarfBuzz offsets stay canonical.

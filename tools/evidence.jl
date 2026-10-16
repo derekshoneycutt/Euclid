@@ -89,7 +89,8 @@ const SCENARIO_ACTIONS = [
     "resume_simulation", "set_view_scroll", "set_splitters", "screenshot",
     "set_library_search", "apply_library_search_suggestion",
     "clear_library_search", "favorite_control", "library_placement", "assert_favorites",
-    "start_gif", "stop_gif", "wait_event", "wait_state", "assert_state",
+    "start_gif", "stop_gif", "set_arrival_style", "wait_event", "wait_state",
+    "assert_state",
     "set_setting", "assert_setting", "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
@@ -105,6 +106,7 @@ const SCENARIO_ACTION_PAYLOADS = (
         "selected", "remember_playback", "playing", "hidden", "selection_cleared",
         "collapsed", "expanded", "failure_retained", "recovered", "capacity",
         "same_placement", "actions_open", "actions_closed"],),
+    set_arrival_style=(styles=["immediate", "fade", "falling_ink", "draw_in"],),
     set_view_scroll=(required=["y"],),
     set_splitters=(required=["vertical", "horizontal"],),
     set_setting=(required=["key", "value"],),
@@ -131,7 +133,10 @@ const SCENARIO_STATES = [
     "library_search_has_matches", "settings_saved", "settings_saving",
     "tree_transitioning", "tree_settled",
     "settings_unavailable", "settings_failed", "settings_worker_only",
-    "tooltip_visible", "tooltip_hidden"]
+    "tooltip_visible", "tooltip_hidden", "presentation_effects_active",
+    "presentation_effects_settled", "presentation_dust_active",
+    "presentation_arrival_active", "presentation_arrival_idle",
+    "presentation_arrival_particles"]
 
 struct TraceEvent
     sequence::UInt64

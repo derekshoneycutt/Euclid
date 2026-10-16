@@ -5,7 +5,10 @@ import viewgraphics "../terminal/graphics"
 import core "../../core"
 
 // Copy display-owned composition into the evidence model at an owner boundary.
-observe_display_state :: proc(state: ^core.Euclid_General_State) -> observe.Display {
+// Presentation effects are copied by their session-owned runtime beforehand.
+observe_display_state :: proc(
+    state: ^core.Euclid_General_State,
+    presentation_effects: observe.Presentation_Effects = {}) -> observe.Display {
     if state == nil {
         return {}
     }
@@ -19,6 +22,7 @@ observe_display_state :: proc(state: ^core.Euclid_General_State) -> observe.Disp
         ui_playback = &state.ui_runtime.playback,
         ui_tooltip = &state.ui_runtime.tooltip,
         ui_platform_reduce_motion = state.ui_runtime.platform_reduce_motion,
+        presentation_effects = presentation_effects,
         preferences_runtime = &state.preferences_runtime,
         telemetry = &state.telemetry,
         gif_capture = &state.gif_capture,

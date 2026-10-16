@@ -136,6 +136,8 @@ initialize_native_dust_atlas :: proc(
     return true
 }
 
+#assert(native.DUST_WORLD_INSTANCE_CAPACITY >= particlemodel.MAX_LOW_PARTICLES)
+
 // encode_low_particles compacts low dust and emits one ordered custom draw.
 encode_low_particles :: proc(
     ps: ^particlemodel.Particle_System, state: ^core.Euclid_General_State,
@@ -146,15 +148,16 @@ encode_low_particles :: proc(
         ps.low_particles.pos_z[:ps^.use_max_dust_particles],
         ps.low_particle_screens[:], state^.iso_scale^},
         state^.ui_runtime.rendering.use_simd_batch_projection)
+    staging := native.draw_encoder_dust_staging(encoder)
     count := 0
     for screen, index in ps.low_particle_screens[:projected_count] {
-        if !ps.low_particles.alive[index] {
+        if !ps.low_particles.alive[index] || count >= len(staging) {
             continue
         }
         t := math.clamp(
             ps.low_particles.age[index] / ps.low_particles.life[index], 0, 1)
         particle_color := ps.low_particles.color[index]
-        encoder^.dust_instances[count] = {
+        staging[count] = {
             center_diameter = {screen.x, screen.y,
                 max(ps.low_particles.size[index] * 2, 1)},
             color = {f32(particle_color.r) / 255,

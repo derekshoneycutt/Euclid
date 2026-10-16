@@ -2,6 +2,7 @@
 package scenario
 
 import particlemodel "../../particles/model"
+import uidust "../../particles/ui_dust"
 import "../observe"
 import trace "../trace"
 import settings "../../settings"
@@ -267,6 +268,60 @@ scenario_test_reject_invalid_viewport_actions :: proc(t: ^testing.T) {
         program: Program
         testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
     }
+}
+
+// Verify every retained arrival style parses and unknown or empty styles reject.
+@(test)
+scenario_test_parse_arrival_style_actions :: proc(t: ^testing.T) {
+    program: Program
+    result := parse(
+        "{\"set_arrival_style\":\"immediate\"}\n" +
+        "{\"set_arrival_style\":\"fade\"}\n" +
+        "{\"set_arrival_style\":\"falling_ink\"}\n" +
+        "{\"set_arrival_style\":\"draw_in\"}\n",
+        &program)
+    testing.expect_value(t, result, Parse_Error.None)
+    testing.expect_value(t, program.count, 4)
+    expected := [?]uidust.Ui_Dust_Arrival_Style{
+        .Immediate, .Fade, .Falling_Ink, .Draw_In}
+    for style, index in expected {
+        command := program.commands[index]
+        testing.expect_value(t, command.kind, Command_Kind.Set_Arrival_Style)
+        testing.expect_value(t, command.arrival_style, style)
+        testing.expect(t, command_kind_ends_frame(command.kind))
+    }
+    invalid_sources := [?]string{
+        "{\"set_arrival_style\":\"Draw_In\"}\n",
+        "{\"set_arrival_style\":\"sparkle\"}\n",
+        "{\"set_arrival_style\":\"fade\",\"shutdown\":true}\n",
+    }
+    for source in invalid_sources {
+        invalid: Program
+        testing.expect_value(t, parse(source, &invalid), Parse_Error.Invalid_Command)
+    }
+}
+
+// Verify presentation-effect predicates distinguish dust, arrivals, and settled panes.
+@(test)
+scenario_test_presentation_effect_predicates :: proc(t: ^testing.T) {
+    settled := observe.Display{}
+    dust := observe.Display{
+        presentation_effects = {departure_particle_count = 12}}
+    fade := observe.Display{presentation_effects = {arrival_active = true}}
+    falling := observe.Display{
+        presentation_effects = {arrival_active = true, arrival_particle_count = 4}}
+    testing.expect(t, state_matches("presentation_effects_settled", settled))
+    testing.expect(t, !state_matches("presentation_effects_active", settled))
+    testing.expect(t, state_matches("presentation_dust_active", dust))
+    testing.expect(t, state_matches("presentation_effects_active", dust))
+    testing.expect(t, !state_matches("presentation_effects_settled", dust))
+    testing.expect(t, state_matches("presentation_arrival_active", fade))
+    testing.expect(t, !state_matches("presentation_arrival_idle", fade))
+    testing.expect(t, state_matches("presentation_arrival_idle", dust))
+    testing.expect(t, !state_matches("presentation_arrival_particles", fade))
+    testing.expect(t, !state_matches("presentation_effects_settled", fade))
+    testing.expect(t, state_matches("presentation_arrival_particles", falling))
+    testing.expect(t, !state_matches("presentation_dust_active", falling))
 }
 
 // Verify view-content actions preserve exact source, MIME, alias, and empty content.

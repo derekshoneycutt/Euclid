@@ -224,7 +224,7 @@ Final tasks:
   - [X] FreeType/Harfbuzz font rendering
   - [X] Core expand/collapse animations
   - [X] UI Shadows
-  - [ ] Major view text animations
+  - [X] Major view text animations
   - [ ] Extended overall look/feel animations
   - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)
 - [ ] Semantic trace and deterministic animation test harness (default off)

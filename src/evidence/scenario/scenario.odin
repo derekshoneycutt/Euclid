@@ -3,6 +3,7 @@ package scenario
 // Package scenario validates and executes bounded semantic workflows.
 
 import particlemodel "../../particles/model"
+import uidust "../../particles/ui_dust"
 import settings "../../settings"
 import "../observe"
 import trace "../trace"
@@ -112,6 +113,7 @@ Command_Kind :: enum u8 {
     Favorite_Control,
     Library_Placement,
     Assert_Favorites,
+    Set_Arrival_Style,
 }
 
 // Payload-free action names accepted by the `do` scenario field.
@@ -210,6 +212,21 @@ Command :: struct {
     key_control : bool,
     setting_id: settings.Setting_Id,
     setting_value: settings.Setting_Value,
+    arrival_style: uidust.Ui_Dust_Arrival_Style,
+}
+
+// Stable scenario spelling for one retained presentation arrival policy.
+Arrival_Style_Entry :: struct {
+    name : string,
+    style : uidust.Ui_Dust_Arrival_Style,
+}
+
+// Debug-only arrival overrides; this is not a preference or persisted setting.
+ARRIVAL_STYLES :: [?]Arrival_Style_Entry {
+    {"immediate", .Immediate},
+    {"fade", .Fade},
+    {"falling_ink", .Falling_Ink},
+    {"draw_in", .Draw_In},
 }
 
 // Temporary decoded payload for one exact view-content action object.
@@ -310,6 +327,7 @@ Raw_Command :: struct {
     type_library_name : string,
     screenshot : string,
     start_gif : string,
+    set_arrival_style : string,
     set_library_search : string,
     favorite_control : string,
     library_placement : string,
@@ -809,7 +827,8 @@ runner_update_command :: proc(
          .Clear_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown, .Set_Setting,
-         .Favorite_Control, .Library_Placement, .Type_Library_Name:
+         .Favorite_Control, .Library_Placement, .Type_Library_Name,
+         .Set_Arrival_Style:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -866,7 +885,7 @@ command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
         .Type_Library_Name, .Key, .Set_View_Content, .Set_Library_Search,
         .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
         .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
-        .Favorite_Control, .Library_Placement:
+        .Favorite_Control, .Library_Placement, .Set_Arrival_Style:
         return true
     case:
         return false
@@ -928,6 +947,22 @@ raw_favorites_command_select :: proc(raw: Raw_Command, command: ^Command) -> int
     return selected
 }
 
+// Select one supported arrival-style override; unknown names invalidate the line.
+raw_arrival_style_command_select :: proc(source: string, command: ^Command) -> int {
+    if len(source) == 0 {
+        return 0
+    }
+    for entry in ARRIVAL_STYLES {
+        if entry.name == source {
+            command.kind = .Set_Arrival_Style
+            command.text, _ = text_copy(source)
+            command.arrival_style = entry.style
+            return 1
+        }
+    }
+    return 2
+}
+
 // Select populated Terminal or Library name typing fields.
 raw_typing_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected := raw_text_command_select(raw.type_text, .Type_Text, command)
@@ -948,6 +983,7 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_text_command_select(
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
+    selected += raw_arrival_style_command_select(raw.set_arrival_style, command)
     selected += raw_library_search_command_select(raw, command)
     selected += raw_favorites_command_select(raw, command)
     selected += raw_text_command_select(raw.wait_event, .Wait_Event, command)
@@ -1156,7 +1192,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Assert_Terminal_Contains, .Assert_Library_Search,
          .Checkpoint, .Allocation_Checkpoint,
          .Assert_Allocation_Baseline, .Favorite_Control, .Library_Placement,
-         .Assert_Favorites:
+         .Assert_Favorites, .Set_Arrival_Style:
         return false
     }
     return false
@@ -1368,7 +1404,26 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     }
     return runtime_state_matches(name, display) ||
         dust_state_matches(name, display) || terminal_state_matches(name, display) ||
-        settings_state_matches(name, display) || interface_state_matches(name, display)
+        settings_state_matches(name, display) ||
+        interface_state_matches(name, display) ||
+        presentation_effects_state_matches(name, display.presentation_effects)
+}
+
+// Evaluate pane-local Dynview presentation dust and arrival predicates.
+presentation_effects_state_matches :: proc(
+    name: string, effects: observe.Presentation_Effects) -> bool {
+    dust_active := effects.departure_particle_count > 0
+    switch name {
+    case "presentation_effects_active":
+        return dust_active || effects.arrival_active
+    case "presentation_effects_settled":
+        return !dust_active && !effects.arrival_active
+    case "presentation_dust_active": return dust_active
+    case "presentation_arrival_active": return effects.arrival_active
+    case "presentation_arrival_idle": return !effects.arrival_active
+    case "presentation_arrival_particles": return effects.arrival_particle_count > 0
+    }
+    return false
 }
 
 // interface_state_matches evaluates logical visibility and display-owned motion policy.

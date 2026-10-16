@@ -242,9 +242,21 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
         return
     }
     resolved := draw.resolved
-    _ = native.draw_encoder_texture_quad(draw.encoder,
+    if !native.draw_encoder_texture_quad(draw.encoder,
         quad.destination, quad.uv, draw.color,
-        {texture = resolved.texture.handle, sampler = .Linear})
+        {texture = resolved.texture.handle, sampler = .Linear}) {
+        return
+    }
+    scale, scale_valid := ui_text_resolved_raster_scale(draw)
+    if !scale_valid {
+        return
+    }
+    for sample in resolved.coverage_samples {
+        native.draw_encoder_record_ink_sample(draw.encoder, {
+            quad.destination.x+(f32(sample.x)+0.5)*scale,
+            quad.destination.y+(f32(sample.y)+0.5)*scale,
+        }, draw.color, sample.coverage)
+    }
 }
 
 // Build the destination and atlas coordinates for a normalized resident glyph.

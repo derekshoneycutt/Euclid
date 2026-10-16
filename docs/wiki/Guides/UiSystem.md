@@ -79,6 +79,7 @@ flowchart LR
 | Animation catalogue and search | [`src/view/ui/library/`](../../../src/view/ui/library/) plus content service | IDs, copied labels, and bounded query results |
 | Terminal state and interactive protocol | [`src/view/terminal/`](../../../src/view/terminal/) | Routed input, prepared terminal frame, draw requests |
 | Font faces and shaping/raster publication | [`src/view/font/`](../../../src/view/font/) | Font capabilities and generation-aware prepared text |
+| Presentation replacement effects | [`src/view/presentation/`](../../../src/view/presentation/) and [`src/particles/ui_dust/`](../../../src/particles/ui_dust/) | Bounded display-owned ink dust and arrival fade |
 | Capture policy and framebuffer/GIF lifecycle | [`src/view/capture/`](../../../src/view/capture/) | Capture state and framebuffer operations |
 | Native drawing and presentation | [`src/view/native/`](../../../src/view/native/) | Bounded encoder commands consumed on the display thread |
 
@@ -402,6 +403,7 @@ its interaction and domain-specific controls:
 | Change application settings | [`settings/`](../../../src/view/ui/settings/) | Typed settings at [`src/settings/`](../../../src/settings/) |
 | Configure or start a GIF | [`gif/`](../../../src/view/ui/gif/) | Capture policy at [`src/view/capture/`](../../../src/view/capture/) |
 | Show authored animation text | [`presentation/`](../../../src/view/ui/presentation/) | Dynview compiler and [`src/dynview/`](../../../src/dynview/) |
+| Transition accepted Dynview changes | [`src/view/presentation/`](../../../src/view/presentation/) | UI dust model in [`src/particles/ui_dust/`](../../../src/particles/ui_dust/) |
 | Use the interactive Terminal | [`terminal/`](../../../src/view/ui/terminal/) | [Terminal Architecture](TerminalArchitecture.md) |
 | Refresh or pause/play an animation | [`animation/`](../../../src/view/ui/animation/) | Animation policy and bridge |
 | Tooltip or context menu | [`overlay/`](../../../src/view/ui/overlay/) | UI routing and display input |
