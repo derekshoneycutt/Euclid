@@ -105,6 +105,9 @@ observe_test_independent_persistence_owner :: proc(t: ^testing.T) {
 @(test)
 observe_tree_motion_is_pointer_free_and_bounded :: proc(t: ^testing.T) {
     library: viewmodel.Ui_Library_State
+    library.motion.branches =
+        make([]viewmodel.Ui_Tree_Branch_Motion, 3, context.allocator)
+    defer delete(library.motion.branches, context.allocator)
     library.motion.count = 2
     library.motion.branches[0].running = true
     library.motion.branches[2].running = true

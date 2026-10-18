@@ -17,7 +17,7 @@ Semantic_Control_Registration :: struct {
     states: viewmodel.Ui_Node_State,
     actions: viewmodel.Ui_Node_Action_Set,
     region: viewmodel.Ui_Focus_Region,
-    traversal_order: u16,
+    traversal_order: u32,
     bounds: geometry.Rectangle,
     clip_bounds: geometry.Rectangle,
     numeric_range: viewmodel.Ui_Numeric_Range,
@@ -27,9 +27,9 @@ Semantic_Control_Registration :: struct {
     text_cursor_byte: int,
     text_anchor_byte: int,
     text_present: bool,
-    level: u16,
-    position_in_set: u16,
-    set_size: u16,
+    level: u32,
+    position_in_set: u32,
+    set_size: u32,
 }
 
 // External_Text_Action_Input carries one validated native text request.
@@ -75,6 +75,10 @@ semantic_begin :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
     staging^.node_count = 0
     staging^.text_count = 0
     staging^.generation = 0
+    staging^.lookup_probes = 0
+    for &slot in staging^.identity_index {
+        slot = 0
+    }
     state^.staging_active = true
     state^.staging_rejected = false
     state^.staging_accordion_parent = {}
@@ -86,21 +90,13 @@ semantic_begin :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
 semantic_node_index :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     id: viewmodel.Ui_Node_Id) -> int {
-    if snapshot == nil {
-        return -1
-    }
-    for index in 0..<snapshot^.node_count {
-        if snapshot^.nodes[index].id == id {
-            return index
-        }
-    }
-    return -1
+    return viewmodel.ui_semantic_snapshot_find(snapshot, id)
 }
 
 // semantic_node_text returns one validated text span owned by its snapshot.
 semantic_node_text :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
-    offset: u32, length: u16) -> string {
+    offset, length: u32) -> string {
     if snapshot == nil {
         return ""
     }
@@ -144,18 +140,14 @@ semantic_registration_status :: proc(
        !utf8.valid_string(registration.placeholder) {
         return .Invalid_Utf8
     }
-    if len(registration.label) > int(max(u16)) ||
-       len(registration.value) > int(max(u16)) ||
-       len(registration.placeholder) > int(max(u16)) {
+    required_text := u64(len(registration.label)) + u64(len(registration.value)) +
+        u64(len(registration.placeholder))
+    if required_text > u64(max(u32)) ||
+        u64(snapshot^.text_count) > u64(max(u32)) - required_text {
         return .Text_Capacity
     }
-    if snapshot^.node_count >= viewmodel.UI_SEMANTIC_NODE_CAPACITY {
+    if snapshot^.node_count == max(int) {
         return .Node_Capacity
-    }
-    required_text := len(registration.label) + len(registration.value) +
-        len(registration.placeholder)
-    if required_text > viewmodel.UI_SEMANTIC_TEXT_CAPACITY - snapshot^.text_count {
-        return .Text_Capacity
     }
     return .Ok
 }
@@ -176,23 +168,39 @@ semantic_register_node :: proc(
     if status != .Ok {
         return semantic_reject(state, status, registration.node.id)
     }
+    required_text := snapshot^.text_count + len(registration.label) +
+        len(registration.value) + len(registration.placeholder)
+    if !viewmodel.ui_semantic_snapshot_init(snapshot) ||
+        !viewmodel.ui_semantic_snapshot_reserve_nodes(
+            snapshot, snapshot^.node_count + 1) ||
+        !viewmodel.ui_semantic_snapshot_reserve_text(snapshot, required_text) {
+        return semantic_reject(state, .Allocation_Failed, registration.node.id)
+    }
+    semantic_copy_registration(snapshot, registration)
+    return .Ok
+}
+
+// Copy admitted text and update the identity index only after all growth succeeds.
+semantic_copy_registration :: proc(
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    registration: viewmodel.Ui_Semantic_Node_Registration) {
     node := registration.node
     node.label_offset = u32(snapshot^.text_count)
-    node.label_length = u16(len(registration.label))
+    node.label_length = u32(len(registration.label))
     copy(snapshot^.text[snapshot^.text_count:], transmute([]u8)registration.label)
     snapshot^.text_count += len(registration.label)
     node.value_offset = u32(snapshot^.text_count)
-    node.value_length = u16(len(registration.value))
+    node.value_length = u32(len(registration.value))
     copy(snapshot^.text[snapshot^.text_count:], transmute([]u8)registration.value)
     snapshot^.text_count += len(registration.value)
     node.placeholder_offset = u32(snapshot^.text_count)
-    node.placeholder_length = u16(len(registration.placeholder))
+    node.placeholder_length = u32(len(registration.placeholder))
     copy(snapshot^.text[snapshot^.text_count:],
         transmute([]u8)registration.placeholder)
     snapshot^.text_count += len(registration.placeholder)
     snapshot^.nodes[snapshot^.node_count] = node
+    viewmodel.ui_semantic_snapshot_index_node(snapshot, snapshot^.node_count)
     snapshot^.node_count += 1
-    return .Ok
 }
 
 // semantic_control_parent resolves the active accordion panel when applicable.
@@ -220,7 +228,8 @@ semantic_control_reveal :: proc(
         clip = uilayout.stack_panel_clamp_x(uilayout.stack_panel_clamp_y(clip,
             geometry.Rectangle(state^.staging_accordion_clip)),
             geometry.Rectangle(state^.staging_accordion_clip))
-        if !geometry.rectangles_intersect(geometry.Rectangle(control.bounds), clip) {
+        if control.role != .Tree_Item &&
+            !geometry.rectangles_intersect(geometry.Rectangle(control.bounds), clip) {
             states -= {.Visible, .Focusable, .Tab_Stop}
         }
     }
@@ -250,8 +259,10 @@ semantic_register_control :: proc(
             bounds = control.bounds,
             clip_bounds = geometry.Rectangle(clip),
             numeric_range = control.numeric_range,
-            text_cursor_byte = u16(max(0, control.text_cursor_byte)),
-            text_anchor_byte = u16(max(0, control.text_anchor_byte)),
+            text_cursor_byte = u32(
+                clamp(control.text_cursor_byte, 0, len(control.value))),
+            text_anchor_byte = u32(
+                clamp(control.text_anchor_byte, 0, len(control.value))),
             text_present = control.text_present,
             level = control.level,
             position_in_set = control.position_in_set,
@@ -283,6 +294,9 @@ semantic_validate_snapshot :: proc(
         return .Invalid_Argument, {}
     }
     root_parent := viewmodel.Ui_Node_Id{}
+    for &slot in snapshot^.traversal_index {
+        slot = 0
+    }
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
         if node.parent != root_parent &&
              semantic_node_index(snapshot, node.parent) < 0 {
@@ -295,15 +309,66 @@ semantic_validate_snapshot :: proc(
         if !semantic_node_is_tab_stop(node) {
             continue
         }
-        for prior in snapshot^.nodes[:index] {
-            if semantic_node_is_tab_stop(prior) &&
-                 prior.region == node.region &&
-                 prior.traversal_order == node.traversal_order {
-                return .Traversal_Collision, node.id
+        if !semantic_index_traversal(snapshot, index) {
+            return .Traversal_Collision, node.id
+        }
+    }
+    return semantic_validate_parent_chains(snapshot)
+}
+
+// Mark parent chains iteratively so malformed hierarchies cannot trap focus repair.
+semantic_validate_parent_chains :: proc(
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot) ->
+    (viewmodel.Ui_Semantic_Status, viewmodel.Ui_Node_Id) {
+    marks := snapshot^.traversal_index[:snapshot^.node_count]
+    for &mark in marks {
+        mark = 0
+    }
+    empty_id := viewmodel.Ui_Node_Id{}
+    for start in 0..<snapshot^.node_count {
+        index := start
+        for index >= 0 && marks[index] == 0 {
+            marks[index] = 1
+            parent := snapshot^.nodes[index].parent
+            index = -1
+            if parent != empty_id {
+                index = semantic_node_index(snapshot, parent)
+            }
+        }
+        if index >= 0 && marks[index] == 1 {
+            return .Missing_Parent, snapshot^.nodes[index].id
+        }
+        index = start
+        for index >= 0 && marks[index] == 1 {
+            marks[index] = 2
+            parent := snapshot^.nodes[index].parent
+            index = -1
+            if parent != empty_id {
+                index = semantic_node_index(snapshot, parent)
             }
         }
     }
     return .Ok, {}
+}
+
+// Detect tab-order collisions in linear expected work without pairwise scans.
+semantic_index_traversal :: proc(
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot, index: int) -> bool {
+    node := snapshot^.nodes[index]
+    key := viewmodel.Ui_Node_Id{
+        local_id = u64(node.traversal_order), generation = u64(node.region)}
+    mask := len(snapshot^.traversal_index) - 1
+    slot := int(viewmodel.ui_semantic_identity_hash(key) & u64(mask))
+    for snapshot^.traversal_index[slot] != 0 {
+        prior := snapshot^.nodes[snapshot^.traversal_index[slot] - 1]
+        if prior.region == node.region &&
+            prior.traversal_order == node.traversal_order {
+            return false
+        }
+        slot = (slot + 1) & mask
+    }
+    snapshot^.traversal_index[slot] = index + 1
+    return true
 }
 
 // semantic_tab_stop_before reports explicit global traversal order.
@@ -954,7 +1019,10 @@ semantic_publish :: proc(
     previous := semantic_snapshot(state)
     semantic_reconcile_focus(state, staging, previous)
     semantic_refresh_focus_visible(state, staging)
-    staging^.generation = previous^.generation + 1
+    staging^.generation = previous^.generation
+    if !semantic_snapshots_equal(staging, previous) {
+        staging^.generation += 1
+    }
     state^.committed_index = state^.staging_index
     state^.staging_active = false
     state^.diagnostics.node_high_water = max(
@@ -964,4 +1032,24 @@ semantic_publish :: proc(
     state^.diagnostics.last_rejection = .Ok
     state^.diagnostics.offending_id = {}
     return .Ok
+}
+
+// Compare populated content only; retained capacities and lookup work are not output.
+semantic_snapshots_equal :: proc(
+    first, second: ^viewmodel.Ui_Semantic_Snapshot) -> bool {
+    if first^.node_count != second^.node_count ||
+        first^.text_count != second^.text_count {
+        return false
+    }
+    for node, index in first^.nodes[:first^.node_count] {
+        if node != second^.nodes[index] {
+            return false
+        }
+    }
+    for value, index in first^.text[:first^.text_count] {
+        if value != second^.text[index] {
+            return false
+        }
+    }
+    return true
 }

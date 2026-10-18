@@ -1,6 +1,7 @@
 package accessibility
 
 import "core:sync"
+import storage "../core/storage"
 
 NATIVE_ID_CAPACITY :: 4096
 ACTION_QUEUE_CAPACITY :: 64
@@ -30,9 +31,10 @@ Native_Id_Entry :: struct {
     identity: Qualified_Identity,
     native_id: u64,
     active: bool,
+    free_next: int,
 }
 
-// Native_Id_Diagnostics records bounded allocation and retirement pressure.
+// Native_Id_Diagnostics records live mapping and monotonic-ID retirement pressure.
 Native_Id_Diagnostics :: struct {
     allocated: u64,
     retired: u64,
@@ -40,12 +42,16 @@ Native_Id_Diagnostics :: struct {
     exhaustion: u64,
 }
 
-// Native_Id_Registry owns monotonic mappings for one native window session.
+// Native_Id_Registry owns indexed mappings and reusable slots for one native session.
 Native_Id_Registry :: struct {
-    entries: [NATIVE_ID_CAPACITY]Native_Id_Entry,
+    memory: ^storage.Tlsf_Owner,
+    entries: [dynamic]Native_Id_Entry,
+    identities: map[Qualified_Identity]int,
+    native_ids: map[u64]int,
     count: int,
     active_count: int,
     next_id: u64,
+    free_head: int,
     diagnostics: Native_Id_Diagnostics,
 }
 
@@ -94,21 +100,63 @@ Action_Queue :: struct {
 }
 
 // native_id_registry_init reserves the synthetic root ID for one window session.
-native_id_registry_init :: proc(registry: ^Native_Id_Registry) {
-    if registry == nil {
-        return
+native_id_registry_init :: proc(
+    registry: ^Native_Id_Registry,
+    memory: ^storage.Tlsf_Owner) -> bool {
+    if registry == nil || registry^.memory != nil ||
+       memory == nil || !memory.initialized {
+        return false
     }
-    registry^ = {}
-    registry^.entries[0] = {
+    registry^ = {memory = memory}
+    if !native_id_registry_allocate(registry) {
+        native_id_registry_destroy(registry)
+        return false
+    }
+    append(&registry^.entries, Native_Id_Entry{
         identity = {domain = .Synthetic, local_id = SYNTHETIC_ROOT_ID},
         native_id = SYNTHETIC_NATIVE_ID,
         active = true,
-    }
+    })
+    registry^.identities[registry^.entries[0].identity] = 0
+    registry^.native_ids[SYNTHETIC_NATIVE_ID] = 0
     registry^.count = 1
     registry^.active_count = 1
     registry^.next_id = SYNTHETIC_NATIVE_ID + 1
     registry^.diagnostics.allocated = 1
     registry^.diagnostics.peak_active = 1
+    return true
+}
+
+// Reserve mapping tables before publishing the synthetic root mapping.
+native_id_registry_allocate :: proc(registry: ^Native_Id_Registry) -> bool {
+    allocator := storage.tlsf_owner_allocator(registry^.memory)
+    entries, entry_error := make([dynamic]Native_Id_Entry, 0, 1, allocator)
+    if entry_error != nil {
+        return false
+    }
+    registry^.entries = entries
+    identities, identity_error := make(map[Qualified_Identity]int, 1, allocator)
+    if identity_error != nil {
+        return false
+    }
+    registry^.identities = identities
+    ids, id_error := make(map[u64]int, 1, allocator)
+    if id_error != nil {
+        return false
+    }
+    registry^.native_ids = ids
+    return true
+}
+
+// native_id_registry_destroy releases display-owned mapping slots after close.
+native_id_registry_destroy :: proc(registry: ^Native_Id_Registry) {
+    if registry == nil || registry^.memory == nil {
+        return
+    }
+    delete(registry^.entries)
+    delete(registry^.identities)
+    delete(registry^.native_ids)
+    registry^ = {}
 }
 
 // native_id_resolve returns an existing mapping or allocates one monotonically.
@@ -119,25 +167,49 @@ native_id_resolve :: proc(
         (identity.domain != .Ui || identity.owner_domain == 0)) {
         return 0, false
     }
-    for index in 0..<registry^.count {
-        entry := &registry^.entries[index]
-        if entry^.identity == identity && entry^.active {
-            return entry^.native_id, true
-        }
+    if index, found := registry^.identities[identity]; found {
+        return registry^.entries[index].native_id, true
     }
-    if registry^.count >= len(registry^.entries) || registry^.next_id == 0 {
+    if registry^.memory == nil || registry^.next_id == 0 {
         registry^.diagnostics.exhaustion += 1
         return 0, false
     }
     native_id := registry^.next_id
+    if reserve(&registry^.identities, registry^.active_count + 1) != nil ||
+       reserve(&registry^.native_ids, registry^.active_count + 1) != nil {
+        registry^.diagnostics.exhaustion += 1
+        return 0, false
+    }
+    index, admitted := native_id_admit_slot(registry)
+    if !admitted {
+        registry^.diagnostics.exhaustion += 1
+        return 0, false
+    }
     registry^.next_id += 1
-    registry^.entries[registry^.count] = {identity, native_id, true}
-    registry^.count += 1
+    registry^.entries[index] = {identity = identity, native_id = native_id, active = true}
+    registry^.identities[identity] = index
+    registry^.native_ids[native_id] = index
+    registry^.count = len(registry^.entries)
     registry^.active_count += 1
     registry^.diagnostics.allocated += 1
     registry^.diagnostics.peak_active = max(
         registry^.diagnostics.peak_active, registry^.active_count)
     return native_id, true
+}
+
+// Reuse retired record backing without ever reusing its numeric native identity.
+native_id_admit_slot :: proc(registry: ^Native_Id_Registry) -> (int, bool) {
+    index := registry^.free_head - 1
+    if index < 0 {
+        _, error := append(&registry^.entries, Native_Id_Entry{})
+        if error != nil {
+            return -1, false
+        }
+        index = len(registry^.entries) - 1
+    } else {
+        registry^.free_head = registry^.entries[index].free_next
+    }
+    return index, true
 }
 
 // native_id_lookup resolves one active native ID back to its qualified identity.
@@ -146,11 +218,8 @@ native_id_lookup :: proc(
     if registry == nil || native_id == 0 {
         return {}, false
     }
-    for index in 0..<registry^.count {
-        entry := registry^.entries[index]
-        if entry.native_id == native_id && entry.active {
-            return entry.identity, true
-        }
+    if index, found := registry^.native_ids[native_id]; found {
+        return registry^.entries[index].identity, true
     }
     return {}, false
 }
@@ -160,12 +229,13 @@ native_id_retire :: proc(registry: ^Native_Id_Registry, native_id: u64) -> bool 
     if registry == nil || native_id == SYNTHETIC_NATIVE_ID {
         return false
     }
-    for index in 0..<registry^.count {
+    if index, found := registry^.native_ids[native_id]; found {
         entry := &registry^.entries[index]
-        if entry^.native_id != native_id || !entry^.active {
-            continue
-        }
+        delete_key(&registry^.native_ids, native_id)
+        delete_key(&registry^.identities, entry^.identity)
         entry^.active = false
+        entry^.free_next = registry^.free_head
+        registry^.free_head = index + 1
         registry^.active_count -= 1
         registry^.diagnostics.retired += 1
         return true

@@ -37,6 +37,13 @@ import uisplitter "ui/layout/splitter"
 import uioverlay "ui/overlay"
 import uianimation "ui/animation"
 import capturemodel "capture/model"
+import storage "../core/storage"
+import nativeaccessibility "native/accessibility"
+
+when !core.SCENARIOS_ENABLED {
+    _ :: storage
+    _ :: nativeaccessibility
+}
 
 // Here is where we initialize the application state and load up the window, running
 // the loop for the lifetime of this instance.
@@ -172,6 +179,15 @@ service_scenario_before_ui :: proc(ctx: Window_Frame_Context) {
 service_scenario_before_present :: proc(ctx: Window_Frame_Context) {
     when core.SCENARIOS_ENABLED {
         if ctx.scenario_runtime != nil {
+            ctx.scenario_runtime.native_memory = storage.tlsf_owner_diagnostics(
+                &ctx.platform^.accessibility.memory)
+            publication := &ctx.platform^.accessibility.control_publication.current
+            ctx.scenario_runtime.native_control_count = publication^.control_count
+            ctx.scenario_runtime.native_text_bytes = publication^.text_count
+            diagnostics := nativeaccessibility.adapter_diagnostics_snapshot(
+                &ctx.platform^.accessibility)
+            ctx.scenario_runtime.native_toolkit_updates = diagnostics.control_tree_updates
+            ctx.scenario_runtime.native_toolkit_nodes = diagnostics.control_tree_nodes
             _ = viewscenario.scenario_runtime_update_current(
                 ctx.scenario_runtime, ctx.input_runtime, ctx.presentation)
         }

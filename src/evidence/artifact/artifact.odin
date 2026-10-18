@@ -5,7 +5,6 @@ package artifact
 import "../observe"
 import trace "../trace"
 import "core:fmt"
-import "core:mem"
 import "core:os"
 import json "core:encoding/json"
 import allocation_evidence "../allocation"
@@ -72,6 +71,7 @@ Bundle :: struct {
     simulation : observe.Simulation,
     allocations : allocation_evidence.Snapshot,
     arena_baselines : allocation_evidence.Arena_Baselines,
+    library_storage: observe.Library_Storage,
 }
 
 //   Serialize one retained arena checkpoint and its final assertion sample.
@@ -114,11 +114,11 @@ artifact_allocations_json :: proc(bundle: Bundle) -> string {
         "{{\"live_allocations\":%d,\"current_bytes\":%d," +
         "\"peak_bytes\":%d,\"total_allocations\":%d,\"bad_frees\":%d," +
         "\"arenas\":{{\"animation\":%s,\"snapshot_slots\":%s," +
-        "\"display_cache\":%s}}}}\n",
+        "\"display_cache\":%s}},\"library\":%s}}\n",
         bundle.allocations.live_allocations, bundle.allocations.current_bytes,
         bundle.allocations.peak_bytes, bundle.allocations.total_allocations,
         bundle.allocations.bad_frees, animation_json, snapshot_slots_json,
-        display_cache_json)
+        display_cache_json, artifact_library_storage_json(bundle.library_storage))
 }
 
 //   Serialize canonical scenario outcome metadata.
@@ -401,11 +401,11 @@ artifact_encode_event :: proc(destination: []u8, event: trace.Event) {
 
 //   Allocate and explicitly encode the schema header and trace records.
 //
-// The caller owns and must delete the returned bytes when successful.
+// The caller owns and must delete the returned bytes with the temporary allocator.
 artifact_trace_bytes :: proc(
-    events: []trace.Event, allocator: mem.Allocator) -> ([]byte, bool) {
+    events: []trace.Event) -> ([]byte, bool) {
     trace_size := size_of(Trace_Header) + len(events) * size_of(trace.Event)
-    trace_bytes, trace_error := make([]byte, trace_size, allocator)
+    trace_bytes, trace_error := make([]byte, trace_size, context.temp_allocator)
     if trace_error != nil {
         return nil, false
     }
@@ -425,24 +425,24 @@ artifact_trace_bytes :: proc(
 // The destination must be a safe relative path whose parent already exists. Events
 // remain caller-owned and are bounded by the artifact retention capacity.
 write_trace :: proc(
-    path: string, events: []trace.Event, allocator: mem.Allocator) -> bool {
+    path: string, events: []trace.Event) -> bool {
     if !artifact_path_safe(path) || len(events) > ARTIFACT_MAX_EVENTS {
         return false
     }
-    trace_bytes, trace_ok := artifact_trace_bytes(events, allocator)
+    trace_bytes, trace_ok := artifact_trace_bytes(events)
     if !trace_ok {
         return false
     }
-    defer delete(trace_bytes, allocator)
+    defer delete(trace_bytes, context.temp_allocator)
     return os.write_entire_file(path, trace_bytes) == nil
 }
 
-//   Write one named artifact using the supplied allocator for its temporary path.
+//   Write one named artifact using the temporary allocator for its path.
 artifact_write_named_file :: proc(
-    directory, filename, contents: string, allocator: mem.Allocator) -> bool {
+    directory, filename, contents: string) -> bool {
     path := fmt.aprintf(
-        "%s/%s", directory, filename, allocator = allocator)
-    defer delete(path, allocator)
+        "%s/%s", directory, filename, allocator = context.temp_allocator)
+    defer delete(path, context.temp_allocator)
     return len(path) > 0 && os.write_entire_file(path, contents) == nil
 }
 
@@ -458,8 +458,8 @@ artifact_write_named_file :: proc(
 // Side effects:
 //   - Creates the destination directory and writes the manifest, trace, state,
 //     allocation artifacts in canonical filenames.
-//   - Temporarily allocates the complete binary trace buffer from the supplied
-//     operation allocator.
+//   - Uses the temporary allocator for path strings and the complete binary trace
+//     buffer; each is released after its corresponding write.
 //
 // Notes:
 //   - The directory must be a safe relative path, and bounded inputs are rejected before
@@ -467,7 +467,7 @@ artifact_write_named_file :: proc(
 //   - Trace records are copied from their fixed native representation; readers must
 //     validate the header schema and event size before interpreting the payload.
 write_bundle :: proc(
-    directory: string, bundle: Bundle, allocator: mem.Allocator) -> bool {
+    directory: string, bundle: Bundle) -> bool {
     if !artifact_path_safe(directory) ||
         len(bundle.events) > ARTIFACT_MAX_EVENTS ||
         os.make_directory_all(directory) != nil {
@@ -481,20 +481,20 @@ write_bundle :: proc(
         return false
     }
     allocations_json := artifact_allocations_json(bundle)
-    if !artifact_write_named_file(directory, "manifest.json", manifest_json, allocator) {
+    if !artifact_write_named_file(directory, "manifest.json", manifest_json) {
         return false
     }
     trace_path := fmt.aprintf(
-        "%s/evidence.bin", directory, allocator = allocator)
-    defer delete(trace_path, allocator)
-    if len(trace_path) == 0 || !write_trace(trace_path, bundle.events, allocator) {
+        "%s/evidence.bin", directory, allocator = context.temp_allocator)
+    defer delete(trace_path, context.temp_allocator)
+    if len(trace_path) == 0 || !write_trace(trace_path, bundle.events) {
         return false
     }
-    if !artifact_write_named_file(directory, "state.json", state_json, allocator) {
+    if !artifact_write_named_file(directory, "state.json", state_json) {
         return false
     }
     return artifact_write_named_file(
-        directory, "allocations.json", allocations_json, allocator)
+        directory, "allocations.json", allocations_json)
 }
 
 //   Return whether a bundle path is relative and contains no parent segment.

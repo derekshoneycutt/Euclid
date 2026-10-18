@@ -2,6 +2,8 @@
 
 package native_accessibility
 
+import storage "../../../core/storage"
+
 import accesskit "../../../../libs/accesskit"
 import portable "../../../accessibility"
 
@@ -30,6 +32,11 @@ unix_tree_update_builds_complete_static_tree :: proc(t: ^testing.T) {
 // Verify native translation accepts a complete mixed ordinary-control tree.
 @(test)
 unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [3]portable.Control_Publication_Input{
         {native_id = 2, role = .Button, bounds = {10, 10, 50, 34},
             label = "Restart animation", actions = {.Focus, .Activate},
@@ -47,7 +54,7 @@ unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
     testing.expect_value(t, portable.control_tree_build(&publication, {
         root_bounds = {0, 0, 800, 600}, window_focused = true,
         controls = controls[:],
-    }), portable.Publication_Status.Ok)
+    }, &memory), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {
@@ -58,6 +65,11 @@ unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
 // Verify native translation accepts nested Search and Tree records.
 @(test)
 unix_control_tree_update_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [4]portable.Control_Publication_Input{
         {native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
             label = "Search animations", enabled = true, focusable = true},
@@ -73,7 +85,7 @@ unix_control_tree_update_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
     publication: portable.Control_Tree_Publication
     testing.expect_value(t, portable.control_tree_build(&publication, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), portable.Publication_Status.Ok)
+    }, &memory), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {
@@ -340,6 +352,7 @@ unix_control_publication_routes_tree_item_actions :: proc(t: ^testing.T) {
 unix_action_request_copies_into_bounded_queue :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
+    defer adapter_close_admission(owner)
     testing.expect_value(t, portable.publication_build_button(
         &owner^.publication.current, {
             present = true, child_id = 2, root_bounds = {0, 0, 800, 600},
@@ -425,6 +438,7 @@ unix_button_removal_retires_identity :: proc(t: ^testing.T) {
 unix_activation_rejects_callback_after_close :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
+    defer adapter_close_admission(owner)
     testing.expect_value(t,
         portable.protected_publish(&owner^.publication, 800, 600, true),
         portable.Publication_Status.Ok)

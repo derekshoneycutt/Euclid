@@ -363,16 +363,12 @@ accesskit_configure_control :: proc(
 accesskit_configure_control_hierarchy :: proc(
     node: ^accesskit.Node, publication: ^portable.Control_Tree_Publication,
     control: portable.Control_Publication) {
-    child_ids: [portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id
-    child_count := 0
-    for candidate in publication^.controls[:publication^.control_count] {
-        if candidate.parent_native_id != control.native_id {
-           continue
-        }
-        child_ids[child_count] = accesskit.Node_Id(candidate.native_id)
-        child_count += 1
-    }
-    accesskit.accesskit_node_set_children(node, uintptr(child_count), &child_ids[0])
+    index := portable.control_tree_find_id(publication, control.native_id) + 1
+    offset := publication^.child_offsets[index]
+    count := publication^.child_counts[index]
+    children := publication^.children[offset:offset + count]
+    accesskit.accesskit_node_set_children(node, uintptr(count),
+        cast(^accesskit.Node_Id)raw_data(children))
     if control.active_descendant_native_id != 0 {
         accesskit.accesskit_node_set_active_descendant(
             node, accesskit.Node_Id(control.active_descendant_native_id))
@@ -388,7 +384,7 @@ accesskit_configure_control_hierarchy :: proc(
 // accesskit_control_root_update creates and transfers one complete synthetic root.
 accesskit_control_root_update :: proc(
     publication: ^portable.Control_Tree_Publication,
-    child_ids: ^[portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id,
+    child_ids: []u64,
     child_count: int,
     focus_id: accesskit.Node_Id) -> ^accesskit.Tree_Update {
     root_id := accesskit.Node_Id(publication^.root_id)
@@ -396,7 +392,8 @@ accesskit_control_root_update :: proc(
     if root == nil {
        return nil
     }
-    accesskit.accesskit_node_set_children(root, uintptr(child_count), &child_ids^[0])
+    accesskit.accesskit_node_set_children(root, uintptr(child_count),
+        cast(^accesskit.Node_Id)raw_data(child_ids))
     accesskit.accesskit_node_set_bounds(
         root, accesskit_physical_bounds(
             publication^.root_bounds, publication^.bounds_scale))
@@ -438,23 +435,20 @@ accesskit_control_push_nodes :: proc(
 // accesskit_control_tree_update builds one complete rooted control update.
 accesskit_control_tree_update :: proc(
     publication: ^portable.Control_Tree_Publication) -> ^accesskit.Tree_Update {
-    if portable.control_tree_validate(publication) != .Ok {
+    if publication == nil || publication^.generation == 0 {
        return nil
     }
     focus_id := accesskit.Node_Id(publication^.root_id)
-    child_ids: [portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id
-    child_count := 0
+    child_count := publication^.child_counts[0]
+    offset := publication^.child_offsets[0]
+    child_ids := publication^.children[offset:offset + child_count]
     for control in publication^.controls[:publication^.control_count] {
-        if control.parent_native_id == publication^.root_id {
-            child_ids[child_count] = accesskit.Node_Id(control.native_id)
-            child_count += 1
-        }
         if publication^.window_focused && control.focused {
             focus_id = accesskit.Node_Id(control.native_id)
         }
     }
     update := accesskit_control_root_update(
-        publication, &child_ids, child_count, focus_id)
+        publication, child_ids, child_count, focus_id)
     if update == nil {
        return nil
     }

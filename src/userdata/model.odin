@@ -40,6 +40,7 @@ Store_Error_Kind :: enum u8 {
     Write,
     Finalize,
     Close,
+    Allocation,
 }
 
 Store_Error :: struct {
@@ -52,6 +53,7 @@ Store_Error :: struct {
 
 Store :: struct {
     connection: sqlite.Connection,
+    collection_replay_workspace: collections.Set,
     read_setting: sqlite.Statement,
     upsert_setting: sqlite.Statement,
     delete_setting: sqlite.Statement,

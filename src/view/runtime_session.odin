@@ -264,9 +264,13 @@ session_finalize_presentation :: proc(
         content_service = content_service,
         startup = session_startup_inputs(startup),
     }
-    session_apply_startup_preferences(
+    if !session_apply_startup_preferences(
         state, session.startup.preferences,
-        session.startup.collections, session.startup.user_store)
+        session.startup.collections, session.startup.user_store) {
+        log.error("runtime_startup_failed phase=collections_clone")
+        _ = shutdown_runtime_session(session)
+        return false
+    }
     if !session_start_presentation(&session) {
         _ = shutdown_runtime_session(session)
         return false
@@ -280,16 +284,20 @@ session_apply_startup_preferences :: proc(
     state: ^core.Euclid_General_State,
     preferences: setting_model.Preferences,
     collection_state: ^collections.Set,
-    store: ^user_data.Store) {
+    store: ^user_data.Store) -> bool {
     if state == nil {
-        return
+        return false
     }
     state^.ui_runtime.preferences.values = preferences
     state^.preferences_runtime.settings_store = store
     if collection_state != nil {
-        state^.preferences_runtime.collections_state = collection_state^
-    } else {
-        collections.initialize(&state^.preferences_runtime.collections_state)
+        if !collections.clone(
+            &state^.preferences_runtime.collections_state, collection_state) {
+            return false
+        }
+    } else if !collections.initialize(
+        &state^.preferences_runtime.collections_state) {
+        return false
     }
     state^.ui_runtime.preferences.store_available = store != nil
     state^.ui_runtime.preferences.save_status =
@@ -300,6 +308,7 @@ session_apply_startup_preferences :: proc(
     state^.particle_system.use_max_dust_particles = preferences.drawing.dust_limit
     state^.ui_runtime.rendering.use_simd_batch_projection =
         preferences.rendering.simd && projection.simd_batch_projection_available()
+    return true
 }
 
 //   Prepare runtime-owned subsystems and state without initializing presentation resources.
@@ -621,6 +630,18 @@ initiate_animations_state :: proc(
 }
 
 when core.SCENARIOS_ENABLED {
+    // Join display and final-frame native observations without borrowing callback storage.
+    observe_scenario_library_storage :: proc(
+        runtime: ^viewscenario.Scenario_Runtime) -> observe.Library_Storage {
+        result := viewevidence.observe_library_storage(
+            runtime^.state, runtime^.native_memory)
+        result.native_control_count = runtime^.native_control_count
+        result.native_text_bytes = runtime^.native_text_bytes
+        result.native_toolkit_updates = runtime^.native_toolkit_updates
+        result.native_toolkit_nodes = runtime^.native_toolkit_nodes
+        return result
+    }
+
     //   Write the terminal scenario artifact when one was requested.
     write_scenario_artifact :: proc(
         session: Euclid_Runtime_Session, runtime: ^viewscenario.Scenario_Runtime,
@@ -629,7 +650,7 @@ when core.SCENARIOS_ENABLED {
             return true
         }
         result := evidence_artifact.Result.Inconclusive
-        if runtime.runner.status == .Passed {
+        if runtime^.runner.status == .Passed {
             result = .Passed
         } else if runtime.runner.status == .Failed {
             result = .Failed
@@ -656,7 +677,8 @@ when core.SCENARIOS_ENABLED {
             simulation = simulation,
             allocations = observe.allocation(session.state.evidence_allocations),
             arena_baselines = session.state.evidence_arena_baselines,
-        }, context.temp_allocator)
+            library_storage = observe_scenario_library_storage(runtime),
+        })
     }
 }
 
@@ -667,7 +689,7 @@ write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
     }
     path := string(session.output_path[:session.output_path_count])
     events := session.events[:session.event_count]
-    return evidence_artifact.write_trace(path, events, context.temp_allocator)
+    return evidence_artifact.write_trace(path, events)
 }
 
 //   Shut down one runtime session in reverse ownership order.

@@ -85,7 +85,7 @@ Settings_Checkbox_Descriptor :: struct {
     label: string,
     checked: bool,
     enabled: bool,
-    order: u16,
+    order: u32,
 }
 
 //   Prepared controls paired with platform feature availability.

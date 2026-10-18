@@ -29,16 +29,25 @@ launch_test_id :: proc(value: u8) -> uuid.Identifier {
 // Save one Favorite fixture before exercising the startup loader.
 launch_test_save_favorite :: proc(store: ^user_data.Store) -> bool {
     snapshot := new(collections.Set, context.allocator)
-    defer free(snapshot, context.allocator)
-    collections.initialize(snapshot)
-    snapshot^.entries[0] = {
+    defer launch_test_destroy_set(snapshot)
+    if !collections.initialize(snapshot) {
+        return false
+    }
+    if collections.append_entry(snapshot, {
         id = launch_test_id(1),
         collection_id = collections.FAVORITES_COLLECTION_ID,
         kind = .Animation,
         animation_id = launch_test_id(2),
+    }) != .None {
+        return false
     }
-    snapshot^.entry_count = 1
     return user_data.store_replace_collections(store, snapshot).kind == .None
+}
+
+// Destroy an owned collection fixture before freeing its test owner record.
+launch_test_destroy_set :: proc(snapshot: ^collections.Set) {
+    collections.destroy(snapshot)
+    free(snapshot, context.allocator)
 }
 
 // Create an isolated durable path for coordinator/store integration tests.
@@ -409,7 +418,7 @@ launch_loads_saved_collections_before_runtime_handoff :: proc(t: ^testing.T) {
     })
     preferences: setting_model.Preferences
     loaded_collections := new(collections.Set, context.allocator)
-    defer free(loaded_collections, context.allocator)
+    defer launch_test_destroy_set(loaded_collections)
     opened := false
     testing.expect(t, launch_prepare_preferences(
         launch, &preferences, &store, &opened, loaded_collections))

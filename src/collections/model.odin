@@ -1,10 +1,12 @@
 package collections
 
 import uuid "core:encoding/uuid"
+import storage "../core/storage"
+import "base:runtime"
 import "core:unicode/utf8"
 
-COLLECTION_CAPACITY :: 512
-ENTRY_CAPACITY :: 512
+// Transitional caller scratch bound; the collection model itself is unbounded.
+ENTRY_INDEX_BUFFER_CAPACITY :: 512
 MUTATION_CAPACITY :: 512
 COLLECTION_NAME_MAX_BYTES :: 256
 ENTRY_NAME_MAX_BYTES :: 256
@@ -31,7 +33,7 @@ Move_Direction :: enum u8 {
 Collection :: struct {
     id: uuid.Identifier,
     role: Role,
-    name: [COLLECTION_NAME_MAX_BYTES]u8,
+    name: []u8,
     name_length: int,
     order: i64,
     is_read_only: bool,
@@ -44,16 +46,45 @@ Entry :: struct {
     sibling_order: i64,
     kind: Entry_Kind,
     animation_id: uuid.Identifier,
-    custom_name: [ENTRY_NAME_MAX_BYTES]u8,
+    custom_name: []u8,
     custom_name_length: int,
+    canonical_name: []u8,
+    canonical_name_length: int,
 }
 
-// Bounded, pointer-free snapshot of user collection placements.
+Placement_Identity :: struct {
+    collection_id: uuid.Identifier,
+    parent_entry_id: uuid.Identifier,
+    entry_id: uuid.Identifier,
+}
+
+Placement_View :: struct {
+    identity: Placement_Identity,
+    kind: Entry_Kind,
+    animation_id: uuid.Identifier,
+    sibling_order: i64,
+    custom_name: []u8,
+    custom_name_length: int,
+    canonical_name: []u8,
+    canonical_name_length: int,
+}
+
+Index_Slot :: struct {
+    id: uuid.Identifier,
+    value_index: int,
+    occupied: bool,
+}
+
+// Owned collection records and reusable lookup storage for one Library lifetime.
 Set :: struct {
-    collections: [COLLECTION_CAPACITY]Collection,
+    allocator: storage.Tlsf_Owner,
+    collections: []Collection,
     collection_count: int,
-    entries: [ENTRY_CAPACITY]Entry,
+    entries: []Entry,
     entry_count: int,
+    collection_index: []Index_Slot,
+    entry_index: []Index_Slot,
+    initialized: bool,
 }
 
 Validation_Error :: enum u8 {
@@ -91,6 +122,7 @@ Policy_Error :: enum u8 {
     No_Neighbor,
     Invalid_Direction,
     Invalid_Name,
+    Allocation_Failed,
 }
 
 Mutation_Kind :: enum u8 {
@@ -103,6 +135,7 @@ Mutation_Kind :: enum u8 {
 // One immutable collection operation retaining placement identity across retry.
 Mutation :: struct {
     kind: Mutation_Kind,
+    placement: Placement_Identity,
     entry_id: uuid.Identifier,
     animation_id: uuid.Identifier,
     sibling_entry_id: uuid.Identifier,
@@ -118,13 +151,20 @@ Mutation_Error :: enum u8 {
     Invalid_Name,
     Policy,
     Capacity,
+    Allocation_Failed,
+}
+
+Sibling_Move_Resolution :: struct {
+    entry_index: int,
+    sibling_index: int,
+    failure: Policy_Error,
 }
 
 // Validate identifiers, hierarchy, sibling order, and Favorites-specific invariants.
 validate :: proc(set: ^Set) -> Validation_Error {
-    if set == nil || set.collection_count < 0 ||
-        set.collection_count > COLLECTION_CAPACITY ||
-        set.entry_count < 0 || set.entry_count > ENTRY_CAPACITY {
+    if set == nil || !set.initialized || set.collection_count < 0 ||
+        set.collection_count > len(set.collections) ||
+        set.entry_count < 0 || set.entry_count > len(set.entries) {
         return .Capacity
     }
     for index in 0..<set.collection_count {
@@ -177,7 +217,8 @@ validate_collection_fields :: proc(collection: ^Collection) -> Validation_Error 
         }
     } else if collection^.role == .User {
         if collection^.name_length < 1 ||
-            collection^.name_length > COLLECTION_NAME_MAX_BYTES {
+            collection^.name_length > COLLECTION_NAME_MAX_BYTES ||
+            collection^.name_length > len(collection^.name) {
             return .Invalid_Collection
         }
         for character in collection^.name[:collection^.name_length] {
@@ -271,22 +312,17 @@ favorites_add :: proc(
     if favorites_animation_exists(set, animation_id, -1) {
         return .Already_Favorited
     }
-    if set.entry_count >= ENTRY_CAPACITY {
-        return .Capacity
-    }
     maximum_order := maximum_favorites_order(set)
     if maximum_order == max(i64) {
         return .Order_Overflow
     }
-    set.entries[set.entry_count] = {
+    return append_entry(set, Entry{
         id = entry_id,
         collection_id = FAVORITES_COLLECTION_ID,
         sibling_order = maximum_order + 1,
         kind = .Animation,
         animation_id = animation_id,
-    }
-    set.entry_count += 1
-    return .None
+    })
 }
 
 // Find the highest extant Favorites root position for append semantics.
@@ -317,34 +353,112 @@ favorites_remove :: proc(set: ^Set, entry_id: uuid.Identifier) -> Policy_Error {
     for index in 0..<set.entry_count {
         if set.entries[index].id == entry_id &&
             set.entries[index].collection_id == FAVORITES_COLLECTION_ID {
+            delete(
+                set.entries[index].custom_name,
+                storage.tlsf_owner_allocator(&set.allocator))
+            delete(
+                set.entries[index].canonical_name,
+                storage.tlsf_owner_allocator(&set.allocator))
             for move in index..<(set.entry_count - 1) {
                 set.entries[move] = set.entries[move + 1]
             }
             set.entry_count -= 1
             set.entries[set.entry_count] = {}
+            if !entry_index_rebuild(set) {
+                return .Invalid_Set
+            }
             return .None
         }
     }
     return .Not_Favorited
 }
 
-// Find the immediate editable sibling above or below a placement.
-sibling_neighbor :: proc(
-    set: ^Set, entry_id: uuid.Identifier,
-    direction: Move_Direction) -> (uuid.Identifier, Policy_Error) {
-    if validate(set) != .None {
+// Capture the parent and collection scope associated with one placement UUID.
+placement_identity_for_entry :: proc(
+    set: ^Set, entry_id: uuid.Identifier) -> (Placement_Identity, Policy_Error) {
+    if set == nil || !set^.initialized {
         return {}, .Invalid_Set
-    }
-    if entry_id == (uuid.Identifier{}) {
-        return {}, .Invalid_Identity
-    }
-    if !move_direction_is_valid(direction) {
-        return {}, .Invalid_Direction
     }
     entry_index := find_entry(set, entry_id)
     if entry_index < 0 {
         return {}, .Missing_Entry
     }
+    entry := set.entries[entry_index]
+    if find_collection(set, entry.collection_id) < 0 {
+        return {}, .Missing_Collection
+    }
+    return Placement_Identity{entry.collection_id, entry.parent_entry_id, entry.id}, .None
+}
+
+// Resolve one placement only while its collection and parent identity still match.
+placement_resolve :: proc(
+    set: ^Set, identity: Placement_Identity) -> (Placement_View, Policy_Error) {
+    entry_index, failure := placement_resolve_index(set, identity)
+    if failure != .None {
+        return {}, failure
+    }
+    entry := set.entries[entry_index]
+    return Placement_View{
+        identity = identity,
+        kind = entry.kind,
+        animation_id = entry.animation_id,
+        sibling_order = entry.sibling_order,
+        custom_name = entry.custom_name,
+        custom_name_length = entry.custom_name_length,
+        canonical_name = entry.canonical_name,
+        canonical_name_length = entry.canonical_name_length,
+    }, .None
+}
+
+// Validate one indexed placement's captured scope without scanning the full Set.
+placement_resolve_index :: proc(
+    set: ^Set, identity: Placement_Identity) -> (int, Policy_Error) {
+    if set == nil || !set^.initialized {
+        return -1, .Invalid_Set
+    }
+    if identity.entry_id == (uuid.Identifier{}) ||
+        identity.collection_id == (uuid.Identifier{}) {
+        return -1, .Invalid_Identity
+    }
+    entry_index := find_entry(set, identity.entry_id)
+    if entry_index < 0 {
+        return -1, .Missing_Entry
+    }
+    entry := set.entries[entry_index]
+    if entry.collection_id != identity.collection_id ||
+        entry.parent_entry_id != identity.parent_entry_id {
+        return -1, .Different_Scope
+    }
+    if !entry_custom_name_is_valid(&entry) {
+        return -1, .Invalid_Set
+    }
+    if find_collection(set, entry.collection_id) < 0 {
+        return -1, .Missing_Collection
+    }
+    if entry.parent_entry_id != (uuid.Identifier{}) {
+        parent_index := find_entry(set, entry.parent_entry_id)
+        if parent_index < 0 {
+            return -1, .Missing_Entry
+        }
+        if set.entries[parent_index].collection_id != entry.collection_id {
+            return -1, .Different_Scope
+        }
+    }
+    return entry_index, .None
+}
+
+// Find one name/order action neighbor through its placement-qualified scope.
+placement_sibling_neighbor :: proc(
+    set: ^Set, identity: Placement_Identity,
+    direction: Move_Direction) -> (uuid.Identifier, Policy_Error) {
+    if !move_direction_is_valid(direction) {
+        return {}, .Invalid_Direction
+    }
+    _, failure := placement_resolve(set, identity)
+    if failure != .None {
+        return {}, failure
+    }
+    entry_index := find_entry(set, identity.entry_id)
     entry := set.entries[entry_index]
     collection_index := find_collection(set, entry.collection_id)
     if set.collections[collection_index].is_read_only {
@@ -357,26 +471,28 @@ sibling_neighbor :: proc(
     return set.entries[neighbor_index].id, .None
 }
 
-// Capture one immutable move of a placement into its current adjacent position.
-make_sibling_move :: proc(
-    set: ^Set, entry_id: uuid.Identifier,
+// Capture one immutable move against exact collection and parent identity.
+make_placement_move :: proc(
+    set: ^Set, identity: Placement_Identity,
     direction: Move_Direction) -> (Mutation, Policy_Error) {
-    sibling_id, failure := sibling_neighbor(set, entry_id, direction)
+    sibling_id, failure := placement_sibling_neighbor(set, identity, direction)
     if failure != .None {
         return {}, failure
     }
     return Mutation{
         kind = .Reorder_Siblings,
-        entry_id = entry_id,
+        placement = identity,
+        entry_id = identity.entry_id,
         sibling_entry_id = sibling_id,
         direction = direction,
     }, .None
 }
 
-// Capture a bounded optional name update addressed to one placement identity.
-make_entry_name_mutation :: proc(
-    entry_id: uuid.Identifier, name: string) -> (Mutation, Mutation_Error) {
-    if entry_id == (uuid.Identifier{}) {
+// Capture a bounded optional name update against exact placement scope.
+make_placement_name_mutation :: proc(
+    identity: Placement_Identity, name: string) -> (Mutation, Mutation_Error) {
+    if identity.collection_id == (uuid.Identifier{}) ||
+        identity.entry_id == (uuid.Identifier{}) {
         return {}, .Invalid_Entry
     }
     name_bytes := transmute([]u8)name
@@ -385,7 +501,8 @@ make_entry_name_mutation :: proc(
     }
     mutation := Mutation{
         kind = .Set_Entry_Name,
-        entry_id = entry_id,
+        placement = identity,
+        entry_id = identity.entry_id,
         custom_name_length = len(name),
     }
     if len(name) > 0 {
@@ -465,7 +582,10 @@ apply_mutation :: proc(set: ^Set, mutation: Mutation) -> Mutation_Error {
 apply_add_favorite_mutation :: proc(
     set: ^Set, mutation: Mutation) -> Mutation_Error {
     if mutation.entry_id == (uuid.Identifier{}) ||
-        mutation.animation_id == (uuid.Identifier{}) {
+        mutation.animation_id == (uuid.Identifier{}) ||
+        mutation.placement.collection_id != FAVORITES_COLLECTION_ID ||
+        mutation.placement.entry_id != mutation.entry_id ||
+        mutation.placement.parent_entry_id != (uuid.Identifier{}) {
         return .Invalid_Entry
     }
     if favorites_add(set, mutation.entry_id, mutation.animation_id) != .None {
@@ -477,8 +597,15 @@ apply_add_favorite_mutation :: proc(
 // Apply one Favorites removal mutation.
 apply_remove_favorite_mutation :: proc(
     set: ^Set, mutation: Mutation) -> Mutation_Error {
-    if mutation.entry_id == (uuid.Identifier{}) {
+    if mutation.entry_id == (uuid.Identifier{}) ||
+        mutation.placement.entry_id != mutation.entry_id ||
+        mutation.placement.collection_id != FAVORITES_COLLECTION_ID ||
+        mutation.placement.parent_entry_id != (uuid.Identifier{}) {
         return .Invalid_Entry
+    }
+    _, identity_error := placement_resolve(set, mutation.placement)
+    if identity_error != .None {
+        return .Policy
     }
     if favorites_remove(set, mutation.entry_id) != .None {
         return .Policy
@@ -502,46 +629,108 @@ apply_reorder_mutation :: proc(
 // Validate and apply one placement-name mutation.
 apply_entry_name_mutation :: proc(
     set: ^Set, mutation: Mutation) -> Mutation_Error {
-    if mutation.entry_id == (uuid.Identifier{}) {
+    if mutation.entry_id == (uuid.Identifier{}) ||
+        mutation.placement.entry_id != mutation.entry_id {
         return .Invalid_Entry
     }
     name := mutation.custom_name
     if !entry_name_bytes_are_valid(name[:], mutation.custom_name_length) {
         return .Invalid_Name
     }
-    if entry_name_set(
-        set, mutation.entry_id, name[:], mutation.custom_name_length) != .None {
+    name_error := placement_entry_name_set(
+        set, mutation.placement, name[:], mutation.custom_name_length)
+    if name_error == .Allocation_Failed {
+        return .Allocation_Failed
+    }
+    if name_error != .None {
         return .Policy
     }
     return .None
 }
 
-// Set or clear one placement name without changing its identity or topology.
-entry_name_set :: proc(
-    set: ^Set, entry_id: uuid.Identifier,
+// Set or clear a placement name only while its captured scope remains current.
+placement_entry_name_set :: proc(
+    set: ^Set, identity: Placement_Identity,
     name: []u8, name_length: int) -> Policy_Error {
-    if validate(set) != .None {
+    if set == nil || !set^.initialized {
         return .Invalid_Set
-    }
-    if entry_id == (uuid.Identifier{}) {
-        return .Invalid_Identity
     }
     if !entry_name_bytes_are_valid(name, name_length) {
         return .Invalid_Name
     }
-    entry_index := find_entry(set, entry_id)
-    if entry_index < 0 {
-        return .Missing_Entry
+    _, failure := placement_resolve(set, identity)
+    if failure != .None {
+        return failure
     }
+    entry_index := find_entry(set, identity.entry_id)
     collection_index := find_collection(set, set.entries[entry_index].collection_id)
     if set.collections[collection_index].is_read_only {
         return .Read_Only
     }
-    set.entries[entry_index].custom_name = {}
-    if name_length > 0 {
-        copy(set.entries[entry_index].custom_name[:name_length], name[:name_length])
+    return placement_custom_name_replace(
+        set, entry_index, name, name_length)
+}
+
+// Replace one custom label after validation, preserving it on allocation failure.
+placement_custom_name_replace :: proc(
+    set: ^Set, entry_index: int, name: []u8, name_length: int) -> Policy_Error {
+    entry := &set^.entries[entry_index]
+    if entry^.custom_name_length == name_length &&
+        (name_length == 0 ||
+            string(entry^.custom_name[:name_length]) == string(name[:name_length])) {
+        return .None
     }
-    set.entries[entry_index].custom_name_length = name_length
+    replacement: []u8
+    allocation_error: runtime.Allocator_Error
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    if name_length > 0 {
+        replacement, allocation_error = make(
+            []u8,
+            name_length,
+            allocator)
+        if allocation_error != nil || len(replacement) != name_length {
+            return .Allocation_Failed
+        }
+        copy(replacement, name[:name_length])
+    }
+    delete(entry^.custom_name, allocator)
+    entry^.custom_name = replacement
+    entry^.custom_name_length = name_length
+    return .None
+}
+
+// Replace one copied catalogue label while preserving the prior label on failure.
+placement_canonical_name_set :: proc(
+    set: ^Set, identity: Placement_Identity, name: string) -> Policy_Error {
+    if set == nil || !set^.initialized {
+        return .Invalid_Set
+    }
+    name_bytes := transmute([]u8)name
+    if !canonical_label_bytes_are_valid(name_bytes, len(name)) {
+        return .Invalid_Name
+    }
+    _, failure := placement_resolve(set, identity)
+    if failure != .None {
+        return failure
+    }
+    entry_index := find_entry(set, identity.entry_id)
+    entry := &set^.entries[entry_index]
+    if name == string(entry^.canonical_name[:entry^.canonical_name_length]) {
+        return .None
+    }
+    replacement: []u8
+    allocation_error: runtime.Allocator_Error
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    if len(name) > 0 {
+        replacement, allocation_error = make([]u8, len(name), allocator)
+        if allocation_error != nil || len(replacement) != len(name) {
+            return .Allocation_Failed
+        }
+        copy(replacement, name_bytes)
+    }
+    delete(entry^.canonical_name, allocator)
+    entry^.canonical_name = replacement
+    entry^.canonical_name_length = len(name)
     return .None
 }
 
@@ -567,14 +756,441 @@ entry_name_bytes_are_valid :: proc(
     return true
 }
 
-// Initialize a valid empty snapshot containing the system Favorites collection.
-initialize :: proc(set: ^Set) {
+// Validate a copied catalogue label without imposing the user-name byte limit.
+canonical_label_bytes_are_valid :: proc(
+    name: []u8, name_length: int) -> bool {
+    if name_length < 0 || name_length > len(name) {
+        return false
+    }
+    if name_length == 0 {
+        return true
+    }
+    if !utf8.valid_string(string(name[:name_length])) {
+        return false
+    }
+    for character in name[:name_length] {
+        if character == 0 {
+            return false
+        }
+    }
+    return true
+}
+
+// Copy one collection record and its optional name into owned storage.
+append_collection :: proc(set: ^Set, value: Collection) -> Policy_Error {
+    if set == nil || !set^.initialized ||
+        value.name_length < 0 ||
+        value.name_length > COLLECTION_NAME_MAX_BYTES ||
+        value.name_length > len(value.name) {
+        return .Invalid_Name
+    }
+    if !collections_ensure_capacity(set, set^.collection_count + 1) ||
+        !collection_index_ensure_capacity(set, set^.collection_count + 1) {
+        return .Capacity
+    }
+    copied_name: []u8
+    allocation_error: runtime.Allocator_Error
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    if value.name_length > 0 {
+        copied_name, allocation_error = make(
+            []u8,
+            value.name_length,
+            allocator)
+        if allocation_error != nil || len(copied_name) != value.name_length {
+            return .Allocation_Failed
+        }
+        copy(copied_name, value.name[:value.name_length])
+    }
+    copied := value
+    copied.name = copied_name
+    set^.collections[set^.collection_count] = copied
+    if !collection_index_insert(
+        set, copied.id, set^.collection_count) {
+        delete(copied.name, allocator)
+        set^.collections[set^.collection_count] = {}
+        return .Capacity
+    }
+    set^.collection_count += 1
+    return .None
+}
+
+// Copy one placement record and its optional name into owned storage.
+append_entry :: proc(set: ^Set, value: Entry) -> Policy_Error {
+    if set == nil || !set^.initialized {
+        return .Invalid_Name
+    }
+    if !entries_ensure_capacity(set, set^.entry_count + 1) ||
+        !entry_index_ensure_capacity(set, set^.entry_count + 1) {
+        return .Capacity
+    }
+    copied, copy_error := entry_copy_owned(set, value)
+    if copy_error != .None {
+        return copy_error
+    }
+    set^.entries[set^.entry_count] = copied
+    if !entry_index_insert(set, copied.id, set^.entry_count) {
+        allocator := storage.tlsf_owner_allocator(&set^.allocator)
+        delete(copied.custom_name, allocator)
+        delete(copied.canonical_name, allocator)
+        set^.entries[set^.entry_count] = {}
+        return .Capacity
+    }
+    set^.entry_count += 1
+    return .None
+}
+
+// Validate and deep-copy one placement's optional labels into the Set owner.
+entry_copy_owned :: proc(set: ^Set, value: Entry) -> (Entry, Policy_Error) {
+    if !entry_optional_text_is_valid(value) {
+        return {}, .Invalid_Name
+    }
+    custom_name, custom_error := copy_owned_label(
+        set, value.custom_name, value.custom_name_length)
+    if custom_error != .None {
+        return {}, custom_error
+    }
+    canonical_name, canonical_error := copy_owned_label(
+        set, value.canonical_name, value.canonical_name_length)
+    if canonical_error != .None {
+        delete(custom_name, storage.tlsf_owner_allocator(&set^.allocator))
+        return {}, canonical_error
+    }
+    copied := value
+    copied.custom_name = custom_name
+    copied.canonical_name = canonical_name
+    return copied, .None
+}
+
+// Copy one optional text slice into the initialized Set's TLSF domain.
+copy_owned_label :: proc(
+    set: ^Set, source: []u8, source_length: int) -> ([]u8, Policy_Error) {
+    if source_length == 0 {
+        return nil, .None
+    }
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    copied, allocation_error := make([]u8, source_length, allocator)
+    if allocation_error != nil || len(copied) != source_length {
+        return nil, .Allocation_Failed
+    }
+    copy(copied, source[:source_length])
+    return copied, .None
+}
+
+// Validate both optional text fields before acquiring owner storage.
+entry_optional_text_is_valid :: proc(value: Entry) -> bool {
+    return entry_name_bytes_are_valid(value.custom_name, value.custom_name_length) &&
+        canonical_label_bytes_are_valid(
+            value.canonical_name, value.canonical_name_length)
+}
+
+// Initialize reusable storage and the required editable Favorites collection.
+initialize :: proc(set: ^Set) -> bool {
+    if set == nil {
+        return false
+    }
+    if set^.initialized {
+        return initialize_existing_set(set)
+    }
     set^ = {}
+    heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+    if storage.tlsf_owner_init(&set^.allocator, heap_allocator) != .Ok {
+        return false
+    }
+    if !initialize_storage_arrays(set) {
+        storage.tlsf_owner_destroy(&set^.allocator)
+        set^ = {}
+        return false
+    }
+    set^.initialized = true
+    if !initialize_favorites(set) {
+        destroy(set)
+        return false
+    }
+    return true
+}
+
+// Reuse the initialized TLSF and arrays while restoring the required Favorites row.
+initialize_existing_set :: proc(set: ^Set) -> bool {
+    clear(set)
+    return initialize_favorites(set)
+}
+
+// Allocate the initial dynamic records and indexes through this Set's owner.
+initialize_storage_arrays :: proc(set: ^Set) -> bool {
+    set^.collections = collections_allocate_array(set, 4)
+    set^.entries = entries_allocate_array(set, 8)
+    set^.collection_index = index_allocate_array(set, 8)
+    set^.entry_index = index_allocate_array(set, 16)
+    return len(set^.collections) == 4 && len(set^.entries) == 8 &&
+        len(set^.collection_index) == 8 && len(set^.entry_index) == 16
+}
+
+// Publish the required editable Favorites collection into the empty Set.
+initialize_favorites :: proc(set: ^Set) -> bool {
     set^.collections[0] = {
         id = FAVORITES_COLLECTION_ID,
         role = .Favorites,
     }
     set^.collection_count = 1
+    return collection_index_insert(set, FAVORITES_COLLECTION_ID, 0)
+}
+
+// Reclaim records and their optional text while retaining reusable table capacity.
+clear :: proc(set: ^Set) {
+    if set == nil || !set^.initialized {
+        return
+    }
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    for &collection in set.collections[:set.collection_count] {
+        delete(collection.name, allocator)
+        collection = {}
+    }
+    for &entry in set.entries[:set.entry_count] {
+        delete(entry.custom_name, allocator)
+        delete(entry.canonical_name, allocator)
+        entry = {}
+    }
+    for &slot in set.collection_index {
+        slot = {}
+    }
+    for &slot in set.entry_index {
+        slot = {}
+    }
+    set.collection_count = 0
+    set.entry_count = 0
+}
+
+// Release all Library records, indexes, and TLSF backing pools.
+destroy :: proc(set: ^Set) {
+    if set == nil || !set^.initialized {
+        return
+    }
+    clear(set)
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    delete(set^.collections, allocator)
+    delete(set^.entries, allocator)
+    delete(set^.collection_index, allocator)
+    delete(set^.entry_index, allocator)
+    storage.tlsf_owner_destroy(&set^.allocator)
+    set^ = {}
+}
+
+// Copy canonical records atomically into independently owned storage.
+clone :: proc(destination, source: ^Set) -> bool {
+    if destination == nil || source == nil || destination == source ||
+        !source^.initialized {
+        return false
+    }
+    staged: Set
+    if !initialize(&staged) {
+        return false
+    }
+    clear(&staged)
+    for value in source.collections[:source.collection_count] {
+        if append_collection(&staged, value) != .None {
+            destroy(&staged)
+            return false
+        }
+    }
+    for value in source.entries[:source.entry_count] {
+        if append_entry(&staged, value) != .None {
+            destroy(&staged)
+            return false
+        }
+    }
+    old := destination^
+    destination^ = staged
+    staged = old
+    destroy(&staged)
+    return true
+}
+
+// Allocate an actual-sized collection table from the owner TLSF domain.
+collections_allocate_array :: proc(set: ^Set, capacity: int) -> []Collection {
+    if capacity <= 0 {
+        return nil
+    }
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    return make([]Collection, capacity, allocator)
+}
+
+// Allocate an actual-sized placement table from the owner TLSF domain.
+entries_allocate_array :: proc(set: ^Set, capacity: int) -> []Entry {
+    if capacity <= 0 {
+        return nil
+    }
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    return make([]Entry, capacity, allocator)
+}
+
+// Allocate a UUID lookup table in this Set's reusable owner domain.
+index_allocate_array :: proc(set: ^Set, capacity: int) -> []Index_Slot {
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    return make([]Index_Slot, capacity, allocator)
+}
+
+// Keep collection UUID lookup below a one-half load factor.
+collection_index_ensure_capacity :: proc(set: ^Set, required: int) -> bool {
+    if required <= len(set^.collection_index)/2 {
+        return true
+    }
+    capacity := max(8, len(set^.collection_index))
+    for required > capacity/2 {
+        if capacity > max(int)/2 {
+            return false
+        }
+        capacity *= 2
+    }
+    replacement := index_allocate_array(set, capacity)
+    if len(replacement) != capacity {
+        return false
+    }
+    for index in 0..<set^.collection_count {
+        if !index_insert(replacement, set^.collections[index].id, index) {
+            delete(replacement, storage.tlsf_owner_allocator(&set^.allocator))
+            return false
+        }
+    }
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    delete(set^.collection_index, allocator)
+    set^.collection_index = replacement
+    return true
+}
+
+// Keep placement UUID lookup below a one-half load factor.
+entry_index_ensure_capacity :: proc(set: ^Set, required: int) -> bool {
+    if required <= len(set^.entry_index)/2 {
+        return true
+    }
+    capacity := max(16, len(set^.entry_index))
+    for required > capacity/2 {
+        if capacity > max(int)/2 {
+            return false
+        }
+        capacity *= 2
+    }
+    replacement := index_allocate_array(set, capacity)
+    if len(replacement) != capacity {
+        return false
+    }
+    for index in 0..<set^.entry_count {
+        if !index_insert(replacement, set^.entries[index].id, index) {
+            delete(replacement, storage.tlsf_owner_allocator(&set^.allocator))
+            return false
+        }
+    }
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    delete(set^.entry_index, allocator)
+    set^.entry_index = replacement
+    return true
+}
+
+// Insert one UUID without replacing the first row for a duplicate identity.
+index_insert :: proc(table: []Index_Slot, id: uuid.Identifier, value_index: int) -> bool {
+    if id == (uuid.Identifier{}) || len(table) == 0 ||
+        len(table) & (len(table) - 1) != 0 {
+        return false
+    }
+    slot_index := int(index_hash(id) & u64(len(table) - 1))
+    for _ in 0..<len(table) {
+        slot := &table[slot_index]
+        if !slot^.occupied {
+            slot^ = {id, value_index, true}
+            return true
+        }
+        if slot^.id == id {
+            return true
+        }
+        slot_index = (slot_index + 1) & (len(table) - 1)
+    }
+    return false
+}
+
+// Insert one collection identity into its retained UUID index.
+collection_index_insert :: proc(
+    set: ^Set, id: uuid.Identifier, value_index: int) -> bool {
+    return index_insert(set^.collection_index, id, value_index)
+}
+
+// Insert one placement identity into its retained UUID index.
+entry_index_insert :: proc(
+    set: ^Set, id: uuid.Identifier, value_index: int) -> bool {
+    return index_insert(set^.entry_index, id, value_index)
+}
+
+// Find one UUID's stored backing-array index without scanning active records.
+index_lookup :: proc(table: []Index_Slot, id: uuid.Identifier) -> int {
+    if id == (uuid.Identifier{}) || len(table) == 0 {
+        return -1
+    }
+    slot_index := int(index_hash(id) & u64(len(table) - 1))
+    for _ in 0..<len(table) {
+        slot := table[slot_index]
+        if !slot.occupied {
+            return -1
+        }
+        if slot.id == id {
+            return slot.value_index
+        }
+        slot_index = (slot_index + 1) & (len(table) - 1)
+    }
+    return -1
+}
+
+// Hash a UUID with rotation and xor so arithmetic cannot overflow.
+index_hash :: proc(id: uuid.Identifier) -> u64 {
+    hash: u64 = 0x9e3779b97f4a7c15
+    for value in id {
+        hash = (hash << 7) | (hash >> 57)
+        hash ~= u64(value)
+    }
+    return hash
+}
+
+// Grow the collection table without relocating separately owned text.
+collections_ensure_capacity :: proc(set: ^Set, required: int) -> bool {
+    if required <= len(set^.collections) {
+        return true
+    }
+    capacity := max(4, len(set^.collections))
+    for capacity < required {
+        if capacity > max(int)/2 {
+            return false
+        }
+        capacity *= 2
+    }
+    replacement := collections_allocate_array(set, capacity)
+    if len(replacement) == 0 {
+        return false
+    }
+    copy(replacement, set^.collections[:set^.collection_count])
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    delete(set^.collections, allocator)
+    set^.collections = replacement
+    return true
+}
+
+// Grow the placement table without relocating separately owned text.
+entries_ensure_capacity :: proc(set: ^Set, required: int) -> bool {
+    if required <= len(set^.entries) {
+        return true
+    }
+    capacity := max(8, len(set^.entries))
+    for capacity < required {
+        if capacity > max(int)/2 {
+            return false
+        }
+        capacity *= 2
+    }
+    replacement := entries_allocate_array(set, capacity)
+    if len(replacement) == 0 {
+        return false
+    }
+    copy(replacement, set^.entries[:set^.entry_count])
+    allocator := storage.tlsf_owner_allocator(&set^.allocator)
+    delete(set^.entries, allocator)
+    set^.entries = replacement
+    return true
 }
 
 // Find the collection carrying the stable Favorites system role.
@@ -589,22 +1205,41 @@ find_favorites :: proc(set: ^Set) -> int {
 
 // Find a collection by its persisted UUID, or return -1.
 find_collection :: proc(set: ^Set, id: uuid.Identifier) -> int {
-    for index in 0..<set.collection_count {
-        if set.collections[index].id == id {
-            return index
-        }
+    if set == nil || !set.initialized {
+        return -1
+    }
+    index := index_lookup(set.collection_index, id)
+    if index >= 0 && index < set.collection_count &&
+        set.collections[index].id == id {
+        return index
     }
     return -1
 }
 
 // Find an entry by its placement UUID, or return -1.
 find_entry :: proc(set: ^Set, id: uuid.Identifier) -> int {
-    for index in 0..<set.entry_count {
-        if set.entries[index].id == id {
-            return index
-        }
+    if set == nil || !set.initialized {
+        return -1
+    }
+    index := index_lookup(set.entry_index, id)
+    if index >= 0 && index < set.entry_count &&
+        set.entries[index].id == id {
+        return index
     }
     return -1
+}
+
+// Rebuild the entry UUID map after records shift in the backing slice.
+entry_index_rebuild :: proc(set: ^Set) -> bool {
+    for &slot in set.entry_index {
+        slot = {}
+    }
+    for index in 0..<set.entry_count {
+        if !index_insert(set.entry_index, set.entries[index].id, index) {
+            return false
+        }
+    }
+    return true
 }
 
 // Find the nearest sibling index in one validated collection-parent scope.
@@ -633,39 +1268,65 @@ sibling_neighbor_index :: proc(
 
 // Apply an immutable move only while its recorded placements remain adjacent.
 sibling_move_apply :: proc(set: ^Set, mutation: Mutation) -> Policy_Error {
-    if validate(set) != .None {
-        return .Invalid_Set
+    resolution := sibling_move_resolve_indexes(set, mutation)
+    if resolution.failure != .None {
+        return resolution.failure
+    }
+    entry := set.entries[resolution.entry_index]
+    sibling := set.entries[resolution.sibling_index]
+    set.entries[resolution.entry_index].sibling_order = sibling.sibling_order
+    set.entries[resolution.sibling_index].sibling_order = entry.sibling_order
+    return .None
+}
+
+// Resolve and validate one move against indexed placements and their current scope.
+sibling_move_resolve_indexes :: proc(
+    set: ^Set, mutation: Mutation) -> Sibling_Move_Resolution {
+    if set == nil || !set^.initialized {
+        return {failure = .Invalid_Set}
     }
     if !move_direction_is_valid(mutation.direction) {
-        return .Invalid_Direction
+        return {failure = .Invalid_Direction}
     }
     if mutation.entry_id == mutation.sibling_entry_id {
-        return .Invalid_Identity
+        return {failure = .Invalid_Identity}
     }
+    return sibling_move_resolve_records(set, mutation)
+}
+
+// Validate the indexed records, identity scope, policy, and current adjacency.
+sibling_move_resolve_records :: proc(
+    set: ^Set, mutation: Mutation) -> Sibling_Move_Resolution {
     entry_index := find_entry(set, mutation.entry_id)
     sibling_index := find_entry(set, mutation.sibling_entry_id)
     if entry_index < 0 {
-        return .Missing_Entry
+        return {failure = .Missing_Entry}
     }
     if sibling_index < 0 {
-        return .Missing_Sibling
+        return {failure = .Missing_Sibling}
     }
     entry := set.entries[entry_index]
     sibling := set.entries[sibling_index]
+    if mutation.placement.entry_id != entry.id ||
+        mutation.placement.collection_id != entry.collection_id ||
+        mutation.placement.parent_entry_id != entry.parent_entry_id {
+        return {failure = .Different_Scope}
+    }
     if entry.collection_id != sibling.collection_id ||
         entry.parent_entry_id != sibling.parent_entry_id {
-        return .Different_Scope
+        return {failure = .Different_Scope}
     }
     collection_index := find_collection(set, entry.collection_id)
+    if collection_index < 0 {
+        return {failure = .Missing_Collection}
+    }
     if set.collections[collection_index].is_read_only {
-        return .Read_Only
+        return {failure = .Read_Only}
     }
     if sibling_neighbor_index(set, entry, mutation.direction) != sibling_index {
-        return .Not_Adjacent
+        return {failure = .Not_Adjacent}
     }
-    set.entries[entry_index].sibling_order = sibling.sibling_order
-    set.entries[sibling_index].sibling_order = entry.sibling_order
-    return .None
+    return {entry_index, sibling_index, .None}
 }
 
 // Count siblings without depending on their backing-array arrangement.
@@ -717,8 +1378,12 @@ entry_kind_is_valid :: proc(entry: Entry) -> bool {
 
 // Validate the optional custom name stored on one entry record.
 entry_custom_name_is_valid :: proc(entry: ^Entry) -> bool {
-    return entry_name_bytes_are_valid(
-        entry^.custom_name[:], entry^.custom_name_length)
+    return len(entry^.custom_name) == entry^.custom_name_length &&
+        entry_name_bytes_are_valid(
+            entry^.custom_name, entry^.custom_name_length) &&
+        len(entry^.canonical_name) == entry^.canonical_name_length &&
+        canonical_label_bytes_are_valid(
+            entry^.canonical_name, entry^.canonical_name_length)
 }
 
 // Reject sibling positions duplicated within one collection parent scope.

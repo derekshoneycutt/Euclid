@@ -97,6 +97,20 @@ const CustomTestAllocationReviews = [
     ("test-core-arena-owner-destroy-buffer", "src/core/storage/arena_owner_test.odin",
         "storage_test_arena_owner_destroy_preserves_diagnostics", "make", "[]u8", 1, 1,
         "Arena-backed test payload is released by the owner destruction under test."),
+    ("test-tlsf-owner-churn-buffers", "src/core/storage/tlsf_owner_test.odin",
+        "storage_test_tlsf_owner_reuses_freed_blocks", "make", "[]u8", 2, 2,
+        "TLSF allocations are freed within each test iteration and the owner is destroyed."),
+    ("test-tlsf-owner-resize-buffer", "src/core/storage/tlsf_owner_test.odin",
+        "storage_test_tlsf_owner_resize_is_failure_atomic", "make", "[]u8", 1, 1,
+        "The resized TLSF allocation is freed before its owner is destroyed."),
+    ("test-tlsf-owner-failed-resize-buffer", "src/core/storage/tlsf_owner_test.odin",
+        "storage_test_tlsf_owner_failed_resize_keeps_old_allocation",
+        "make", "[]u8", 1, 1,
+        "The preserved original TLSF allocation is freed before owner destruction."),
+    ("test-tlsf-owner-growth-recovery-buffer", "src/core/storage/tlsf_owner_test.odin",
+        "storage_test_tlsf_owner_metadata_failure_keeps_committed_pool",
+        "make", "[]u8", 1, 1,
+        "The recovery allocation is freed before the TLSF owner releases its backing."),
     ("test-evidence-allocation-baseline-buffer",
         "src/evidence/allocation/allocation_test.odin",
         "allocation_test_baseline_restoration", "make", "[]byte", 1, 1,
@@ -353,8 +367,8 @@ function add_animation_reviews!(reviews)
     reviews
 end
 
-"""Add the reviewed metric policy for the failure-test allocators."""
-function add_builder_test_allocation_procs!(reviews)
+"""Review failure-test allocator callback signatures required by the Odin ABI."""
+function add_allocator_callback_reviews!(reviews)
     push!(reviews, ReviewedComplexity(
         "test-bounded-builder-allocator-parameters",
         "src/core/storage/bounded_builder_test.odin",
@@ -379,6 +393,26 @@ function add_builder_test_allocation_procs!(reviews)
         :parameters,
         "The test allocator implements the required seven-parameter allocator ABI.";
         response=Ignore))
+    add_tlsf_owner_callback_reviews!(reviews)
+end
+
+"""Review the TLSF allocation callbacks against Odin's required allocator ABI."""
+function add_tlsf_owner_callback_reviews!(reviews)
+    for (id, path, name) in (
+        ("test-tlsf-owner-allocator-abi-parameters",
+            "src/core/storage/tlsf_owner_test.odin", "tlsf_owner_test_allocator_proc"),
+        ("tlsf-owner-allocator-abi-parameters",
+            "src/core/storage/tlsf_owner.odin", "tlsf_owner_allocator_proc"),
+        ("test-collection-backing-allocator-abi-parameters",
+            "src/collections/storage_failure_test.odin", "collections_test_reject_backing"),
+        ("test-replay-backing-allocator-abi-parameters",
+            "src/userdata/library_storage_test.odin", "userdata_replay_reject_backing"))
+        push!(reviews, ReviewedComplexity(
+            id, path, :odin, name, :parameters,
+            "The allocator callback implements Odin's required seven-parameter ABI.";
+            response=Ignore))
+    end
+    return reviews
 end
 
 """Add reviewed metric policies for one animation state-machine module."""
@@ -405,7 +439,7 @@ function animation_loop_reviews()
     reviews = ReviewedComplexity[]
     foreach(path -> add_animation_loop_reviews!(reviews, path), AnimationLoopFiles)
     add_animation_reviews!(reviews)
-    add_builder_test_allocation_procs!(reviews)
+    add_allocator_callback_reviews!(reviews)
 end
 
 AnalysisSettings(
@@ -454,6 +488,7 @@ AnalysisSettings(
             BaseSettings.allocations.source_patterns...;
             AllocatorSourcePattern("builder.allocator", :custom);
             AllocatorSourcePattern("operations.allocator", :custom);
+            AllocatorSourcePattern("owner.backing_allocator", :custom);
             AllocatorSourcePattern("store.allocator", :custom);
             AllocatorSourcePattern("store.payload_allocator", :custom);
             AllocatorSourcePattern("state.allocator", :custom)
@@ -507,19 +542,6 @@ AnalysisSettings(
                 "The harness releases the asset-root config with the allocator selected when its owner was created.";
                 operation="allocator-pass",
                 target="files.destroy_asset_root_config",
-                allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "app-launch-collection-snapshot-owner-release",
-                "src/app/launch.odin",
-                "launch_run_session",
-                :context,
-                "The launch owner releases its explicitly allocated collection snapshot with the same process allocator after the synchronous view session returns.";
-                operation="allocator-pass",
-                target="free",
                 allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore,
@@ -2109,60 +2131,392 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "app-launch-collection-snapshot",
-                "src/app/launch.odin",
-                "launch_run_session",
-                :context,
-                "Collection snapshot is explicitly allocated for launch preparation and remains alive through the synchronous view session; the launch owner frees it when the session returns.";
-                operation="new",
-                target="collections.Set",
-                allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "userdata-admission-collection-snapshot",
-                "src/userdata/collections.odin",
-                "store_verify_collection_admission",
+                "evidence-artifact-trace-serialization-buffer",
+                "src/evidence/artifact/artifact.odin",
+                "artifact_trace_bytes",
                 :temporary,
-                "Temporary bounded snapshot holds persisted rows only while admission validates the complete collection topology, then is freed before returning.";
-                operation="new",
-                target="collections.Set",
+                "Bounded canonical trace bytes are serialized only for the file write and released with context.temp_allocator before the writer returns.";
+                operation="make",
+                target="[]byte",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "userdata-load-collection-snapshot",
-                "src/userdata/collections.odin",
-                "store_load_collections",
-                :temporary,
-                "Temporary bounded snapshot keeps the SQLite read transactional and is copied to the caller only after validation and commit; deferred free releases it on every exit.";
-                operation="new",
-                target="collections.Set",
+                "collections-placement-custom-name",
+                "src/collections/model.odin",
+                "placement_custom_name_replace",
+                :custom,
+                "The initialized Set's TLSF owner holds optional custom text until replacement, clear, record removal, or Set destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "userdata-mutation-collection-snapshot",
-                "src/userdata/collections.odin",
-                "store_apply_collection_mutations",
-                :temporary,
-                "Temporary bounded candidate holds the replayed mutation batch until the enclosing transaction applies it; deferred free releases it on success or failure.";
-                operation="new",
-                target="collections.Set",
+                "collections-placement-canonical-name",
+                "src/collections/model.odin",
+                "placement_canonical_name_set",
+                :custom,
+                "The initialized display Set's TLSF owner holds copied catalogue labels across Julia generations and releases them on refresh or Set destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "preferences-save-collection-staging",
-                "src/view/preferences/settings_save.odin",
-                "settings_save_collection_mutation",
-                :temporary,
-                "Temporary bounded snapshot validates one mutation before atomic in-memory admission and is freed when the operation returns.";
+                "collections-record-copy-text",
+                "src/collections/model.odin",
+                "append_collection",
+                :custom,
+                "Optional collection labels are deep-copied into the initialized Set owner and released on clear or destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "collections-owned-label-copy",
+                "src/collections/model.odin",
+                "copy_owned_label",
+                :custom,
+                "One optional custom, canonical, or collection label is copied into the initialized Set owner and released by its replacement, removal, or destruction lifecycle.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "collections-record-storage",
+                "src/collections/model.odin",
+                "collections_allocate_array",
+                :custom,
+                "The Set's TLSF owner retains actual-sized collection records until growth or owner destruction.";
+                operation="make",
+                target="[]Collection",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "collections-entry-storage",
+                "src/collections/model.odin",
+                "entries_allocate_array",
+                :custom,
+                "The Set's TLSF owner retains actual-sized placement records until growth or owner destruction.";
+                operation="make",
+                target="[]Entry",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "collections-uuid-index-storage",
+                "src/collections/model.odin",
+                "index_allocate_array",
+                :custom,
+                "UUID lookup slots are actual-sized TLSF-owned storage replaced transactionally on index growth and released with the Set.";
+                operation="make",
+                target="[]Index_Slot",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-semantic-snapshot-nodes",
+                "src/view/ui/model/semantic_storage.odin",
+                "ui_semantic_snapshot_reserve_nodes",
+                :custom,
+                "Each stable display snapshot owns reusable node backing in its own TLSF domain; failed admission frees candidates, replacement frees old backing, and focus teardown destroys both domains.";
+                operation="make",
+                target="[]Ui_Semantic_Node",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-semantic-snapshot-indexes",
+                "src/view/ui/model/semantic_storage.odin",
+                "ui_semantic_snapshot_reserve_nodes",
+                :custom,
+                "Identity and traversal indexes grow transactionally with the snapshot node table in its TLSF domain; both candidate failure and replacement release backing before final owner teardown.";
+                operation="make",
+                target="[]int",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "ui-semantic-snapshot-text",
+                "src/view/ui/model/semantic_storage.odin",
+                "ui_semantic_snapshot_reserve_text",
+                :custom,
+                "Reusable UTF-8 backing belongs to one display snapshot TLSF domain; growth copies accepted bytes before releasing old backing and focus teardown releases retained storage.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-registry-root-insertion",
+                "src/accessibility/native_storage.odin",
+                "native_id_registry_init", :dynamic_growth,
+                "Root insertion uses the TLSF-owned record capacity reserved during registry initialization; registry teardown releases the backing after callback drain.";
+                operation="append", response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-registry-index-growth",
+                "src/accessibility/native_storage.odin",
+                "native_id_resolve", :dynamic_growth,
+                "Both indexes retain their native TLSF allocator from initialization. Growth is admitted before mapping insertion, failure preserves accepted mappings, and registry teardown destroys both tables.";
+                operation="reserve", response=Ignore,
+                minimum_matches=2, maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "native-registry-slot-growth",
+                "src/accessibility/native_storage.odin",
+                "native_id_admit_slot", :dynamic_growth,
+                "Record growth retains the native TLSF allocator. Retired slots are reused first; failed append rejects admission and registry destruction releases retained capacity after callback drain.";
+                operation="append", response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-staging-index-growth",
+                "src/view/native/accessibility/action_adapter.odin",
+                "adapter_index_input", :dynamic_growth,
+                "Staging lookup retains its independent native TLSF allocator across clear/reserve. Growth failure rejects staging before accepted mappings change; initialization failure or close/drain destroys the table.";
+                operation="reserve", response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-registry-owned-tables",
+                "src/accessibility/native_storage.odin",
+                "native_id_registry_allocate", :custom,
+                "Reusable mapping records and both lookup tables belong to the native TLSF domain. Initialization failure releases partial tables; close/drain destroys the registry. Slots recycle but numeric IDs never do.";
+                operation="make", allocator_source="allocator",
+                certainty=:definite, response=Ignore,
+                minimum_matches=3, maximum_matches=3),
+            ReviewedAllocationPolicy(
+                "native-publication-graph-scratch",
+                "src/accessibility/publication.odin",
+                "control_tree_validate_graph", :custom,
+                "Iterative ancestry scratch uses the candidate publication's TLSF owner and is deleted before validation returns.";
+                operation="make", target="[]int", allocator_source="allocator",
+                certainty=:definite, response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-publication-owned-content",
+                "src/accessibility/publication.odin",
+                "control_tree_allocate", :custom,
+                "Controls, copied UTF-8, character widths, and word metadata belong to immutable native TLSF generations. Failure destroys candidates; display collection frees retired content only after callback leases release.";
+                operation="make", allocator_source="allocator",
+                certainty=:definite, response=Ignore,
+                minimum_matches=4, maximum_matches=4),
+            ReviewedAllocationPolicy(
+                "native-publication-owned-relations",
+                "src/accessibility/publication.odin",
+                "control_tree_allocate_relations", :custom,
+                "Child IDs, offsets, counts, and ID lookup belong to the immutable native generation. Candidate failure or display collection after lease drain releases all backing.";
+                operation="make", allocator_source="allocator",
+                certainty=:definite, response=Ignore,
+                minimum_matches=4, maximum_matches=4),
+            ReviewedAllocationPolicy(
+                "native-publication-lease",
+                "src/accessibility/publication.odin",
+                "protected_publish_controls", :custom,
+                "Display publication allocates one native TLSF lease per changed generation. Callbacks only borrow/release; display collection frees descriptors after readers drain.";
+                operation="new", target="Control_Publication_Lease",
+                allocator_source="allocator", certainty=:definite, response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-projection-workspace",
+                "src/view/native/accessibility/action_adapter.odin",
+                "adapter_projection_workspace", :custom,
+                "Display-only projection scratch belongs to the native TLSF domain. Borrowed semantic strings are cleared after copying; replacement and close/drain release backing.";
+                operation="make", target="[]Adapter_Control_Input",
+                allocator_source="allocator", certainty=:definite, response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-staging-index",
+                "src/view/native/accessibility/action_adapter.odin",
+                "adapter_prepare_memory", :custom,
+                "Reusable qualified-identity staging lookup belongs to the independent native TLSF domain and is released on initialization failure or drained teardown.";
+                operation="make", target="map[portable.Qualified_Identity]int",
+                allocator_source="allocator", certainty=:definite, response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "native-staging-owned-buffers",
+                "src/view/native/accessibility/action_adapter.odin",
+                "adapter_prepare_staging", :custom,
+                "Staged controls and staged/committed IDs grow transactionally in the native TLSF domain. Borrowed strings clear after submission; failures, replacement, and drained teardown release backing.";
+                operation="make", allocator_source="allocator",
+                certainty=:definite, response=Ignore,
+                minimum_matches=3, maximum_matches=3),
+            # Tree projection records, indexes, and staging use its owned TLSF pool.
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-prepared-rows",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_reserve_prepared_rows",
+                :custom,
+                "Independent frame and scratch row buffers grow in the projection's TLSF domain; replacement frees old backing and projection destruction releases both buffers.";
+                operation="make",
+                target="[]Ui_Tree_Prepared_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-motion-branches",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_reserve_motion",
+                :custom,
+                "Reusable branch motion belongs to the projection's TLSF owner; failed growth preserves prior storage and replacement or destruction frees it.";
+                operation="make",
+                target="[]Ui_Tree_Branch_Motion",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-reorder-rows",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_reserve_reorder",
+                :custom,
+                "Sampled reorder rows reuse projection-owned TLSF capacity and are released on replacement or projection destruction.";
+                operation="make",
+                target="[]Ui_Tree_Reorder_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-traversal-frames",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_reserve_traversal",
+                :custom,
+                "Synchronous layout and motion walks reuse projection-owned TLSF frames rather than recursive stack storage; replacement and destruction release the backing.";
+                operation="make",
+                target="[]Ui_Tree_Traversal_Frame",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-library-search-visibility",
+                "src/view/ui/model/library_search_storage.odin",
+                "library_search_reserve_ids",
+                :custom,
+                "Accepted and staged visibility IDs use the display search state's TLSF owner; failed growth preserves accepted state and shutdown destroys both reusable buffers.";
+                operation="make",
+                target="[]uuid.Identifier",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-order-workspace",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_reserve_order_workspace",
+                :custom,
+                "The reusable ordering workspace belongs to the projection's TLSF owner and is released on growth or projection destruction.";
+                operation="make",
+                target="[]int",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-pointer-table",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_resize_tables",
+                :custom,
+                "The dense pointer table belongs to the projection's TLSF owner and is replaced transactionally on growth or released on projection destruction.";
+                operation="make",
+                target="[]^Ui_Tree_Item",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-uuid-index",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_resize_tables",
+                :custom,
+                "The UUID index belongs to the projection's TLSF owner and is rebuilt transactionally on growth or released on projection destruction.";
+                operation="make",
+                target="[]Ui_Tree_Index_Slot",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-stable-node",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_make_node",
+                :custom,
+                "Each stable tree node is independently allocated from the projection's TLSF owner and freed when its placement is retired or the projection is destroyed.";
                 operation="new",
-                target="collections.Set",
+                target="Ui_Tree_Item",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-node-label",
+                "src/view/ui/model/tree_projection_storage.odin",
+                "ui_tree_projection_make_node",
+                :custom,
+                "A node's copied canonical label shares the projection's TLSF owner and is freed with its stable node.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-projection-reconcile-staging",
+                "src/view/ui/library/tree_panel.odin",
+                "tree_projection_reconcile_publish_missing",
+                :custom,
+                "The detached-node staging table uses the projection's TLSF owner and is explicitly freed after commit or rollback.";
+                operation="make",
+                target="[]^viewmodel.Ui_Tree_Item",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-ui-tree-projection-pool-exhaustion",
+                "src/view/ui/tree_favorites_test.odin",
+                "tree_favorites_test_allocate_until_failure",
+                :custom,
+                "The test deliberately consumes the projection's TLSF pool and frees each block before restoring the original backing allocator.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -2174,6 +2528,24 @@ AnalysisSettings(
         BaseSettings.report.report_limit;
         staging_maximum_response=Ignore,
         reviewed_diagnostics=ReviewedDiagnosticPolicy[
+            ReviewedDiagnosticPolicy(
+                "display-root-matching-context-release",
+                "ODIN-ALLOCATION-CONTEXT",
+                "src/view/shutdown.odin",
+                "allocator-pass",
+                "The display owner releases its root directly through the allocating display context; the saved Julia callback allocator is not its owner. A tracking-allocator regression test verifies this pairing without caching or relaying an allocator."),
+            ReviewedDiagnosticPolicy(
+                "publication-failing-allocator-runtime-callback",
+                "ODIN-PARAMETERS-WARN",
+                "src/accessibility/publication_test.odin",
+                "publication_fail_allocate",
+                "Seven parameters implement the runtime allocator callback ABI for deterministic native publication allocation failure."),
+            ReviewedDiagnosticPolicy(
+                "tree-projection-failing-allocator-runtime-callback",
+                "ODIN-PARAMETERS-WARN",
+                "src/view/ui/tree_favorites_test.odin",
+                "tree_projection_test_failing_allocator",
+                "The seven parameters are required by the runtime allocator callback ABI so the test allocator can forward releases exactly."),
             ReviewedDiagnosticPolicy(
                 "bridge-standard-julia-callback-wrapper",
                 "ODIN-UNREACHABLE-PROCEDURE",

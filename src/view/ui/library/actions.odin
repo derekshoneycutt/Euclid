@@ -23,22 +23,6 @@ TREE_ACTION_HORIZONTAL_MIN_WIDTH :: f32(190)
 TREE_ACTION_TOGGLE_WIDTH :: f32(22)
 TREE_ACTION_DRAWER_MIN_HEIGHT :: f32(32)
 
-Tree_Actions_Layout :: struct {
-    eligible: bool,
-    open: bool,
-    height: f32,
-    toggle_rect: geometry.Rectangle,
-    label_clip: geometry.Rectangle,
-    drawer_rect: geometry.Rectangle,
-    move_up_rect: geometry.Rectangle,
-    move_down_rect: geometry.Rectangle,
-    move_up_enabled: bool,
-    move_down_enabled: bool,
-    toggle_id: int,
-    move_up_id: int,
-    move_down_id: int,
-}
-
 // tree_actions_cancel_context_capture releases only action-widget press ownership.
 tree_actions_cancel_context_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
@@ -127,7 +111,7 @@ tree_actions_reconcile :: proc(params: Tree_List_Params) {
             &runtime^.library.tree.projection,
             runtime^.library.tree.selected_item_id,
             params.visibility.search != nil && params.visibility.search^.active,
-            &runtime^.library.tree.projection.items[owner]) {
+            runtime^.library.tree.projection.items[owner]) {
         _ = tree_actions_close_context(runtime, params.general_state)
         return
     }
@@ -212,7 +196,7 @@ tree_actions_toggle :: proc(params: Tree_List_Params, entry_id: uuid.Identifier)
             &params.ui_runtime^.library.tree.projection,
             params.ui_runtime^.library.tree.selected_item_id,
             params.visibility.search != nil && params.visibility.search^.active,
-            &params.ui_runtime^.library.tree.projection.items[index]) {
+            params.ui_runtime^.library.tree.projection.items[index]) {
         return
     }
     motion := &params.ui_runtime^.library.actions.drawer
@@ -234,7 +218,7 @@ tree_actions_toggle :: proc(params: Tree_List_Params, entry_id: uuid.Identifier)
     } else if params.general_state != nil {
         _ = library_entry_name_begin(params.general_state, entry_id,
             tree_item_label(params.ji,
-                &params.ui_runtime^.library.tree.projection.items[index],
+                params.ui_runtime^.library.tree.projection.items[index],
                 params.collections))
     }
 }
@@ -242,8 +226,8 @@ tree_actions_toggle :: proc(params: Tree_List_Params, entry_id: uuid.Identifier)
 // tree_actions_layout prepares shared content-space geometry for every consumer.
 tree_actions_layout :: proc(
     ctx: Tree_Geometry_Context, item: ^viewmodel.Ui_Tree_Item,
-    depth: int, content_y: f32) -> Tree_Actions_Layout {
-    result: Tree_Actions_Layout
+    depth: int, content_y: f32) -> viewmodel.Ui_Tree_Actions_Layout {
+    result: viewmodel.Ui_Tree_Actions_Layout
     if !tree_actions_eligible(
         ctx.projection, ctx.selected_item_id, ctx.search_active, item) {
         return result
@@ -272,7 +256,7 @@ tree_actions_layout_buttons :: proc(
     collections: ^collections.Set,
     projection: ^viewmodel.Ui_Tree_Projection,
     item: ^viewmodel.Ui_Tree_Item,
-    layout: ^Tree_Actions_Layout) {
+    layout: ^viewmodel.Ui_Tree_Actions_Layout) {
     available := max(layout^.drawer_rect.width - layout^.label_clip.x -
         TREE_ACTION_DRAWER_PADDING, 0)
     inner := geometry.Rectangle{
@@ -308,7 +292,11 @@ tree_actions_neighbor_exists :: proc(
     if set == nil {
         return false
     }
-    _, failure := collections.sibling_neighbor(set, entry_id, direction)
+    identity, identity_failure := collections.placement_identity_for_entry(set, entry_id)
+    if identity_failure != .None {
+        return false
+    }
+    _, failure := collections.placement_sibling_neighbor(set, identity, direction)
     return failure == .None
 }
 
@@ -326,7 +314,7 @@ tree_actions_control_id_owned :: #force_inline proc(id: int) -> bool {
 
 // tree_actions_label_clip returns the reserved-name area in screen coordinates.
 tree_actions_label_clip :: proc(
-    layout: Tree_Actions_Layout, bounds,
+    layout: viewmodel.Ui_Tree_Actions_Layout, bounds,
     clip: geometry.Rectangle) -> geometry.Rectangle {
     if !layout.eligible {
         return bounds
@@ -343,7 +331,7 @@ tree_actions_screen_rect :: #force_inline proc(
 
 // tree_actions_screen_clip clips controls to drawer extent, ancestry, and viewport.
 tree_actions_screen_clip :: proc(
-    row: Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) ->
+    row: viewmodel.Ui_Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) ->
         geometry.Rectangle {
     drawer := tree_actions_screen_rect(row.actions.drawer_rect, panel, scroll_y)
     reveal := row.reveal
@@ -355,15 +343,15 @@ tree_actions_screen_clip :: proc(
 
 // tree_actions_prepare_controls resolves owned pointer gestures against prepared clips.
 tree_actions_prepare_controls :: proc(
-    params: Tree_List_Params, row: ^Tree_Prepared_Row,
-    ctx: Tree_Walk_Context, hit: ^Tree_Hit) {
+    params: Tree_List_Params, row: ^viewmodel.Ui_Tree_Prepared_Row,
+    prepared: ^Tree_List_Preparation, ctx: Tree_Walk_Context, hit: ^Tree_Hit) {
     if !row^.actions.eligible {
         return
     }
     row_geometry := tree_row_screen_geometry(row^, ctx.panel, ctx.scroll_y)
     toggle_clip := geometry.Rectangle(row_geometry.clip_bounds)
     toggle := tree_actions_screen_rect(row^.actions.toggle_rect, ctx.panel, ctx.scroll_y)
-    row^.actions_toggle = uiwidgets.update_icon_button({
+    prepared^.actions_toggle = uiwidgets.update_icon_button({
         id = row^.actions.toggle_id, rect = toggle, icon_id = .None,
         toggle = row^.actions.open, mouse = params.mouse_input,
         interaction_space_rect = toggle_clip,
@@ -371,7 +359,7 @@ tree_actions_prepare_controls :: proc(
             !params.ui_runtime^.library.tree.scroll_dragging,
         inset_scale = 1, semantics = {clip_bounds = toggle_clip},
     }, &params.ui_runtime^.input.press_owner)
-    if row^.actions_toggle.clicked {
+    if prepared^.actions_toggle.clicked {
         hit^.actions_toggle_id = row^.item^.key
     }
     if params.ui_runtime^.input.press_owner.active &&
@@ -382,13 +370,13 @@ tree_actions_prepare_controls :: proc(
         tree_actions_cancel_closed_capture(params.ui_runtime, row^.actions)
         return
     }
-    tree_actions_prepare_move_buttons(params, row, ctx, hit)
+    tree_actions_prepare_move_buttons(params, row, prepared, ctx, hit)
 }
 
 // tree_actions_prepare_move_buttons hit tests the drawer's two ordinary text controls.
 tree_actions_prepare_move_buttons :: proc(
-    params: Tree_List_Params, row: ^Tree_Prepared_Row,
-    ctx: Tree_Walk_Context, hit: ^Tree_Hit) {
+    params: Tree_List_Params, row: ^viewmodel.Ui_Tree_Prepared_Row,
+    prepared: ^Tree_List_Preparation, ctx: Tree_Walk_Context, hit: ^Tree_Hit) {
     clip := tree_actions_screen_clip(row^, ctx.panel, ctx.scroll_y)
     tree_actions_cancel_clipped_capture(params.ui_runtime, row^.actions, clip)
     if clip.width <= 0 || clip.height <= 0 {
@@ -396,11 +384,11 @@ tree_actions_prepare_move_buttons :: proc(
     }
     up := tree_actions_screen_rect(row^.actions.move_up_rect, ctx.panel, ctx.scroll_y)
     down := tree_actions_screen_rect(row^.actions.move_down_rect, ctx.panel, ctx.scroll_y)
-    row^.actions_up = uiwidgets.update_text_button(tree_actions_button_params(
+    prepared^.actions_up = uiwidgets.update_text_button(tree_actions_button_params(
         params, row^.actions.move_up_id, {up, clip},
         row^.actions.move_up_enabled, ctx.allow_clicks),
         &params.ui_runtime^.input.press_owner)
-    row^.actions_down = uiwidgets.update_text_button(tree_actions_button_params(
+    prepared^.actions_down = uiwidgets.update_text_button(tree_actions_button_params(
         params, row^.actions.move_down_id, {down, clip},
         row^.actions.move_down_enabled, ctx.allow_clicks),
         &params.ui_runtime^.input.press_owner)
@@ -409,9 +397,9 @@ tree_actions_prepare_move_buttons :: proc(
          params.ui_runtime^.input.press_owner.id == row^.actions.move_down_id) {
         params.ui_runtime^.library.actions.press_entry = row^.item^.key
     }
-    if row^.actions_up.clicked {
+    if prepared^.actions_up.clicked {
         tree_actions_record_move(hit, row^.item^.key, .Up)
-    } else if row^.actions_down.clicked {
+    } else if prepared^.actions_down.clicked {
         tree_actions_record_move(hit, row^.item^.key, .Down)
     }
 }
@@ -442,7 +430,8 @@ tree_actions_record_move :: proc(
 
 // tree_actions_cancel_closed_capture cancels controls as soon as closing begins.
 tree_actions_cancel_closed_capture :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, layout: Tree_Actions_Layout) {
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    layout: viewmodel.Ui_Tree_Actions_Layout) {
     owner := runtime^.input.press_owner
     if owner.active && owner.kind == .Text_Button &&
         (owner.id == layout.move_up_id || owner.id == layout.move_down_id) {
@@ -453,7 +442,7 @@ tree_actions_cancel_closed_capture :: proc(
 // tree_actions_cancel_clipped_capture prevents releases through a hidden drawer tail.
 tree_actions_cancel_clipped_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    layout: Tree_Actions_Layout, clip: geometry.Rectangle) {
+    layout: viewmodel.Ui_Tree_Actions_Layout, clip: geometry.Rectangle) {
     owner := runtime^.input.press_owner
     if owner.active && owner.kind == .Text_Button &&
         (owner.id == layout.move_up_id || owner.id == layout.move_down_id) &&
@@ -492,14 +481,14 @@ tree_actions_cancel_hidden_capture :: proc(
 // tree_actions_capture_matches recognizes only this row's three transient controls.
 tree_actions_capture_matches :: #force_inline proc(
     owner: viewmodel.Ui_Press_Owner_State,
-    layout: Tree_Actions_Layout) -> bool {
+    layout: viewmodel.Ui_Tree_Actions_Layout) -> bool {
     return owner.id == layout.toggle_id || owner.id == layout.move_up_id ||
         owner.id == layout.move_down_id
 }
 
 // tree_actions_capture_visible admits only the clipped rectangle owning a gesture.
 tree_actions_capture_visible :: proc(
-    owner: viewmodel.Ui_Press_Owner_State, row: Tree_Prepared_Row,
+    owner: viewmodel.Ui_Press_Owner_State, row: viewmodel.Ui_Tree_Prepared_Row,
     panel: geometry.Rectangle, scroll_y: f32) -> bool {
     if !row.logical || !row.actions.eligible {
         return false
@@ -533,7 +522,7 @@ tree_actions_move_is_admitted :: proc(
             &params.ui_runtime^.library.tree.projection,
             params.ui_runtime^.library.tree.selected_item_id,
             params.visibility.search != nil && params.visibility.search^.active,
-            &params.ui_runtime^.library.tree.projection.items[index]) ||
+            params.ui_runtime^.library.tree.projection.items[index]) ||
         state^.ui_runtime.layout.active_accordion_section != .Library ||
         entry_id != state^.ui_runtime.library.actions.drawer.entry_id ||
         !state^.ui_runtime.library.actions.drawer.open ||
@@ -555,8 +544,13 @@ tree_actions_move :: proc(
     if !library_entry_name_flush(state, entry_id) {
         return false
     }
-    mutation, failure := collections.make_sibling_move(
-        &state^.preferences_runtime.collections_state, entry_id, direction)
+    set := &state^.preferences_runtime.collections_state
+    identity, identity_failure := collections.placement_identity_for_entry(set, entry_id)
+    if identity_failure != .None {
+        log.errorf("library_tree_actions_move_rejected policy=%v", identity_failure)
+        return false
+    }
+    mutation, failure := collections.make_placement_move(set, identity, direction)
     if failure != .None {
         log.errorf("library_tree_actions_move_rejected policy=%v", failure)
         return false
@@ -578,48 +572,51 @@ tree_actions_move :: proc(
 
 // draw_encoded_tree_actions_geometry renders disclosure and attached button surfaces.
 draw_encoded_tree_actions_geometry :: proc(
-    encoder: ^native.Draw_Encoder,
-    row: Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) {
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row) {
     if !row.actions.eligible || !row.logical {
         return
     }
-    row_geometry := tree_row_screen_geometry(row, panel, scroll_y)
+    row_geometry := tree_row_screen_geometry(row, ctx.panel, ctx.scroll_y)
     clip := geometry.Rectangle(row_geometry.clip_bounds)
-    toggle := tree_actions_screen_rect(row.actions.toggle_rect, panel, scroll_y)
+    toggle := tree_actions_screen_rect(
+        row.actions.toggle_rect, ctx.panel, ctx.scroll_y)
     if geometry.rectangles_intersect(toggle, clip) {
-        _ = native.draw_encoder_push_scissor(encoder, clip)
-        draw_tree_actions_toggle(encoder, toggle, row.actions_toggle, row.actions.open)
-        _ = native.draw_encoder_pop_scissor(encoder)
+        _ = native.draw_encoder_push_scissor(ctx.encoder, clip)
+        draw_tree_actions_toggle(
+            ctx.encoder, toggle, ctx.actions_toggle, row.actions.open)
+        _ = native.draw_encoder_pop_scissor(ctx.encoder)
     }
-    draw_tree_actions_drawer_surfaces(encoder, row, panel, scroll_y)
+    draw_tree_actions_drawer_surfaces(ctx, row)
 }
 
 // draw_tree_actions_drawer_surfaces extends the selected row's fill through its drawer.
 draw_tree_actions_drawer_surfaces :: proc(
-    encoder: ^native.Draw_Encoder,
-    row: Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) {
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row) {
     if row.actions.height <= 0 {
         return
     }
-    drawer_clip := tree_actions_screen_clip(row, panel, scroll_y)
+    drawer_clip := tree_actions_screen_clip(row, ctx.panel, ctx.scroll_y)
     if drawer_clip.width <= 0 || drawer_clip.height <= 0 {
         return
     }
-    _ = native.draw_encoder_push_scissor(encoder, drawer_clip)
-    drawer := tree_actions_screen_rect(row.actions.drawer_rect, panel, scroll_y)
+    _ = native.draw_encoder_push_scissor(ctx.encoder, drawer_clip)
+    drawer := tree_actions_screen_rect(
+        row.actions.drawer_rect, ctx.panel, ctx.scroll_y)
     _ = native.draw_encoder_rectangle(
-        encoder, drawer, theme.UI_BORDER_COLOR)
+        ctx.encoder, drawer, theme.UI_BORDER_COLOR)
     if row.actions.open {
         draw_tree_actions_button_surface(
-            encoder,
-            tree_actions_screen_rect(row.actions.move_up_rect, panel, scroll_y),
-            row.actions_up, row.actions.move_up_enabled)
+            ctx.encoder,
+            tree_actions_screen_rect(
+                row.actions.move_up_rect, ctx.panel, ctx.scroll_y),
+            ctx.actions_up, row.actions.move_up_enabled)
         draw_tree_actions_button_surface(
-            encoder,
-            tree_actions_screen_rect(row.actions.move_down_rect, panel, scroll_y),
-            row.actions_down, row.actions.move_down_enabled)
+            ctx.encoder,
+            tree_actions_screen_rect(
+                row.actions.move_down_rect, ctx.panel, ctx.scroll_y),
+            ctx.actions_down, row.actions.move_down_enabled)
     }
-    _ = native.draw_encoder_pop_scissor(encoder)
+    _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }
 
 // draw_tree_actions_toggle inverts the ellipsis while its drawer is logically open.
@@ -665,7 +662,8 @@ draw_tree_actions_button_surface :: proc(
 // draw_encoded_tree_actions_text emits labels only while the drawer accepts actions.
 draw_encoded_tree_actions_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    row: Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) {
+    row: viewmodel.Ui_Tree_Prepared_Row,
+    panel: geometry.Rectangle, scroll_y: f32) {
     if !row.actions.open || !row.logical {
         return
     }

@@ -7,11 +7,13 @@ import evidence_trace "../../../../evidence/trace"
 import viewcontent "../../../content"
 import uuid "core:encoding/uuid"
 import viewmodel "../../model"
+import log "core:log"
 
 Library_Search_Result_Acceptance :: enum {
     Rejected,
     Invalid_Query,
     Ready,
+    Allocation_Failed,
 }
 
 // library_search_record_commit publishes one accepted display-owned search result.
@@ -55,19 +57,22 @@ library_search_record_clear_commit :: proc(state: ^core.Euclid_General_State) {
     library_search_record_commit(state, 0, 0, false, false)
 }
 
-// library_search_add_visible_id inserts one UUID into the bounded visible set.
+// library_search_add_visible_id appends one unique UUID to staged visibility.
 library_search_add_visible_id :: proc(
-    search: ^viewmodel.Library_Search_State, stable_id: uuid.Identifier) {
-    for index in 0..<search^.visible_id_count {
-        if search^.visible_ids[index] == stable_id {
-           return
+    search: ^viewmodel.Library_Search_State,
+    stable_id: uuid.Identifier) -> bool {
+    for index in 0..<search^.staged_visible_id_count {
+        if search^.staged_visible_ids[index] == stable_id {
+            return true
         }
     }
-    if search^.visible_id_count >= len(search^.visible_ids) {
-       return
+    if !viewmodel.library_search_reserve_ids(
+        search, true, search^.staged_visible_id_count + 1) {
+        return false
     }
-    search^.visible_ids[search^.visible_id_count] = stable_id
-    search^.visible_id_count += 1
+    search^.staged_visible_ids[search^.staged_visible_id_count] = stable_id
+    search^.staged_visible_id_count += 1
+    return true
 }
 
 // library_search_find_node resolves one built-in UUID against the current registry.
@@ -89,19 +94,22 @@ library_search_find_node :: proc(
 library_search_add_result_path :: proc(
     search: ^viewmodel.Library_Search_State,
     ji: ^bridgemodel.Euclid_Julia_Interface,
-    key: ^viewcontent.Search_Document_Key) {
+    key: ^viewcontent.Search_Document_Key) -> bool {
     if key == nil || key^.source_namespace != .Builtin {
-        return
+        return true
     }
     stable_id, read_error := uuid.read(string(key^.document_id.bytes[:]))
     if read_error != .None {
-        return
+        return true
     }
     node := library_search_find_node(ji, stable_id)
     for steps := 0; node != nil && steps < ji^.animation_count; steps += 1 {
-        library_search_add_visible_id(search, node^.stable_id)
+        if !library_search_add_visible_id(search, node^.stable_id) {
+            return false
+        }
         node = node^.parent
     }
+    return true
 }
 
 // library_search_accept_result updates only search and catalogue-owned state.
@@ -122,19 +130,34 @@ library_search_accept_result :: proc(
     if result^.status != .Ready {
         return .Rejected
     }
-    viewmodel.library_search_clear_results(search)
+    search^.staged_visible_id_count = 0
+    for index in 0..<int(result^.returned_count) {
+        if !library_search_add_result_path(
+            search, ji, &result^.document_keys[index]) {
+            return .Allocation_Failed
+        }
+    }
+    accepted_ids := search^.visible_ids
+    search^.visible_ids = search^.staged_visible_ids
+    search^.staged_visible_ids = accepted_ids
+    search^.visible_id_count = search^.staged_visible_id_count
+    search^.staged_visible_id_count = 0
     search^.active = search^.query_length > 0
+    search^.invalid_query = false
     search^.total_match_count = result^.total_match_count
     search^.more_available = result^.more_available
-    for index in 0..<int(result^.returned_count) {
-        library_search_add_result_path(
-            search, ji, &result^.document_keys[index])
-    }
+    library_search_accept_suggestion(search, result)
+    return .Ready
+}
+
+// library_search_accept_suggestion copies the bounded worker suggestion.
+library_search_accept_suggestion :: proc(
+    search: ^viewmodel.Library_Search_State,
+    result: ^viewcontent.Search_Query_Result) {
     search^.suggestion_length = min(
         int(result^.suggestion_length), len(search^.suggestion))
     copy(search^.suggestion[:search^.suggestion_length],
         result^.suggestion_bytes[:search^.suggestion_length])
-    return .Ready
 }
 
 // library_search_commit_result accepts current worker output and records ready evidence.
@@ -151,6 +174,9 @@ library_search_commit_result :: proc(
         library_search_record_commit(state, u32(result^.returned_count),
             result^.total_match_count, result^.more_available,
             result^.suggestion_length > 0)
+    } else if accepted == .Allocation_Failed {
+        log.error("library_search_visibility_allocation_failed")
+        return false
     }
     return accepted != .Rejected
 }

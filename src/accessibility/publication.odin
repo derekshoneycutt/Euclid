@@ -3,6 +3,8 @@ package accessibility
 import "core:math"
 import "core:sync"
 import "core:unicode/utf8"
+import storage "../core/storage"
+import "base:runtime"
 
 STATIC_LABEL_CAPACITY :: 64
 SYNTHETIC_ROOT_ID :: u64(1)
@@ -81,9 +83,9 @@ Control_Publication_Input :: struct {
     text_present: bool,
     text_cursor_byte: int,
     text_anchor_byte: int,
-    level: u16,
-    position_in_set: u16,
-    set_size: u16,
+    level: u32,
+    position_in_set: u32,
+    set_size: u32,
 }
 
 // Tree_Publication_Input borrows one complete flat ordinary-control projection.
@@ -102,18 +104,18 @@ Control_Publication :: struct {
     controls_native_id: u64,
     role: Publication_Role,
     bounds: Bounds,
-    label_offset: u16,
-    label_length: u16,
-    value_offset: u16,
-    value_length: u16,
-    placeholder_offset: u16,
-    placeholder_length: u16,
-    character_offset: u16,
-    character_count: u16,
-    cursor_character: u16,
-    anchor_character: u16,
-    word_start_offset: u16,
-    word_start_count: u16,
+    label_offset: int,
+    label_length: int,
+    value_offset: int,
+    value_length: int,
+    placeholder_offset: int,
+    placeholder_length: int,
+    character_offset: int,
+    character_count: int,
+    cursor_character: int,
+    anchor_character: int,
+    word_start_offset: int,
+    word_start_count: int,
     actions: Publication_Action_Set,
     range: Numeric_Range,
     enabled: bool,
@@ -124,9 +126,9 @@ Control_Publication :: struct {
     expanded: bool,
     busy: bool,
     text_present: bool,
-    level: u16,
-    position_in_set: u16,
-    set_size: u16,
+    level: u32,
+    position_in_set: u32,
+    set_size: u32,
 }
 
 // Control_Tree_Publication owns a complete rooted ordinary-control tree.
@@ -136,10 +138,15 @@ Control_Tree_Publication :: struct {
     root_bounds: Bounds,
     bounds_scale: f64,
     window_focused: bool,
-    controls: [CONTROL_NODE_CAPACITY]Control_Publication,
-    text: [CONTROL_TEXT_CAPACITY]u8,
-    character_lengths: [CONTROL_CHARACTER_CAPACITY]u8,
-    word_starts: [CONTROL_CHARACTER_CAPACITY]u8,
+    memory: ^storage.Tlsf_Owner,
+    controls: []Control_Publication,
+    text: []u8,
+    character_lengths: []u8,
+    word_starts: []u8,
+    children: []u64,
+    child_offsets: []int,
+    child_counts: []int,
+    index: map[u64]int,
     control_count: int,
     text_count: int,
     character_count: int,
@@ -149,8 +156,20 @@ Control_Tree_Publication :: struct {
 // Protected_Control_Publication serializes complete tree snapshots for callbacks.
 Protected_Control_Publication :: struct {
     mutex: sync.Mutex,
+    drained: sync.Cond,
+    readers: int,
+    memory: ^storage.Tlsf_Owner,
     current: Control_Tree_Publication,
+    active: ^Control_Publication_Lease,
+    retired: ^Control_Publication_Lease,
     closing: bool,
+}
+
+// Control_Publication_Lease pins immutable storage until the callback releases it.
+Control_Publication_Lease :: struct {
+    value: Control_Tree_Publication,
+    readers: int,
+    next: ^Control_Publication_Lease,
 }
 
 // Button_Publication_Input groups one complete display-owned button projection.
@@ -250,7 +269,7 @@ control_text_boundary :: proc(value: string, offset: int) -> bool {
 
 // control_publication_text returns one validated copied string slice.
 control_publication_text :: proc(
-    value: ^Control_Tree_Publication, offset, length: u16) -> string {
+    value: ^Control_Tree_Publication, offset, length: int) -> string {
     if value == nil {
         return ""
     }
@@ -262,82 +281,16 @@ control_publication_text :: proc(
     return string(value^.text[start:finish])
 }
 
-// control_node_validate_identity rejects empty, root, and duplicate native IDs.
-control_node_validate_identity :: proc(
-    value: ^Control_Tree_Publication,
-    node: Control_Publication, index: int) -> Publication_Status {
-    if node.native_id == 0 {
-        return .Invalid_Id
-    }
-    if node.native_id == value^.root_id {
-        return .Duplicate_Id
-    }
-    for prior in value^.controls[:index] {
-        if prior.native_id == node.native_id {
-            return .Duplicate_Id
-        }
-    }
-    return .Ok
-}
-
 // control_tree_find_id resolves one projected native ID without allocation.
 control_tree_find_id :: proc(
     value: ^Control_Tree_Publication, native_id: u64) -> int {
     if value == nil || native_id == 0 {
         return -1
     }
-    for node, index in value^.controls[:value^.control_count] {
-        if node.native_id == native_id {
-            return index
-        }
+    if index, found := value^.index[native_id]; found {
+        return index
     }
     return -1
-}
-
-// control_node_validate_ancestor walks one bounded parent chain.
-control_node_validate_ancestor :: proc(
-    value: ^Control_Tree_Publication, start, ancestor: u64,
-    missing, exhausted: Publication_Status) -> Publication_Status {
-    current := start
-    for steps := 0; current != ancestor; steps += 1 {
-        if steps >= value^.control_count {
-            return exhausted
-        }
-        index := control_tree_find_id(value, current)
-        if index < 0 {
-            return missing
-        }
-        current = value^.controls[index].parent_native_id
-    }
-    return .Ok
-}
-
-// control_node_validate_hierarchy proves parent reachability and descendant facts.
-control_node_validate_hierarchy :: proc(
-    value: ^Control_Tree_Publication,
-    node: Control_Publication) -> Publication_Status {
-    if node.parent_native_id == 0 {
-        return .Missing_Parent
-    }
-    if node.parent_native_id == node.native_id {
-        return .Cycle
-    }
-    parent_status := control_node_validate_ancestor(
-        value, node.parent_native_id, value^.root_id, .Missing_Parent, .Cycle)
-    if parent_status != .Ok {
-        return parent_status
-    }
-    if node.active_descendant_native_id == 0 {
-        return .Ok
-    }
-    descendant_index := control_tree_find_id(
-        value, node.active_descendant_native_id)
-    if descendant_index < 0 {
-        return .Unreachable_Node
-    }
-    return control_node_validate_ancestor(value,
-        value^.controls[descendant_index].parent_native_id, node.native_id,
-        .Unreachable_Node, .Unreachable_Node)
 }
 
 // control_node_validate_relation rejects controls targets absent from the tree.
@@ -353,6 +306,47 @@ control_node_validate_relation :: proc(
     return .Ok
 }
 
+// control_node_text_ranges_fit rejects negative and overflowing copied-string ranges.
+control_node_text_ranges_fit :: proc(
+    value: ^Control_Tree_Publication, node: Control_Publication) -> bool {
+    offsets := [3]int{node.label_offset, node.value_offset, node.placeholder_offset}
+    lengths := [3]int{node.label_length, node.value_length, node.placeholder_length}
+    for offset, index in offsets {
+        if offset < 0 || offset > value^.text_count || lengths[index] < 0 ||
+           lengths[index] > value^.text_count - offset {
+            return false
+        }
+    }
+    return true
+}
+
+// control_node_validate_characters proves copied UTF-8 widths and selection indices.
+control_node_validate_characters :: proc(
+    value: ^Control_Tree_Publication, node: Control_Publication,
+    text_length: int) -> Publication_Status {
+    if !node.text_present {
+        return .Ok
+    }
+    first := node.character_offset
+    if first < 0 || first > value^.character_count || node.character_count < 0 ||
+       node.character_count > value^.character_count - first ||
+       node.cursor_character < 0 || node.cursor_character > node.character_count ||
+       node.anchor_character < 0 || node.anchor_character > node.character_count {
+        return .Capacity
+    }
+    byte_count := 0
+    for length in value^.character_lengths[first:first + node.character_count] {
+        if int(length) > text_length - byte_count {
+            return .Invalid_Utf8
+        }
+        byte_count += int(length)
+    }
+    if byte_count != text_length {
+        return .Invalid_Utf8
+    }
+    return .Ok
+}
+
 // control_node_validate_content proves one node's geometry, text, and range.
 control_node_validate_content :: proc(
     value: ^Control_Tree_Publication,
@@ -363,6 +357,9 @@ control_node_validate_content :: proc(
     if node.role == .Slider && !node.range.present {
         return .Invalid_Bounds
     }
+    if !control_node_text_ranges_fit(value, node) {
+        return .Capacity
+    }
     label := control_publication_text(value, node.label_offset, node.label_length)
     text_value := control_publication_text(
         value, node.value_offset, node.value_length)
@@ -372,23 +369,7 @@ control_node_validate_content :: proc(
        !utf8.valid_string(placeholder) {
         return .Invalid_Utf8
     }
-    if node.text_present {
-        first := int(node.character_offset)
-        last := first + int(node.character_count)
-        if last > value^.character_count ||
-           node.cursor_character > node.character_count ||
-           node.anchor_character > node.character_count {
-            return .Capacity
-        }
-        byte_count := 0
-        for length in value^.character_lengths[first:last] {
-            byte_count += int(length)
-        }
-        if byte_count != len(text_value) {
-            return .Invalid_Utf8
-        }
-    }
-    return .Ok
+    return control_node_validate_characters(value, node, len(text_value))
 }
 
 // control_tree_validate proves IDs, text, bounds, roles, and ranges are complete.
@@ -400,22 +381,22 @@ control_tree_validate :: proc(
     if !bounds_are_valid(value^.root_bounds) {
         return .Invalid_Bounds
     }
-    if value^.control_count < 0 || value^.control_count > CONTROL_NODE_CAPACITY ||
-       value^.text_count < 0 || value^.text_count > CONTROL_TEXT_CAPACITY {
-        return .Capacity
-    }
-    if value^.character_count < 0 ||
-       value^.character_count > CONTROL_CHARACTER_CAPACITY {
+    if value^.control_count < 0 || value^.control_count > len(value^.controls) ||
+       value^.text_count < 0 || value^.text_count > len(value^.text) ||
+       value^.character_count < 0 ||
+       value^.character_count > len(value^.character_lengths) {
         return .Capacity
     }
     for node, index in value^.controls[:value^.control_count] {
-        identity_status := control_node_validate_identity(value, node, index)
+        identity_status := Publication_Status.Ok
+        if node.native_id == 0 {
+            identity_status = .Invalid_Id
+        } else if node.native_id == value^.root_id ||
+            control_tree_find_id(value, node.native_id) != index {
+            identity_status = .Duplicate_Id
+        }
         if identity_status != .Ok {
             return identity_status
-        }
-        hierarchy_status := control_node_validate_hierarchy(value, node)
-        if hierarchy_status != .Ok {
-            return hierarchy_status
         }
         relation_status := control_node_validate_relation(value, node)
         if relation_status != .Ok {
@@ -426,19 +407,93 @@ control_tree_validate :: proc(
             return content_status
         }
     }
+    return control_tree_validate_graph(value)
+}
+
+// control_tree_parents_exist rejects missing parents before child-list construction.
+control_tree_parents_exist :: proc(value: ^Control_Tree_Publication) -> bool {
+    for node in value^.controls[:value^.control_count] {
+        if node.parent_native_id == 0 {
+            return false
+        }
+        if node.parent_native_id != value^.root_id &&
+           control_tree_find_id(value, node.parent_native_id) < 0 {
+            return false
+        }
+    }
+    return true
+}
+
+// control_tree_validate_graph proves rooted ancestry in linear display-owner work.
+control_tree_validate_graph :: proc(
+    value: ^Control_Tree_Publication) -> Publication_Status {
+    if !control_tree_parents_exist(value) {
+        return .Missing_Parent
+    }
+    control_tree_children(value)
+    count := value^.control_count + 1
+    if count > max(int) / 3 {
+        return .Capacity
+    }
+    allocator := storage.tlsf_owner_allocator(value^.memory)
+    scratch, error := make([]int, count * 3, allocator)
+    if error != nil {
+        return .Capacity
+    }
+    defer delete(scratch, storage.tlsf_owner_allocator(value^.memory))
+    starts, ends, visited :=
+        scratch[:count], scratch[count:count * 2], scratch[count * 2:]
+    control_tree_walk_root(value, starts, ends, visited)
+    for node, index in value^.controls[:value^.control_count] {
+        if starts[index + 1] == 0 {
+            return .Cycle
+        }
+        if node.active_descendant_native_id == 0 {
+            continue
+        }
+        child := control_tree_find_id(value, node.active_descendant_native_id) + 1
+        if child == 0 || starts[child] <= starts[index + 1] ||
+           starts[child] > ends[index + 1] {
+            return .Unreachable_Node
+        }
+    }
     return .Ok
+}
+
+// control_tree_walk_root computes ancestry intervals without recursive stack growth.
+control_tree_walk_root :: proc(
+    value: ^Control_Tree_Publication, starts, ends, visited: []int) {
+    current, clock := 0, 1
+    starts[0] = clock
+    for current >= 0 {
+        if visited[current] < value^.child_counts[current] {
+            offset := value^.child_offsets[current] + visited[current]
+            visited[current] += 1
+            child := control_tree_find_id(value, value^.children[offset]) + 1
+            clock += 1
+            starts[child] = clock
+            current = child
+            continue
+        }
+        ends[current] = clock
+        if current == 0 {
+            break
+        }
+        current = control_tree_find_id(
+            value, value^.controls[current - 1].parent_native_id) + 1
+    }
 }
 
 // control_tree_copy_text appends one borrowed string into publication-owned storage.
 control_tree_copy_text :: proc(
     destination: ^Control_Tree_Publication, value: string,
-    offset, length: ^u16) -> bool {
+    offset, length: ^int) -> bool {
     if destination == nil || offset == nil || length == nil ||
        destination^.text_count + len(value) > len(destination^.text) {
         return false
     }
-    offset^ = u16(destination^.text_count)
-    length^ = u16(len(value))
+    offset^ = destination^.text_count
+    length^ = len(value)
     copy(destination^.text[destination^.text_count:], transmute([]u8)value)
     destination^.text_count += len(value)
     return true
@@ -467,11 +522,13 @@ control_tree_copy_character_metadata :: proc(
         destination^.character_lengths[destination^.character_count] = u8(width)
         is_space := source.value[byte_offset] == ' ' ||
             source.value[byte_offset] == '\t' || source.value[byte_offset] == '\n'
-        if previous_space && !is_space && node^.character_count <= u16(max(u8)) {
+        if previous_space && !is_space && node^.character_count <= int(max(u8)) {
             destination^.word_starts[destination^.word_start_count] =
                 u8(node^.character_count)
             destination^.word_start_count += 1
             node^.word_start_count += 1
+        } else if previous_space && !is_space {
+            node^.word_start_count = 0
         }
         previous_space = is_space
         destination^.character_count += 1
@@ -493,8 +550,8 @@ control_tree_copy_characters :: proc(
         return false
     }
     node^.text_present = true
-    node^.character_offset = u16(destination^.character_count)
-    node^.word_start_offset = u16(destination^.word_start_count)
+    node^.character_offset = destination^.character_count
+    node^.word_start_offset = destination^.word_start_count
     return control_tree_copy_character_metadata(destination, node, source)
 }
 
@@ -544,55 +601,179 @@ control_tree_append :: proc(
     return .Ok
 }
 
+// control_tree_candidate initializes normalized root facts for a detached generation.
+control_tree_candidate :: proc(
+    input: Tree_Publication_Input,
+    memory: ^storage.Tlsf_Owner) -> Control_Tree_Publication {
+    scale := input.bounds_scale
+    if scale <= 0 || math.is_nan(scale) || math.is_inf(scale) {
+        scale = 1
+    }
+    return {
+        memory = memory,
+        root_id = SYNTHETIC_ROOT_ID,
+        root_bounds = input.root_bounds,
+        bounds_scale = scale,
+        window_focused = input.window_focused,
+    }
+}
+
 // control_tree_build copies one complete validated ordinary-control projection.
 control_tree_build :: proc(
     destination: ^Control_Tree_Publication,
-    input: Tree_Publication_Input) -> Publication_Status {
-    if destination == nil {
+    input: Tree_Publication_Input, memory: ^storage.Tlsf_Owner) -> Publication_Status {
+    if destination == nil || memory == nil || !memory.initialized {
         return .Invalid_Id
     }
-    if len(input.controls) > CONTROL_NODE_CAPACITY {
+    if destination^.generation == max(u64) || len(input.controls) == max(int) {
         return .Capacity
     }
-    bounds_scale := input.bounds_scale
-    if bounds_scale <= 0 || math.is_nan(bounds_scale) || math.is_inf(bounds_scale) {
-        bounds_scale = 1
-    }
-    candidate := Control_Tree_Publication{
-        root_id = SYNTHETIC_ROOT_ID,
-        root_bounds = input.root_bounds,
-        bounds_scale = bounds_scale,
-        window_focused = input.window_focused,
+    candidate := control_tree_candidate(input, memory)
+    if !control_tree_allocate(&candidate, input) {
+        control_tree_destroy(&candidate)
+        return .Capacity
     }
     for source in input.controls {
         status := control_tree_append(&candidate, source)
         if status != .Ok {
+            control_tree_destroy(&candidate)
             return status
         }
+        candidate.index[source.native_id] = candidate.control_count - 1
     }
     status := control_tree_validate(&candidate)
     if status == .Ok {
         candidate.generation = destination^.generation + 1
+        control_tree_destroy(destination)
         destination^ = candidate
+    } else {
+        control_tree_destroy(&candidate)
     }
     return status
 }
 
-// control_trees_match reports semantic equality while ignoring generation.
-control_trees_match :: proc(
-    left, right: Control_Tree_Publication) -> bool {
-    normalized_left := left
-    normalized_right := right
-    normalized_left.generation = 0
-    normalized_right.generation = 0
-    return normalized_left == normalized_right
+// control_tree_measure checks aggregate lengths before publication allocation.
+control_tree_measure :: proc(input: Tree_Publication_Input) -> ([2]int, bool) {
+    text_count, character_count := 0, 0
+    for source in input.controls {
+        texts := [3]string{source.label, source.value, source.placeholder}
+        for text in texts {
+            if len(text) > max(int) - text_count {
+                return {}, false
+            }
+            text_count += len(text)
+        }
+        if source.text_present {
+            if len(source.value) > max(int) - character_count {
+                return {}, false
+            }
+            character_count += len(source.value)
+        }
+    }
+    return {text_count, character_count}, true
+}
+
+// control_tree_allocate reserves publication storage on the display owner.
+control_tree_allocate :: proc(
+    value: ^Control_Tree_Publication, input: Tree_Publication_Input) -> bool {
+    size, fits := control_tree_measure(input)
+    if !fits {
+        return false
+    }
+    error: runtime.Allocator_Error
+    allocator := storage.tlsf_owner_allocator(value^.memory)
+    value^.controls, error = make([]Control_Publication, len(input.controls),
+        allocator)
+    if error != nil {
+        return false
+    }
+    value^.text, error = make([]u8, size[0], allocator)
+    if error != nil {
+        return false
+    }
+    value^.character_lengths, error = make(
+        []u8, size[1], allocator)
+    if error != nil {
+        return false
+    }
+    value^.word_starts, error = make(
+        []u8, size[1], allocator)
+    if error != nil {
+        return false
+    }
+    return control_tree_allocate_relations(value, len(input.controls))
+}
+
+// Allocate indexed hierarchy storage in the publication's independently retired domain.
+control_tree_allocate_relations :: proc(
+    value: ^Control_Tree_Publication, count: int) -> bool {
+    error: runtime.Allocator_Error
+    allocator := storage.tlsf_owner_allocator(value^.memory)
+    value^.children, error = make(
+        []u64, count, allocator)
+    if error != nil {
+        return false
+    }
+    value^.child_offsets, error = make(
+        []int, count + 1, allocator)
+    if error != nil {
+        return false
+    }
+    value^.child_counts, error = make(
+        []int, count + 1, allocator)
+    if error != nil {
+        return false
+    }
+    value^.index, error = make(
+        map[u64]int, count, allocator)
+    return error == nil
+}
+
+// control_tree_destroy reclaims a detached tree exclusively on its display owner.
+control_tree_destroy :: proc(value: ^Control_Tree_Publication) {
+    if value == nil || value^.memory == nil {
+        return
+    }
+    delete(value^.controls, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.text, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.character_lengths, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.word_starts, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.children, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.child_offsets, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.child_counts, storage.tlsf_owner_allocator(value^.memory))
+    delete(value^.index)
+    value^ = {}
+}
+
+// control_tree_children groups committed child order without callback scratch.
+control_tree_children :: proc(value: ^Control_Tree_Publication) {
+    for &count in value^.child_counts {
+        count = 0
+    }
+    for node in value^.controls {
+        parent := control_tree_find_id(value, node.parent_native_id) + 1
+        value^.child_counts[parent] += 1
+    }
+    offset := 0
+    for count, index in value^.child_counts {
+        value^.child_offsets[index] = offset
+        offset += count
+    }
+    for node in value^.controls {
+        parent := control_tree_find_id(value, node.parent_native_id) + 1
+        value^.children[value^.child_offsets[parent]] = node.native_id
+        value^.child_offsets[parent] += 1
+    }
+    for count, index in value^.child_counts {
+        value^.child_offsets[index] -= count
+    }
 }
 
 // protected_publish_controls atomically retains one changed complete tree.
 protected_publish_controls :: proc(
     protected: ^Protected_Control_Publication,
     input: Tree_Publication_Input) -> Publication_Status {
-    if protected == nil {
+    if protected == nil || protected^.memory == nil {
         return .Invalid_Id
     }
     sync.mutex_lock(&protected^.mutex)
@@ -600,21 +781,180 @@ protected_publish_controls :: proc(
     if protected^.closing {
         return .Invalid_Id
     }
+    if control_tree_matches_input(&protected^.current, input) {
+        return .Ok
+    }
+    if protected^.current.generation == max(u64) {
+        return .Capacity
+    }
     candidate: Control_Tree_Publication
-    status := control_tree_build(&candidate, input)
+    status := control_tree_build(&candidate, input, protected^.memory)
     if status != .Ok {
         return status
     }
-    if control_tree_validate(&protected^.current) == .Ok &&
-       control_trees_match(protected^.current, candidate) {
-        return .Ok
+
+    allocator := storage.tlsf_owner_allocator(protected^.memory)
+    slot, error := new(Control_Publication_Lease, allocator)
+    if error != nil {
+        control_tree_destroy(&candidate)
+        return .Capacity
     }
     candidate.generation = protected^.current.generation + 1
-    protected^.current = candidate
+    protected_control_commit(protected, slot, candidate)
     return .Ok
 }
 
-// protected_control_snapshot copies one immutable complete callback view.
+// protected_control_commit swaps complete generations while preserving leased predecessors.
+protected_control_commit :: proc(
+    protected: ^Protected_Control_Publication, slot: ^Control_Publication_Lease,
+    candidate: Control_Tree_Publication) {
+    slot^.value = candidate
+    if protected^.active != nil {
+        protected^.active.next = protected^.retired
+        protected^.retired = protected^.active
+    }
+    protected^.active = slot
+    protected^.current = candidate
+}
+
+// control_input_matches_node compares facts and selections, never backing addresses.
+control_input_matches_node :: proc(
+    value: ^Control_Tree_Publication, node: Control_Publication,
+    source: Control_Publication_Input) -> bool {
+    expected := control_publication_from_input(source)
+    if expected.parent_native_id == 0 {
+        expected.parent_native_id = value^.root_id
+    }
+    actual := node
+    actual.label_offset, actual.label_length = 0, 0
+    actual.value_offset, actual.value_length = 0, 0
+    actual.placeholder_offset, actual.placeholder_length = 0, 0
+    actual.character_offset, actual.character_count = 0, 0
+    actual.cursor_character, actual.anchor_character = 0, 0
+    actual.word_start_offset, actual.word_start_count = 0, 0
+    actual.text_present = false
+    if actual != expected || node.text_present != source.text_present ||
+       control_publication_text(value,
+            node.label_offset, node.label_length) != source.label ||
+       control_publication_text(value,
+            node.value_offset, node.value_length) != source.value ||
+       control_publication_text(value,
+            node.placeholder_offset, node.placeholder_length) != source.placeholder {
+        return false
+    }
+    if !source.text_present {
+        return true
+    }
+    return control_input_matches_selection(value, node, source)
+}
+
+// Compare byte-addressed selection against the immutable character-width table.
+control_input_matches_selection :: proc(
+    value: ^Control_Tree_Publication, node: Control_Publication,
+    source: Control_Publication_Input) -> bool {
+    cursor, anchor := 0, 0
+    count := node.character_offset + node.character_count
+    for width, index in value^.character_lengths[node.character_offset:count] {
+        if index < node.cursor_character {
+            cursor += int(width)
+        }
+        if index < node.anchor_character {
+            anchor += int(width)
+        }
+    }
+    return cursor == source.text_cursor_byte && anchor == source.text_anchor_byte
+}
+
+// control_tree_matches_input permits unchanged display updates without allocation.
+control_tree_matches_input :: proc(
+    value: ^Control_Tree_Publication, input: Tree_Publication_Input) -> bool {
+    scale := input.bounds_scale
+    if scale <= 0 || math.is_nan(scale) || math.is_inf(scale) {
+        scale = 1
+    }
+    if value == nil || value^.generation == 0 ||
+       value^.control_count != len(input.controls) ||
+       value^.root_bounds != input.root_bounds || value^.bounds_scale != scale ||
+       value^.window_focused != input.window_focused {
+        return false
+    }
+    for source, index in input.controls {
+        if !control_input_matches_node(value, value^.controls[index], source) {
+            return false
+        }
+    }
+    return true
+}
+
+// protected_control_acquire borrows immutable storage without callback allocation.
+protected_control_acquire :: proc(
+    protected: ^Protected_Control_Publication) -> ^Control_Publication_Lease {
+    if protected == nil {
+        return nil
+    }
+    sync.mutex_lock(&protected^.mutex)
+    defer sync.mutex_unlock(&protected^.mutex)
+    if protected^.closing || protected^.active == nil ||
+       protected^.readers == max(int) {
+        return nil
+    }
+    protected^.active.readers += 1
+    protected^.readers += 1
+    return protected^.active
+}
+
+// protected_control_release relinquishes a lease; only display collection frees it.
+protected_control_release :: proc(
+    protected: ^Protected_Control_Publication, lease: ^Control_Publication_Lease) {
+    if protected == nil || lease == nil {
+        return
+    }
+    sync.mutex_lock(&protected^.mutex)
+    assert(lease^.readers > 0)
+    lease^.readers -= 1
+    protected^.readers -= 1
+    if protected^.readers == 0 {
+        sync.cond_broadcast(&protected^.drained)
+    }
+    sync.mutex_unlock(&protected^.mutex)
+}
+
+// protected_control_wait_drained joins accepted readers after native callbacks stop.
+protected_control_wait_drained :: proc(protected: ^Protected_Control_Publication) {
+    if protected == nil {
+        return
+    }
+    sync.mutex_lock(&protected^.mutex)
+    defer sync.mutex_unlock(&protected^.mutex)
+    assert(protected^.closing)
+    for protected^.readers > 0 {
+        sync.cond_wait(&protected^.drained, &protected^.mutex)
+    }
+}
+
+// protected_control_collect reclaims retired generations at a display boundary.
+protected_control_collect :: proc(protected: ^Protected_Control_Publication) -> bool {
+    if protected == nil {
+        return true
+    }
+    sync.mutex_lock(&protected^.mutex)
+    defer sync.mutex_unlock(&protected^.mutex)
+    link := &protected^.retired
+    for link^ != nil {
+        lease := link^
+        if lease^.readers != 0 {
+            link = &lease^.next
+            continue
+        }
+        link^ = lease^.next
+        control_tree_destroy(&lease^.value)
+        runtime.mem_free_with_size(lease, size_of(Control_Publication_Lease),
+            storage.tlsf_owner_allocator(protected^.memory))
+    }
+    return protected^.retired == nil
+}
+
+// protected_control_snapshot borrows a descriptor for display-owner-only inspection.
 protected_control_snapshot :: proc(
     protected: ^Protected_Control_Publication,
     destination: ^Control_Tree_Publication) -> bool {
@@ -627,7 +967,7 @@ protected_control_snapshot :: proc(
         return false
     }
     destination^ = protected^.current
-    return control_tree_validate(destination) == .Ok
+    return destination^.generation != 0
 }
 
 // protected_control_close rejects observations before native teardown begins.
@@ -637,6 +977,12 @@ protected_control_close :: proc(protected: ^Protected_Control_Publication) {
     }
     sync.mutex_lock(&protected^.mutex)
     protected^.closing = true
+    if protected^.active != nil {
+        protected^.active.next = protected^.retired
+        protected^.retired = protected^.active
+        protected^.active = nil
+        protected^.current = {}
+    }
     sync.mutex_unlock(&protected^.mutex)
 }
 

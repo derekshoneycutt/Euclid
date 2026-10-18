@@ -1,6 +1,128 @@
 package accessibility
 
 import "core:testing"
+import storage "../core/storage"
+import "base:runtime"
+
+// publication_fail_allocate denies growth without touching existing TLSF pools.
+publication_fail_allocate :: proc(
+    data: rawptr, mode: runtime.Allocator_Mode, size, alignment: int,
+    old_memory: rawptr, old_size: int,
+    location: runtime.Source_Code_Location = #caller_location) -> (
+        []byte, runtime.Allocator_Error) {
+    return nil, .Out_Of_Memory
+}
+
+// Verify accepted native projections exceed every former control/text ceiling.
+@(test)
+control_tree_scales_owned_nodes_text_and_widths :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
+    controls := make([]Control_Publication_Input, 5000, context.allocator)
+    defer delete(controls, context.allocator)
+    label := make([]u8, 70000, context.allocator)
+    defer delete(label, context.allocator)
+    for &byte in label {
+        byte = 'a'
+    }
+    for &control, index in controls {
+        control = {native_id = u64(index + 2), label = "Library entry",
+            enabled = true, role = .Tree_Item, position_in_set = u32(index + 1),
+            set_size = 5000}
+    }
+    controls[0].label = string(label)
+    controls[1].value = string(label[:2048])
+    controls[1].text_present = true
+    controls[1].text_cursor_byte = 2048
+    controls[4999].level = max(u32)
+    value: Control_Tree_Publication
+    testing.expect_value(t, control_tree_build(&value, {controls = controls}, &memory),
+        Publication_Status.Ok)
+    testing.expect_value(t, value.control_count, 5000)
+    testing.expect_value(t, value.controls[0].label_length, 70000)
+    testing.expect(t, value.controls[1].label_offset > int(max(u16)))
+    testing.expect_value(t, value.controls[1].character_count, 2048)
+    testing.expect_value(t, value.controls[4999].level, max(u32))
+    testing.expect_value(t, value.child_counts[0], 5000)
+    testing.expect_value(t, value.children[4999], u64(5001))
+    control_tree_destroy(&value)
+    testing.expect_value(t, memory.live_allocation_count, uint(0))
+}
+
+// Verify overlapping immutable readers survive replacement and close until collection.
+@(test)
+protected_control_leases_retire_only_on_display_collection :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
+    protected := Protected_Control_Publication{memory = &memory}
+    controls := [1]Control_Publication_Input{{native_id = 2, label = "before"}}
+    input := Tree_Publication_Input{controls = controls[:]}
+    testing.expect_value(t,
+        protected_publish_controls(&protected, input), Publication_Status.Ok)
+    first := protected_control_acquire(&protected)
+    second := protected_control_acquire(&protected)
+    testing.expect(t, first != nil && first == second)
+    controls[0].label = "after"
+    testing.expect_value(t,
+        protected_publish_controls(&protected, input), Publication_Status.Ok)
+    current := protected_control_acquire(&protected)
+    testing.expect_value(t, control_publication_text(&first^.value, 0, 6), "before")
+    testing.expect_value(t, control_publication_text(&current^.value, 0, 5), "after")
+    allocations := memory.live_allocation_count
+    protected_control_release(&protected, first)
+    testing.expect_value(t, memory.live_allocation_count, allocations)
+    testing.expect(t, !protected_control_collect(&protected))
+    protected_control_close(&protected)
+    testing.expect(t, protected_control_acquire(&protected) == nil)
+    testing.expect_value(t,
+        protected_publish_controls(&protected, input), Publication_Status.Invalid_Id)
+    protected_control_release(&protected, second)
+    testing.expect(t, !protected_control_collect(&protected))
+    protected_control_release(&protected, current)
+    testing.expect(t, protected_control_collect(&protected))
+    testing.expect_value(t, memory.live_allocation_count, uint(0))
+}
+
+// Verify allocation failure preserves predecessor leases and unchanged reuse allocates nothing.
+@(test)
+protected_control_growth_failure_preserves_predecessor :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
+    protected := Protected_Control_Publication{memory = &memory}
+    controls := [1]Control_Publication_Input{{native_id = 2, label = "retained"}}
+    input := Tree_Publication_Input{controls = controls[:]}
+    testing.expect_value(t,
+        protected_publish_controls(&protected, input), Publication_Status.Ok)
+    first := protected_control_acquire(&protected)
+    original_backing := memory.backing_allocator
+    memory.backing_allocator = {procedure = publication_fail_allocate}
+    testing.expect_value(t,
+        protected_publish_controls(&protected, input), Publication_Status.Ok)
+    testing.expect(t, first == protected.active)
+    huge := make([]u8, 1024 * 1024, context.allocator)
+    defer delete(huge, context.allocator)
+    for &byte in huge {byte = 'z'}
+    controls[0].label = string(huge)
+    testing.expect_value(t,
+        protected_publish_controls(&protected, input), Publication_Status.Capacity)
+    testing.expect(t, first == protected.active)
+    testing.expect_value(t, protected.current.generation, u64(1))
+    testing.expect_value(t, control_publication_text(&first^.value, 0, 8), "retained")
+    memory.backing_allocator = original_backing
+    protected_control_release(&protected, first)
+    protected_control_close(&protected)
+    testing.expect(t, protected_control_collect(&protected))
+    testing.expect_value(t, memory.live_allocation_count, uint(0))
+}
 
 // phase_two_control_fixture returns representative ordinary-control facts.
 phase_two_control_fixture :: proc() -> [6]Control_Publication_Input {
@@ -31,12 +153,17 @@ phase_two_control_fixture :: proc() -> [6]Control_Publication_Input {
 // Verify Phase 2 controls retain complete native-ready semantic facts.
 @(test)
 control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := phase_two_control_fixture()
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, window_focused = true,
         controls = controls[:],
-    }), Publication_Status.Ok)
+    }, &memory), Publication_Status.Ok)
     testing.expect_value(t, value.control_count, 6)
     testing.expect_value(t, value.controls[0].role, Publication_Role.Button)
     testing.expect(t, value.controls[1].checked)
@@ -51,6 +178,11 @@ control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
 // Verify nested Phase 4 controls retain hierarchy and active descendant identity.
 @(test)
 control_tree_builds_search_and_tree_hierarchy :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [5]Control_Publication_Input{
         {native_id = 2, controls_native_id = 3, role = .Search_Input,
             bounds = {10, 10, 220, 40}, label = "Search animations",
@@ -70,7 +202,7 @@ control_tree_builds_search_and_tree_hierarchy :: proc(t: ^testing.T) {
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), Publication_Status.Ok)
+    }, &memory), Publication_Status.Ok)
     testing.expect_value(t, value.controls[0].parent_native_id, value.root_id)
     testing.expect_value(t, value.controls[4].parent_native_id, u64(4))
     testing.expect_value(t, value.controls[2].active_descendant_native_id, u64(5))
@@ -82,6 +214,11 @@ control_tree_builds_search_and_tree_hierarchy :: proc(t: ^testing.T) {
 // Verify editable text copies UTF-8 widths and byte selections as characters.
 @(test)
 control_tree_builds_utf8_editable_text :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [1]Control_Publication_Input{{
         native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
         label = "Search animations", value = "aβc", placeholder = "Search",
@@ -91,15 +228,15 @@ control_tree_builds_utf8_editable_text :: proc(t: ^testing.T) {
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), Publication_Status.Ok)
+    }, &memory), Publication_Status.Ok)
     text := value.controls[0]
-    testing.expect_value(t, text.character_count, u16(3))
+    testing.expect_value(t, text.character_count, int(3))
     testing.expect_value(t, value.character_lengths[0], u8(1))
     testing.expect_value(t, value.character_lengths[1], u8(2))
     testing.expect_value(t, value.character_lengths[2], u8(1))
-    testing.expect_value(t, text.cursor_character, u16(2))
-    testing.expect_value(t, text.anchor_character, u16(1))
-    testing.expect_value(t, text.word_start_count, u16(1))
+    testing.expect_value(t, text.cursor_character, int(2))
+    testing.expect_value(t, text.anchor_character, int(1))
+    testing.expect_value(t, text.word_start_count, int(1))
     testing.expect_value(t, value.word_starts[text.word_start_offset], u8(0))
     testing.expect_value(t, control_publication_text(&value,
         text.placeholder_offset, text.placeholder_length), "Search")
@@ -108,6 +245,11 @@ control_tree_builds_utf8_editable_text :: proc(t: ^testing.T) {
 // Verify editable text rejects selection offsets inside a UTF-8 sequence.
 @(test)
 control_tree_rejects_non_boundary_text_selection :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [1]Control_Publication_Input{{
         native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
         value = "aβc", text_present = true,
@@ -116,13 +258,18 @@ control_tree_rejects_non_boundary_text_selection :: proc(t: ^testing.T) {
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), Publication_Status.Invalid_Utf8)
+    }, &memory), Publication_Status.Invalid_Utf8)
 }
 
 // Verify malformed Phase 4 hierarchy cannot replace a complete publication.
 @(test)
 control_tree_rejects_dangling_cycles_and_unrelated_active_descendants :: proc(
     t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [2]Control_Publication_Input{
         {native_id = 2, role = .Tree, bounds = {0, 0, 200, 200},
             label = "Library", enabled = true},
@@ -133,29 +280,34 @@ control_tree_rejects_dangling_cycles_and_unrelated_active_descendants :: proc(
     controls[1].parent_native_id = 99
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), Publication_Status.Missing_Parent)
+    }, &memory), Publication_Status.Missing_Parent)
     controls[0].parent_native_id = 3
     controls[1].parent_native_id = 2
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), Publication_Status.Cycle)
+    }, &memory), Publication_Status.Cycle)
     controls[0].parent_native_id = 0
     controls[0].active_descendant_native_id = 3
     controls[1].parent_native_id = 0
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), Publication_Status.Unreachable_Node)
+    }, &memory), Publication_Status.Unreachable_Node)
 }
 
 // Verify identical trees suppress generations and invalid ranges preserve state.
 @(test)
 protected_control_tree_suppresses_and_preserves :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [1]Control_Publication_Input{{
         native_id = 2, role = .Slider, bounds = {10, 10, 180, 34},
         label = "Output scale", actions = {.Focus, .Increment, .Decrement},
         range = {1, 8, 2, 1, false, true}, enabled = true, focusable = true,
     }}
-    protected: Protected_Control_Publication
+    protected := Protected_Control_Publication{memory = &memory}
     input := Tree_Publication_Input{
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
     }

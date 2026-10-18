@@ -15,6 +15,8 @@ import viewscenario "scenario"
 import terminalservice "terminal/service"
 import viewpreferences "preferences"
 import uilibrary "ui/library"
+import collections "../collections"
+import viewmodel "ui/model"
 
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
@@ -98,11 +100,15 @@ free_animations_state :: proc(state : ^core.Euclid_General_State) {
     terminalservice.terminal_graphics_runtime_destroy(state)
     terminalservice.shell_service_runtime_destroy(state)
     terminalview.terminal_destroy(&state^.terminal)
+    viewmodel.ui_tree_projection_destroy(
+        &state^.ui_runtime.library.tree.projection)
+    viewmodel.library_search_destroy(&state^.ui_runtime.library.search)
+    viewmodel.ui_semantic_focus_destroy(&state^.semantic_focus)
+    collections.destroy(&state^.preferences_runtime.collections_state)
     julia.animation_storage_destroy(
         &state^.animation_memory,
         &state^.animation_values,
         &state^.dynview_documents)
     julia.destroy_julia_interface_resources(state)
-    allocator := state^.saved_context.allocator
-    free(state, allocator)
+    free(state, context.allocator)
 }

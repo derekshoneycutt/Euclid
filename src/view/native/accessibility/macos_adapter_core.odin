@@ -144,5 +144,6 @@ macos_adapter_destroy_with_operations :: proc(
         operations.free(operations.user_data, owner^.native)
     }
     owner^.native = nil
+    adapter_finish_destroy(owner)
     adapter_record_diagnostic(owner, .Destroy)
 }

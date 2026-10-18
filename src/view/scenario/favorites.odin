@@ -173,7 +173,7 @@ scenario_favorites_item :: proc(
     }
     projection := &state^.ui_runtime.library.tree.projection
     index := uilibrary.tree_projection_find(projection, key)
-    return &projection^.items[index] if index >= 0 else nil
+    return projection^.items[index] if index >= 0 else nil
 }
 
 // Address a published tree occurrence; hidden or disabled rows reject actions.
@@ -400,7 +400,7 @@ scenario_favorites_expand_all :: proc(runtime: ^Scenario_Runtime) -> bool {
     for item in projection^.items[:projection^.count] {
         if item.first_child != uilibrary.TREE_NO_ITEM {
             item_index := uilibrary.tree_projection_find(projection, item.key)
-            target := &projection^.items[item_index]
+            target := projection^.items[item_index]
             _ = uilibrary.tree_apply_structure_command(params, target, .Expand)
         }
     }
@@ -425,17 +425,16 @@ scenario_favorites_capacity :: proc(runtime: ^Scenario_Runtime) -> bool {
         }
     }
     projection := &state^.ui_runtime.library.tree.projection
+    set := &state^.preferences_runtime.collections_state
     snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
-    if !projection^.valid || projection^.count != ji^.animation_count + eligible + 2 ||
+    if !projection^.valid ||
+        projection^.count != ji^.animation_count + set^.entry_count + 2 ||
         projection^.count != state^.ui_runtime.library.motion.count ||
-        eligible != state^.preferences_runtime.collections_state.entry_count ||
-        eligible > collections.MUTATION_CAPACITY ||
         snapshot == nil {
         return false
     }
-    for &item in projection^.items[:projection^.count] {
-        if uisemantics.semantic_node_index(
-            snapshot, uilibrary.tree_placement_semantic_id(&item)) < 0 {
+    for item in projection^.items[:projection^.count] {
+        if !scenario_favorites_semantic_item(runtime, snapshot, item) {
             return false
         }
     }
@@ -445,11 +444,29 @@ scenario_favorites_capacity :: proc(runtime: ^Scenario_Runtime) -> bool {
     return true
 }
 
+// Compare the published occurrence's name and sibling facts with its drawing source.
+scenario_favorites_semantic_item :: proc(
+    runtime: ^Scenario_Runtime, snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    item: ^viewmodel.Ui_Tree_Item) -> bool {
+    index := uisemantics.semantic_node_index(
+        snapshot, uilibrary.tree_placement_semantic_id(item))
+    if index < 0 {
+        return false
+    }
+    node := snapshot^.nodes[index]
+    label := uilibrary.tree_item_label(runtime^.state^.julia_interface, item,
+        &runtime^.state^.preferences_runtime.collections_state)
+    return uisemantics.semantic_node_text(
+        snapshot, node.label_offset, node.label_length) == label &&
+        node.position_in_set == item^.semantic_position &&
+        node.set_size == item^.semantic_set_size
+}
+
 // Require exact ordered Favorites membership by unambiguous canonical animation names.
 scenario_favorites_order :: proc(
     runtime: ^Scenario_Runtime, text: string) -> bool {
     set := &runtime^.state^.preferences_runtime.collections_state
-    indexes: [collections.ENTRY_CAPACITY]int
+    indexes: [collections.ENTRY_INDEX_BUFFER_CAPACITY]int
     count, failure := collections.ordered_siblings(
         set, collections.FAVORITES_COLLECTION_ID, {}, indexes[:])
     if failure != .None {
@@ -577,6 +594,13 @@ scenario_assert_favorites :: proc(
     switch operation {
     case "capacity":
         return scenario_favorites_capacity(runtime)
+    case "large_store":
+        set := &runtime^.state^.preferences_runtime.collections_state
+        snapshot := uisemantics.semantic_snapshot(
+            runtime^.state^.ui_runtime.semantic_focus)
+        return scenario_favorites_capacity(runtime) && set^.entry_count >= 1024 &&
+            set^.collection_count > 512 && snapshot != nil &&
+            snapshot^.text_count > 65536
     case "order":
         return scenario_favorites_order(runtime, argument)
     case "empty":

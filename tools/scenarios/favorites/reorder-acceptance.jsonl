@@ -19,7 +19,10 @@
 {"assert_favorites":"playing:Point"}
 {"library_placement":"actions_open:favorite:Point"}
 {"assert_favorites":"actions_open:favorite:Point"}
+{"wait_state":"tree_settled","timeout_ms":10000}
 {"library_placement":"actions_focus:favorite:Point"}
+{"key":"tab"}
+{"assert_favorites":"name_editor_input_focus"}
 {"key":"tab"}
 {"assert_focus":"library_move_down"}
 {"key":"enter"}

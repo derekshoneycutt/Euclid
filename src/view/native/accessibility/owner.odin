@@ -2,6 +2,7 @@ package native_accessibility
 
 import portable "../../../accessibility"
 import "core:sync"
+import storage "../../../core/storage"
 
 ADAPTER_NATIVE_CLASS_CAPACITY :: 16
 
@@ -113,6 +114,7 @@ Adapter_Tree_Input :: struct {
     bounds_scale: f64,
     window_focused: bool,
     controls: []Adapter_Control_Input,
+    identity_index: map[portable.Qualified_Identity]int,
 }
 
 // Adapter_Diagnostics records content-free callback and owner lifecycle counts.
@@ -123,6 +125,8 @@ Adapter_Diagnostics :: struct {
     deactivations: u64,
     updates: u64,
     destroys: u64,
+    control_tree_updates: u64,
+    control_tree_nodes: u64,
     rejected_actions: u64,
     last_action_status: Adapter_Action_Status,
     macos_failures: Macos_Failure_Diagnostics,
@@ -138,6 +142,7 @@ Adapter_Process_State :: struct {
 
 // Adapter owns one platform handle and its callback-visible publication.
 Adapter :: struct {
+    memory: storage.Tlsf_Owner,
     native: rawptr,
     publication: portable.Protected_Publication,
     control_publication: portable.Protected_Control_Publication,
@@ -146,7 +151,11 @@ Adapter :: struct {
     child_identity: portable.Qualified_Identity,
     child_native_id: u64,
     child_present: bool,
-    control_native_ids: [portable.CONTROL_NODE_CAPACITY]u64,
+    control_native_ids: []u64,
+    staged_native_ids: []u64,
+    staged_controls: []portable.Control_Publication_Input,
+    staged_index: map[portable.Qualified_Identity]int,
+    projection_workspace: []Adapter_Control_Input,
     control_count: int,
     delivered_generation: u64,
     windows_admission_attempted: bool,
@@ -234,7 +243,16 @@ adapter_diagnostics_snapshot :: proc(owner: ^Adapter) -> Adapter_Diagnostics {
     if owner == nil {
        return {}
     }
+
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     return owner^.diagnostics
+}
+
+// Count successful AccessKit construction separately from reusable TLSF publication storage.
+adapter_record_control_tree_construction :: proc(owner: ^Adapter, controls: int) {
+    sync.mutex_lock(&owner^.diagnostics_mutex)
+    defer sync.mutex_unlock(&owner^.diagnostics_mutex)
+    owner^.diagnostics.control_tree_updates += 1
+    owner^.diagnostics.control_tree_nodes += u64(controls) + 1
 }

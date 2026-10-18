@@ -104,4 +104,5 @@ windows_adapter_destroy_with_operations :: proc(
         owner^.native = nil
         adapter_record_diagnostic(owner, .Destroy)
     }
+    adapter_finish_destroy(owner)
 }

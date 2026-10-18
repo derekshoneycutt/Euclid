@@ -149,18 +149,6 @@ General features:
 - [X] UUID animation handles
 - [X] Improved UI layout system
 - [X] Improved hybrid immediate mode, block-based view text rendering
-- [ ] Terminal / REPL
-  - [X] Basic setup and availability
-  - [X] Basic help feature
-  - [X] Basic input tab completion support, including unicode characters & function names
-  - [X] Basic clipboard support
-  - [X] Initial primitive drawing animation hooks
-  - [X] Improved console-like REPL
-  - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
-  - [X] Julia syntax highlighting
-  - [ ] History explorer Julia-REPL style
-  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
-  - [ ] Improved input after full input system migration (IME, etc.)
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -184,6 +172,10 @@ General features:
 - [X] Window sizing and portrait
 - [X] SDL3 Migration
 - [X] Drawing Sounds
+- [X] Comprehensive mouse/keyboard focus system
+- [ ] Animation Slider
+  - [ ] Initial slider support
+  - [ ] Existing animation slider support
 - [ ] Sqlite backend
   - [X] Initial creation and access
   - [X] Full-text search tables
@@ -203,13 +195,28 @@ General features:
     - [ ] Custom notes in collections
     - [ ] Most viewed (dynamic; non-mutable)
     - [ ] Most recent (dynamic; non-mutable)
-- [ ] Sharing custom collections
-  - [ ] Export/import files
-  - [ ] In-network (ip-2-ip) custom collection sharing
-- [ ] Full input/accessibility system
-  - [X] Comprehensive mouse/keyboard focus system
+    - [ ] Sharing custom collections
+      - [ ] Export/import files
+      - [ ] In-network (ip-2-ip) custom collection sharing
+- [ ] Accessibility Support
   - [X] Basic initial accesibility support
-  - [ ] Additional accessibility support
+  - [X] Reduced motion support
+  - [ ] Additional accessibility support : Dynview
+  - [ ] High contrast mode
+  - [ ] Large text support
+- [ ] Terminal / REPL
+  - [X] Basic setup and availability
+  - [X] Basic help feature
+  - [X] Basic input tab completion support, including unicode characters & function names
+  - [X] Basic clipboard support
+  - [X] Initial primitive drawing animation hooks
+  - [X] Improved console-like REPL
+  - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
+  - [X] Julia syntax highlighting
+  - [ ] History explorer Julia-REPL style
+  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+  - [ ] Improved input after full input system migration (IME, etc.)
+  - [ ] Accessibility support
 
 Final tasks:
 
@@ -228,6 +235,9 @@ Final tasks:
   - [X] Major view text animations
   - [ ] Extended overall look/feel animations
   - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)
+- [ ] Accessibility polish
+  - [ ] Up to AccessKit support at polish-time
+  - [ ] Additional, advanced support (nice-to-do)
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity
@@ -302,7 +312,6 @@ Core Features:
   that can be navigated away from and returned to with persisted internal state;
   exit cleans REPL state and removes from tree)
 - Declarative animations support
-- Animation slider
 - Transformations
   - Scaling
   - Shearing

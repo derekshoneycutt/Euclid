@@ -72,7 +72,7 @@ Gif_Timing_Button_Descriptor :: struct {
     id: int,
     label: string,
     semantic_label: string,
-    order: u16,
+    order: u32,
     rectangle: geometry.Rectangle,
 }
 
@@ -307,7 +307,7 @@ gif_slider_params :: proc(
         value = value, min_value = 1, max_value = 4, font = ctx.font,
         font_resolver = ctx.resolver,
         semantic_domain = .Gif_Control,
-        semantic_order = u16(press_id - 6201),
+        semantic_order = u32(press_id - 6201),
     }
 }
 

@@ -807,6 +807,7 @@ settings_test_pointer_toggle :: proc() -> uiwidgets.Checkbox_Result {
 settings_test_semantic_toggle :: proc(t: ^testing.T) -> uiwidgets.Checkbox_Result {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     semantic_id := uisemantics.semantic_control_id(.Settings_Control, 4002)
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -874,6 +875,7 @@ checkbox_result_publishes_authoritative_geometry :: proc(t: ^testing.T) {
 text_button_converges_semantic_action_and_geometry :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     id := uisemantics.semantic_control_id(.Gif_Control, 77)
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -901,6 +903,7 @@ text_button_converges_semantic_action_and_geometry :: proc(t: ^testing.T) {
 disabled_text_button_rejects_semantic_activation :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     id := uisemantics.semantic_control_id(.Gif_Control, 78)
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -924,6 +927,7 @@ disabled_text_button_rejects_semantic_activation :: proc(t: ^testing.T) {
 button_action_coalesces_duplicate_sources :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     id := uisemantics.semantic_control_id(.Animation_Control, 79)
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -1164,6 +1168,7 @@ splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
 splitter_semantic_step_precedes_owner_commit :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{
         semantic_focus = semantic,
         layout = {
@@ -1477,6 +1482,7 @@ scroll_container_update_reserves_track_and_wheel :: proc(t: ^testing.T) {
 scroll_container_update_coalesces_input_sources :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     id := uisemantics.semantic_control_id(.Presentation, 7)
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -1687,7 +1693,11 @@ tree_search_policy_retains_ancestors_without_changing_expansion :: proc(t: ^test
     seed_tree_node(&nodes[0], nil, &nodes[1], nil, false)
     seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
     seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
-    search := viewmodel.Library_Search_State{active = true, visible_id_count = 2}
+    search: viewmodel.Library_Search_State
+    defer viewmodel.library_search_destroy(&search)
+    testing.expect(t, viewmodel.library_search_reserve_ids(&search, false, 2))
+    search.active = true
+    search.visible_id_count = 2
     search.visible_ids[0] = nodes[0].stable_id
     search.visible_ids[1] = nodes[2].stable_id
     policy := uilibrary.Tree_Visibility_Policy{search = &search}
@@ -1874,6 +1884,7 @@ library_search_keyboard_correction_preserves_submit :: proc(t: ^testing.T) {
 integer_slider_applies_semantic_keyboard_step :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     value := 2
     id := uisemantics.semantic_control_id(.Gif_Control, 6201)
@@ -1952,6 +1963,7 @@ tree_semantic_hierarchy_fixture :: proc(
 tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji := bridgemodel.Euclid_Julia_Interface{}
     nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
@@ -1980,9 +1992,9 @@ tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     testing.expect(t, child_index >= 0)
     child := snapshot^.nodes[child_index]
     testing.expect_value(t, child.parent, uilibrary.tree_item_semantic_id(&nodes[0]))
-    testing.expect_value(t, child.level, u16(2))
-    testing.expect_value(t, child.position_in_set, u16(1))
-    testing.expect_value(t, child.set_size, u16(1))
+    testing.expect_value(t, child.level, u32(2))
+    testing.expect_value(t, child.position_in_set, u32(1))
+    testing.expect_value(t, child.set_size, u32(1))
     testing.expect(t, .Tab_Stop not_in child.states)
 }
 
@@ -2015,6 +2027,7 @@ tree_semantic_commands_fixture :: proc(
 tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji := bridgemodel.Euclid_Julia_Interface{}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -2050,6 +2063,7 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
 tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji := bridgemodel.Euclid_Julia_Interface{}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -2076,7 +2090,7 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
     active := uilibrary.tree_apply_semantic_commands(params)
 
     testing.expect(t, !runtime.library.tree.projection.items[1].expanded)
-    testing.expect_value(t, active, &runtime.library.tree.projection.items[1])
+    testing.expect_value(t, active, runtime.library.tree.projection.items[1])
     testing.expect_value(t, semantic^.active_tree_item, nodes[1].stable_id)
 }
 
@@ -2085,6 +2099,7 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
 tree_keyboard_active_descendant_is_visible :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     node := bridgemodel.Euclid_Julia_Animation_Interface{}
     node.stable_id[0] = 1
@@ -2108,6 +2123,7 @@ presentation_semantics_reconcile_compilation_generation :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     state^.ui_runtime.input.interaction.logical_focus = {kind = .Presentation}
     state^.dynview.compile_cache.compiled_revision = 12
@@ -2168,6 +2184,7 @@ terminal_semantics_publish_single_surface :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     state^.terminal.animation_generation = 9
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -2406,6 +2423,7 @@ accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     active := viewmodel.Ui_Accordion_Section.Library
     panel := geometry.Rectangle{10, 20, 300, 500}
     sections := uiaccordion.accordion_landscape_sections()
@@ -2436,6 +2454,7 @@ accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
 accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Library
     sections := uiaccordion.accordion_landscape_sections()
@@ -2463,6 +2482,7 @@ accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
 accordion_header_external_expand_selects_section :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Library
     sections := uiaccordion.accordion_landscape_sections()
@@ -2489,6 +2509,7 @@ accordion_header_external_expand_selects_section :: proc(t: ^testing.T) {
 accordion_publishes_controlled_content_panel :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Settings
     testing.expect(t, uisemantics.semantic_begin(semantic))

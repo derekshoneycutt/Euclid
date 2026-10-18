@@ -14,10 +14,11 @@ import input "../../input"
 import uisemantics "../semantics"
 import theme "../theme"
 import collectionmodel "../../../collections"
+import storage "../../../core/storage"
 import log "core:log"
 
 TREE_SEMANTIC_LOCAL_ID :: 1
-TREE_NO_ITEM :: -1
+TREE_NO_ITEM :: viewmodel.UI_TREE_NO_ITEM
 
 Tree_Hit :: struct {
     selected_node: ^viewmodel.Ui_Tree_Item,
@@ -54,7 +55,7 @@ Tree_Semantic_Context :: struct {
     panel: geometry.Rectangle,
     scroll_y: f32,
     row: ^int,
-    layout: ^Tree_Prepared_Layout,
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout,
 }
 
 // Prepared facts for publishing one tree item's semantics.
@@ -66,8 +67,8 @@ Tree_Item_Semantic_Publication :: struct {
     parent_id: viewmodel.Ui_Node_Id,
     states: viewmodel.Ui_Node_State,
     actions: viewmodel.Ui_Node_Action_Set,
-    position: u16,
-    size: u16,
+    position: u32,
+    size: u32,
 }
 
 // Tree_Visible_Node_Context groups one bounded visible-row lookup.
@@ -95,7 +96,10 @@ Tree_List_Preparation :: struct {
     entry_name_input: uiwidgets.Input_Box_Result,
     entry_name_params: uiwidgets.Input_Box_Params,
     entry_name_prepared: bool,
-    layout: Tree_Prepared_Layout,
+    actions_toggle: uiwidgets.Icon_Button_Result,
+    actions_up: uiwidgets.Text_Button_Result,
+    actions_down: uiwidgets.Text_Button_Result,
+    layout: viewmodel.Ui_Tree_Prepared_Layout,
 }
 
 //   Inputs for one tree list panel frame, grouped so the call passes one value.
@@ -146,6 +150,9 @@ Encoded_Tree_Walk_Context :: struct {
     entry_name_input: ^uiwidgets.Input_Box_Result,
     entry_name_params: ^uiwidgets.Input_Box_Params,
     entry_name_prepared: bool,
+    actions_toggle: uiwidgets.Icon_Button_Result,
+    actions_up: uiwidgets.Text_Button_Result,
+    actions_down: uiwidgets.Text_Button_Result,
     reorder_foreground_index: int,
     reorder_occlusion: geometry.Rectangle,
     render_only: bool,
@@ -161,6 +168,8 @@ Tree_Projection_Add_Request :: struct {
     kind: viewmodel.Ui_Tree_Item_Kind,
     parent: int,
     expanded, selectable: bool,
+    terminal: bool,
+    canonical_name: string,
 }
 
 // tree_cancel_geometry_capture ends a tree scrollbar drag invalidated by layout changes.
@@ -169,15 +178,10 @@ tree_cancel_geometry_capture :: proc(tree: ^viewmodel.Ui_Library_Tree_State) {
     tree^.scroll_drag_off = 0
 }
 
-// Find one stable placement identity in the bounded display-owned topology.
+// Resolve one stable UUID through the projection-owned index.
 tree_projection_find :: proc(
     projection: ^viewmodel.Ui_Tree_Projection, key: uuid.Identifier) -> int {
-    for index in 0..<projection^.count {
-        if projection^.items[index].key == key {
-            return index
-        }
-    }
-    return TREE_NO_ITEM
+    return viewmodel.ui_tree_projection_find(projection, key)
 }
 
 // Link an initialized item into its parent or the ordered root list.
@@ -192,7 +196,7 @@ tree_projection_link :: proc(
         projection^.last_root = index
         return
     }
-    branch := &projection^.items[parent]
+    branch := projection^.items[parent]
     if branch^.first_child == TREE_NO_ITEM {
         branch^.first_child = index
     } else {
@@ -206,8 +210,7 @@ tree_projection_add :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     previous: ^viewmodel.Ui_Tree_Projection,
     request: Tree_Projection_Add_Request) -> int {
-    if projection^.count >= len(projection^.items) ||
-        request.key == (uuid.Identifier{}) ||
+    if request.key == (uuid.Identifier{}) ||
         tree_projection_find(projection, request.key) != TREE_NO_ITEM {
         return TREE_NO_ITEM
     }
@@ -220,15 +223,17 @@ tree_projection_add :: proc(
     if retained != TREE_NO_ITEM {
         retained_expanded = previous^.items[retained].expanded
     }
-    index := projection^.count
-    projection^.items[index] = {
+    index := viewmodel.ui_tree_projection_add_node(projection, {
         key = request.key, target_animation_id = request.target_id,
         kind = request.kind, parent = request.parent,
         first_child = TREE_NO_ITEM,
         last_child = TREE_NO_ITEM, next_sibling = TREE_NO_ITEM,
         expanded = retained_expanded, selectable = request.selectable,
+        terminal = request.terminal,
+    }, request.canonical_name)
+    if index == TREE_NO_ITEM {
+        return index
     }
-    projection^.count += 1
     tree_projection_link(projection, index, request.parent)
     return index
 }
@@ -237,6 +242,7 @@ tree_projection_add :: proc(
 tree_projection_add_favorites :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     previous: ^viewmodel.Ui_Tree_Projection,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
     snapshot: ^collectionmodel.Set) -> bool {
     if snapshot == nil || snapshot^.entry_count == 0 {
         return true
@@ -255,25 +261,32 @@ tree_projection_add_favorites :: proc(
         return false
     }
     return tree_projection_add_favorite_entries(
-        projection, previous, snapshot, favorites_index)
+        projection, previous, ji, snapshot, favorites_index)
 }
 
 // tree_projection_add_favorite_entries preserves durable sibling order in the projection.
 tree_projection_add_favorite_entries :: proc(
     projection, previous: ^viewmodel.Ui_Tree_Projection,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
     snapshot: ^collectionmodel.Set, favorites_index: int) -> bool {
-    ordered_indexes: [collectionmodel.ENTRY_CAPACITY]int
+    if !viewmodel.ui_tree_projection_reserve_order_workspace(
+        projection, snapshot^.entry_count) {
+        return false
+    }
     count, failure := collectionmodel.ordered_siblings(
         snapshot, collectionmodel.FAVORITES_COLLECTION_ID, {},
-        ordered_indexes[:])
+        projection^.order_workspace)
     if failure != .None {
         return false
     }
-    for index in ordered_indexes[:count] {
+    for index in projection^.order_workspace[:count] {
         entry := snapshot^.entries[index]
+        target := tree_find_stable_id(ji, entry.animation_id)
+        canonical_name := target^.name if target != nil else ""
         if tree_projection_add(projection, previous, {
             key = entry.id, target_id = entry.animation_id,
             kind = .Placement, parent = favorites_index, selectable = true,
+            canonical_name = canonical_name,
         }) == TREE_NO_ITEM {
             return false
         }
@@ -289,39 +302,476 @@ tree_projection_prepare :: proc(params: Tree_List_Params) -> bool {
         return false
     }
     runtime := params.ui_runtime
+    current_params := params
+    if params.general_state != nil {
+        current_params.collections_revision =
+            params.general_state^.preferences_runtime.collection_revision
+    }
     old := &runtime^.library.tree.projection
     if old^.valid && old^.content_generation != params.ji^.content_generation {
         if !tree_actions_close_context(runtime, params.general_state) {
             return false
         }
     }
-    if old^.valid && old^.content_generation == params.ji^.content_generation &&
-        old^.collections_revision == params.collections_revision {
+    if old^.valid && old^.content_generation == params.ji^.content_generation {
+        if !tree_projection_prepare_same_generation(current_params, old) {
+            log.error("library_topology_reconciliation_rejected")
+            return false
+        }
         return true
     }
-    staged := tree_projection_begin(params, old)
+    return tree_projection_prepare_new_generation(current_params, old)
+}
+
+// Build and publish a replacement projection without exposing partial state.
+tree_projection_prepare_new_generation :: proc(
+    params: Tree_List_Params,
+    old: ^viewmodel.Ui_Tree_Projection) -> bool {
+    staged: viewmodel.Ui_Tree_Projection
+    if !tree_projection_begin(params, old, &staged) {
+        log.error("library_projection_owner_initialization_failed")
+        return false
+    }
     has_terminal: bool
     if !tree_projection_registry_info(params.ji, &has_terminal) ||
-        !tree_projection_add_registry(params, old, &staged, has_terminal) {
+        !tree_projection_add_registry(
+            params, old, &staged, has_terminal) {
+        viewmodel.ui_tree_projection_destroy(&staged)
+        log.error("library_projection_generation_build_failed")
         return false
     }
     staged.valid = true
-    tree_projection_repair_selection(runtime, &staged)
-    runtime^.library.tree.projection = staged
+    tree_projection_repair_selection(params.ui_runtime, &staged)
+    viewmodel.ui_tree_projection_replace(old, &staged)
     tree_actions_reconcile(params)
     return true
 }
 
-// Initialize staged metadata without carrying old item storage forward.
+// Reconcile collection edits while retaining the current generation's nodes.
+tree_projection_prepare_same_generation :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection) -> bool {
+    if projection^.collections_revision == params.collections_revision {
+        return true
+    }
+    if !tree_projection_reconcile_collections(params, projection) {
+        return false
+    }
+    tree_projection_repair_selection(params.ui_runtime, projection)
+    tree_actions_reconcile(params)
+    return true
+}
+
+// Patch external collection revisions without recreating unaffected nodes.
+tree_projection_reconcile_collections :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection) -> bool {
+    snapshot := params.collections
+    if snapshot == nil {
+        return false
+    }
+    ordered_count, order_error :=
+        tree_projection_reconcile_ordered_count(snapshot, projection)
+    if order_error != .None {
+        return false
+    }
+    return tree_projection_reconcile_apply(params, projection, ordered_count)
+}
+
+// Reserve reusable sibling indexes and produce the current authoritative order.
+tree_projection_reconcile_ordered_count :: proc(
+    snapshot: ^collectionmodel.Set,
+    projection: ^viewmodel.Ui_Tree_Projection) -> (int, collectionmodel.Policy_Error) {
+    if !viewmodel.ui_tree_projection_reserve_order_workspace(
+        projection, snapshot^.entry_count) {
+        return 0, .Capacity
+    }
+    return collectionmodel.ordered_siblings(
+        snapshot, collectionmodel.FAVORITES_COLLECTION_ID, {},
+        projection^.order_workspace)
+}
+
+// Add or retire placement records before restoring their authoritative order.
+tree_projection_reconcile_apply :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection,
+    ordered_count: int) -> bool {
+    snapshot := params.collections
+    root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+    favorites := tree_projection_find(
+        projection, collectionmodel.FAVORITES_COLLECTION_ID)
+    if (root == TREE_NO_ITEM) != (favorites == TREE_NO_ITEM) {
+        return false
+    }
+    original_count := projection^.count
+    if !tree_projection_reconcile_add_missing(
+        params, projection, root, favorites, ordered_count) {
+        return false
+    }
+    removed, remove_ok :=
+        tree_projection_reconcile_remove_missing(projection, snapshot)
+    if !remove_ok {
+        return false
+    }
+    changed := removed || projection^.count != original_count
+    return tree_projection_reconcile_finish(
+        params, projection, ordered_count, changed)
+}
+
+// Publish ordering, shell retirement, and the accepted collection revision.
+tree_projection_reconcile_finish :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection,
+    ordered_count: int,
+    changed: bool) -> bool {
+    snapshot := params.collections
+    topology_changed := changed
+    if ordered_count > 0 {
+        root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+        favorites := tree_projection_find(
+            projection, collectionmodel.FAVORITES_COLLECTION_ID)
+        if root == TREE_NO_ITEM || favorites == TREE_NO_ITEM {
+            return false
+        }
+        reordered, reorder_ok := tree_projection_reconcile_favorite_order(
+            projection, snapshot, favorites, ordered_count)
+        if !reorder_ok {
+            return false
+        }
+        topology_changed = reordered || topology_changed
+    } else {
+        shell_removed, remove_ok :=
+            tree_projection_reconcile_remove_shell(projection)
+        if !remove_ok {
+            return false
+        }
+        topology_changed = shell_removed || topology_changed
+    }
+    if topology_changed {
+        projection^.topology_revision += 1
+    }
+    projection^.collections_revision = params.collections_revision
+    return true
+}
+
+// Preserve disclosure state while removing an empty Favorites shell.
+tree_projection_reconcile_remove_shell :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection) -> (bool, bool) {
+    favorites := tree_projection_find(
+        projection, collectionmodel.FAVORITES_COLLECTION_ID)
+    if favorites == TREE_NO_ITEM {
+        return false, true
+    }
+    root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+    projection^.favorites_expanded = projection^.items[favorites].expanded
+    if root != TREE_NO_ITEM {
+        projection^.collections_expanded = projection^.items[root].expanded
+    }
+    if !viewmodel.ui_tree_projection_remove(projection, favorites) {
+        return false, false
+    }
+    root = tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+    if root != TREE_NO_ITEM &&
+        !viewmodel.ui_tree_projection_remove(projection, root) {
+        return false, false
+    }
+    return true, true
+}
+
+// Allocate absent Favorites nodes before changing the currently published topology.
+tree_projection_reconcile_add_missing :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection,
+    root, favorites, ordered_count: int) -> bool {
+    missing := 0
+    if ordered_count > 0 && root == TREE_NO_ITEM {
+        missing += 2
+    }
+    for order_index in 0..<ordered_count {
+        entry := params.collections^.entries[
+            projection^.order_workspace[order_index]]
+        if tree_projection_find(projection, entry.id) == TREE_NO_ITEM {
+            missing += 1
+        }
+    }
+    if missing == 0 {
+        return true
+    }
+    if !viewmodel.ui_tree_projection_reserve(
+        projection, projection^.count + missing) {
+        return false
+    }
+    return tree_projection_reconcile_publish_missing(
+        params, projection, ordered_count, missing)
+}
+
+// Build detached missing records, then append them without further allocation.
+tree_projection_reconcile_publish_missing :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection,
+    ordered_count, missing: int) -> bool {
+    root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+    allocator := storage.tlsf_owner_allocator(&projection^.allocator)
+    nodes := make([]^viewmodel.Ui_Tree_Item, missing, allocator)
+    if len(nodes) != missing {
+        return false
+    }
+    node_count := 0
+    if ordered_count > 0 && root == TREE_NO_ITEM {
+        if !tree_projection_reconcile_make_shells(projection, nodes, &node_count) {
+            tree_projection_reconcile_free_nodes(projection, nodes, node_count)
+            return false
+        }
+    }
+    if !tree_projection_reconcile_make_placements(
+        params, projection, nodes, &node_count, ordered_count) {
+        tree_projection_reconcile_free_nodes(projection, nodes, node_count)
+        return false
+    }
+    if !tree_projection_reconcile_nodes_are_unique(projection, nodes, node_count) {
+        tree_projection_reconcile_free_nodes(projection, nodes, node_count)
+        return false
+    }
+    if !tree_projection_reconcile_commit_nodes(projection, nodes, node_count) {
+        tree_projection_reconcile_free_nodes(projection, nodes, node_count)
+        return false
+    }
+    delete(nodes, allocator)
+    if ordered_count > 0 && root == TREE_NO_ITEM &&
+        !tree_projection_reconcile_attach_shells(projection) {
+        return false
+    }
+    return true
+}
+
+// Index and append all validated detached records to reserved projection storage.
+tree_projection_reconcile_commit_nodes :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    nodes: []^viewmodel.Ui_Tree_Item,
+    node_count: int) -> bool {
+    for node in nodes[:node_count] {
+        index := projection^.count
+        projection^.items[index] = node
+        if !viewmodel.ui_tree_projection_index_insert(
+            projection, node^.key, index) {
+            return false
+        }
+        projection^.count += 1
+    }
+    return true
+}
+
+// Attach newly staged collection shells and restore their disclosure state.
+tree_projection_reconcile_attach_shells :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection) -> bool {
+    root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+    favorites := tree_projection_find(
+        projection, collectionmodel.FAVORITES_COLLECTION_ID)
+    if root == TREE_NO_ITEM || favorites == TREE_NO_ITEM {
+        return false
+    }
+    viewmodel.ui_tree_projection_insert_collections_root(projection, root)
+    projection^.items[root].first_child = favorites
+    projection^.items[root].last_child = favorites
+    projection^.items[favorites].parent = root
+    projection^.collections_expanded = projection^.items[root].expanded
+    projection^.favorites_expanded = projection^.items[favorites].expanded
+    return true
+}
+
+// Reject collisions before any detached reconciliation node is published.
+tree_projection_reconcile_nodes_are_unique :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    nodes: []^viewmodel.Ui_Tree_Item,
+    node_count: int) -> bool {
+    for index in 0..<node_count {
+        node := nodes[index]
+        if node == nil ||
+            tree_projection_find(projection, node^.key) != TREE_NO_ITEM {
+            return false
+        }
+        for previous in 0..<index {
+            if nodes[previous]^.key == node^.key {
+                return false
+            }
+        }
+    }
+    return node_count <= projection^.capacity - projection^.count
+}
+
+// Prepare the stable Collections and Favorites shell nodes.
+tree_projection_reconcile_make_shells :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    nodes: []^viewmodel.Ui_Tree_Item,
+    node_count: ^int) -> bool {
+    allocator := storage.tlsf_owner_allocator(&projection^.allocator)
+    root, root_ok := viewmodel.ui_tree_projection_make_node({
+        key = viewmodel.TREE_COLLECTIONS_ROOT_ID,
+        kind = .Collections,
+        parent = TREE_NO_ITEM,
+        first_child = TREE_NO_ITEM,
+        last_child = TREE_NO_ITEM,
+        next_sibling = TREE_NO_ITEM,
+        expanded = projection^.collections_expanded,
+    }, "", allocator)
+    if !root_ok {
+        return false
+    }
+    nodes[node_count^] = root
+    node_count^ += 1
+    favorites, favorites_ok := viewmodel.ui_tree_projection_make_node({
+        key = collectionmodel.FAVORITES_COLLECTION_ID,
+        kind = .Collection,
+        parent = TREE_NO_ITEM,
+        first_child = TREE_NO_ITEM,
+        last_child = TREE_NO_ITEM,
+        next_sibling = TREE_NO_ITEM,
+        expanded = projection^.favorites_expanded,
+    }, "", allocator)
+    if !favorites_ok {
+        return false
+    }
+    nodes[node_count^] = favorites
+    node_count^ += 1
+    return true
+}
+
+// Prepare missing placement nodes with canonical labels from the current registry.
+tree_projection_reconcile_make_placements :: proc(
+    params: Tree_List_Params,
+    projection: ^viewmodel.Ui_Tree_Projection,
+    nodes: []^viewmodel.Ui_Tree_Item,
+    node_count: ^int,
+    ordered_count: int) -> bool {
+    allocator := storage.tlsf_owner_allocator(&projection^.allocator)
+    for order_index in 0..<ordered_count {
+        entry := params.collections^.entries[
+            projection^.order_workspace[order_index]]
+        if tree_projection_find(projection, entry.id) != TREE_NO_ITEM {
+            continue
+        }
+        target := tree_find_stable_id(params.ji, entry.animation_id)
+        canonical_name := target^.name if target != nil else ""
+        node, ok := viewmodel.ui_tree_projection_make_node({
+            key = entry.id,
+            target_animation_id = entry.animation_id,
+            kind = .Placement,
+            parent = TREE_NO_ITEM,
+            first_child = TREE_NO_ITEM,
+            last_child = TREE_NO_ITEM,
+            next_sibling = TREE_NO_ITEM,
+            selectable = true,
+        }, canonical_name, allocator)
+        if !ok {
+            return false
+        }
+        nodes[node_count^] = node
+        node_count^ += 1
+    }
+    return true
+}
+
+// Release detached topology records after failed reconciliation admission.
+tree_projection_reconcile_free_nodes :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    nodes: []^viewmodel.Ui_Tree_Item,
+    node_count: int) {
+    allocator := storage.tlsf_owner_allocator(&projection^.allocator)
+    for node in nodes[:node_count] {
+        viewmodel.ui_tree_projection_free_node(node, allocator)
+    }
+    delete(nodes, allocator)
+}
+
+// Remove placements no longer present in the committed Favorites collection.
+tree_projection_reconcile_remove_missing :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    snapshot: ^collectionmodel.Set) -> (bool, bool) {
+    changed := false
+    index := projection^.count
+    for index > 0 {
+        index -= 1
+        item := projection^.items[index]
+        if item^.kind == .Placement &&
+            collectionmodel.find_entry(snapshot, item^.key) < 0 {
+            if !viewmodel.ui_tree_projection_remove(projection, index) {
+                return changed, false
+            }
+            changed = true
+        }
+    }
+    return changed, true
+}
+
+// Reorder the existing Favorites nodes to match durable sibling order.
+tree_projection_reconcile_favorite_order :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    snapshot: ^collectionmodel.Set,
+    favorites: int,
+    ordered_count: int) -> (bool, bool) {
+    changed, valid := tree_projection_reconcile_order_changed(
+        projection, snapshot, favorites, ordered_count)
+    if !valid {
+        return changed, false
+    }
+    projection^.items[favorites].first_child =
+        tree_projection_find(projection, snapshot^.entries[
+            projection^.order_workspace[0]].id)
+    last := projection^.items[favorites].first_child
+    for order_index in 0..<ordered_count {
+        entry := snapshot^.entries[projection^.order_workspace[order_index]]
+        index := tree_projection_find(projection, entry.id)
+        projection^.items[index].parent = favorites
+        projection^.items[index].next_sibling = TREE_NO_ITEM
+        if order_index > 0 {
+            projection^.items[last].next_sibling = index
+        }
+        last = index
+    }
+    projection^.items[favorites].last_child = last
+    return changed, true
+}
+
+// Check whether current sibling links differ from authoritative saved order.
+tree_projection_reconcile_order_changed :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    snapshot: ^collectionmodel.Set,
+    favorites, ordered_count: int) -> (bool, bool) {
+    changed := false
+    current := projection^.items[favorites].first_child
+    for order_index in 0..<ordered_count {
+        entry := snapshot^.entries[projection^.order_workspace[order_index]]
+        desired := tree_projection_find(projection, entry.id)
+        if desired == TREE_NO_ITEM {
+            return changed, false
+        }
+        if current != desired {
+            changed = true
+        }
+        if current != TREE_NO_ITEM {
+            current = projection^.items[current].next_sibling
+        }
+    }
+    if current != TREE_NO_ITEM {
+        changed = true
+    }
+    return changed, true
+}
+
+// Initialize a separate owner for one failure-atomic catalogue generation.
 tree_projection_begin :: proc(
     params: Tree_List_Params,
-    old: ^viewmodel.Ui_Tree_Projection) -> viewmodel.Ui_Tree_Projection {
-    staged: viewmodel.Ui_Tree_Projection
+    old: ^viewmodel.Ui_Tree_Projection,
+    staged: ^viewmodel.Ui_Tree_Projection) -> bool {
+    if !viewmodel.ui_tree_projection_init(staged) {
+        return false
+    }
     staged.first_root = TREE_NO_ITEM
     staged.last_root = TREE_NO_ITEM
     staged.content_generation = params.ji^.content_generation
     staged.collections_revision = params.collections_revision
     staged.topology_revision = old^.topology_revision + 1
+    staged.build_count = old^.build_count + 1
     staged.collections_expanded = old^.collections_expanded
     staged.favorites_expanded = old^.favorites_expanded
     root := tree_projection_find(old, viewmodel.TREE_COLLECTIONS_ROOT_ID)
@@ -332,7 +782,7 @@ tree_projection_begin :: proc(
     if favorites != TREE_NO_ITEM {
         staged.favorites_expanded = old^.items[favorites].expanded
     }
-    return staged
+    return true
 }
 
 // Validate the registry bound and report whether Collections follows Terminal.
@@ -355,7 +805,8 @@ tree_projection_add_registry :: proc(
     staged: ^viewmodel.Ui_Tree_Projection,
     has_terminal: bool) -> bool {
     if !has_terminal &&
-        !tree_projection_add_favorites(staged, previous, params.collections) {
+        !tree_projection_add_favorites(
+            staged, previous, params.ji, params.collections) {
         return false
     }
     collections_added := !has_terminal
@@ -367,7 +818,7 @@ tree_projection_add_registry :: proc(
         }
         if node^.node_kind == .Terminal && !collections_added {
             if !tree_projection_add_favorites(
-                staged, previous, params.collections) {
+                staged, previous, params.ji, params.collections) {
                 return false
             }
             collections_added = true
@@ -394,7 +845,8 @@ tree_projection_add_animation :: proc(
     return tree_projection_add(staged, previous, {
         key = node^.stable_id, target_id = node^.stable_id,
         kind = .Animation, parent = parent, expanded = expanded,
-        selectable = true,
+        selectable = true, terminal = node^.node_kind == .Terminal,
+        canonical_name = node^.name,
     }) != TREE_NO_ITEM
 }
 
@@ -458,21 +910,11 @@ tree_item_is_effectively_expanded :: proc(
     for child, steps := item.first_child, 0;
         child != TREE_NO_ITEM && steps < policy.projection^.count;
         child, steps = policy.projection^.items[child].next_sibling, steps + 1 {
-        if tree_item_is_visible(policy, policy.projection^.items[child]) {
+        if tree_item_is_visible(policy, policy.projection^.items[child]^) {
             return true
         }
     }
     return false
-}
-
-// expanded_first_child returns only logically expanded children, never closing visual tails.
-tree_item_first_child :: proc(
-    item: viewmodel.Ui_Tree_Item,
-    policy: Tree_Visibility_Policy = {}) -> int {
-    if !tree_item_is_effectively_expanded(policy, item) {
-        return TREE_NO_ITEM
-    }
-    return item.first_child
 }
 
 // Keep canonical search helpers for existing library-specific queries.
@@ -577,23 +1019,49 @@ tree_item_label :: proc(
     case .Collections: return "Collections"
     case .Collection: return "Favorites"
     case .Placement:
-        if collections != nil {
-            entry_index := collectionmodel.find_entry(collections, item^.key)
-            if entry_index >= 0 {
-                entry := &collections^.entries[entry_index]
-                if entry^.custom_name_length > 0 &&
-                    entry^.custom_name_length <= len(entry^.custom_name) {
-                    return string(entry^.custom_name[:entry^.custom_name_length])
-                }
-            }
+        if custom_name := tree_placement_custom_label(collections, item^.key);
+            custom_name != "" {
+            return custom_name
         }
-        target := tree_find_stable_id(ji, item^.target_animation_id)
-        return target^.name if target != nil else "Unavailable animation"
+        return tree_item_animation_label(ji, item, "Unavailable animation")
     case .Animation:
-        target := tree_find_stable_id(ji, item^.target_animation_id)
-        return target^.name if target != nil else ""
+        return tree_item_animation_label(ji, item, "")
     }
     return ""
+}
+
+// Resolve the latest custom label for a placement while its collection owner lives.
+tree_placement_custom_label :: proc(
+    collections: ^collectionmodel.Set,
+    key: uuid.Identifier) -> string {
+    if collections == nil {
+        return ""
+    }
+    identity, identity_error :=
+        collectionmodel.placement_identity_for_entry(collections, key)
+    if identity_error != .None {
+        return ""
+    }
+    placement, placement_error :=
+        collectionmodel.placement_resolve(collections, identity)
+    if placement_error != .None ||
+        placement.custom_name_length == 0 ||
+        placement.custom_name_length > len(placement.custom_name) {
+        return ""
+    }
+    return string(placement.custom_name[:placement.custom_name_length])
+}
+
+// Resolve an animation label from a bounded canonical name or current Julia node.
+tree_item_animation_label :: proc(
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    item: ^viewmodel.Ui_Tree_Item,
+    unavailable: string) -> string {
+    if item^.canonical_name_length > 0 {
+        return string(item^.canonical_name[:item^.canonical_name_length])
+    }
+    target := tree_find_stable_id(ji, item^.target_animation_id)
+    return target^.name if target != nil else unavailable
 }
 
 // tree_item_is_keyboard_active reports visible focus for one roving descendant.
@@ -847,7 +1315,7 @@ tree_projection_visible_row_limited :: proc(
     if index < 0 || index >= projection^.count || remaining <= 0 {
         return 0, false
     }
-    item := &projection^.items[index]
+    item := projection^.items[index]
     if !tree_item_is_visible(ctx.policy, item^) {
         return 0, false
     }
@@ -904,7 +1372,7 @@ tree_projection_item_at_row_limited :: proc(
     if index < 0 || index >= projection^.count || remaining <= 0 {
         return nil
     }
-    item := &projection^.items[index]
+    item := projection^.items[index]
     if !tree_item_is_visible(ctx.policy, item^) {
         return nil
     }
@@ -956,11 +1424,11 @@ tree_projection_visible_count_limited :: proc(
         return 0
     }
     item := projection^.items[index]
-    if !tree_item_is_visible(policy, item) {
+    if !tree_item_is_visible(policy, item^) {
         return 0
     }
     count := 1
-    if !tree_item_is_effectively_expanded(policy, item) {
+    if !tree_item_is_effectively_expanded(policy, item^) {
         return count
     }
     for child, steps := item.first_child, 0;
@@ -982,7 +1450,7 @@ tree_resolve_active_node :: proc(
     }
     active_index := tree_projection_find(projection, active_key)
     if active_index != TREE_NO_ITEM {
-        active := &projection^.items[active_index]
+        active := projection^.items[active_index]
         if _, visible := tree_projection_visible_row(
             projection, active, params.visibility); visible {
             return active
@@ -991,7 +1459,7 @@ tree_resolve_active_node :: proc(
     selected_index := tree_projection_find(
         projection, params.ui_runtime^.library.tree.selected_item_id)
     if selected_index != TREE_NO_ITEM {
-        selected := &projection^.items[selected_index]
+        selected := projection^.items[selected_index]
         if _, visible := tree_projection_visible_row(
             projection, selected, params.visibility); visible {
             return selected
@@ -1068,7 +1536,7 @@ tree_apply_parent_command :: proc(
     if active^.first_child != TREE_NO_ITEM && active^.expanded {
         active^.expanded = false
     } else if active^.parent != TREE_NO_ITEM {
-        return &params.ui_runtime^.library.tree.projection.items[active^.parent]
+        return params.ui_runtime^.library.tree.projection.items[active^.parent]
     }
     return active
 }
@@ -1086,7 +1554,7 @@ tree_apply_child_command :: proc(
     for child, steps := active^.first_child, 0;
         child != TREE_NO_ITEM && steps < policy.projection^.count;
         child, steps = policy.projection^.items[child].next_sibling, steps + 1 {
-        candidate := &policy.projection^.items[child]
+        candidate := policy.projection^.items[child]
         if tree_item_is_visible(policy, candidate^) {
             return candidate
         }
@@ -1180,7 +1648,7 @@ tree_entry_name_is_descendant :: proc(
     for parent, steps := projection^.items[entry_index].parent, 0;
         parent != TREE_NO_ITEM && steps < projection^.count;
         parent, steps = projection^.items[parent].parent, steps + 1 {
-        if &projection^.items[parent] == ancestor {
+        if projection^.items[parent] == ancestor {
             return true
         }
     }
@@ -1203,7 +1671,7 @@ tree_semantic_command_target :: proc(
     if index == TREE_NO_ITEM {
         return nil
     }
-    item := &params.ui_runtime^.library.tree.projection.items[index]
+    item := params.ui_runtime^.library.tree.projection.items[index]
     _, visible := tree_projection_visible_row(
         &params.ui_runtime^.library.tree.projection, item, params.visibility)
     return item if visible else nil
@@ -1229,42 +1697,37 @@ tree_apply_semantic_commands :: proc(params: Tree_List_Params) ->
     return active
 }
 
-// register_tree_item_semantics publishes one visible branch without allocation.
+// Compute logical sibling positions once for the complete sibling chain.
 tree_item_set_facts :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     policy_input: Tree_Visibility_Policy,
-    item: ^viewmodel.Ui_Tree_Item) -> (u16, u16) {
-    if projection == nil || item == nil {
-        return 0, 0
-    }
+    first: int) {
     policy := policy_input
     policy.projection = projection
-    position, size: u16
-    first := projection^.first_root
-    if item^.parent != TREE_NO_ITEM {
-        first = projection^.items[item^.parent].first_child
+    size: u32
+    for candidate_index, steps := first, 0;
+        candidate_index != TREE_NO_ITEM && steps < projection^.count;
+        candidate_index, steps = projection^.items[candidate_index].next_sibling,
+            steps + 1 {
+        candidate := projection^.items[candidate_index]
+        if !tree_item_is_visible(policy, candidate^) {
+            continue
+        }
+        size += 1
+        candidate.semantic_position = size
     }
     for candidate_index, steps := first, 0;
         candidate_index != TREE_NO_ITEM && steps < projection^.count;
         candidate_index, steps = projection^.items[candidate_index].next_sibling,
             steps + 1 {
-        candidate := &projection^.items[candidate_index]
-        if !tree_item_is_visible(policy, candidate^) {
-            continue
-        }
-        size += 1
-        if candidate == item {
-            position = size
-        }
+        projection^.items[candidate_index].semantic_set_size = size
     }
-    return position, size
 }
 
 // Publish one visible tree node using its computed parent, state, and geometry.
 tree_publish_item_semantics :: proc(
-    ctx: Tree_Semantic_Context, publication: Tree_Item_Semantic_Publication) {
-    row := tree_layout_find_item(ctx.layout, publication.item)
-    assert(row != nil, "logical tree row absent from prepared layout")
+    ctx: Tree_Semantic_Context, publication: Tree_Item_Semantic_Publication,
+    row: ^viewmodel.Ui_Tree_Prepared_Row) {
     geometry := tree_reorder_visible_geometry(
         ctx.reorder,
         ctx.layout, row^, ctx.panel, ctx.scroll_y)
@@ -1274,8 +1737,9 @@ tree_publish_item_semantics :: proc(
         states -= {.Visible, .Enabled, .Focusable}
         actions = {}
     }
-    if ctx.reorder^.active &&
-        geometry.clip_bounds.height <= 0 {
+    if ctx.reorder^.active && geometry.clip_bounds.height <= 0 &&
+        geometry.bounds.y < ctx.panel.y + ctx.panel.height &&
+        geometry.bounds.y + geometry.bounds.height > ctx.panel.y {
         states -= {.Visible, .Enabled, .Focusable}
         actions = {}
     }
@@ -1283,27 +1747,11 @@ tree_publish_item_semantics :: proc(
         id = publication.item_id, parent = publication.parent_id,
         role = .Tree_Item, states = states,
         actions = actions, region = .Accordion_Content,
-        traversal_order = u16(ctx.row^), bounds = geometry.bounds,
+        traversal_order = u32(ctx.row^), bounds = geometry.bounds,
         clip_bounds = geometry.clip_bounds, label = publication.label,
-        level = u16(publication.depth + 1),
+        level = u32(publication.depth + 1),
         position_in_set = publication.position, set_size = publication.size,
     })
-}
-
-// Recursively publish the visible children of one expanded semantic node.
-tree_publish_semantic_children :: proc(
-    ctx: Tree_Semantic_Context,
-    projection: ^viewmodel.Ui_Tree_Projection,
-    item: ^viewmodel.Ui_Tree_Item,
-    depth, remaining: int) {
-    policy := ctx.policy
-    policy.projection = projection
-    for child, steps := tree_item_first_child(item^, policy), 0;
-        child != TREE_NO_ITEM && steps < projection^.count;
-        child, steps = projection^.items[child].next_sibling, steps + 1 {
-        register_tree_item_semantics(
-            ctx, projection, &projection^.items[child], depth + 1, remaining - 1)
-    }
 }
 
 // Prepare the semantic states and sibling position for one visible item.
@@ -1333,13 +1781,13 @@ tree_item_semantic_publication :: proc(
     }
     parent_id := ctx.tree_id
     if item^.parent != TREE_NO_ITEM {
-        parent_id = tree_placement_semantic_id(&projection^.items[item^.parent])
+        parent_id = tree_placement_semantic_id(projection^.items[item^.parent])
     }
-    position, size := tree_item_set_facts(projection, policy, item)
     return {
         item = item, label = tree_item_label(ctx.ji, item, ctx.collections),
         depth = depth, item_id = item_id, parent_id = parent_id,
-        states = states, actions = actions, position = position, size = size,
+        states = states, actions = actions,
+        position = item.semantic_position, size = item.semantic_set_size,
     }
 }
 
@@ -1347,18 +1795,16 @@ tree_item_semantic_publication :: proc(
 register_tree_item_semantics :: proc(
     ctx: Tree_Semantic_Context,
     projection: ^viewmodel.Ui_Tree_Projection,
-    item: ^viewmodel.Ui_Tree_Item,
-    depth, remaining: int) {
+    row: ^viewmodel.Ui_Tree_Prepared_Row) {
     policy := ctx.policy
     policy.projection = projection
-    if item == nil || remaining <= 0 || !tree_item_is_visible(policy, item^) {
+    if !row.logical {
         return
     }
     publication := tree_item_semantic_publication(
-        ctx, projection, item, depth, policy)
-    tree_publish_item_semantics(ctx, publication)
+        ctx, projection, row.item, row.depth, policy)
+    tree_publish_item_semantics(ctx, publication, row)
     ctx.row^ += 1
-    tree_publish_semantic_children(ctx, projection, item, depth, remaining)
 }
 
 // register_tree_semantics publishes one Tab stop and its visible descendants.
@@ -1366,7 +1812,12 @@ register_tree_semantics :: proc(
     params: Tree_List_Params,
     scroll: uiwidgets.Scroll_Container_Update_Result,
     active: ^viewmodel.Ui_Tree_Item,
-    layout: ^Tree_Prepared_Layout) {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
+    if u64(params.ui_runtime^.library.tree.projection.count) >= u64(max(u32)) {
+        _ = uisemantics.semantic_reject(params.ui_runtime^.semantic_focus,
+            .Node_Capacity, tree_semantic_id())
+        return
+    }
     tree_id := tree_semantic_id()
     active_id := tree_placement_semantic_id(active)
     tree_register_semantic_control(params, scroll, tree_id, active_id)
@@ -1386,11 +1837,20 @@ register_tree_semantics :: proc(
         layout = layout,
     }
     projection := &ctx.tree^.projection
-    for root, steps := projection^.first_root, 0;
-        root != TREE_NO_ITEM && steps < projection^.count;
-        root, steps = projection^.items[root].next_sibling, steps + 1 {
-        register_tree_item_semantics(
-            ctx, projection, &projection^.items[root], 0, projection^.count)
+    tree_prepare_semantic_set_facts(projection, ctx.policy)
+    for &prepared_row in layout^.rows[:layout^.count] {
+        register_tree_item_semantics(ctx, projection, &prepared_row)
+    }
+}
+
+// Compute sibling facts once per sibling chain, independent of painted-row clipping.
+tree_prepare_semantic_set_facts :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection, policy: Tree_Visibility_Policy) {
+    tree_item_set_facts(projection, policy, projection^.first_root)
+    for item in projection^.items[:projection^.count] {
+        if item^.first_child != TREE_NO_ITEM {
+            tree_item_set_facts(projection, policy, item^.first_child)
+        }
     }
 }
 
@@ -1462,7 +1922,7 @@ apply_pending_tree_reveal :: proc(
     target_index := tree_projection_find(
         projection, ui_runtime^.library.tree.reveal_stable_id)
     tree_expand_reveal_ancestors(projection, target_index)
-    target := &projection^.items[target_index] if
+    target := projection^.items[target_index] if
         target_index != TREE_NO_ITEM else nil
     row, found := tree_projection_visible_row(
         projection, target, params.visibility)
@@ -1651,14 +2111,18 @@ tree_entry_name_gate_hit :: proc(
 tree_refresh_hit_preparation :: proc(
     params: Tree_List_Params, hit: Tree_Hit, prepared: ^Tree_List_Preparation) {
     if hit.toggled_node != nil {
-        tree_prepare_layout(params, &prepared^.layout)
+        if !tree_prepare_layout(params, &prepared^.layout) {
+            return
+        }
         tree_refresh_preparation(params, prepared)
         prepared^.cancel_geometry_capture = true
     }
     if hit.actions_toggle_id != (uuid.Identifier{}) ||
        hit.actions_move_id != (uuid.Identifier{}) {
         tree_actions_prepare_focus(params)
-        tree_prepare_layout(params, &prepared^.layout)
+        if !tree_prepare_layout(params, &prepared^.layout) {
+            return
+        }
         tree_actions_reveal_focus(params, &prepared^.layout)
         tree_refresh_preparation(params, prepared)
     }
@@ -1694,13 +2158,23 @@ prepare_tree_list_panel :: proc(
         return
     }
     tree_actions_reconcile(params)
-    tree_prepare_layout(params, &prepared^.layout)
+    if !tree_prepare_layout(params, &prepared^.layout) {
+        return
+    }
     _ = tree_apply_semantic_commands(params)
     tree_actions_reconcile(params)
     tree_actions_apply_commands(params)
     tree_actions_prepare_focus(params)
     tree_motion_settle_navigation(params)
-    tree_prepare_layout(params, &prepared^.layout)
+    if !tree_prepare_layout(params, &prepared^.layout) {
+        return
+    }
+    tree_finalize_list_panel(params, prepared)
+}
+
+// Finalize scrolling and interaction after command-driven layout preparation.
+tree_finalize_list_panel :: proc(
+    params: Tree_List_Params, prepared: ^Tree_List_Preparation) {
     tree_apply_visual_reveal(params, &prepared^.layout)
     tree_actions_reveal_focus(params, &prepared^.layout)
     tree_motion_apply_anchor(params, &prepared^.layout)

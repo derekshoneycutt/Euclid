@@ -4,6 +4,7 @@ import dynviewmodel "../../../dynview/model"
 import geometry "../../../core/geometry"
 import settings "../../../settings"
 import collections "../../../collections"
+import storage "../../../core/storage"
 import uuid "core:encoding/uuid"
 import preferencesmodel "../../preferences/model"
 import worldmodel "../../world/model"
@@ -23,14 +24,6 @@ TREE_COLLECTIONS_ROOT_ID :: uuid.Identifier{
     0x45, 0x55, 0x43, 0x4c, 0x49, 0x44, 0x00, 0x00,
     0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
 }
-
-LIBRARY_SEARCH_VISIBLE_ID_CAPACITY :: UI_TREE_NODE_CAPACITY
-
-// Capacity covers 512 tree nodes, 1,024 Dynview copy targets, and 64
-// static, container, and responsive-layout nodes.
-UI_SEMANTIC_NODE_CAPACITY :: UI_TREE_NODE_CAPACITY + 1024 + 64
-
-UI_SEMANTIC_TEXT_CAPACITY :: 64 * 1024
 
 UI_FOCUS_COMMAND_CAPACITY :: 128
 
@@ -270,7 +263,7 @@ Ui_Editable_Text_Descriptor :: struct {
     text_run_id: Ui_Node_Id,
     parent: Ui_Node_Id,
     region: Ui_Focus_Region,
-    traversal_order: u16,
+    traversal_order: u32,
     label: string,
     placeholder: string,
     text: string,
@@ -353,22 +346,22 @@ Ui_Semantic_Node :: struct {
     states: Ui_Node_State,
     actions: Ui_Node_Action_Set,
     region: Ui_Focus_Region,
-    traversal_order: u16,
+    traversal_order: u32,
     bounds: geometry.Rectangle,
     clip_bounds: geometry.Rectangle,
     numeric_range: Ui_Numeric_Range,
     label_offset: u32,
-    label_length: u16,
+    label_length: u32,
     value_offset: u32,
-    value_length: u16,
+    value_length: u32,
     placeholder_offset: u32,
-    placeholder_length: u16,
-    text_cursor_byte: u16,
-    text_anchor_byte: u16,
+    placeholder_length: u32,
+    text_cursor_byte: u32,
+    text_anchor_byte: u32,
     text_present: bool,
-    level: u16,
-    position_in_set: u16,
-    set_size: u16,
+    level: u32,
+    position_in_set: u32,
+    set_size: u32,
 }
 
 // Ui_Semantic_Node_Registration borrows text only for one atomic registration.
@@ -381,11 +374,15 @@ Ui_Semantic_Node_Registration :: struct {
 
 // Ui_Semantic_Snapshot owns one complete immutable semantic tree publication.
 Ui_Semantic_Snapshot :: struct {
-    nodes: [UI_SEMANTIC_NODE_CAPACITY]Ui_Semantic_Node,
-    text: [UI_SEMANTIC_TEXT_CAPACITY]u8,
+    allocator: storage.Tlsf_Owner,
+    nodes: []Ui_Semantic_Node,
+    text: []u8,
+    identity_index: []int,
+    traversal_index: []int,
     node_count: int,
     text_count: int,
     generation: u64,
+    lookup_probes: u64,
 }
 
 Ui_Semantic_Status :: enum u8 {
@@ -399,6 +396,7 @@ Ui_Semantic_Status :: enum u8 {
     Invalid_Utf8,
     Traversal_Collision,
     Not_Staging,
+    Allocation_Failed,
 }
 
 Ui_Focus_Origin :: enum u8 {
@@ -430,7 +428,7 @@ Ui_Semantic_Focus_State :: struct {
     logical_focus: Ui_Node_Id,
     focus_origin: Ui_Focus_Origin,
     last_region: Ui_Focus_Region,
-    last_traversal_order: u16,
+    last_traversal_order: u32,
     active_tree_item: uuid.Identifier,
     commands: [UI_FOCUS_COMMAND_CAPACITY]Ui_Focus_Command,
     command_count: int,
@@ -539,8 +537,11 @@ Library_Search_State :: struct {
     worker_available: bool,
     invalid_query: bool,
     active: bool,
-    visible_ids: [LIBRARY_SEARCH_VISIBLE_ID_CAPACITY]uuid.Identifier,
+    visible_id_allocator: storage.Tlsf_Owner,
+    visible_ids: []uuid.Identifier,
     visible_id_count: int,
+    staged_visible_ids: []uuid.Identifier,
+    staged_visible_id_count: int,
     total_match_count: u32,
     more_available: bool,
     suggestion: [LIBRARY_SEARCH_QUERY_BYTE_CAPACITY]u8,
@@ -585,27 +586,52 @@ Ui_Tree_Item_Kind :: enum u8 {
 Ui_Tree_Item :: struct {
     key: uuid.Identifier,
     target_animation_id: uuid.Identifier,
+    canonical_name: []u8,
+    canonical_name_length: int,
     kind: Ui_Tree_Item_Kind,
+    terminal: bool,
     parent: int,
     first_child: int,
     last_child: int,
     next_sibling: int,
     expanded: bool,
     selectable: bool,
+    semantic_position: u32,
+    semantic_set_size: u32,
 }
 
-// Ui_Tree_Projection caches bounded topology without retaining content pointers.
+Ui_Tree_Index_Slot :: struct {
+    key: uuid.Identifier,
+    item_index: int,
+    occupied: bool,
+}
+
+// Ui_Tree_Projection owns stable node addresses and UUID-indexed logical topology.
 Ui_Tree_Projection :: struct {
+    allocator: storage.Tlsf_Owner,
+    items: []^Ui_Tree_Item,
+    index: []Ui_Tree_Index_Slot,
+    order_workspace: []int,
+    frame_rows: []Ui_Tree_Prepared_Row,
+    scratch_rows: []Ui_Tree_Prepared_Row,
+    motion_branches: []Ui_Tree_Branch_Motion,
+    reorder_rows: []Ui_Tree_Reorder_Row,
+    traversal_frames: []Ui_Tree_Traversal_Frame,
+    prepared_nodes: [3]^Ui_Tree_Item,
+    prepared_node_count: int,
+    prepared_mutation: collections.Mutation,
+    mutation_prepared: bool,
     valid: bool,
     content_generation: u64,
     collections_revision: u64,
     topology_revision: u64,
+    build_count: u64,
     count: int,
+    capacity: int,
     first_root: int,
     last_root: int,
     collections_expanded: bool,
     favorites_expanded: bool,
-    items: [UI_TREE_NODE_CAPACITY]Ui_Tree_Item,
 }
 
 // Ui_Tree_Motion retains only generation-scoped identities and reveal geometry.
@@ -619,7 +645,7 @@ Ui_Tree_Motion :: struct {
     panel: geometry.Rectangle,
     count: int,
     visual_height: f32,
-    branches: [UI_TREE_NODE_CAPACITY]Ui_Tree_Branch_Motion,
+    branches: []Ui_Tree_Branch_Motion,
     anchor_id: uuid.Identifier,
     anchor_view_y: f32,
     anchored: bool,
@@ -630,6 +656,66 @@ Ui_Tree_Reorder_Row :: struct {
     id: uuid.Identifier,
     from_y: f32,
     target_y: f32,
+}
+
+// Ui_Tree_Actions_Layout stores geometry and eligibility for one placement's controls.
+Ui_Tree_Actions_Layout :: struct {
+    eligible: bool,
+    open: bool,
+    height: f32,
+    toggle_rect: geometry.Rectangle,
+    label_clip: geometry.Rectangle,
+    drawer_rect: geometry.Rectangle,
+    move_up_rect: geometry.Rectangle,
+    move_down_rect: geometry.Rectangle,
+    move_up_enabled: bool,
+    move_down_enabled: bool,
+    toggle_id: int,
+    move_up_id: int,
+    move_down_id: int,
+}
+
+// Ui_Tree_Prepared_Row is a compact frame borrow of one logical or closing row.
+Ui_Tree_Prepared_Row :: struct {
+    item: ^Ui_Tree_Item,
+    depth: int,
+    content_y: f32,
+    canonical_y: f32,
+    reveal: geometry.Rectangle,
+    logical: bool,
+    expanded: bool,
+    actions: Ui_Tree_Actions_Layout,
+}
+
+// Ui_Tree_Traversal_Frame holds one iterative layout or motion walk position.
+Ui_Tree_Traversal_Frame :: struct {
+    item_index: int,
+    next_child: int,
+    sibling_steps: int,
+    depth: int,
+    content_y: f32,
+    child_y: f32,
+    children_height: f32,
+    reveal: geometry.Rectangle,
+    logical: bool,
+    expanded: bool,
+    entered: bool,
+    actions: Ui_Tree_Actions_Layout,
+}
+
+// Ui_Tree_Traversal_Step carries one bounded iterative traversal transition.
+Ui_Tree_Traversal_Step :: struct {
+    stack_count: int,
+    extent: f32,
+    complete: bool,
+    valid: bool,
+}
+
+// Ui_Tree_Prepared_Layout borrows owner-backed rows through the frame's final consumer.
+Ui_Tree_Prepared_Layout :: struct {
+    rows: []Ui_Tree_Prepared_Row,
+    count: int,
+    content_height: f32,
 }
 
 // Ui_Tree_Reorder_Motion owns bounded visual offsets for accepted Favorites moves.
@@ -643,7 +729,7 @@ Ui_Tree_Reorder_Motion :: struct {
     drawer_height: f32,
     start_seconds: f64,
     count: int,
-    rows: [UI_TREE_NODE_CAPACITY]Ui_Tree_Reorder_Row,
+    rows: []Ui_Tree_Reorder_Row,
 }
 
 // Ui_Tree_Actions_Motion retains one transient Favorites drawer by placement UUID.
@@ -703,6 +789,7 @@ Ui_Library_Actions_State :: struct {
 // Ui_Library_Entry_Name_Draft owns one bounded placement-name edit between frames.
 Ui_Library_Entry_Name_Draft :: struct {
     entry_id: uuid.Identifier,
+    placement: collections.Placement_Identity,
     rect: geometry.Rectangle,
     clip_rect: geometry.Rectangle,
     value: [collections.ENTRY_NAME_MAX_BYTES]u8,
@@ -808,6 +895,7 @@ library_search_clear_results :: proc(search: ^Library_Search_State) {
     search^.active = false
     search^.invalid_query = false
     search^.visible_id_count = 0
+    search^.staged_visible_id_count = 0
     search^.total_match_count = 0
     search^.more_available = false
     search^.suggestion_length = 0

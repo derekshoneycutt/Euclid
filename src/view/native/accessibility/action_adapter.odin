@@ -7,6 +7,7 @@ import "base:runtime"
 import "core:log"
 import "core:math"
 import "core:unicode/utf8"
+import storage "../../../core/storage"
 
 Adapter_Action_Mapping :: struct {
     required: portable.Publication_Action,
@@ -15,17 +16,111 @@ Adapter_Action_Mapping :: struct {
     supported: bool,
 }
 
+// adapter_projection_workspace lends reusable native-owner storage for one display copy.
+adapter_projection_workspace :: proc(
+    owner: ^Adapter, count: int) -> ([]Adapter_Control_Input, bool) {
+    if count < 0 || !adapter_prepare_memory(owner) {
+        return nil, false
+    }
+    if len(owner^.projection_workspace) < count {
+        allocator := storage.tlsf_owner_allocator(&owner^.memory)
+        workspace, error := make([]Adapter_Control_Input, count,
+            allocator)
+        if error != nil {
+            return nil, false
+        }
+        delete(owner^.projection_workspace, storage.tlsf_owner_allocator(&owner^.memory))
+        owner^.projection_workspace = workspace
+    }
+    return owner^.projection_workspace[:count], true
+}
+
+// adapter_projection_release drops borrowed semantic text before the next snapshot reset.
+adapter_projection_release :: proc(owner: ^Adapter) {
+    if owner == nil {
+        return
+    }
+    for &control in owner^.projection_workspace {
+        control = {}
+    }
+}
+
+// adapter_prepare_memory initializes the independently retired native session domain.
+adapter_prepare_memory :: proc(owner: ^Adapter) -> bool {
+    if owner == nil {
+        return false
+    }
+    if owner^.control_publication.closing || owner^.publication.closing {
+        return false
+    }
+    if owner^.memory.initialized {
+        return owner^.native_ids.count != 0
+    }
+    heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+    if storage.tlsf_owner_init(&owner^.memory, heap_allocator) != .Ok {
+        return false
+    }
+    owner^.control_publication.memory = &owner^.memory
+    allocator := storage.tlsf_owner_allocator(&owner^.memory)
+    index, error := make(map[portable.Qualified_Identity]int, 1,
+        allocator)
+    if error != nil ||
+       !portable.native_id_registry_init(&owner^.native_ids, &owner^.memory) {
+        delete(index)
+        portable.native_id_registry_destroy(&owner^.native_ids)
+        storage.tlsf_owner_destroy(&owner^.memory)
+        owner^.control_publication.memory = nil
+        return false
+    }
+    owner^.staged_index = index
+    return true
+}
+
+// adapter_prepare_staging replaces display-only scratch without retaining frame data.
+adapter_prepare_staging :: proc(owner: ^Adapter, count: int) -> bool {
+    if !adapter_prepare_memory(owner) {
+        return false
+    }
+    if len(owner^.staged_controls) >= count {
+        return true
+    }
+    allocator := storage.tlsf_owner_allocator(&owner^.memory)
+    controls, control_error := make([]portable.Control_Publication_Input, count,
+        allocator)
+    if control_error != nil {
+        return false
+    }
+    ids, id_error := make([]u64, count, allocator)
+    if id_error != nil {
+        delete(controls, storage.tlsf_owner_allocator(&owner^.memory))
+        return false
+    }
+    committed_ids, committed_error := make([]u64, count,
+        allocator)
+    if committed_error != nil {
+        delete(controls, storage.tlsf_owner_allocator(&owner^.memory))
+        delete(ids, storage.tlsf_owner_allocator(&owner^.memory))
+        return false
+    }
+    copy(committed_ids, owner^.control_native_ids)
+    delete(owner^.staged_controls, storage.tlsf_owner_allocator(&owner^.memory))
+    delete(owner^.staged_native_ids, storage.tlsf_owner_allocator(&owner^.memory))
+    delete(owner^.control_native_ids, storage.tlsf_owner_allocator(&owner^.memory))
+    owner^.staged_controls = controls
+    owner^.staged_native_ids = ids
+    owner^.control_native_ids = committed_ids
+    return true
+}
+
 // adapter_input_index finds one semantic identity in staged input.
 adapter_input_index :: proc(
     input: Adapter_Tree_Input,
     identity: portable.Qualified_Identity) -> int {
-    if identity == {
-       } {return -1
+    if identity == (portable.Qualified_Identity{}) {
+        return -1
     }
-    for source, index in input.controls {
-        if source.identity == identity {
-           return index
-        }
+    if index, found := input.identity_index[identity]; found {
+        return index
     }
     return -1
 }
@@ -33,12 +128,9 @@ adapter_input_index :: proc(
 // adapter_stage_identity_unique rejects one duplicate staged identity.
 adapter_stage_identity_unique :: proc(
     input: Adapter_Tree_Input, source: Adapter_Control_Input, index: int) -> bool {
-    for prior in input.controls[:index] {
-        if prior.identity != source.identity {
-           continue
-        }
+    if prior, found := input.identity_index[source.identity]; found && prior != index {
         log.warnf("accessibility_control_identity_duplicate index=%d prior=%d",
-            index, adapter_input_index(input, source.identity))
+            index, prior)
         return false
     }
     return true
@@ -47,33 +139,38 @@ adapter_stage_identity_unique :: proc(
 // adapter_stage_validation_control resolves one temporary relation record.
 adapter_stage_validation_control :: proc(
     input: Adapter_Tree_Input, source: Adapter_Control_Input, index: int,
-    controls: ^[portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input) ->
+    controls: []portable.Control_Publication_Input) ->
     bool {
     if !adapter_stage_identity_unique(input, source, index) {
        return false
     }
-    controls^[index] = source.control
-    controls^[index].native_id = u64(index + 2)
+    controls[index] = source.control
+    controls[index].native_id = u64(index + 2)
+    controls[index].parent_native_id = 0
+    controls[index].active_descendant_native_id = 0
+    controls[index].controls_native_id = 0
     parent_index := adapter_input_index(input, source.parent_identity)
-    if source.parent_identity != {
-       } && parent_index < 0 {return false
+    if source.parent_identity != (portable.Qualified_Identity{}) && parent_index < 0 {
+        return false
     }
     if parent_index >= 0 {
-       controls^[index].parent_native_id = u64(parent_index + 2)
+       controls[index].parent_native_id = u64(parent_index + 2)
     }
     active_index := adapter_input_index(input, source.active_descendant_identity)
-    if source.active_descendant_identity != {
-       } && active_index < 0 {return false
+    if source.active_descendant_identity != (portable.Qualified_Identity{}) &&
+       active_index < 0 {
+        return false
     }
     if active_index >= 0 {
-        controls^[index].active_descendant_native_id = u64(active_index + 2)
+        controls[index].active_descendant_native_id = u64(active_index + 2)
     }
     controls_index := adapter_input_index(input, source.controls_identity)
-    if source.controls_identity != {
-       } && controls_index < 0 {return false
+    if source.controls_identity != (portable.Qualified_Identity{}) &&
+       controls_index < 0 {
+        return false
     }
     if controls_index >= 0 {
-        controls^[index].controls_native_id = u64(controls_index + 2)
+        controls[index].controls_native_id = u64(controls_index + 2)
     }
     return true
 }
@@ -81,19 +178,22 @@ adapter_stage_validation_control :: proc(
 // adapter_stage_validation validates relations without consuming registry IDs.
 adapter_stage_validation :: proc(
     input: Adapter_Tree_Input,
-    controls: ^[portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input) ->
+    controls: []portable.Control_Publication_Input, memory: ^storage.Tlsf_Owner) ->
     bool {
     for source, index in input.controls {
         if !adapter_stage_validation_control(
-            input, source, index, controls) {return false}
+            input, source, index, controls) {
+            return false
+        }
     }
     validation: portable.Control_Tree_Publication
     status := portable.control_tree_build(&validation, {
         root_bounds = input.root_bounds,
         bounds_scale = input.bounds_scale,
         window_focused = input.window_focused,
-        controls = controls^[:len(input.controls)],
-    })
+        controls = controls[:len(input.controls)],
+    }, memory)
+    defer portable.control_tree_destroy(&validation)
     if status != .Ok {
         log.warnf("accessibility_control_validation_failed status=%v controls=%d",
             status, len(input.controls))
@@ -105,22 +205,22 @@ adapter_stage_validation :: proc(
 // adapter_resolve_relation maps one optional semantic identity to a native ID.
 adapter_resolve_relation :: proc(
     input: Adapter_Tree_Input,
-    native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64,
+    native_ids: []u64,
     identity: portable.Qualified_Identity) -> (u64, bool) {
-    if identity == {
-       } {return 0, true
+    if identity == (portable.Qualified_Identity{}) {
+        return 0, true
     }
     index := adapter_input_index(input, identity)
     if index < 0 {
        return 0, false
     }
-    return native_ids^[index], true
+    return native_ids[index], true
 }
 
 // adapter_resolve_control_ids assigns monotonic IDs to staged identities.
 adapter_resolve_control_ids :: proc(
     owner: ^Adapter, input: Adapter_Tree_Input,
-    native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64) -> bool {
+    native_ids: []u64) -> bool {
     for source, index in input.controls {
         native_id, resolved := portable.native_id_resolve(
             &owner^.native_ids, source.identity)
@@ -132,7 +232,7 @@ adapter_resolve_control_ids :: proc(
                 source.identity.stable_uuid != ([16]u8{}), owner^.native_ids.count)
             return false
         }
-        native_ids^[index] = native_id
+        native_ids[index] = native_id
     }
     return true
 }
@@ -140,11 +240,11 @@ adapter_resolve_control_ids :: proc(
 // adapter_stage_control resolves one record's hierarchy relations.
 adapter_stage_control :: proc(
     input: Adapter_Tree_Input,
-    native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64,
+    native_ids: []u64,
     source: Adapter_Control_Input, index: int,
     destination: ^portable.Control_Publication_Input) -> bool {
     destination^ = source.control
-    destination^.native_id = native_ids^[index]
+    destination^.native_id = native_ids[index]
     parent_id, parent_ok := adapter_resolve_relation(
         input, native_ids, source.parent_identity)
     active_id, active_ok := adapter_resolve_relation(
@@ -163,25 +263,23 @@ adapter_stage_control :: proc(
 // adapter_stage_controls resolves native IDs into complete portable records.
 adapter_stage_controls :: proc(
     owner: ^Adapter, input: Adapter_Tree_Input,
-    controls: ^[portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input,
+    controls: []portable.Control_Publication_Input,
     count: ^int) -> bool {
-    if owner == nil || controls == nil || count == nil ||
-       len(input.controls) > portable.CONTROL_NODE_CAPACITY {return false}
-    if owner^.native_ids.count == 0 {
-        portable.native_id_registry_init(&owner^.native_ids)
+    if owner == nil || count == nil || len(input.controls) > len(controls) {
+        return false
     }
-    validation_controls:
-        [portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input
-    if !adapter_stage_validation(input, &validation_controls) {
+    if !adapter_stage_validation(input, controls, &owner^.memory) {
        return false
     }
-    native_ids: [portable.CONTROL_NODE_CAPACITY]u64
-    if !adapter_resolve_control_ids(owner, input, &native_ids) {
+    native_ids := owner^.staged_native_ids
+    if !adapter_resolve_control_ids(owner, input, native_ids) {
        return false
     }
     for source, index in input.controls {
         if !adapter_stage_control(
-            input, &native_ids, source, index, &controls^[index]) {return false}
+            input, native_ids, source, index, &controls[index]) {
+            return false
+        }
     }
     count^ = len(input.controls)
     return true
@@ -191,33 +289,106 @@ adapter_stage_controls :: proc(
 adapter_retire_absent_controls :: proc(
     owner: ^Adapter, controls: []portable.Control_Publication_Input) {
     for old_id in owner^.control_native_ids[:owner^.control_count] {
-        retained := false
-        for control in controls {
-            if control.native_id == old_id {
-               retained = true; break
-            }
-        }
+        identity, found := portable.native_id_lookup(&owner^.native_ids, old_id)
+        _, retained := owner^.staged_index[identity]
+        retained = retained && found
         if !retained {
            _ = portable.native_id_retire(&owner^.native_ids, old_id)
         }
     }
-    owner^.control_native_ids = {}
     owner^.control_count = len(controls)
     for control, index in controls {
         owner^.control_native_ids[index] = control.native_id
     }
 }
 
-// adapter_publish_controls owns one complete portable control publication.
-adapter_publish_controls :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -> bool {
-    if owner == nil {
-       return false
-    }
-    controls: [portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input
-    control_count: int
-    if !adapter_stage_controls(owner, input, &controls, &control_count) {
+// adapter_controls_unchanged resolves existing identities before logical reuse.
+adapter_controls_unchanged :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -> bool {
+    if owner^.control_publication.closing ||
+       owner^.control_publication.current.control_count != len(input.controls) {
         return false
     }
+    for source, index in input.controls {
+        slot, found := owner^.native_ids.identities[source.identity]
+        if !found {
+            return false
+        }
+        owner^.staged_native_ids[index] = owner^.native_ids.entries[slot].native_id
+    }
+    for source, index in input.controls {
+        if !adapter_stage_control(input, owner^.staged_native_ids, source, index,
+            &owner^.staged_controls[index]) {
+            return false
+        }
+    }
+    return portable.control_tree_matches_input(&owner^.control_publication.current, {
+        root_bounds = input.root_bounds, bounds_scale = input.bounds_scale,
+        window_focused = input.window_focused,
+        controls = owner^.staged_controls[:len(input.controls)],
+    })
+}
+
+// adapter_index_input rejects duplicate identities before changing active mappings.
+adapter_index_input :: proc(owner: ^Adapter, input: ^Adapter_Tree_Input) -> bool {
+    if reserve(&owner^.staged_index, len(input^.controls)) != nil {
+        return false
+    }
+    clear(&owner^.staged_index)
+    for source, index in input^.controls {
+        if _, duplicate := owner^.staged_index[source.identity]; duplicate {
+            return false
+        }
+        owner^.staged_index[source.identity] = index
+    }
+    input^.identity_index = owner^.staged_index
+    return true
+}
+
+// adapter_rollback_mappings retires unpublished new IDs without reusing numbers.
+adapter_rollback_mappings :: proc(owner: ^Adapter, first_new_id: u64) {
+    for entry in owner^.native_ids.entries {
+        if entry.active && entry.native_id >= first_new_id {
+            _ = portable.native_id_retire(&owner^.native_ids, entry.native_id)
+        }
+    }
+}
+
+// adapter_publish_controls owns one complete portable control publication.
+adapter_publish_controls :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -> bool {
+    if owner == nil || !adapter_prepare_staging(owner, len(input.controls)) {
+       return false
+    }
+    defer {
+        for &control in owner^.staged_controls {
+            control = {}
+        }
+    }
+    staged_input := input
+    if !adapter_index_input(owner, &staged_input) {
+        return false
+    }
+    if adapter_controls_unchanged(owner, staged_input) {
+        _ = portable.protected_control_collect(&owner^.control_publication)
+        return true
+    }
+    return adapter_commit_controls(owner, staged_input)
+}
+
+// Admit mappings and a complete publication before retiring any predecessor IDs.
+adapter_commit_controls :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -> bool {
+    first_new_id := owner^.native_ids.next_id
+    accepted := false
+    defer {
+        if !accepted {
+            adapter_rollback_mappings(owner, first_new_id)
+        }
+    }
+    controls := owner^.staged_controls
+    control_count: int
+    if !adapter_stage_controls(owner, input, controls, &control_count) {
+        return false
+    }
+
     slice := controls[:control_count]
     status := portable.protected_publish_controls(&owner^.control_publication, {
         root_bounds = input.root_bounds,
@@ -231,6 +402,8 @@ adapter_publish_controls :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -> 
         return false
     }
     adapter_retire_absent_controls(owner, slice)
+    accepted = true
+    _ = portable.protected_control_collect(&owner^.control_publication)
     return true
 }
 
@@ -245,7 +418,9 @@ adapter_publish_present_button :: proc(
     publication_input := input
     publication_input.child_id = child_id
     if portable.protected_publish_button(
-        &owner^.publication, publication_input) != .Ok {return false}
+        &owner^.publication, publication_input) != .Ok {
+        return false
+    }
     if owner^.child_present && owner^.child_native_id != child_id {
         _ = portable.native_id_retire(&owner^.native_ids, owner^.child_native_id)
     }
@@ -281,7 +456,9 @@ adapter_publish_button :: proc(
         if !input.present {
            return true
         }
-        portable.native_id_registry_init(&owner^.native_ids)
+        if !adapter_prepare_memory(owner) {
+            return false
+        }
     }
     if input.present {
         return adapter_publish_present_button(owner, input, identity)
@@ -295,7 +472,9 @@ adapter_initialize_static :: proc(
     if owner == nil {
        return false
     }
-    portable.native_id_registry_init(&owner^.native_ids)
+    if !adapter_prepare_memory(owner) {
+        return false
+    }
     child_id, child_ok := portable.native_id_resolve(&owner^.native_ids, {
         domain = .Synthetic,
         local_id = portable.STATIC_CHILD_ID,
@@ -383,7 +562,9 @@ adapter_validate_text_action :: proc(
     destination: ^Adapter_Action) -> Adapter_Action_Status {
     if .Replace_Selected_Text not_in control^.actions ||
        request.payload_length < 0 ||
-       request.payload_length > len(request.payload) {return .Invalid_Value}
+       request.payload_length > len(request.payload) {
+        return .Invalid_Value
+    }
     payload := request.payload
     text := string(payload[:request.payload_length])
     if !utf8.valid_string(text) {
@@ -404,8 +585,8 @@ adapter_validate_selection_action :: proc(
     control: ^portable.Control_Publication, request: portable.Queued_Action,
     destination: ^Adapter_Action) -> Adapter_Action_Status {
     if .Set_Text_Selection not_in control^.actions || !control^.text_present ||
-       request.selection_anchor > control^.character_count ||
-       request.selection_focus > control^.character_count {
+       int(request.selection_anchor) > control^.character_count ||
+       int(request.selection_focus) > control^.character_count {
         return .Invalid_Value
     }
     destination^.kind = .Set_Text_Selection
@@ -534,10 +715,17 @@ accesskit_activation_callback :: proc "c" (user_data: rawptr) -> ^accesskit.Tree
     context = runtime.default_context()
     owner := cast(^Adapter)user_data
     adapter_record_diagnostic(owner, .Activation)
-    control_publication: portable.Control_Tree_Publication
-    if owner != nil && portable.protected_control_snapshot(
-            &owner^.control_publication, &control_publication) {
-        return accesskit_control_tree_update(&control_publication)
+    if owner != nil {
+        lease := portable.protected_control_acquire(&owner^.control_publication)
+        if lease != nil {
+            defer portable.protected_control_release(&owner^.control_publication, lease)
+            update := accesskit_control_tree_update(&lease^.value)
+            if update != nil {
+                adapter_record_control_tree_construction(
+                    owner, lease^.value.control_count)
+            }
+            return update
+        }
     }
     publication: portable.Static_Publication
     if owner == nil ||
@@ -546,19 +734,6 @@ accesskit_activation_callback :: proc "c" (user_data: rawptr) -> ^accesskit.Tree
         return nil
     }
     return accesskit_tree_update(&publication)
-}
-
-// adapter_action_generation snapshots the generation used for ingress validation.
-adapter_action_generation :: proc(owner: ^Adapter) -> (u64, bool) {
-    controls: portable.Control_Tree_Publication
-    if portable.protected_control_snapshot(&owner^.control_publication, &controls) {
-        return controls.generation, true
-    }
-    publication: portable.Static_Publication
-    if portable.protected_snapshot(&owner^.publication, &publication) {
-        return publication.generation, true
-    }
-    return 0, false
 }
 
 // accesskit_action_supported admits only actions translated by the shared adapter.
@@ -577,7 +752,9 @@ accesskit_copy_text_value :: proc(
     request: ^accesskit.Action_Request,
     copied: ^portable.Queued_Action) -> portable.Action_Queue_Status {
     if !request^.data.has_value || request^.data.value.tag != .Value ||
-       request^.data.value.payload.value == nil {return .Invalid_Target}
+       request^.data.value.payload.value == nil {
+        return .Invalid_Target
+    }
     source := cast([^]u8)request^.data.value.payload.value
     for copied^.payload_length < len(copied^.payload) &&
         source[copied^.payload_length] != 0 {
@@ -585,7 +762,9 @@ accesskit_copy_text_value :: proc(
         copied^.payload_length += 1
     }
     if copied^.payload_length == len(copied^.payload) &&
-       source[copied^.payload_length] != 0 {return .Payload_Overflow}
+       source[copied^.payload_length] != 0 {
+        return .Payload_Overflow
+    }
     return .Ok
 }
 
@@ -607,7 +786,9 @@ accesskit_copy_selection_value :: proc(
     publication: ^portable.Control_Tree_Publication,
     copied: ^portable.Queued_Action) -> portable.Action_Queue_Status {
     if !request^.data.has_value ||
-       request^.data.value.tag != .Set_Text_Selection {return .Invalid_Target}
+       request^.data.value.tag != .Set_Text_Selection {
+        return .Invalid_Target
+    }
     selection := request^.data.value.payload.set_text_selection
     target := accesskit_text_run_target(publication, copied^.target_native_id)
     if selection.anchor.node != target || selection.focus.node != target ||
@@ -657,13 +838,20 @@ accesskit_copy_action_request :: proc(
     if owner == nil || request == nil {
        return .Invalid_Target
     }
-    generation, live := adapter_action_generation(owner)
-    if !live {
-       return .Closing
-    }
+    lease := portable.protected_control_acquire(&owner^.control_publication)
+    defer portable.protected_control_release(&owner^.control_publication, lease)
     control_publication: portable.Control_Tree_Publication
-    _ = portable.protected_control_snapshot(
-        &owner^.control_publication, &control_publication)
+    generation: u64
+    if lease != nil {
+        control_publication = lease^.value
+        generation = control_publication.generation
+    } else {
+        publication: portable.Static_Publication
+        if !portable.protected_snapshot(&owner^.publication, &publication) {
+            return .Closing
+        }
+        generation = publication.generation
+    }
     if !accesskit_action_supported(request^.action) {
        return .Invalid_Target
     }
@@ -707,4 +895,39 @@ adapter_close_admission :: proc(owner: ^Adapter) {
     portable.protected_close(&owner^.publication)
     portable.protected_control_close(&owner^.control_publication)
     portable.action_queue_close(&owner^.actions)
+    if owner^.native == nil {
+        _ = adapter_drain_memory(owner)
+    }
+}
+
+// adapter_finish_destroy joins callback leases before destroying native session memory.
+adapter_finish_destroy :: proc(owner: ^Adapter) {
+    portable.protected_control_wait_drained(&owner^.control_publication)
+    assert(adapter_drain_memory(owner))
+}
+
+// adapter_drain_memory releases the native domain only after every lease has drained.
+adapter_drain_memory :: proc(owner: ^Adapter) -> bool {
+    if owner == nil || !owner^.memory.initialized {
+        return true
+    }
+    if !owner^.control_publication.closing ||
+       !portable.protected_control_collect(&owner^.control_publication) {
+        return false
+    }
+    portable.native_id_registry_destroy(&owner^.native_ids)
+    delete(owner^.control_native_ids, storage.tlsf_owner_allocator(&owner^.memory))
+    delete(owner^.staged_native_ids, storage.tlsf_owner_allocator(&owner^.memory))
+    delete(owner^.staged_controls, storage.tlsf_owner_allocator(&owner^.memory))
+    delete(owner^.staged_index)
+    delete(owner^.projection_workspace, storage.tlsf_owner_allocator(&owner^.memory))
+    owner^.control_native_ids = nil
+    owner^.staged_native_ids = nil
+    owner^.staged_controls = nil
+    owner^.staged_index = nil
+    owner^.projection_workspace = nil
+    owner^.control_count = 0
+    owner^.control_publication.memory = nil
+    storage.tlsf_owner_destroy(&owner^.memory)
+    return true
 }

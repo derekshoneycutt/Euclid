@@ -320,12 +320,17 @@ context_menu_tab_traverses_from_origin :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
     semantic := state^.ui_runtime.semantic_focus
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    testing.expect_value(t, uisemantics.semantic_register_node(semantic, {
+        node = semantic_test_node(
+            state^.ui_runtime.context_menu.target, {}, .Presentation, 0)}),
+        viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_register_node(semantic, {
+        node = semantic_test_node({domain = .Animation_Control, local_id = 1},
+            {}, .Animation_Overlay, 0)}), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_publish(semantic),
+        viewmodel.Ui_Semantic_Status.Ok)
     snapshot := uisemantics.semantic_snapshot(semantic)
-    snapshot^.node_count = 2
-    snapshot^.nodes[0] = semantic_test_node(
-        state^.ui_runtime.context_menu.target, {}, .Presentation, 0)
-    snapshot^.nodes[1] = semantic_test_node({domain = .Animation_Control, local_id = 1},
-        {}, .Animation_Overlay, 0)
     uioverlay.context_menu_key(
         &state^.ui_runtime.context_menu, state^.ui_runtime.semantic_focus,
         {kind = .Press, key = .Tab})

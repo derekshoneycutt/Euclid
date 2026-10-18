@@ -34,7 +34,7 @@ library_entry_name_selection_flush_preserves_exact_text :: proc(t: ^testing.T) {
         return
     }
     uilibrary.tree_select_item(
-        params, &state^.ui_runtime.library.tree.projection.items[other_index])
+        params, state^.ui_runtime.library.tree.projection.items[other_index])
 
     entry_index := collections.find_entry(
         params.collections, entry_id)
@@ -60,6 +60,7 @@ semantic_favorites_actions_tab_activation_and_escape :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -98,6 +99,7 @@ semantic_favorites_name_editor_pointer_focus_and_identity :: proc(t: ^testing.T)
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -125,6 +127,37 @@ semantic_favorites_name_editor_pointer_focus_and_identity :: proc(t: ^testing.T)
     testing.expect_value(t, semantic^.logical_focus, editor_id)
     testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected)
     testing.expect_value(t, ji.selected_animation, &nodes[1])
+}
+
+// Keyboard editor focus maps placement-qualified semantics to the actual input widget.
+@(test)
+semantic_favorites_name_editor_keyboard_focus_routes_to_widget :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
+    state^.ui_runtime.semantic_focus = semantic
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_actions_test_fixture(state, &ji, &nodes)
+    prepared := tree_actions_test_semantic_frame(t, &params)
+    selected := state^.ui_runtime.library.tree.selected_item_id
+    row := tree_actions_test_row(&prepared.layout, selected)
+    _ = tree_actions_test_semantic_click(t, &params,
+        uilibrary.tree_actions_screen_rect(
+            row^.actions.toggle_rect, params.list_panel, 0))
+    semantic^.logical_focus = uilibrary.tree_actions_semantic_id(
+        params, selected, uilibrary.TREE_ENTRY_NAME_INPUT)
+    ui_apply_semantic_focus(
+        &state^.ui_runtime, {window_focused = true}, false)
+    expected := viewmodel.Ui_Focus_Target{
+        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+    }
+    testing.expect_value(t, state^.ui_runtime.input.interaction.logical_focus, expected)
+    testing.expect_value(t,
+        state^.ui_runtime.input.interaction_frame.effective_focus, expected)
+    testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected)
 }
 
 // Verify the editable field and its text run have stable parentage and actions.
@@ -158,6 +191,7 @@ semantic_favorites_actions_move_focus_and_boundary :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -194,6 +228,7 @@ semantic_favorites_actions_context_focus_repair :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -228,6 +263,7 @@ semantic_favorites_pointer_focus_and_visible_drawer_tail :: proc(t: ^testing.T) 
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -267,6 +303,7 @@ semantic_favorites_actions_reveal_and_scroll_clipping :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface

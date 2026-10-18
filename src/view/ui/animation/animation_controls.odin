@@ -70,7 +70,7 @@ Animation_Control_Descriptor :: struct {
     icon_id: uiwidgets.Icon_Button_Id,
     toggle: bool,
     label: string,
-    order: u16,
+    order: u32,
 }
 
 // Report whether animation controls should be presented and interactive.
@@ -350,25 +350,52 @@ toggle_animation_favorite :: proc(
         return false, false
     }
     entry_id, active := animation_favorite_entry(set, animation^.stable_id)
-    mutation := collections.Mutation{animation_id = animation^.stable_id}
-    if active {
-        mutation.kind = .Remove_Favorite
-        mutation.entry_id = entry_id
-    } else {
-        mutation.kind = .Add_Favorite
-        new_entry_id, found := animation_favorite_new_entry_id(set)
-        if !found {
-            log.error("animation_favorite_identity_unavailable")
-            return false, false
-        }
-        mutation.entry_id = new_entry_id
+    mutation, mutation_valid := animation_favorite_make_mutation(
+        set, animation^.stable_id, entry_id, active)
+    if !mutation_valid {
+        return active, false
     }
-    result := viewpreferences.settings_save_collection_mutation(state, mutation)
+    result := viewpreferences.settings_save_collection_mutation(
+        state, mutation, animation^.name)
     if result != .None {
         log.errorf("animation_favorite_toggle_rejected error=%v", result)
         return active, false
     }
     return !active, true
+}
+
+// Build an identity-qualified mutation for the current favorite membership.
+animation_favorite_make_mutation :: proc(
+    set: ^collections.Set,
+    animation_id: uuid.Identifier,
+    entry_id: uuid.Identifier,
+    active: bool) -> (collections.Mutation, bool) {
+    mutation := collections.Mutation{animation_id = animation_id}
+    if active {
+        mutation.kind = .Remove_Favorite
+        mutation.entry_id = entry_id
+        identity, identity_error :=
+            collections.placement_identity_for_entry(set, entry_id)
+        if identity_error != .None {
+            log.errorf("animation_favorite_identity_rejected policy=%v",
+                identity_error)
+            return {}, false
+        }
+        mutation.placement = identity
+    } else {
+        mutation.kind = .Add_Favorite
+        new_entry_id, found := animation_favorite_new_entry_id(set)
+        if !found {
+            log.error("animation_favorite_identity_unavailable")
+            return {}, false
+        }
+        mutation.entry_id = new_entry_id
+        mutation.placement = {
+            collection_id = collections.FAVORITES_COLLECTION_ID,
+            entry_id = new_entry_id,
+        }
+    }
+    return mutation, true
 }
 
 // Resolve animation-control interaction and commit its actions before simulation.

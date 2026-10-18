@@ -1,12 +1,18 @@
 package accessibility
 
 import "core:testing"
+import storage "../core/storage"
 
 // Verify native IDs are monotonic, reversible, retired, and never reused.
 @(test)
 native_id_registry_preserves_session_identity :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     registry: Native_Id_Registry
-    native_id_registry_init(&registry)
+    testing.expect(t, native_id_registry_init(&registry, &memory))
     root, root_ok := native_id_lookup(&registry, SYNTHETIC_NATIVE_ID)
     testing.expect(t, root_ok)
     testing.expect_value(t, root.domain, Identity_Domain.Synthetic)
@@ -31,8 +37,13 @@ native_id_registry_preserves_session_identity :: proc(t: ^testing.T) {
 // Verify UUID-backed semantic identities do not require an unrelated local ID.
 @(test)
 native_id_registry_accepts_stable_uuid_identity :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     registry: Native_Id_Registry
-    native_id_registry_init(&registry)
+    testing.expect(t, native_id_registry_init(&registry, &memory))
     identity := Qualified_Identity{domain = .Ui, owner_domain = 8}
     identity.stable_uuid[0] = 1
     native_id, ok := native_id_resolve(&registry, identity)
@@ -46,8 +57,13 @@ native_id_registry_accepts_stable_uuid_identity :: proc(t: ^testing.T) {
 // Verify zero local IDs are valid only when qualified by a UI owner domain.
 @(test)
 native_id_registry_accepts_owner_qualified_zero :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     registry: Native_Id_Registry
-    native_id_registry_init(&registry)
+    testing.expect(t, native_id_registry_init(&registry, &memory))
     identity := Qualified_Identity{domain = .Ui, owner_domain = 9, generation = 1}
     native_id, ok := native_id_resolve(&registry, identity)
     testing.expect(t, ok)
@@ -61,8 +77,13 @@ native_id_registry_accepts_owner_qualified_zero :: proc(t: ^testing.T) {
 // Verify the registry rejects exhaustion without wrapping or retargeting IDs.
 @(test)
 native_id_registry_rejects_capacity_exhaustion :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     registry: Native_Id_Registry
-    native_id_registry_init(&registry)
+    testing.expect(t, native_id_registry_init(&registry, &memory))
     for local_id in 2..=NATIVE_ID_CAPACITY {
         _, ok := native_id_resolve(&registry, {
             domain = .Ui,
@@ -70,22 +91,32 @@ native_id_registry_rejects_capacity_exhaustion :: proc(t: ^testing.T) {
         })
         testing.expect(t, ok)
     }
-    native_id, ok := native_id_resolve(&registry, {
+    _, beyond_old_limit := native_id_resolve(&registry, {
         domain = .Ui,
         local_id = u64(NATIVE_ID_CAPACITY + 1),
+    })
+    testing.expect(t, beyond_old_limit)
+    registry.next_id = 0
+    native_id, ok := native_id_resolve(&registry, {
+        domain = .Ui, local_id = u64(NATIVE_ID_CAPACITY + 2),
     })
     testing.expect(t, !ok)
     testing.expect_value(t, native_id, u64(0))
     testing.expect_value(t, registry.diagnostics.exhaustion, 1)
 }
 
-// Verify repeated popup retirement never reuses IDs and eventually rejects admission.
+// Verify repeated popup retirement reuses slots without reusing native IDs.
 @(test)
 native_id_registry_bounds_popup_retirement :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     registry: Native_Id_Registry
-    native_id_registry_init(&registry)
+    testing.expect(t, native_id_registry_init(&registry, &memory))
     previous := SYNTHETIC_NATIVE_ID
-    for generation in 1..=(NATIVE_ID_CAPACITY-1)/3 {
+    for generation in 1..=NATIVE_ID_CAPACITY * 2 {
         for local_id in 0..<3 {
             identity := Qualified_Identity{domain = .Ui, owner_domain = 11,
                 local_id = u64(local_id), generation = u64(generation)}
@@ -100,8 +131,9 @@ native_id_registry_bounds_popup_retirement :: proc(t: ^testing.T) {
     }
     _, admitted := native_id_resolve(&registry, {
         domain = .Ui, owner_domain = 11, generation = u64(NATIVE_ID_CAPACITY)})
-    testing.expect(t, !admitted)
-    testing.expect_value(t, registry.diagnostics.exhaustion, 1)
+    testing.expect(t, admitted)
+    testing.expect_value(t, registry.diagnostics.exhaustion, 0)
+    testing.expect_value(t, registry.count, 2)
 }
 
 // Verify callback ingress is FIFO, bounded, and denied after close.

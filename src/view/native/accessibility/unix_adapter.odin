@@ -156,5 +156,6 @@ unix_adapter_destroy :: proc(owner: ^Adapter) {
             cast(^accesskit.Unix_Adapter)owner^.native)
     }
     owner^.native = nil
+    adapter_finish_destroy(owner)
     adapter_record_diagnostic(owner, .Destroy)
 }

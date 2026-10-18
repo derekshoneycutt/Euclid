@@ -25,7 +25,7 @@ Integer_Slider_Params :: struct {
     font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
     semantic_domain: viewmodel.Ui_Node_Domain,
-    semantic_order: u16,
+    semantic_order: u32,
 }
 
 //   Prepared interaction and geometry for one integer slider draw.

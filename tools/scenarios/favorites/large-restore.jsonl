@@ -1,0 +1,10 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"library_placement":"expand_all"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"large_store"}
+{"assert_favorites":"name:favorite:Point|Large store persisted name"}
+{"library_placement":"focus:favorite:Point"}
+{"key":"home"}
+{"key":"end"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

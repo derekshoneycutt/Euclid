@@ -11,6 +11,30 @@ import "core:os"
 import "core:strings"
 import "core:testing"
 
+// TLSF domains stay typed and distinct from arena-reset and outer heap evidence.
+@(test)
+artifact_library_storage_preserves_domain_diagnostics :: proc(t: ^testing.T) {
+    text := artifact_allocations_json({
+        library_storage = {
+            display = {
+                initialized = true, current_live_bytes = 13, retained_bytes = 4096},
+            replay = {initialized = true, current_live_bytes = 17},
+            native = {initialized = true, current_live_bytes = 19},
+            placement_count = 1024, collection_count = 601, replay_joined = true,
+        },
+    })
+    decoded: struct {library: observe.Library_Storage}
+    testing.expect(t,
+        json.unmarshal_string(text, &decoded, allocator = context.allocator) == nil)
+    testing.expect_value(t, decoded.library.display.current_live_bytes, uint(13))
+    testing.expect_value(t, decoded.library.display.retained_bytes, uint(4096))
+    testing.expect_value(t, decoded.library.replay.current_live_bytes, uint(17))
+    testing.expect_value(t, decoded.library.native.current_live_bytes, uint(19))
+    testing.expect_value(t, decoded.library.placement_count, 1024)
+    testing.expect_value(t, decoded.library.collection_count, 601)
+    testing.expect(t, decoded.library.replay_joined)
+}
+
 // Tree facts retain their numeric types and remain separate from accordion state.
 @(test)
 artifact_tree_state_preserves_json_contract :: proc(t: ^testing.T) {
@@ -73,7 +97,7 @@ artifact_test_expect_failure_trace :: proc(t: ^testing.T, directory: string) {
 artifact_test_expect_standalone_trace :: proc(
     t: ^testing.T, directory: string, events: []trace.Event) {
     standalone_path := fmt.tprintf("%s/standalone.bin", directory)
-    testing.expect(t, write_trace(standalone_path, events, context.allocator))
+    testing.expect(t, write_trace(standalone_path, events))
     standalone, standalone_error := os.read_entire_file(
         standalone_path, context.allocator)
     defer delete(standalone)
@@ -167,8 +191,7 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     arenas.observed_present[allocation.Arena_Domain_Kind.Animation] = true
     arenas.matched[allocation.Arena_Domain_Kind.Animation] = true
     written := write_bundle(
-        directory, artifact_test_failure_bundle_data(events[:], arenas),
-        context.allocator)
+        directory, artifact_test_failure_bundle_data(events[:], arenas))
     testing.expect(t, written)
     if !written {
         return
@@ -179,6 +202,6 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     artifact_test_expect_standalone_trace(t, directory, events[:])
     artifact_test_expect_arena_allocations(t, directory)
     artifact_test_expect_viewport_state(t, directory)
-    testing.expect(t, !write_bundle("../outside", {}, context.allocator))
-    testing.expect(t, !write_trace("../outside.bin", events[:], context.allocator))
+    testing.expect(t, !write_bundle("../outside", {}))
+    testing.expect(t, !write_trace("../outside.bin", events[:]))
 }

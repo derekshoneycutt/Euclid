@@ -12,6 +12,7 @@ import uisemantics "semantics"
 import uiwidgets "widgets"
 import uilibrary "library"
 import uiaccordion "layout/accordion"
+import storage "../../core/storage"
 
 // Tree_Transition_Components retains only the bounded state used by tree geometry.
 Tree_Transition_Components :: struct {
@@ -53,6 +54,7 @@ tree_transition_geometry_seed_nodes :: proc(
 tree_transition_geometry_seed_projection :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     nodes: []bridgemodel.Euclid_Julia_Animation_Interface) {
+    assert(viewmodel.ui_tree_projection_init(projection))
     projection^.first_root = uilibrary.TREE_NO_ITEM
     projection^.last_root = uilibrary.TREE_NO_ITEM
     projection^.content_generation = 1
@@ -192,7 +194,7 @@ tree_transition_finishes_at_180_ms :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     frame := tree_transition_geometry_fixture(
         &state, &ji, nodes[:], {10, 20, 200, 200})
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_layout_prepare(frame.geometry, frame.admission, &layout)
     initial_height := layout.content_height
     testing.expect_value(t, initial_height, theme.TREE_ROW_HEIGHT * 6)
@@ -229,7 +231,7 @@ tree_transition_reverses_without_a_queue :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     frame := tree_transition_geometry_fixture(
         &state, &ji, nodes[:], {10, 20, 200, 200})
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_layout_prepare(frame.geometry, frame.admission, &layout)
     tree_transition_set_component_expanded(&state, &nodes[0], false)
     uilibrary.tree_layout_prepare(frame.geometry, frame.admission, &layout)
@@ -257,7 +259,7 @@ tree_transition_composes_concurrent_nested_branches :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     frame := tree_transition_geometry_fixture(
         &state, &ji, nodes[:], {10, 20, 200, 200})
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_layout_prepare(frame.geometry, frame.admission, &layout)
     tree_transition_set_component_expanded(&state, &nodes[0], false)
     tree_transition_set_component_expanded(&state, &nodes[4], false)
@@ -285,6 +287,7 @@ tree_transition_composes_concurrent_nested_branches :: proc(t: ^testing.T) {
 tree_transition_semantics_share_prepared_clips :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
@@ -362,6 +365,7 @@ tree_transition_hidden_release_cannot_activate :: proc(t: ^testing.T) {
 tree_transition_keyboard_reveal_finishes_required_path :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
@@ -389,7 +393,7 @@ tree_transition_invalidations_snap :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     for trigger in 0..<7 {
         runtime.library.tree.reveal_pending = false
         runtime.preferences.values.interface.reduce_motion = false
@@ -452,6 +456,22 @@ tree_transition_scroll_anchor_respects_input_and_clamp :: proc(t: ^testing.T) {
     testing.expect_value(t, prepared.scroll.maximum, theme.TREE_ROW_HEIGHT)
 }
 
+// Hidden Library preparation admits its workspace even before the first visible frame.
+@(test)
+tree_transition_first_hidden_preparation_admits_motion_storage :: proc(t: ^testing.T) {
+    runtime: viewmodel.Euclid_Ui_Runtime_State
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_transition_fixture(&runtime, &ji, nodes[:])
+    defer viewmodel.ui_tree_projection_destroy(&runtime.library.tree.projection)
+    testing.expect_value(t, len(runtime.library.motion.branches), 0)
+    prepared: uilibrary.Tree_List_Preparation
+    uilibrary.prepare_tree_visual(params, &prepared)
+    testing.expect_value(t, prepared.layout.count, 6)
+    testing.expect_value(t, runtime.library.motion.count, 6)
+    testing.expect(t, !runtime.library.motion.branches[0].running)
+}
+
 // Verify hidden Library preparation preserves user scroll and leaves no running branches.
 @(test)
 tree_transition_outgoing_preparation_is_noninteractive :: proc(t: ^testing.T) {
@@ -459,7 +479,7 @@ tree_transition_outgoing_preparation_is_noninteractive :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     tree_transition_set_expanded(&runtime, &nodes[0], false)
     uilibrary.tree_prepare_layout(params, &layout)
@@ -501,7 +521,7 @@ tree_transition_covers_full_catalogue_capacity :: proc(t: ^testing.T) {
     for index in 0..<len(nodes) {
         tree_transition_set_expanded(&runtime, &nodes[index], true)
     }
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     testing.expect_value(t, layout.count, len(nodes))
     testing.expect_value(t, runtime.library.motion.count, len(nodes))
@@ -549,6 +569,7 @@ tree_transition_pointer_toggle_uses_prepared_row :: proc(t: ^testing.T) {
 tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
@@ -564,10 +585,13 @@ tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
     params.mouse_input.sample_time_seconds = 1.05
     uilibrary.prepare_tree_list_panel(params, &prepared)
     testing.expect_value(t, runtime.library.motion.branches[0].start_seconds, f64(1))
-    runtime.library.search.active = true
-    runtime.library.search.visible_ids[0] = nodes[0].stable_id
-    runtime.library.search.visible_ids[1] = nodes[1].stable_id
-    runtime.library.search.visible_id_count = 2
+    search := &runtime.library.search
+    defer viewmodel.library_search_destroy(search)
+    testing.expect(t, viewmodel.library_search_reserve_ids(search, false, 2))
+    search.visible_ids[0] = nodes[0].stable_id
+    search.visible_ids[1] = nodes[1].stable_id
+    search.visible_id_count = 2
+    search.active = true
     uilibrary.prepare_tree_list_panel(params, &prepared)
     semantic^.commands[0].kind = .Collapse
     uilibrary.prepare_tree_list_panel(params, &prepared)
@@ -591,7 +615,7 @@ tree_transition_snap_cancels_removed_row_capture :: proc(t: ^testing.T) {
     runtime.input.press_owner = {
         active = true, kind = .List_Item,
         id = uilibrary.tree_placement_press_id(
-            &runtime.library.tree.projection.items[
+            runtime.library.tree.projection.items[
                 uilibrary.tree_projection_find(&runtime.library.tree.projection,
                     nodes[2].stable_id)])}
     runtime.preferences.values.interface.reduce_motion = true
@@ -660,14 +684,16 @@ tree_transition_prepared_disclosure_is_frozen :: proc(t: ^testing.T) {
     frame := tree_transition_geometry_fixture(
         &state, &ji, nodes[:], {10, 20, 200, 200})
     tree_transition_set_component_expanded(&state, &nodes[0], false)
+    defer viewmodel.library_search_destroy(&state.search)
+    testing.expect(t, viewmodel.library_search_reserve_ids(&state.search, false, 2))
     state.search.active = true
     state.search.visible_ids[0] = nodes[0].stable_id
     state.search.visible_ids[1] = nodes[1].stable_id
     state.search.visible_id_count = 2
     frame.geometry.search_active = true
     frame.admission.search_active = true
-    prepared: uilibrary.Tree_Prepared_Layout
-    next_frame: uilibrary.Tree_Prepared_Layout
+    prepared: viewmodel.Ui_Tree_Prepared_Layout
+    next_frame: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_layout_prepare(frame.geometry, frame.admission, &prepared)
     testing.expect(t, prepared.rows[0].expanded)
     state.search.active = false
@@ -676,4 +702,152 @@ tree_transition_prepared_disclosure_is_frozen :: proc(t: ^testing.T) {
     testing.expect(t, prepared.rows[0].expanded)
     uilibrary.tree_layout_prepare(frame.geometry, frame.admission, &next_frame)
     testing.expect(t, !next_frame.rows[0].expanded)
+}
+
+// Seed a data-controlled deep chain without imposing the former inline row limit.
+tree_transition_seed_deep_chain :: proc(
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    nodes: []bridgemodel.Euclid_Julia_Animation_Interface) {
+    ji^.animation_head = &nodes[0]
+    ji^.animation_count = len(nodes)
+    ji^.content_generation = 1
+    for index in 0..<len(nodes) {
+        identity := index + 1
+        nodes[index].stable_id[0] = byte(identity)
+        nodes[index].stable_id[1] = byte(identity >> 8)
+        nodes[index].name = "deep"
+        nodes[index].node_kind = .Animation
+        nodes[index].is_expanded = true
+        if index > 0 {
+            nodes[index].parent = &nodes[index - 1]
+            nodes[index - 1].first_child = &nodes[index]
+        }
+        if index + 1 < len(nodes) {
+            nodes[index].next_in_registry = &nodes[index + 1]
+        }
+    }
+}
+
+// Deep layouts grow typed projection buffers and keep scratch consumers independent.
+@(test)
+tree_layout_workspace_reuses_deep_topology :: proc(t: ^testing.T) {
+    state: Tree_Transition_Components
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes := make([]bridgemodel.Euclid_Julia_Animation_Interface, 600, context.allocator)
+    defer delete(nodes, context.allocator)
+    tree_transition_seed_deep_chain(&ji, nodes)
+    tree_transition_geometry_seed_projection(&state.tree.projection, nodes)
+    defer viewmodel.ui_tree_projection_destroy(&state.tree.projection)
+    frame := tree_transition_deep_geometry(
+        &state, &ji, {10, 20, 400, 800})
+    prepared: viewmodel.Ui_Tree_Prepared_Layout
+    scratch: viewmodel.Ui_Tree_Prepared_Layout
+    testing.expect(t, uilibrary.tree_layout_prepare(
+        frame.geometry, frame.admission, &prepared))
+    testing.expect_value(t, prepared.count, len(nodes))
+    testing.expect_value(t, prepared.rows[len(nodes) - 1].depth, len(nodes) - 1)
+    testing.expect(t, uilibrary.tree_layout_prepare_mode(
+        frame.geometry, frame.admission, &scratch, true))
+    testing.expect(t, &prepared.rows[0] != &scratch.rows[0])
+    testing.expect_value(t, prepared.rows[len(nodes) - 1].depth, len(nodes) - 1)
+    tree_transition_assert_repeated_preparation_is_reused(t, frame, &prepared)
+}
+
+// Bind deep-chain state to the same production geometry contract as the pane.
+tree_transition_deep_geometry :: proc(
+    state: ^Tree_Transition_Components,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    panel: geometry.Rectangle) -> Tree_Transition_Geometry {
+    projection := &state^.tree.projection
+    visibility := uilibrary.Tree_Visibility_Policy{
+        search = &state^.search,
+        projection = projection,
+    }
+    return {
+        geometry = {
+            ji = ji,
+            projection = projection,
+            motion = &state^.motion,
+            drawer = &state^.actions.drawer,
+            visibility = visibility,
+            panel = panel,
+            now_seconds = 1,
+        },
+        admission = {
+            generation = ji^.content_generation,
+            topology_revision = projection^.topology_revision,
+            count = projection^.count,
+            panel = panel,
+        },
+    }
+}
+
+// Assert unchanged backing after one thousand warmed tree preparations.
+tree_transition_assert_repeated_preparation_is_reused :: proc(
+    t: ^testing.T, frame: Tree_Transition_Geometry,
+    prepared: ^viewmodel.Ui_Tree_Prepared_Layout) {
+    owner := &frame.geometry.projection^.allocator
+    before := storage.tlsf_owner_diagnostics(owner)
+    for _ in 0..<1000 {
+        testing.expect(t, uilibrary.tree_layout_prepare(
+            frame.geometry, frame.admission, prepared))
+    }
+    after := storage.tlsf_owner_diagnostics(owner)
+    testing.expect_value(t, after.retained_bytes, before.retained_bytes)
+    testing.expect_value(t, after.live_allocation_count, before.live_allocation_count)
+}
+
+// Scroll and resize retain logical membership while bounds follow the final viewport.
+@(test)
+tree_semantics_retain_offscreen_identity_and_reveal :: proc(t: ^testing.T) {
+    semantic: viewmodel.Ui_Semantic_Focus_State
+    defer viewmodel.ui_semantic_focus_destroy(&semantic)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = &semantic}
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_transition_fixture(&runtime, &ji, nodes[:])
+    defer viewmodel.ui_tree_projection_destroy(&runtime.library.tree.projection)
+    params.list_panel = {10, 20, 75, theme.TREE_ROW_HEIGHT}
+    runtime.library.tree.reveal_pending = false
+    prepared: uilibrary.Tree_List_Preparation
+    testing.expect(t, uisemantics.semantic_begin(&semantic))
+    uilibrary.prepare_tree_list_panel(params, &prepared)
+    testing.expect_value(t, uisemantics.semantic_publish(&semantic),
+        viewmodel.Ui_Semantic_Status.Ok)
+    target := uilibrary.tree_item_semantic_id(&nodes[5])
+    snapshot := uisemantics.semantic_snapshot(&semantic)
+    index := uisemantics.semantic_node_index(snapshot, target)
+    testing.expect(t, index >= 0)
+    before := snapshot.nodes[index]
+    testing.expect(t, .Visible in before.states && .Focus in before.actions)
+    testing.expect_value(t, before.parent,
+        uilibrary.tree_item_semantic_id(&nodes[4]))
+    runtime.library.tree.scroll_y = theme.TREE_ROW_HEIGHT * 5
+    tree_transition_assert_scrolled_identity(t, params, &prepared, before)
+    params.list_panel = {10, 20, 320, theme.TREE_ROW_HEIGHT * 2}
+    uilibrary.tree_set_active_node(&runtime, &nodes[5], true)
+    tree_transition_assert_scrolled_identity(t, params, &prepared, before)
+    testing.expect(t, !runtime.library.tree.reveal_pending)
+}
+
+// Compare hierarchy and action identity after a new frame has scrolled or resized.
+tree_transition_assert_scrolled_identity :: proc(
+    t: ^testing.T, params: uilibrary.Tree_List_Params,
+    prepared: ^uilibrary.Tree_List_Preparation,
+    before: viewmodel.Ui_Semantic_Node) {
+    semantic := params.ui_runtime.semantic_focus
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    uilibrary.prepare_tree_list_panel(params, prepared)
+    testing.expect_value(t, uisemantics.semantic_publish(semantic),
+        viewmodel.Ui_Semantic_Status.Ok)
+    snapshot := uisemantics.semantic_snapshot(semantic)
+    index := uisemantics.semantic_node_index(snapshot, before.id)
+    testing.expect(t, index >= 0)
+    after := snapshot.nodes[index]
+    testing.expect_value(t, after.parent, before.parent)
+    testing.expect_value(t, after.level, before.level)
+    testing.expect_value(t, after.position_in_set, before.position_in_set)
+    testing.expect_value(t, after.actions, before.actions)
+    testing.expect(t, after.bounds.y != before.bounds.y)
+    testing.expect(t, after.clip_bounds.width <= params.list_panel.width)
 }

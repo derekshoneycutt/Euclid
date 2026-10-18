@@ -6,6 +6,7 @@ import collections "../collections"
 import core "../core"
 import testing "core:testing"
 import viewscenario "scenario"
+import viewmodel "ui/model"
 
 // Verify scenario order assertions follow authoritative sibling order after a swap.
 @(test)
@@ -45,9 +46,28 @@ scenario_favorites_assertion_fixture :: proc(
     id := ji^.animation_head^.stable_id
     assert(collections.favorites_add(set, id, id) == .None)
     projection := &state^.ui_runtime.library.tree.projection
-    projection^.count = 1
-    projection^.items[0].key = id
+    assert(viewmodel.ui_tree_projection_init(projection))
+    assert(viewmodel.ui_tree_projection_add_node(projection, {
+        key = id,
+        target_animation_id = id,
+        kind = .Placement,
+        parent = viewmodel.UI_TREE_NO_ITEM,
+        first_child = viewmodel.UI_TREE_NO_ITEM,
+        last_child = viewmodel.UI_TREE_NO_ITEM,
+        next_sibling = viewmodel.UI_TREE_NO_ITEM,
+        selectable = true,
+    }, "Point") == 0)
+    projection^.valid = true
     return state
+}
+
+// Release the isolated projection and Favorites fixture before freeing its root.
+scenario_favorites_assertion_destroy :: proc(
+    state: ^core.Euclid_General_State) {
+    viewmodel.ui_tree_projection_destroy(
+        &state^.ui_runtime.library.tree.projection)
+    collections.destroy(&state^.preferences_runtime.collections_state)
+    free(state, context.allocator)
 }
 
 // Reject missing baselines and distinguish stable placements from replacements.
@@ -57,7 +77,7 @@ scenario_favorites_identity_assertions :: proc(t: ^testing.T) {
     node.stable_id[0] = 1
     ji := bridgemodel.Euclid_Julia_Interface{animation_head = &node, animation_count = 1}
     state := scenario_favorites_assertion_fixture(&ji)
-    defer free(state, context.allocator)
+    defer scenario_favorites_assertion_destroy(state)
     runtime := viewscenario.Scenario_Runtime{state = state}
     testing.expect(t,
         !viewscenario.scenario_assert_favorites(
@@ -82,7 +102,7 @@ scenario_favorites_drawer_assertions :: proc(t: ^testing.T) {
     node.stable_id[0] = 1
     ji := bridgemodel.Euclid_Julia_Interface{animation_head = &node, animation_count = 1}
     state := scenario_favorites_assertion_fixture(&ji)
-    defer free(state, context.allocator)
+    defer scenario_favorites_assertion_destroy(state)
     runtime := viewscenario.Scenario_Runtime{state = state}
     state^.ui_runtime.library.actions.drawer = {entry_id = node.stable_id, open = true}
     testing.expect(t, viewscenario.scenario_assert_favorites(

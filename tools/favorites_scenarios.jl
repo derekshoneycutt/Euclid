@@ -2,7 +2,8 @@
 function favorites_fixture_sql(database::String, sql::String)
     sqlite = Sys.which("sqlite3")
     sqlite === nothing && error("Favorites acceptance requires the sqlite3 CLI")
-    result = capture_process(Cmd([sqlite, "-json", database, sql]))
+    result = capture_process(
+        Cmd([sqlite, "-bail", "-json", database]); input=IOBuffer(sql))
     result.exit_code == 0 || error("Favorites fixture SQL failed: $(result.stderr)")
     return isempty(strip(result.stdout)) ? nothing : JSON.parse(result.stdout)
 end
@@ -11,7 +12,7 @@ end
 function favorites_database_rows(database::String)
     sqlite = Sys.which("sqlite3")
     sqlite === nothing && error("Favorites acceptance requires the sqlite3 CLI")
-    sql = "SELECT hex(entry_id) AS placement,hex(animation_id) AS animation," *
+    sql = "SELECT hex(entry_id) AS placement,hex(animation_id) AS animation,custom_name," *
         "sibling_order FROM user_collection_entry " *
         "WHERE collection_id=(SELECT collection_id FROM user_collection " *
         "WHERE system_role='favorites') ORDER BY sibling_order"
@@ -218,32 +219,112 @@ function run_favorites_motion(binary::String, root::String)
     return records
 end
 
-"""Seed every real eligible catalog animation and verify maximum publication on relaunch."""
+"""Seed large durable membership and retained collections without custom collection UI."""
 function run_favorites_capacity(binary::String, root::String)
     directory = joinpath(root, "capacity")
     mkpath(directory)
     database = joinpath(directory, "user.sqlite3")
     initialized = favorites_launch(binary, directory, database, "initialize",
         joinpath("tools", "scenarios", "favorites", "initialize.jsonl"))
+    seed_favorites_capacity(database)
+    before = favorites_database_rows(database)
+    collections_before = favorites_collection_rows(database)
+    maximum = favorites_launch(binary, directory, database, "maximum",
+        joinpath("tools", "scenarios", "favorites", "capacity.jsonl"))
+    after = favorites_database_rows(database)
+    validate_favorites_capacity_rows(before, after)
+    favorites_collection_rows(database) == collections_before ||
+        error("Large save lost retained collections")
+    restored = favorites_launch(binary, directory, database, "large-restore",
+        joinpath("tools", "scenarios", "favorites", "large-restore.jsonl"))
+    favorites_database_rows(database) == after ||
+        error("Reopen changed durable membership")
+    favorites_collection_rows(database) == collections_before ||
+        error("Reopen changed retained collections")
+    validate_favorites_storage(maximum, length(after))
+    validate_favorites_storage(restored, length(after))
+    require_setting_row(settings_database_rows(database), "drawing", "dust_limit", 1400)
+    return [initialized, maximum, restored]
+end
+
+"""Inspect collection identities and metadata without decoding raw UUID blobs as text."""
+function favorites_collection_rows(database::String)
+    return favorites_fixture_sql(database,
+        "SELECT hex(collection_id),system_role,display_name,collection_order,is_read_only " *
+        "FROM user_collection ORDER BY collection_order")
+end
+
+"""Preserve untouched UUIDs, targets and names while Point is removed and re-added."""
+function validate_favorites_capacity_rows(before, after)
+    length(after) == length(before) || error("Large Favorites lost placements")
+    point = last(after)
+    point["custom_name"] == "Large store persisted name" ||
+        error("Large store name edit did not persist")
+    before_by_id = Dict(row["placement"] => row for row in before)
+    haskey(before_by_id, point["placement"]) &&
+        error("Re-added Point reused its removed placement UUID")
+    previous = only(filter(row -> row["animation"] == point["animation"], before))
+    [row["placement"] for row in after[1:end-1]] ==
+        [row["placement"] for row in before if
+            row["placement"] != previous["placement"]] ||
+        error("Large save changed unrelated sibling order")
+    for row in after[1:end-1]
+        prior = before_by_id[row["placement"]]
+        row["animation"] == prior["animation"] &&
+            row["custom_name"] == prior["custom_name"] ||
+            error("Large save changed an unrelated identity or name")
+    end
+    return nothing
+end
+
+"""Populate every eligible animation plus unavailable labels exceeding former text caps."""
+function seed_favorites_capacity(database::String)
     source = joinpath(REPOSITORY_ROOT, ".build", "content", "content-records.jsonl")
     nodes = filter(record -> get(record, "kind", 0) == 7,
         JSON.parse.(readlines(source)))
     eligible = filter(record -> record["node_kind"] == 1, nodes)
-    length(nodes) + length(eligible) + 2 <= 512 ||
-        error("Maximum Favorites exceeds combined tree capacity")
     sql = "BEGIN;"
     for (index, record) in enumerate(eligible)
         animation = replace(string(UUID(record["animation_id"])), "-" => "")
         placement = replace(string(uuid4()), "-" => "")
         sql *= "INSERT INTO user_collection_entry VALUES(X'$placement'," *
             "X'4555434C494400008000000000000001',NULL,$(index - 1)," *
-            "'animation',X'$animation');"
+            "'animation',X'$animation',NULL);"
+    end
+    for index in 1:max(512, 1024 - length(eligible))
+        animation = replace(string(uuid4()), "-" => "")
+        placement = replace(string(uuid4()), "-" => "")
+        label = "Unavailable $(lpad(index, 4, '0')) " * repeat("retained label ", 13)
+        sql *= "INSERT INTO user_collection_entry VALUES(X'$placement'," *
+            "X'4555434C494400008000000000000001',NULL,$(length(eligible) + index - 1)," *
+            "'animation',X'$animation','$label');"
+    end
+    for index in 1:600
+        collection = replace(string(uuid4()), "-" => "")
+        sql *= "INSERT INTO user_collection VALUES(X'$collection',NULL," *
+            "'Stored collection $index',$index,1);"
     end
     favorites_fixture_sql(database, sql * "COMMIT;")
-    maximum = favorites_launch(binary, directory, database, "maximum",
-        joinpath("tools", "scenarios", "favorites", "capacity.jsonl"))
-    length(favorites_database_rows(database)) == length(eligible) ||
-        error("Maximum Favorites did not round-trip durably")
-    require_setting_row(settings_database_rows(database), "drawing", "dust_limit", 1400)
-    return [initialized, maximum]
+    return nothing
+end
+
+"""Require separate display, joined replay and native TLSF diagnostics in the bundle."""
+function validate_favorites_storage(record, placements::Int)
+    evidence = JSON.parsefile(
+        joinpath(REPOSITORY_ROOT, record.artifacts, "allocations.json"))
+    sample = evidence["library"]
+    sample["placement_count"] == placements && sample["collection_count"] == 601 ||
+        error("Library TLSF evidence disagrees with the durable fixture")
+    sample["replay_joined"] || error("Replay evidence was sampled before join")
+    sample["semantic_text_bytes"] > 65536 ||
+        error("Large fixture did not cross the former semantic text cap")
+    sample["native_text_bytes"] > 32768 &&
+        sample["native_control_count"] >= placements ||
+        error("Large fixture did not cross the former native publication caps")
+    for domain in ("display", "projection", "replay")
+        sample[domain]["initialized"] || error("Missing $domain TLSF evidence")
+        sample[domain]["growth_failure_count"] == 0 ||
+            error("$domain TLSF admission failed")
+    end
+    return nothing
 end

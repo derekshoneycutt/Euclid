@@ -5,8 +5,10 @@ import viewcapture "../capture"
 import viewmessages "../messages"
 import app_core "../../core"
 import contentdata "../../core/content"
+import collections "../../collections"
 import testing "core:testing"
 import uilibrary "library"
+import viewmodel "model"
 
 // Allocate a stable complete content owner behind ordinary shell consumers.
 make_shell_test_state :: proc(t: ^testing.T) -> ^app_core.Euclid_General_State {
@@ -21,8 +23,12 @@ make_shell_test_state :: proc(t: ^testing.T) -> ^app_core.Euclid_General_State {
 
 // Release synthetic service ownership without attempting to join a nonexistent worker.
 destroy_shell_test_state :: proc(state: ^app_core.Euclid_General_State) {
+    viewmodel.ui_semantic_focus_destroy(&state^.semantic_focus)
+    viewmodel.ui_tree_projection_destroy(&state^.ui_runtime.library.tree.projection)
+    viewmodel.library_search_destroy(&state^.ui_runtime.library.search)
     contentdata.content_message_test_destroy(state.content_service.active_generation)
     free(state.content_service, context.allocator)
+    collections.destroy(&state^.preferences_runtime.collections_state)
     free(state, context.allocator)
 }
 

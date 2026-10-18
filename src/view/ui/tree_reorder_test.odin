@@ -3,6 +3,7 @@ package ui
 
 import bridgemodel "../../bridge/model"
 import collections "../../collections"
+import app_core "../../core"
 import testing "core:testing"
 import uilibrary "library"
 import uiaccordion "layout/accordion"
@@ -25,12 +26,12 @@ tree_reorder_test_open :: proc(
 // tree_reorder_test_move exercises the common owner and updates the caller's projection revision.
 tree_reorder_test_move :: proc(
     t: ^testing.T, params: ^uilibrary.Tree_List_Params,
-    direction: collections.Move_Direction) -> uilibrary.Tree_Prepared_Layout {
+    direction: collections.Move_Direction) -> viewmodel.Ui_Tree_Prepared_Layout {
     testing.expect(t, uilibrary.tree_actions_move(params^,
         params^.ui_runtime^.library.tree.selected_item_id, direction))
     params^.collections_revision =
         params^.general_state^.preferences_runtime.collection_revision
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params^, &layout)
     return layout
 }
@@ -38,13 +39,13 @@ tree_reorder_test_move :: proc(
 // tree_reorder_test_expect_positions compares sampled positions across a retarget boundary.
 tree_reorder_test_expect_positions :: proc(
     t: ^testing.T, before: viewmodel.Ui_Tree_Reorder_Motion,
-    after: ^uilibrary.Tree_Prepared_Layout) {
+    after: ^viewmodel.Ui_Tree_Prepared_Layout) {
     for index in 0..<before.count {
         row := before.rows[index]
         other := tree_actions_test_row(after, row.id)
         testing.expect(t, other != nil)
         if other != nil {
-            testing.expect_value(t, other^.content_y, row.from_y)
+            testing.expect(t, abs(other^.content_y - row.from_y) < 0.00001)
         }
     }
 }
@@ -68,7 +69,7 @@ tree_reorder_samples_attached_drawer_and_commits_immediately :: proc(t: ^testing
     tree_reorder_test_expect_positions(t, sampled, &start)
     params.mouse_input.sample_time_seconds +=
         uiaccordion.INTERFACE_TRANSITION_SECONDS * 0.5
-    middle: uilibrary.Tree_Prepared_Layout
+    middle: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &middle)
     row := tree_actions_test_row(&middle, owner)
     testing.expect(t,
@@ -79,7 +80,7 @@ tree_reorder_samples_attached_drawer_and_commits_immediately :: proc(t: ^testing
         uilibrary.TREE_ACTION_DRAWER_PADDING)
     testing.expect_value(t, middle.content_height, initial.layout.content_height)
     params.mouse_input.sample_time_seconds += uiaccordion.INTERFACE_TRANSITION_SECONDS
-    final: uilibrary.Tree_Prepared_Layout
+    final: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &final)
     testing.expect(t, !state^.ui_runtime.library.actions.reorder.active)
     for settled in final.rows[:final.count] {
@@ -130,10 +131,17 @@ tree_reorder_rejection_and_reduce_motion_preserve_model :: proc(t: ^testing.T) {
     testing.expect(t, !uilibrary.tree_actions_move(params,
         state^.ui_runtime.library.tree.selected_item_id, .Down))
     context.logger = prior_logger
-    testing.expect_value(t, state^.ui_runtime.library.actions.reorder, before)
+    after := state^.ui_runtime.library.actions.reorder
+    testing.expect_value(t, after.active, before.active)
+    testing.expect_value(t, after.count, before.count)
+    testing.expect_value(t, after.owner, before.owner)
+    testing.expect_value(t, after.generation, before.generation)
+    for index in 0..<before.count {
+        testing.expect_value(t, after.rows[index], before.rows[index])
+    }
     state^.ui_runtime.platform_reduce_motion = true
     params.reduce_motion = true
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     testing.expect(t, !state^.ui_runtime.library.actions.reorder.active)
     for row in layout.rows[:layout.count] {
@@ -154,32 +162,43 @@ tree_reorder_context_changes_settle_without_undo :: proc(t: ^testing.T) {
         prepared: uilibrary.Tree_List_Preparation
         _ = tree_reorder_test_open(t, &params)
         _ = tree_reorder_test_move(t, &params, .Down)
-        switch boundary {
-        case 0:
-            uilibrary.tree_actions_toggle(
-                params, state^.ui_runtime.library.tree.selected_item_id)
-        case 1:
-            state^.ui_runtime.library.tree.selected_item_id =
-                params.collections^.entries[0].id
-        case 2:
-            state^.ui_runtime.layout.active_accordion_section = .Settings
-        case 3:
-            state^.ui_runtime.library.search.active = true
-        case 4:
-            ji.content_generation += 1
-        case 5:
-            params.list_panel.width += 10
-        case 6:
-            parent := uilibrary.tree_projection_find(
-                &state^.ui_runtime.library.tree.projection,
-                collections.FAVORITES_COLLECTION_ID)
-            state^.ui_runtime.library.tree.projection.items[parent].expanded = false
-        case 7: params.collections_revision += 1
-        }
+        tree_reorder_test_apply_boundary(boundary, state, &ji, &params)
         uilibrary.prepare_tree_list_panel(params, &prepared)
-        testing.expect(t, !state^.ui_runtime.library.actions.reorder.active)
+        testing.expect_value(
+            t, state^.ui_runtime.library.actions.reorder.active, boundary == 7)
         tree_actions_test_expect_order(t, params.collections)
         destroy_shell_test_state(state)
+    }
+}
+
+// Apply one interruption between an accepted move and its visual settling.
+tree_reorder_test_apply_boundary :: proc(
+    boundary: int,
+    state: ^app_core.Euclid_General_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    params: ^uilibrary.Tree_List_Params) {
+    switch boundary {
+    case 0:
+        uilibrary.tree_actions_toggle(
+            params^, state^.ui_runtime.library.tree.selected_item_id)
+    case 1:
+        state^.ui_runtime.library.tree.selected_item_id =
+            params^.collections^.entries[0].id
+    case 2:
+        state^.ui_runtime.layout.active_accordion_section = .Settings
+    case 3:
+        state^.ui_runtime.library.search.active = true
+    case 4:
+        ji^.content_generation += 1
+    case 5:
+        params^.list_panel.width += 10
+    case 6:
+        parent := uilibrary.tree_projection_find(
+            &state^.ui_runtime.library.tree.projection,
+            collections.FAVORITES_COLLECTION_ID)
+        state^.ui_runtime.library.tree.projection.items[parent].expanded = false
+    case 7:
+        params^.collections_revision += 1
     }
 }
 
@@ -214,6 +233,7 @@ tree_reorder_keyboard_uses_sampled_semantic_geometry :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -255,7 +275,7 @@ tree_reorder_sampling_does_not_allocate_or_override_scrolling :: proc(t: ^testin
     defer mem.tracking_allocator_destroy(&tracker)
     prior_allocator := context.allocator
     context.allocator = mem.tracking_allocator(&tracker)
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     for frame in 0..<16 {
         params.mouse_input.sample_time_seconds += 0.005
         params.scroll_y^ = f32(frame)
@@ -274,6 +294,7 @@ tree_reorder_multiple_native_commands_keep_continuity :: proc(t: ^testing.T) {
     defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
@@ -288,7 +309,7 @@ tree_reorder_multiple_native_commands_keep_continuity :: proc(t: ^testing.T) {
     semantic^.command_count = 2
     uilibrary.tree_actions_apply_commands(params)
     params.collections_revision = state^.preferences_runtime.collection_revision
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     tree_reorder_test_expect_positions(t, before, &layout)
     testing.expect(t, !uilibrary.tree_actions_neighbor_exists(

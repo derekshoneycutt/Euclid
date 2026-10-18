@@ -40,6 +40,9 @@ store_open_internal :: proc(
         return {kind = .Invalid_Path}
     }
     defer delete(absolute_path, context.temp_allocator)
+    if !collections.initialize(&store^.collection_replay_workspace) {
+        return {kind = .Allocation}
+    }
     copy(store^.path[:len(absolute_path)], transmute([]u8)absolute_path)
     store^.path_length = len(absolute_path)
     if !sqlite.threading_supported() {
@@ -83,7 +86,8 @@ store_can_open :: proc(store: ^Store) -> bool {
         store^.insert_collection.handle == nil &&
         store^.insert_collection_entry.handle == nil &&
         store^.delete_collection_entries.handle == nil &&
-        store^.delete_collections.handle == nil
+        store^.delete_collections.handle == nil &&
+        !store^.collection_replay_workspace.initialized
 }
 
 // Select read/write access, falling back to read-only only for an existing file.
@@ -873,15 +877,17 @@ store_commit_transaction :: proc(
         store, changes, fail_after_changes)
     if !store_sqlite_error_is_clear(applied.failure) {
         return store_commit_rollback_result(
-            store, applied.failure, applied.failed_id, applied.has_failed_id)
+            store, {kind = .Write, sqlite_error = applied.failure},
+            applied.failed_id, applied.has_failed_id)
     }
     collection_error := store_apply_collection_mutations(store, mutations)
-    if !store_sqlite_error_is_clear(collection_error) {
+    if !store_error_is_clear(collection_error) {
         return store_commit_rollback_result(store, collection_error, {}, false)
     }
     commit_error := store_exec(store, "COMMIT")
     if !store_sqlite_error_is_clear(commit_error) {
-        return store_commit_rollback_result(store, commit_error, {}, false)
+        return store_commit_rollback_result(
+            store, {kind = .Write, sqlite_error = commit_error}, {}, false)
     }
     return {outcome = .Committed}
 }
@@ -1032,10 +1038,10 @@ store_enum_text :: proc(value: settings.Setting_Value) -> string {
 // Preserve the failed write result and report a rollback failure as unusable.
 store_commit_rollback_result :: proc(
     store: ^Store,
-    failure: sqlite.Error,
+    failure: Store_Error,
     id: settings.Setting_Id,
     has_id: bool) -> Commit_Result {
-    store_failure := store_rollback_failure(store, .Write, failure)
+    store_failure := store_rollback_failure(store, failure.kind, failure.sqlite_error)
     outcome := Commit_Outcome.Not_Committed
     if store^.status == .Unusable {
         outcome = .Store_Unusable
@@ -1117,6 +1123,7 @@ store_close :: proc(store: ^Store) -> Store_Error {
     } else {
         store^.status = .Unusable
     }
+    collections.destroy(&store^.collection_replay_workspace)
     return failure
 }
 

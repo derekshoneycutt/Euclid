@@ -13,7 +13,7 @@ Button_Semantics :: struct {
     role: viewmodel.Ui_Node_Role,
     states: viewmodel.Ui_Node_State,
     region: viewmodel.Ui_Focus_Region,
-    traversal_order: u16,
+    traversal_order: u32,
     clip_bounds: geometry.Rectangle,
     label: string,
     value: string,

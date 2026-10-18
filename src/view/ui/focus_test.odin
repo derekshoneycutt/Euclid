@@ -3,9 +3,71 @@ package ui
 import input "../input"
 import uuid "core:encoding/uuid"
 import testing "core:testing"
+import storage "../../core/storage"
 import viewmodel "model"
 import uisemantics "semantics"
 import uiwidgets "widgets"
+
+// Populate both reusable slots with widened facts and deterministic qualified IDs.
+semantic_test_publish_scaled :: proc(
+    t: ^testing.T, state: ^viewmodel.Ui_Semantic_Focus_State) {
+    testing.expect(t, uisemantics.semantic_begin(state))
+    for index in 0..<2048 {
+        node := semantic_test_node(semantic_test_id(.Animation_Tree, u64(index + 1)),
+            {}, .Accordion_Content, u32(index + 70000))
+        node.level = 70000
+        node.position_in_set = 70000
+        node.set_size = 80000
+        testing.expect_value(t, uisemantics.semantic_register_node(state,
+            {node = node, label = "Reusable semantic node"}),
+            viewmodel.Ui_Semantic_Status.Ok)
+    }
+    testing.expect_value(t, uisemantics.semantic_publish(state),
+        viewmodel.Ui_Semantic_Status.Ok)
+}
+
+// Unchanged publication retains logical generation and warmed owner pressure.
+@(test)
+semantic_scaled_publication_reuses_storage_and_indexed_work :: proc(t: ^testing.T) {
+    state: viewmodel.Ui_Semantic_Focus_State
+    defer viewmodel.ui_semantic_focus_destroy(&state)
+    semantic_test_publish_scaled(t, &state)
+    semantic_test_publish_scaled(t, &state)
+    generation := uisemantics.semantic_snapshot(&state).generation
+    before := storage.tlsf_owner_diagnostics(&state.snapshots[0].allocator)
+    for _ in 0..<1000 {
+        semantic_test_publish_scaled(t, &state)
+    }
+    after := storage.tlsf_owner_diagnostics(&state.snapshots[0].allocator)
+    snapshot := uisemantics.semantic_snapshot(&state)
+    testing.expect_value(t, snapshot.generation, generation)
+    testing.expect_value(t, snapshot.nodes[2047].level, u32(70000))
+    testing.expect_value(t, snapshot.nodes[2047].traversal_order, u32(72047))
+    testing.expect(t, snapshot.lookup_probes < u64(snapshot.node_count * 20))
+    testing.expect_value(t, after.retained_bytes, before.retained_bytes)
+    testing.expect_value(t, after.live_allocation_count, before.live_allocation_count)
+}
+
+// Rejected cyclic hierarchy keeps the committed publication and focus alive.
+@(test)
+semantic_parent_cycles_reject_without_replacing_snapshot :: proc(t: ^testing.T) {
+    state: viewmodel.Ui_Semantic_Focus_State
+    defer viewmodel.ui_semantic_focus_destroy(&state)
+    semantic_test_publish_scaled(t, &state)
+    accepted := uisemantics.semantic_snapshot(&state)
+    testing.expect(t, uisemantics.semantic_begin(&state))
+    first := semantic_test_id(.Animation_Tree, 1)
+    second := semantic_test_id(.Animation_Tree, 2)
+    testing.expect_value(t, uisemantics.semantic_register_node(&state,
+        {node = semantic_test_node(first, second), label = "first"}),
+        viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_register_node(&state,
+        {node = semantic_test_node(second, first, .Accordion_Content, 1),
+         label = "second"}), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_publish(&state),
+        viewmodel.Ui_Semantic_Status.Missing_Parent)
+    testing.expect_value(t, uisemantics.semantic_snapshot(&state), accepted)
+}
 
 // semantic_test_id constructs one static domain-qualified test identity.
 semantic_test_id :: proc(
@@ -18,7 +80,7 @@ semantic_test_id :: proc(
 semantic_test_node :: proc(
     id: viewmodel.Ui_Node_Id, parent: viewmodel.Ui_Node_Id = {},
     region: viewmodel.Ui_Focus_Region = .Accordion_Content,
-    order: u16 = 0) -> viewmodel.Ui_Semantic_Node {
+    order: u32 = 0) -> viewmodel.Ui_Semantic_Node {
     return {
         id = id,
         parent = parent,
@@ -52,6 +114,7 @@ semantic_identity_is_domain_and_generation_qualified :: proc(t: ^testing.T) {
 semantic_registration_owns_utf8_and_publishes_atomically :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     label := [6]u8{'R', 'e', 's', 'u', 'm', 'e'}
     testing.expect(t, uisemantics.semantic_begin(state))
     status := uisemantics.semantic_register_node(state, {
@@ -81,6 +144,7 @@ semantic_registration_owns_utf8_and_publishes_atomically :: proc(t: ^testing.T) 
 semantic_duplicate_rejects_publication :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     id := semantic_test_id(.Settings_Control, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state,
@@ -108,6 +172,7 @@ semantic_duplicate_rejects_publication :: proc(t: ^testing.T) {
 semantic_validation_rejects_invalid_relations :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     missing := semantic_test_id(.Accordion, 9)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
@@ -135,17 +200,18 @@ semantic_validation_rejects_invalid_relations :: proc(t: ^testing.T) {
 semantic_registration_rejects_text_atomically :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     invalid := [1]u8{0xff}
     testing.expect(t, uisemantics.semantic_begin(state))
     staging := uisemantics.semantic_staging_snapshot(state)
-    staging^.text_count = viewmodel.UI_SEMANTIC_TEXT_CAPACITY - 1
+    staging^.text_count = int(max(u32)) - 1
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Gif_Control, 1)),
         label = "Too long",
     }), viewmodel.Ui_Semantic_Status.Text_Capacity)
     testing.expect_value(t, staging^.node_count, 0)
     testing.expect_value(t, staging^.text_count,
-        viewmodel.UI_SEMANTIC_TEXT_CAPACITY - 1)
+        int(max(u32)) - 1)
 
     testing.expect(t, uisemantics.semantic_begin(state))
     staging = uisemantics.semantic_staging_snapshot(state)
@@ -157,34 +223,36 @@ semantic_registration_rejects_text_atomically :: proc(t: ^testing.T) {
     testing.expect_value(t, staging^.text_count, 0)
 }
 
-// Verify maximum node capacity publishes and rejects one additional node atomically.
+// Verify actual-sized snapshots grow beyond the former fixed node capacity.
 @(test)
 semantic_registration_enforces_node_capacity :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     testing.expect(t, uisemantics.semantic_begin(state))
-    for index in 0..<viewmodel.UI_SEMANTIC_NODE_CAPACITY {
+    count := 2048
+    for index in 0..<count {
         testing.expect_value(t, uisemantics.semantic_register_node(state, {
             node = semantic_test_node(semantic_test_id(.Application, u64(index + 1)),
-                {}, .Animation_Overlay, u16(index)),
+                {}, .Animation_Overlay, u32(index)),
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_snapshot(state)^.node_count,
-        viewmodel.UI_SEMANTIC_NODE_CAPACITY)
+        count)
     testing.expect_value(t, state^.diagnostics.node_high_water,
-        viewmodel.UI_SEMANTIC_NODE_CAPACITY)
+        count)
 
     testing.expect(t, uisemantics.semantic_begin(state))
     staging := uisemantics.semantic_staging_snapshot(state)
-    staging^.node_count = viewmodel.UI_SEMANTIC_NODE_CAPACITY
+    staging^.node_count = max(int)
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Application, 9999)),
         label = "Overflow",
     }), viewmodel.Ui_Semantic_Status.Node_Capacity)
     testing.expect_value(t, staging^.node_count,
-        viewmodel.UI_SEMANTIC_NODE_CAPACITY)
+        max(int))
     testing.expect_value(t, staging^.text_count, 0)
 }
 
@@ -193,7 +261,8 @@ semantic_registration_enforces_node_capacity :: proc(t: ^testing.T) {
 semantic_registration_accepts_maximum_text_capacity :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
-    half := viewmodel.UI_SEMANTIC_TEXT_CAPACITY / 2
+    defer viewmodel.ui_semantic_focus_destroy(state)
+    half := 70000
     text := make([]u8, half, context.allocator)
     defer delete(text, context.allocator)
     for &byte in text {
@@ -211,9 +280,9 @@ semantic_registration_accepts_maximum_text_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_snapshot(state)^.text_count,
-        viewmodel.UI_SEMANTIC_TEXT_CAPACITY)
+        half * 2)
     testing.expect_value(t, state^.diagnostics.text_high_water,
-        viewmodel.UI_SEMANTIC_TEXT_CAPACITY)
+        half * 2)
 }
 
 // Publish an ordered set of enabled controls for focus-repair tests.
@@ -223,7 +292,7 @@ semantic_test_publish_controls :: proc(
     testing.expect(t, uisemantics.semantic_begin(state))
     for id, index in ids {
         testing.expect_value(t, uisemantics.semantic_register_node(state, {
-            node = semantic_test_node(id, {}, .Accordion_Content, u16(index)),
+            node = semantic_test_node(id, {}, .Accordion_Content, u32(index)),
             label = "Control",
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
@@ -236,6 +305,7 @@ semantic_test_publish_controls :: proc(
 semantic_focus_repairs_deterministically :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     first := semantic_test_id(.Settings_Control, 1)
     middle := semantic_test_id(.Settings_Control, 2)
     last := semantic_test_id(.Settings_Control, 3)
@@ -272,6 +342,7 @@ semantic_focus_repairs_deterministically :: proc(t: ^testing.T) {
 semantic_focus_repairs_within_composite_first :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     parent := semantic_test_id(.Animation_Tree, 1)
     first := semantic_test_id(.Animation_Tree, 2)
     middle := semantic_test_id(.Animation_Tree, 3)
@@ -282,7 +353,7 @@ semantic_focus_repairs_within_composite_first :: proc(t: ^testing.T) {
         node_parent := index == 0 ? viewmodel.Ui_Node_Id{} : parent
         testing.expect_value(t, uisemantics.semantic_register_node(state, {
             node = semantic_test_node(id, node_parent, .Accordion_Content,
-                u16(index)), label = "Tree node",
+                u32(index)), label = "Tree node",
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
     testing.expect_value(t,
@@ -291,7 +362,7 @@ semantic_focus_repairs_within_composite_first :: proc(t: ^testing.T) {
 
     testing.expect(t, uisemantics.semantic_begin(state))
     remaining := [3]viewmodel.Ui_Node_Id{parent, first, last}
-    orders := [3]u16{0, 1, 3}
+    orders := [3]u32{0, 1, 3}
     for id, index in remaining {
         node_parent := index == 0 ? viewmodel.Ui_Node_Id{} : parent
         testing.expect_value(t, uisemantics.semantic_register_node(state, {
@@ -309,6 +380,7 @@ semantic_focus_repairs_within_composite_first :: proc(t: ^testing.T) {
 semantic_keyboard_traversal_is_ordered_and_bounded :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     first := semantic_test_id(.Animation_Control, 1)
     second := semantic_test_id(.Accordion, 1)
     third := semantic_test_id(.Settings_Control, 1)
@@ -343,6 +415,7 @@ semantic_keyboard_traversal_is_ordered_and_bounded :: proc(t: ^testing.T) {
 semantic_keyboard_traversal_uses_composite_anchor :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     tree := semantic_test_id(.Animation_Tree, 1)
     item := semantic_test_id(.Animation_Tree, 2)
     after := semantic_test_id(.Settings_Control, 1)
@@ -373,6 +446,7 @@ semantic_keyboard_traversal_uses_composite_anchor :: proc(t: ^testing.T) {
 semantic_terminal_escape_preserves_plain_tab :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     terminal := semantic_test_id(.Terminal, 1)
     after := semantic_test_id(.Accordion, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
@@ -402,6 +476,7 @@ semantic_terminal_escape_preserves_plain_tab :: proc(t: ^testing.T) {
 semantic_keyboard_routes_role_commands :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     slider := semantic_test_id(.Settings_Control, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     node := semantic_test_node(slider)
@@ -433,6 +508,7 @@ semantic_keyboard_routes_role_commands :: proc(t: ^testing.T) {
 semantic_keyboard_leaves_tab_unclaimed_without_target :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
 
     claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
@@ -446,6 +522,7 @@ semantic_keyboard_leaves_tab_unclaimed_without_target :: proc(t: ^testing.T) {
 semantic_terminal_ownership_suppresses_control_commands :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     button := semantic_test_id(.Accordion, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
@@ -466,6 +543,7 @@ semantic_terminal_ownership_suppresses_control_commands :: proc(t: ^testing.T) {
 semantic_publication_marks_keyboard_focus_visible :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     button := semantic_test_id(.Animation_Control, 1)
     state^.logical_focus = button
     state^.focus_origin = .Keyboard
@@ -501,6 +579,7 @@ semantic_publication_marks_keyboard_focus_visible :: proc(t: ^testing.T) {
 semantic_external_button_actions_validate_and_coalesce :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     button := semantic_test_id(.Animation_Control, 2101)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
@@ -532,6 +611,7 @@ semantic_external_button_actions_validate_and_coalesce :: proc(t: ^testing.T) {
 semantic_external_slider_value_retains_payload :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     slider := semantic_test_id(.Settings_Control, 6101)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
@@ -554,6 +634,7 @@ semantic_external_slider_value_retains_payload :: proc(t: ^testing.T) {
 semantic_external_button_actions_reject_invalid_targets :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     button := semantic_test_id(.Animation_Control, 2101)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
@@ -577,6 +658,7 @@ semantic_external_button_actions_reject_invalid_targets :: proc(t: ^testing.T) {
 semantic_keyboard_rejects_unadvertised_action :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     button := semantic_test_id(.Gif_Control, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     node := semantic_test_node(button)
@@ -598,6 +680,7 @@ semantic_keyboard_rejects_unadvertised_action :: proc(t: ^testing.T) {
 semantic_terminal_reverse_escape_wraps_backward :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
     first := semantic_test_id(.Animation_Control, 1)
     terminal := semantic_test_id(.Terminal, 1)
     testing.expect(t, uisemantics.semantic_begin(state))

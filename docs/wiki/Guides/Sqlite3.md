@@ -285,6 +285,9 @@ Saving indicates an active transaction, and Saved requires no queued edits or
 unresolved failure. A failed batch remains unresolved through retries until a
 committed batch covers its revision.
 
+Replay uses a separate Store-owned TLSF `Set`. Allocation failures retain their
+structured error through rollback; save work joins before replay sampling or close.
+
 ## Shared SQLite Mechanics
 
 `src/sqlite/` wraps the narrow native binding with explicit connection and statement

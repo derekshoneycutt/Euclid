@@ -316,6 +316,11 @@ ui_apply_semantic_focus :: proc(
     if !present {
         return
     }
+    id := runtime^.semantic_focus^.logical_focus
+    if target.kind == .Input_Box && id.domain == .Library_Action &&
+        id.local_id == uilibrary.TREE_ENTRY_NAME_INPUT {
+        target.id = uilibrary.TREE_ENTRY_NAME_INPUT_ID
+    }
     routed := &runtime^.input.interaction_frame
     prior_terminal := runtime^.input.interaction.terminal_effectively_focused
     terminal_focused := uiterminal.ui_terminal_effectively_focused(

@@ -24,7 +24,7 @@ Checkbox_Params :: struct {
     font_resolver: view_font.Font_Resolver,
     semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     semantic_domain: viewmodel.Ui_Node_Domain,
-    semantic_order: u16,
+    semantic_order: u32,
     semantic_clip: geometry.Rectangle,
 }
 

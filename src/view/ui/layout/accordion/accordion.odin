@@ -89,7 +89,7 @@ register_accordion_header :: proc(
         states = states,
         actions = {.Focus, .Activate, .Expand},
         region = .Accordion_Headers,
-        traversal_order = u16(order),
+        traversal_order = u32(order),
         bounds = geometry.Rectangle(rect),
         clip_bounds = geometry.Rectangle(ctx.panel),
         label = descriptor.label,
@@ -337,7 +337,7 @@ accordion_header_params :: proc(
     ctx: Accordion_Context,
     descriptor: Accordion_Section_Descriptor,
     rect: geometry.Rectangle,
-    order: u16) -> uiwidgets.Text_Button_Params {
+    order: u32) -> uiwidgets.Text_Button_Params {
     id := accordion_semantic_id(descriptor.section)
     return {
         id = ACCORDION_HEADER_ID_BASE + int(descriptor.section),
@@ -383,7 +383,7 @@ prepare_accordion_header_interactions :: proc(
         result^.headers[section_index] = uiwidgets.update_text_button(
             accordion_header_params(
                 ctx, descriptor, result^.layout.headers[section_index],
-                u16(section_index)),
+                u32(section_index)),
             ctx.press_owner)
         id := accordion_semantic_id(descriptor.section)
         if result^.headers[section_index].action.activated ||

@@ -27,6 +27,22 @@ import viewscenario "scenario"
 import viewsimulation "simulation"
 import uiaccordion "ui/layout/accordion"
 
+// Prepare one minimal indexed tree node for scenario rejection fixtures.
+scenario_runtime_test_add_tree_item :: proc(
+    state: ^core.Euclid_General_State,
+    item: viewmodel.Ui_Tree_Item) -> bool {
+    projection := &state^.ui_runtime.library.tree.projection
+    if !viewmodel.ui_tree_projection_init(projection) {
+        return false
+    }
+    if viewmodel.ui_tree_projection_add_node(projection, item, "") ==
+        viewmodel.UI_TREE_NO_ITEM {
+        return false
+    }
+    projection^.valid = true
+    return true
+}
+
 // Verify swap sampling freezes test input time without allowing time to run backwards on resume.
 @(test)
 scenario_reorder_sampling_is_bounded_and_monotonic :: proc(t: ^testing.T) {
@@ -80,6 +96,8 @@ scenario_favorites_pointer_edges_are_one_shot :: proc(t: ^testing.T) {
 scenario_favorites_unpublished_actions_are_rejected :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_tree_projection_destroy(
+        &state^.ui_runtime.library.tree.projection)
     ji: bridgemodel.Euclid_Julia_Interface
     node: bridgemodel.Euclid_Julia_Animation_Interface
     node.name = "Point"
@@ -94,8 +112,15 @@ scenario_favorites_unpublished_actions_are_rejected :: proc(t: ^testing.T) {
         &runtime, "press:favorite:Point"))
     testing.expect(t, !viewscenario.scenario_library_placement(
         &runtime, "press:catalogue:Unknown"))
-    state^.ui_runtime.library.tree.projection.count = 1
-    state^.ui_runtime.library.tree.projection.items[0].key = node.stable_id
+    testing.expect(t, scenario_runtime_test_add_tree_item(state, {
+        key = node.stable_id,
+        target_animation_id = node.stable_id,
+        kind = .Animation,
+        parent = viewmodel.UI_TREE_NO_ITEM,
+        first_child = viewmodel.UI_TREE_NO_ITEM,
+        last_child = viewmodel.UI_TREE_NO_ITEM,
+        next_sibling = viewmodel.UI_TREE_NO_ITEM,
+    }))
     testing.expect(t, !viewscenario.scenario_library_placement(
         &runtime, "press:catalogue:Point"))
     testing.expect(t, !runtime.pointer_override)
@@ -106,8 +131,11 @@ scenario_favorites_unpublished_actions_are_rejected :: proc(t: ^testing.T) {
 scenario_favorites_hidden_and_disabled_rows_reject_input :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.ui_tree_projection_destroy(
+        &state^.ui_runtime.library.tree.projection)
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(focus, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(focus)
     ji: bridgemodel.Euclid_Julia_Interface
     node: bridgemodel.Euclid_Julia_Animation_Interface
     node.name = "Point"
@@ -116,24 +144,45 @@ scenario_favorites_hidden_and_disabled_rows_reject_input :: proc(t: ^testing.T) 
     ji.animation_count = 1
     state^.julia_interface = &ji
     state^.ui_runtime.semantic_focus = focus
-    state^.ui_runtime.library.tree.projection.count = 1
-    item := &state^.ui_runtime.library.tree.projection.items[0]
-    item^.key = node.stable_id
+    testing.expect(t, scenario_runtime_test_add_tree_item(state, {
+        key = node.stable_id,
+        target_animation_id = node.stable_id,
+        kind = .Animation,
+        parent = viewmodel.UI_TREE_NO_ITEM,
+        first_child = viewmodel.UI_TREE_NO_ITEM,
+        last_child = viewmodel.UI_TREE_NO_ITEM,
+        next_sibling = viewmodel.UI_TREE_NO_ITEM,
+    }))
+    item := state^.ui_runtime.library.tree.projection.items[0]
     runtime := viewscenario.Scenario_Runtime{state = state}
-    variants := [?]bool{true, false}
-    for hidden in variants {
-        testing.expect(t, uisemantics.semantic_begin(focus))
-        status := uisemantics.semantic_register_node(focus, {
-            node = {id = uilibrary.tree_placement_semantic_id(item), role = .Tree_Item,
-                states = {.Enabled} if hidden else {.Visible},
-                bounds = {0, 0, 100, 20}}})
-        testing.expect_value(t, status, viewmodel.Ui_Semantic_Status.Ok)
-        testing.expect_value(t,
-            uisemantics.semantic_publish(focus), viewmodel.Ui_Semantic_Status.Ok)
-        testing.expect(t, !viewscenario.scenario_library_placement(
-            &runtime, "press:catalogue:Point"))
-        testing.expect(t, !runtime.pointer_override)
-    }
+    scenario_runtime_test_reject_hidden_tree_row(
+        t, focus, &runtime, item, true)
+    scenario_runtime_test_reject_hidden_tree_row(
+        t, focus, &runtime, item, false)
+}
+
+// Ensure hidden and disabled semantic rows reject pointer actions.
+scenario_runtime_test_reject_hidden_tree_row :: proc(
+    t: ^testing.T,
+    focus: ^viewmodel.Ui_Semantic_Focus_State,
+    runtime: ^viewscenario.Scenario_Runtime,
+    item: ^viewmodel.Ui_Tree_Item,
+    hidden: bool) {
+    testing.expect(t, uisemantics.semantic_begin(focus))
+    status := uisemantics.semantic_register_node(focus, {
+        node = {
+            id = uilibrary.tree_placement_semantic_id(item),
+            role = .Tree_Item,
+            states = {.Enabled} if hidden else {.Visible},
+            bounds = {0, 0, 100, 20},
+        },
+    })
+    testing.expect_value(t, status, viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t,
+        uisemantics.semantic_publish(focus), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect(t, !viewscenario.scenario_library_placement(
+        runtime, "press:catalogue:Point"))
+    testing.expect(t, !runtime^.pointer_override)
 }
 
 // Verify scenario edits share control policy and assertions observe intent, not hardware fallback.
@@ -222,11 +271,16 @@ scenario_runtime_focus_assertion_uses_committed_snapshot :: proc(t: ^testing.T) 
     defer free(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
     semantic^.logical_focus = {.Terminal, 0, {}, 4}
-    snapshot := &semantic^.snapshots[semantic^.committed_index]
-    snapshot^.nodes[0] = {id = semantic^.logical_focus, role = .Terminal}
-    snapshot^.node_count = 1
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    testing.expect_value(t, uisemantics.semantic_register_node(semantic, {
+        node = {id = semantic^.logical_focus, role = .Terminal,
+            states = {.Visible, .Enabled, .Focusable}}}),
+        viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_publish(semantic),
+        viewmodel.Ui_Semantic_Status.Ok)
     runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
     command := scenario.Command{kind = .Assert_Focus}
@@ -237,6 +291,10 @@ scenario_runtime_focus_assertion_uses_committed_snapshot :: proc(t: ^testing.T) 
 
     testing.expect(t, handled && accepted)
     command.text, _ = scenario.text_copy("presentation")
+    handled, accepted = viewscenario.scenario_issue_generic_action(
+        &runtime, &command, &identity)
+    testing.expect(t, handled && !accepted)
+    state^.ui_runtime.semantic_focus = nil
     handled, accepted = viewscenario.scenario_issue_generic_action(
         &runtime, &command, &identity)
     testing.expect(t, handled && !accepted)
@@ -512,6 +570,7 @@ runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
     runtime: viewmodel.Euclid_Ui_Runtime_State
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(focus, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(focus)
     testing.expect(t, init_ui_runtime_fields(&runtime, focus, &settings))
     testing.expect_value(t, runtime.layout.current_layout_mode,
         viewmodel.Ui_Layout_Mode.Portrait)

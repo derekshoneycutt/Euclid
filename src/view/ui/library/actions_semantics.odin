@@ -89,7 +89,7 @@ tree_actions_command_item :: proc(
     if index == TREE_NO_ITEM {
         return nil
     }
-    item := &params.ui_runtime^.library.tree.projection.items[index]
+    item := params.ui_runtime^.library.tree.projection.items[index]
     if !tree_actions_eligible(
         &params.ui_runtime^.library.tree.projection,
         params.ui_runtime^.library.tree.selected_item_id,
@@ -145,8 +145,10 @@ tree_actions_command_visible :: proc(
     params: Tree_List_Params,
     item: ^viewmodel.Ui_Tree_Item,
     action: u64) -> bool {
-    layout: Tree_Prepared_Layout
-    tree_prepare_layout(params, &layout)
+    layout: viewmodel.Ui_Tree_Prepared_Layout
+    if !tree_prepare_layout_scratch(params, &layout) {
+        return false
+    }
     row := tree_layout_find_item(&layout, item)
     if row == nil || !row^.logical || !row^.actions.eligible {
         return false
@@ -175,7 +177,7 @@ tree_actions_command_visible :: proc(
 
 // tree_actions_move_command_visible admits only an enabled, clipped move button.
 tree_actions_move_command_visible :: proc(
-    params: Tree_List_Params, row: ^Tree_Prepared_Row, action: u64) -> bool {
+    params: Tree_List_Params, row: ^viewmodel.Ui_Tree_Prepared_Row, action: u64) -> bool {
     direction := collections.Move_Direction.Up if action == TREE_ACTION_UP else .Down
     if !tree_actions_neighbor_exists(params.collections, row^.item^.key, direction) {
         return false
@@ -263,14 +265,14 @@ tree_actions_prepare_move_focus :: proc(
         motion^.height = tree_actions_full_height(
             params.list_panel.width, tree_item_depth(
                 &runtime^.library.tree.projection,
-                &runtime^.library.tree.projection.items[index]))
+                runtime^.library.tree.projection.items[index]))
         motion^.running = false
     }
 }
 
 // tree_actions_reveal_focus scrolls the addressed action rectangle into the list viewport.
 tree_actions_reveal_focus :: proc(
-    params: Tree_List_Params, layout: ^Tree_Prepared_Layout) {
+    params: Tree_List_Params, layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
     runtime := params.ui_runtime
     if !runtime^.library.actions.reveal_pending || runtime^.semantic_focus == nil {
         return
@@ -332,14 +334,14 @@ tree_actions_publish_button :: proc(
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
         id = id, parent = parent,
         role = .Button, states = states, actions = actions,
-        region = .Accordion_Content, traversal_order = u16(id.local_id + 4),
+        region = .Accordion_Content, traversal_order = u32(id.local_id + 4),
         bounds = bounds.bounds, clip_bounds = bounds.clip_bounds, label = label,
     })
 }
 
 // tree_actions_publish_row copies placement-qualified disclosure and drawer semantics.
 tree_actions_publish_row :: proc(
-    params: Tree_List_Params, row: Tree_Prepared_Row,
+    params: Tree_List_Params, row: viewmodel.Ui_Tree_Prepared_Row,
     panel: geometry.Rectangle, scroll_y: f32) {
     entry_id := row.item^.key
     toggle := tree_actions_screen_rect(row.actions.toggle_rect, panel, scroll_y)
@@ -374,7 +376,7 @@ tree_actions_publish_row :: proc(
 
 // tree_actions_publish_moves keeps closed buttons absent and endpoints non-actionable.
 tree_actions_publish_moves :: proc(
-    params: Tree_List_Params, row: Tree_Prepared_Row,
+    params: Tree_List_Params, row: viewmodel.Ui_Tree_Prepared_Row,
     panel: geometry.Rectangle, scroll_y: f32) {
     if !row.actions.open {
         return
@@ -417,7 +419,7 @@ tree_actions_publish :: proc(
 
 // tree_actions_pointer_focus focuses the exact action press without selecting its row.
 tree_actions_pointer_focus :: proc(
-    params: Tree_List_Params, row: Tree_Prepared_Row) {
+    params: Tree_List_Params, row: viewmodel.Ui_Tree_Prepared_Row) {
     owner := params.ui_runtime^.input.press_owner
     if !owner.active || !tree_actions_capture_matches(owner, row.actions) {
         return
@@ -435,7 +437,7 @@ tree_actions_pointer_focus :: proc(
 // tree_actions_draw_focus outlines only the keyboard-focused current action.
 tree_actions_draw_focus :: proc(
     encoder: ^native.Draw_Encoder, runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    row: Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) {
+    row: viewmodel.Ui_Tree_Prepared_Row, panel: geometry.Rectangle, scroll_y: f32) {
     semantic := runtime^.semantic_focus
     if semantic == nil || !semantic^.window_focused ||
         semantic^.focus_origin != .Keyboard ||

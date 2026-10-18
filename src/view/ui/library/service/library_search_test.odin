@@ -134,6 +134,7 @@ library_search_quality_fixture_matches :: proc(
     defer free(state, context.allocator)
     state^.julia_interface = registry
     search := &state^.ui_runtime.library.search
+    defer viewmodel.library_search_destroy(search)
     copy(search^.query[:], fixture.query)
     search^.query_length = len(fixture.query)
     search^.generation = generation
@@ -161,16 +162,23 @@ library_search_quality_fixture_matches :: proc(
 // Verify a current result derives ancestors without mutating stored expansion.
 @(test)
 library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
-    root_id, _ := uuid.read("11111111-1111-4111-8111-111111111111")
     leaf_id, _ := uuid.read("22222222-2222-4222-8222-222222222222")
-    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
-    nodes[0].stable_id = root_id
-    nodes[0].first_child = &nodes[1]
-    nodes[0].next_in_registry = &nodes[1]
-    nodes[1].stable_id = leaf_id
-    nodes[1].parent = &nodes[0]
+    nodes := make([]bridgemodel.Euclid_Julia_Animation_Interface, 600,
+        context.allocator)
+    defer delete(nodes, context.allocator)
+    for index in 0..<len(nodes) {
+        nodes[index].stable_id[0] = u8(index & 0xff)
+        nodes[index].stable_id[1] = u8(index >> 8)
+        if index > 0 {
+            nodes[index].parent = &nodes[index - 1]
+            nodes[index - 1].next_in_registry = &nodes[index]
+        }
+    }
+    nodes[len(nodes) - 1].stable_id = leaf_id
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
+    defer viewmodel.library_search_destroy(
+        &state^.ui_runtime.library.search)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.animation_head = &nodes[0]
     state^.julia_interface^.animation_count = len(nodes)
@@ -186,7 +194,8 @@ library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
 
     testing.expect(t, library_search_commit_result(state, &result))
     testing.expect(t, search.active)
-    testing.expect_value(t, search.visible_id_count, 2)
+    testing.expect_value(t, search.visible_id_count, len(nodes))
+    testing.expect_value(t, search.visible_ids[0], leaf_id)
     testing.expect(t, !nodes[0].is_expanded)
 }
 

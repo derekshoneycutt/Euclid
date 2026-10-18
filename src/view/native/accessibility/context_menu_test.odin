@@ -12,7 +12,9 @@ accesskit_context_menu_roles_and_actions :: proc(t: ^testing.T) {
     testing.expect_value(t, accesskit_control_role(.Menu_Item), accesskit.Role.Menu_Item)
     node := accesskit.accesskit_node_new(.Pane)
     testing.expect(t, node != nil)
-    if node == nil { return }
+    if node == nil {
+        return
+    }
     defer accesskit.accesskit_node_free(node)
     accesskit_configure_control_actions(node, {.Focus, .Show_Context_Menu})
     testing.expect(t, accesskit.accesskit_node_supports_action(node, .Show_Context_Menu))
@@ -26,10 +28,11 @@ accesskit_context_menu_roles_and_actions :: proc(t: ^testing.T) {
 accesskit_context_menu_validates_owner_requests :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
+    defer adapter_close_admission(owner)
     pane := portable.Qualified_Identity{domain = .Ui, owner_domain = 9, generation = 1}
     menu := portable.Qualified_Identity{domain = .Ui, owner_domain = 11, generation = 1}
-    item := menu
-    item.local_id = 1
+    item := portable.Qualified_Identity{
+        domain = .Ui, owner_domain = 11, local_id = 1, generation = 1}
     controls := [3]Adapter_Control_Input{
         {identity = pane, control = {role = .Panel, bounds = {0, 0, 600, 400},
             label = "Presentation", enabled = true, focusable = true,
@@ -50,6 +53,15 @@ accesskit_context_menu_validates_owner_requests :: proc(t: ^testing.T) {
     testing.expect_value(t,
         adapter_validate_control_action(owner, request, publication, &action),
         Adapter_Action_Status.Ok)
+    accesskit_context_menu_expect_rejections(t, owner, request)
+}
+
+// Disabled menu rows and requests against prior publications never reach UI actions.
+accesskit_context_menu_expect_rejections :: proc(
+    t: ^testing.T, owner: ^Adapter, original: portable.Queued_Action) {
+    request := original
+    action: Adapter_Action
+    publication := &owner^.control_publication.current
     request.kind = u16(accesskit.Action.Click)
     request.target_native_id = owner^.control_native_ids[2]
     testing.expect_value(t,

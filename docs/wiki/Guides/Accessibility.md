@@ -4,8 +4,9 @@
 
 Last consolidated: 2026-09-30.
 
-Euclid provides a bounded native accessibility projection for its application shell and
-sidebar on Linux, macOS, and Windows through AccessKit C 0.23.1. The supported surface
+Euclid provides a scope-limited native accessibility projection for its application
+shell and sidebar on Linux, macOS, and Windows through AccessKit C 0.23.1.
+The supported surface
 is the ordinary controls, Library Search, Library Tree, and content-free context-menu
 entry points described in this guide.
 All three platforms consume the same semantic publication, identity, validation, and
@@ -180,10 +181,10 @@ The flow is:
 1. The display thread commits one semantic UI snapshot.
 2. Visible supported nodes are copied into one complete native-ready candidate.
 3. The candidate is validated for identities, hierarchy, relations, UTF-8, ranges,
-   bounds, and capacities.
+   bounds, representable widths, and allocation success.
 4. Qualified semantic identities resolve to monotonic session-local native IDs.
 5. One protected immutable tree generation is published to AccessKit.
-6. Native callbacks may only read protected publication, copy bounded requests, update
+6. Native callbacks acquire an immutable publication lease, copy bounded requests, update
    content-free diagnostics, and release transferred native values.
 7. The display thread drains requests, revalidates target identity, generation, action,
    state, and payload, then routes an ordinary semantic UI command to the owner.
@@ -199,12 +200,36 @@ and owner convergence are in `src/view/view.odin`.
 A native target is keyed by domain, owner domain, local ID, stable UUID, and generation.
 Surviving semantic controls keep their native ID for the window session. Removed IDs
 are retired and never reused, so a retained native element cannot retarget a later
-control. Exhaustion rejects publication rather than wrapping IDs.
+control. Mapping slots are recycled after retirement, but their numeric native IDs are
+not. Both qualified-identity and native-ID lookups are indexed. Numeric ID exhaustion
+rejects publication rather than wrapping IDs.
 
 The display owner creates and destroys each platform adapter. Teardown closes protected
 publication and action admission before AccessKit is freed and before the SDL window is
 destroyed. New callbacks are rejected while already accepted bounded work remains safe
-to drain. Native callbacks hold no display-owned pointers and cannot mutate UI state.
+to drain. Native callbacks borrow only immutable native-owned generation storage, never
+mutable UI or Library storage, and cannot mutate UI state.
+
+Each adapter owns a separate TLSF domain for copied control records, text, character
+metadata, child lists, staging, and mappings. Only the display owner allocates or frees
+in this domain. It is not the display Library allocator. Callback acquisition and release
+change synchronized reader counts only. Replacement retires the predecessor without
+invalidating existing leases; subsequent display collection reclaims generations whose
+last reader has released. Native destruction closes admission, releases the upstream
+adapter, joins outstanding leases, and drains the domain before its owner can disappear.
+The nonblocking drain API retains storage and reports incomplete while any lease survives.
+`protected_control_snapshot` is a display-owner-only borrowed descriptor, not a callback
+snapshot API.
+
+Logical equality compares committed facts and used text, not slice addresses, spare
+capacity, or generations. Unchanged publications retain the generation and backing
+storage without rebuilding the candidate or issuing a redundant native update. Hierarchy
+validation and child grouping use indexed identities and linear traversal; callbacks
+consume precomputed immutable child lists without allocating display scratch.
+
+[Native owner tests](../../../src/view/native/accessibility/publication_owner_test.odin)
+cover publication reuse and callback drain. TLSF samples and AccessKit construction
+counts are separate observations, not platform-native AT qualification.
 
 ### Validation and Failure Policy
 
@@ -217,24 +242,30 @@ native actions are rejected without owner mutation.
 Diagnostics may retain generations, IDs, counts, capacities, statuses, failure stages,
 and queue pressure. They must not log arbitrary Search, Dynview, or Terminal content.
 
-## Published Model and Hard Limits
+## Published Storage and Bounded Action Ingress
 
-The current model is deliberately fixed-capacity and allocation-free in callback paths.
+Control publication and mapping storage are actual-sized and owner-backed. They no
+longer impose the former 320-control, 32-KiB copied-text, 1,024-character, or
+4,096-mapping limits. Allocation failure rejects the complete candidate and retains
+its predecessor;
+publication never silently truncates accepted Library records. Tree levels and sibling
+facts are `u32`; copied text and character offsets/counts use checked `int` sizes.
+The action ingress protocol remains deliberately bounded:
 
 | Limit | Current value | Behavior at limit |
 | --- | ---: | --- |
-| Published control nodes | 320 | Reject the complete candidate. |
-| Copied labels, values, and placeholders | 32 KiB total | Reject the complete candidate. |
-| UTF-8 character and word-boundary entries | 1,024 | Reject the complete candidate. |
-| Session-local native ID registry | 4,096 entries, including the root | Reject new identity allocation without ID reuse. |
 | Queued native actions | 64 | Reject additional ingress and increment overflow diagnostics. |
 | Text payload per action | 512 bytes | Reject the action. |
 | Static bootstrap label | 64 bytes | Reject invalid bootstrap publication. |
 
 Text offsets from the UI owner are UTF-8 byte offsets. Publication validates boundaries
-and converts them to bounded native character positions. The current projection carries
+and converts them to native character positions. Native action selections outside the
+bounded ingress representation are rejected before narrowing. The projection carries
 one caret/selection pair and basic word starts, not a complete styled text document or
 arbitrary text geometry.
+AccessKit's optional word-start positions use byte-wide indices. When a text run has
+a word start outside that representation, its word-start hint is omitted as a whole;
+the full UTF-8 value, character widths, and selection are retained.
 
 Published roles are Label, TextRun, Button, Checkbox, Slider, AccordionHeader, Panel,
 Status, SearchInput, Tree, TreeItem, Menu, and MenuItem. The current UI projection uses
@@ -251,8 +282,8 @@ pane, including in Terminal. Outside presses dismiss and use normal click-throug
 routing; presses inside retain their release ownership even after dismissal.
 
 Menu identities include an opening generation. Closed or replaced menu actions are
-rejected, and native IDs are retired without reuse. Repeated openings consume the
-existing bounded session registry; exhaustion rejects native publication explicitly.
+rejected, and native IDs are retired without numeric reuse. Repeated openings recycle
+mapping slots rather than accumulating retired entries for the rest of the session.
 Menu callbacks enqueue bounded owner requests and never read clipboard or pane text.
 Menu-role/action translation and stale/disabled rejection have automated coverage;
 complete screen-reader menu workflows remain unqualified on all three platforms.

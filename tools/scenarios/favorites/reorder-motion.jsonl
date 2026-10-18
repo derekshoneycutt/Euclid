@@ -30,10 +30,13 @@
 {"wait_state":"tree_settled","timeout_ms":10000}
 {"library_placement":"actions_focus:favorite:Point"}
 {"key":"tab"}
+{"assert_favorites":"name_editor_input_focus"}
+{"key":"tab"}
+{"assert_focus":"library_move_down"}
 {"library_placement":"swap_sample:hold"}
 {"key":"enter"}
-{"library_placement":"swap_sample:start"}
 {"assert_favorites":"order:Line:Point:Circle"}
+{"library_placement":"swap_sample:start"}
 {"screenshot":".build/reorder-motion-start.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"library_placement":"swap_sample:middle"}

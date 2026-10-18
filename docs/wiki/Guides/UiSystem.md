@@ -110,7 +110,7 @@ allocation owner.
 | `preferences` | Current preference values and save feedback |
 | `rendering`, `playback` | Effective display controls and pause intent |
 | `tooltip`, `context_menu`, `gif_path_input` | Cross-panel transient UI state |
-| `semantic_focus` | Separately allocated bounded snapshots, commands, and logical focus |
+| `semantic_focus` | Separately owned growable snapshot slots, bounded commands, and logical focus |
 
 `semantic_focus` keeps its existing explicit allocation and shutdown lifecycle; it is
 not moved into the startup allocation. Component references are borrowed on the
@@ -118,7 +118,8 @@ display thread and do not change that ownership.
 
 Frame preparation is caller-owned. The frame coordinator keeps its
 `Frame_Draw_Preparation` alive from preparation through encoding and drawing; tree,
-control, and text preparation fill destinations within that value. Prepared values
+control, and text preparation fill destinations within that value. Tree rows borrow
+projection-owned reusable buffers. Prepared values
 and pointers into their source models are frame-bounded and must not be retained past
 that frame. Unit tests should construct the smallest relevant component records:
 layout tests use `Ui_Layout_State`, tree preparation uses bounded Library components,

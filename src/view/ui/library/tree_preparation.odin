@@ -14,10 +14,12 @@ UI_TREE_SCROLLBAR_ID :: 1003
 
 // tree_layout_find locates a frame-borrowed row without confusing logical and visual order.
 tree_layout_find :: proc(
-    layout: ^Tree_Prepared_Layout,
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> ^Tree_Prepared_Row {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface) ->
+        ^viewmodel.Ui_Tree_Prepared_Row {
     for index in 0..<layout^.count {
-        if layout^.rows[index].node == node {
+        if node != nil &&
+            layout^.rows[index].item^.target_animation_id == node^.stable_id {
             return &layout^.rows[index]
         }
     }
@@ -26,8 +28,8 @@ tree_layout_find :: proc(
 
 // tree_layout_find_item resolves a prepared row by its display-owned placement.
 tree_layout_find_item :: proc(
-    layout: ^Tree_Prepared_Layout,
-    item: ^viewmodel.Ui_Tree_Item) -> ^Tree_Prepared_Row {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout,
+    item: ^viewmodel.Ui_Tree_Item) -> ^viewmodel.Ui_Tree_Prepared_Row {
     for index in 0..<layout^.count {
         if layout^.rows[index].item == item {
             return &layout^.rows[index]
@@ -37,7 +39,7 @@ tree_layout_find_item :: proc(
 }
 
 // tree_row_is_revealed excludes rows beyond the inherited descendant reveal.
-tree_row_is_revealed :: proc(row: Tree_Prepared_Row) -> bool {
+tree_row_is_revealed :: proc(row: viewmodel.Ui_Tree_Prepared_Row) -> bool {
     return row.logical && geometry.rectangles_intersect(
         {0, row.content_y, row.reveal.width, theme.TREE_ROW_HEIGHT}, row.reveal)
 }
@@ -57,6 +59,9 @@ draw_encoded_prepared_tree :: proc(
         entry_name_input = &prepared^.entry_name_input,
         entry_name_params = &prepared^.entry_name_params,
         entry_name_prepared = prepared^.entry_name_prepared,
+        actions_toggle = prepared^.actions_toggle,
+        actions_up = prepared^.actions_up,
+        actions_down = prepared^.actions_down,
         scroll_y = prepared^.scroll.scroll_y_out,
         visibility = visibility}
     foreground := tree_reorder_foreground(
@@ -77,7 +82,7 @@ draw_encoded_prepared_tree :: proc(
 
 // tree_draw_prepared_row omits fully clipped rows and preserves reorder occlusion.
 tree_draw_prepared_row :: proc(
-    ctx: Encoded_Tree_Walk_Context, row: Tree_Prepared_Row,
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row,
     index: int, text: bool) {
     row_geometry := tree_row_screen_geometry(row, ctx.panel, ctx.scroll_y)
     bounds := geometry.Rectangle(row_geometry.bounds)
@@ -93,7 +98,7 @@ tree_draw_prepared_row :: proc(
 
 // tree_draw_reorder_layer clips background geometry and text around the opaque moving block.
 tree_draw_reorder_layer :: proc(
-    ctx: Encoded_Tree_Walk_Context, row: Tree_Prepared_Row,
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row,
     bounds: viewmodel.Ui_Control_Geometry, text: bool, occlusion: geometry.Rectangle) {
     clip := bounds.clip_bounds
     if occlusion.height <= 0 || !geometry.rectangles_intersect(clip, occlusion) {
@@ -115,38 +120,48 @@ tree_draw_reorder_layer :: proc(
 
 // draw_encoded_prepared_tree_row shares one inherited clip between row and drawer.
 draw_encoded_prepared_tree_row :: proc(
-    ctx: Encoded_Tree_Walk_Context, row: Tree_Prepared_Row,
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row,
     row_geometry: viewmodel.Ui_Control_Geometry, text: bool) {
     bounds := row_geometry.bounds
     clip := row_geometry.clip_bounds
     _ = native.draw_encoder_push_scissor(ctx.encoder, clip)
     if text {
-        label_clip := tree_actions_label_clip(row.actions, bounds, clip)
-        if geometry.rectangles_intersect(label_clip, clip) {
-            _ = native.draw_encoder_push_scissor(ctx.encoder, label_clip)
-            if ctx.entry_name_prepared && row.logical &&
-                row.item^.key == ctx.state^.ui_runtime.library.entry_name.entry_id {
-                uiwidgets.draw_encoded_input_box(ctx.encoder,
-                    ctx.entry_name_params^, ctx.entry_name_input^)
-            } else {
-                viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder,
-                    tree_item_label(ctx.ji, row.item,
-                        &ctx.state^.preferences_runtime.collections_state),
-                    bounds.x + f32(row.depth) *
-                        theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X,
-                    bounds.y + theme.TREE_ROW_LABEL_OFFSET_Y)
-            }
-            _ = native.draw_encoder_pop_scissor(ctx.encoder)
-        }
+        draw_encoded_prepared_tree_label(ctx, row, row_geometry)
         draw_encoded_tree_actions_text(
             ctx.state, ctx.encoder, row, ctx.panel, ctx.scroll_y)
     } else {
         current := ctx
         current.render_only = !row.logical
         draw_encoded_tree_row(current, row.item, row.depth, bounds.y, row.expanded)
-        draw_encoded_tree_actions_geometry(ctx.encoder, row, ctx.panel, ctx.scroll_y)
+        draw_encoded_tree_actions_geometry(ctx, row)
         tree_actions_draw_focus(
             ctx.encoder, &ctx.state^.ui_runtime, row, ctx.panel, ctx.scroll_y)
+    }
+    _ = native.draw_encoder_pop_scissor(ctx.encoder)
+}
+
+// Draw the accepted label or active editor within its row's inherited clip.
+draw_encoded_prepared_tree_label :: proc(
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row,
+    row_geometry: viewmodel.Ui_Control_Geometry) {
+    bounds := row_geometry.bounds
+    label_clip := tree_actions_label_clip(
+        row.actions, bounds, row_geometry.clip_bounds)
+    if !geometry.rectangles_intersect(label_clip, row_geometry.clip_bounds) {
+        return
+    }
+    _ = native.draw_encoder_push_scissor(ctx.encoder, label_clip)
+    if ctx.entry_name_prepared && row.logical &&
+        row.item^.key == ctx.state^.ui_runtime.library.entry_name.entry_id {
+        uiwidgets.draw_encoded_input_box(ctx.encoder,
+            ctx.entry_name_params^, ctx.entry_name_input^)
+    } else {
+        viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder,
+            tree_item_label(ctx.ji, row.item,
+                &ctx.state^.preferences_runtime.collections_state),
+            bounds.x + f32(row.depth) *
+                theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X,
+            bounds.y + theme.TREE_ROW_LABEL_OFFSET_Y)
     }
     _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }
@@ -245,7 +260,7 @@ tree_cancel_occluded_row_capture :: proc(
 // tree_update_prepared_row keeps row capture and drawer admission on the same viewport.
 tree_update_prepared_row :: proc(
     params: Tree_List_Params, ctx: Tree_Walk_Context,
-    row: ^Tree_Prepared_Row, prepared: ^Tree_List_Preparation,
+    row: ^viewmodel.Ui_Tree_Prepared_Row, prepared: ^Tree_List_Preparation,
     hit: ^Tree_Hit) {
     row_geometry := tree_row_screen_geometry(row^, ctx.panel, ctx.scroll_y)
     clip := geometry.Rectangle(row_geometry.clip_bounds)
@@ -260,7 +275,7 @@ tree_update_prepared_row :: proc(
             uiwidgets.input_frame_mouse_position(params.mouse_input))) {
         params.ui_runtime^.input.press_owner = {}
     }
-    tree_actions_prepare_controls(params, row, ctx, hit)
+    tree_actions_prepare_controls(params, row, prepared, ctx, hit)
     if tree_prepare_entry_name_input(params, ctx, row, prepared) {
         return
     }
@@ -276,7 +291,7 @@ tree_update_prepared_row :: proc(
 // tree_prepare_entry_name_input edits only the selected logical row's prepared field.
 tree_prepare_entry_name_input :: proc(
     params: Tree_List_Params, ctx: Tree_Walk_Context,
-    row: ^Tree_Prepared_Row, prepared: ^Tree_List_Preparation) -> bool {
+    row: ^viewmodel.Ui_Tree_Prepared_Row, prepared: ^Tree_List_Preparation) -> bool {
     runtime := params.ui_runtime
     draft := &runtime^.library.entry_name
     if !draft^.active || draft^.entry_id != row^.item^.key ||
@@ -326,7 +341,7 @@ tree_apply_prepared_entry_name_input :: proc(
 // tree_entry_name_input_geometry derives shared clipped bounds for the inline field.
 tree_entry_name_input_geometry :: proc(
     params: Tree_List_Params, ctx: Tree_Walk_Context,
-    row: Tree_Prepared_Row) -> Tree_Entry_Name_Input_Geometry {
+    row: viewmodel.Ui_Tree_Prepared_Row) -> Tree_Entry_Name_Input_Geometry {
     row_geometry := tree_row_screen_geometry(row, ctx.panel, ctx.scroll_y)
     rect := geometry.Rectangle{row_geometry.bounds.x + row.actions.label_clip.x,
         row_geometry.bounds.y, row.actions.label_clip.width, row_geometry.bounds.height}
@@ -360,7 +375,7 @@ tree_cancel_hidden_capture :: proc(
 tree_motion_anchor :: proc(
     params: Tree_List_Params,
     item: ^viewmodel.Ui_Tree_Item,
-    layout: ^Tree_Prepared_Layout) {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
     row := tree_layout_find_item(layout, item)
     if row == nil || !row^.logical {
         return
@@ -381,8 +396,10 @@ tree_motion_anchor_action :: proc(
         kind == .Tree_Parent && item^.expanded ||
         kind == .Tree_Child && !item^.expanded
     if changes && item^.first_child != TREE_NO_ITEM {
-        layout: Tree_Prepared_Layout
-        tree_prepare_layout(params, &layout)
+        layout: viewmodel.Ui_Tree_Prepared_Layout
+        if !tree_prepare_layout_scratch(params, &layout) {
+            return
+        }
         tree_motion_anchor(params, item, &layout)
     }
 }
@@ -415,14 +432,14 @@ tree_motion_settle_navigation :: proc(params: Tree_List_Params) {
 
 // tree_apply_visual_reveal honors keyboard/external reveal using fractional visual positions.
 tree_apply_visual_reveal :: proc(
-    params: Tree_List_Params, layout: ^Tree_Prepared_Layout) {
+    params: Tree_List_Params, layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
     runtime := params.ui_runtime
     if !runtime^.library.tree.reveal_pending {
         return
     }
     target_index := tree_projection_find(
         &runtime^.library.tree.projection, runtime^.library.tree.reveal_stable_id)
-    target := &runtime^.library.tree.projection.items[target_index] if
+    target := runtime^.library.tree.projection.items[target_index] if
         target_index != TREE_NO_ITEM else nil
     row := tree_layout_find_item(layout, target)
     if row == nil || !tree_row_is_revealed(row^) {
@@ -452,7 +469,7 @@ tree_apply_visual_reveal :: proc(
 
 // tree_motion_apply_anchor defers to explicit wheel/drag input and ordinary row reveal.
 tree_motion_apply_anchor :: proc(
-    params: Tree_List_Params, layout: ^Tree_Prepared_Layout) {
+    params: Tree_List_Params, layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
     motion := &params.ui_runtime^.library.motion
     if params.mouse_input.mouse_wheel_delta != 0 ||
        params.ui_runtime^.library.tree.scroll_dragging {
@@ -508,9 +525,11 @@ prepare_tree_visual :: proc(
         log.error("library_tree_projection_rejected")
         return
     }
-    frame := tree_frame_context(params)
-    tree_motion_reset(frame.geometry, frame.admission)
-    tree_prepare_layout(params, &prepared^.layout)
+    params.ui_runtime^.library.motion.initialized = false
+    if !tree_prepare_layout(params, &prepared^.layout) {
+        log.error("library_tree_layout_rejected")
+        return
+    }
     prepared^.content_height = prepared^.layout.content_height
     prepared^.scroll = uiwidgets.scroll_container_visual(params.list_panel,
         prepared^.layout.content_height, params.scroll_y^,

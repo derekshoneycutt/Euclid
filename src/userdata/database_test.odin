@@ -27,6 +27,36 @@ userdata_test_id :: proc(value: u8) -> uuid.Identifier {
     return identifier
 }
 
+// Build a placement identity for a prospective Favorites root.
+userdata_test_favorite_identity :: proc(
+    entry_id: uuid.Identifier) -> collections.Placement_Identity {
+    return {
+        collection_id = collections.FAVORITES_COLLECTION_ID,
+        entry_id = entry_id,
+    }
+}
+
+// Build an immutable Favorites addition with explicit placement scope.
+userdata_test_add_favorite :: proc(
+    entry_id, animation_id: uuid.Identifier) -> collections.Mutation {
+    return {
+        kind = .Add_Favorite,
+        placement = userdata_test_favorite_identity(entry_id),
+        entry_id = entry_id,
+        animation_id = animation_id,
+    }
+}
+
+// Encode an integer as a stable UUID suffix for large persistence fixtures.
+userdata_test_index_id :: proc(value: u32) -> uuid.Identifier {
+    identifier: uuid.Identifier
+    identifier[12] = byte(value >> 24)
+    identifier[13] = byte(value >> 16)
+    identifier[14] = byte(value >> 8)
+    identifier[15] = byte(value)
+    return identifier
+}
+
 // Create a genuine v1 settings-only database for migration tests.
 userdata_test_create_v1 :: proc(path: string) -> bool {
     connection: sqlite.Connection
@@ -215,6 +245,7 @@ userdata_store_creates_identity_and_preserves_unknown_rows :: proc(t: ^testing.T
     failure := store_open(&store, fixture.path)
     testing.expect_value(t, failure.kind, Store_Error_Kind.None)
     testing.expect_value(t, store.status, Store_Status.Ready)
+    testing.expect(t, store.collection_replay_workspace.initialized)
     testing.expect(t, len(string(store.path[:store.path_length])) > 0)
     testing.expect_value(t,
         store_exec(&store,
@@ -236,6 +267,7 @@ userdata_store_creates_identity_and_preserves_unknown_rows :: proc(t: ^testing.T
     testing.expect_value(t,
         store_close(&store).kind, Store_Error_Kind.None)
     testing.expect_value(t, store.status, Store_Status.Closed)
+    testing.expect(t, !store.collection_replay_workspace.initialized)
 }
 
 // Enforce scalar types, NULL exclusion, byte caps, and composite-key uniqueness.
@@ -455,7 +487,9 @@ userdata_rollback_failure_marks_store_unusable :: proc(t: ^testing.T) {
 userdata_test_expect_combined_rollback :: proc(
     t: ^testing.T, store: ^Store, changes: settings.Change_Set) {
     invalid := collections.Mutation{
-        kind = .Remove_Favorite, entry_id = userdata_test_id(71),
+        kind = .Remove_Favorite,
+        placement = userdata_test_favorite_identity(userdata_test_id(71)),
+        entry_id = userdata_test_id(71),
     }
     failed := store_commit_user_data(
         store, changes, []collections.Mutation{invalid})
@@ -484,11 +518,8 @@ userdata_combined_commit_is_atomic_for_settings_and_collections :: proc(t: ^test
         &changes, .Rendering_Vsync, settings.boolean_value(false)))
     userdata_test_expect_combined_rollback(t, &store, changes)
 
-    add_mutation := collections.Mutation{
-        kind = .Add_Favorite,
-        entry_id = userdata_test_id(72),
-        animation_id = userdata_test_id(73),
-    }
+    add_mutation := userdata_test_add_favorite(
+        userdata_test_id(72), userdata_test_id(73))
     committed := store_commit_user_data(
         &store, changes, []collections.Mutation{add_mutation})
     testing.expect_value(t, committed.outcome, Commit_Outcome.Committed)
@@ -497,7 +528,7 @@ userdata_combined_commit_is_atomic_for_settings_and_collections :: proc(t: ^test
         Store_Error_Kind.None)
     testing.expect(t, !preferences.rendering.vsync)
     snapshot := new(collections.Set, context.allocator)
-    defer free(snapshot, context.allocator)
+    defer userdata_test_free_collection_set(snapshot)
     testing.expect_value(t, store_load_collections(&store, snapshot).kind,
         Store_Error_Kind.None)
     testing.expect_value(t, snapshot^.entry_count, 1)
@@ -510,7 +541,7 @@ userdata_test_expect_favorites_order :: proc(
     t: ^testing.T, snapshot: ^collections.Set,
     expected_entries, expected_animations: []uuid.Identifier) {
     testing.expect_value(t, len(expected_entries), len(expected_animations))
-    indexes: [collections.ENTRY_CAPACITY]int
+    indexes: [collections.ENTRY_INDEX_BUFFER_CAPACITY]int
     count, failure := collections.ordered_siblings(
         snapshot, collections.FAVORITES_COLLECTION_ID, {}, indexes[:])
     testing.expect_value(t, failure, collections.Policy_Error.None)
@@ -529,21 +560,9 @@ userdata_test_expect_favorites_order :: proc(
 userdata_test_seed_favorites :: proc(
     t: ^testing.T, store: ^Store) -> [3]collections.Mutation {
     additions := [3]collections.Mutation{
-        {
-        kind = .Add_Favorite,
-        entry_id = userdata_test_id(31),
-        animation_id = userdata_test_id(41),
-        },
-        {
-            kind = .Add_Favorite,
-            entry_id = userdata_test_id(32),
-            animation_id = userdata_test_id(42),
-        },
-        {
-            kind = .Add_Favorite,
-            entry_id = userdata_test_id(33),
-            animation_id = userdata_test_id(43),
-        },
+        userdata_test_add_favorite(userdata_test_id(31), userdata_test_id(41)),
+        userdata_test_add_favorite(userdata_test_id(32), userdata_test_id(42)),
+        userdata_test_add_favorite(userdata_test_id(33), userdata_test_id(43)),
     }
     initial := store_commit_user_data(
         store, {}, additions[:])
@@ -555,7 +574,7 @@ userdata_test_seed_favorites :: proc(
 userdata_test_expect_failed_reorder_unchanged :: proc(
     t: ^testing.T, store: ^Store, additions: [3]collections.Mutation) {
     snapshot := new(collections.Set, context.allocator)
-    defer free(snapshot, context.allocator)
+    defer userdata_test_free_collection_set(snapshot)
     testing.expect_value(t, store_load_collections(store, snapshot).kind,
         Store_Error_Kind.None)
     userdata_test_expect_favorites_order(t, snapshot,
@@ -591,6 +610,7 @@ userdata_collection_mutation_rollback_is_atomic :: proc(t: ^testing.T) {
         &changes, .Rendering_Vsync, settings.boolean_value(false)))
     move := collections.Mutation{
         kind = .Reorder_Siblings,
+        placement = additions[0].placement,
         entry_id = additions[0].entry_id,
         sibling_entry_id = additions[1].entry_id,
         direction = .Down,
@@ -609,25 +629,25 @@ userdata_test_commit_reordered_favorites :: proc(
     changes: settings.Change_Set
     testing.expect(t, settings.change_set_set(
         &changes, .Rendering_Vsync, settings.boolean_value(false)))
-    d := collections.Mutation{
-        kind = .Add_Favorite,
-        entry_id = userdata_test_id(34),
-        animation_id = userdata_test_id(44),
-    }
+    d := userdata_test_add_favorite(
+        userdata_test_id(34), userdata_test_id(44))
     move_a_down_b := collections.Mutation{
         kind = .Reorder_Siblings,
+        placement = a.placement,
         entry_id = a.entry_id,
         sibling_entry_id = b.entry_id,
         direction = .Down,
     }
     move_a_down_c := collections.Mutation{
         kind = .Reorder_Siblings,
+        placement = a.placement,
         entry_id = a.entry_id,
         sibling_entry_id = c.entry_id,
         direction = .Down,
     }
     remove_b := collections.Mutation{
         kind = .Remove_Favorite,
+        placement = b.placement,
         entry_id = b.entry_id,
     }
     committed := store_commit_user_data(store, changes,
@@ -660,7 +680,7 @@ userdata_collection_mutation_moves_round_trip_after_reopen :: proc(
     testing.expect_value(t,
         store_open(&store, fixture.path).kind, Store_Error_Kind.None)
     reopened := new(collections.Set, context.allocator)
-    defer free(reopened, context.allocator)
+    defer userdata_test_free_collection_set(reopened)
     testing.expect_value(t, store_load_collections(&store, reopened).kind,
         Store_Error_Kind.None)
     userdata_test_expect_favorites_order(t, reopened,
@@ -677,11 +697,7 @@ userdata_collection_mutation_moves_round_trip_after_reopen :: proc(
 userdata_test_open_favorites_entry :: proc(
     t: ^testing.T, store: ^Store, path: string, entry_id: uuid.Identifier) {
     testing.expect_value(t, store_open(store, path).kind, Store_Error_Kind.None)
-    add := collections.Mutation{
-        kind = .Add_Favorite,
-        entry_id = entry_id,
-        animation_id = userdata_test_id(82),
-    }
+    add := userdata_test_add_favorite(entry_id, userdata_test_id(82))
     testing.expect_value(t,
         store_commit_user_data(store, {}, []collections.Mutation{add}).outcome,
         Commit_Outcome.Committed)
@@ -717,7 +733,9 @@ userdata_collection_entry_name_round_trip :: proc(t: ^testing.T) {
     name_bytes[254] = 0xc3
     name_bytes[255] = 0xa9
     name := string(name_bytes[:])
-    set_name, name_error := collections.make_entry_name_mutation(entry_id, name)
+    identity := userdata_test_favorite_identity(entry_id)
+    set_name, name_error := collections.make_placement_name_mutation(
+        identity, name)
     testing.expect_value(t, name_error, collections.Mutation_Error.None)
     testing.expect_value(t,
         store_commit_user_data(&store, {}, []collections.Mutation{set_name}).outcome,
@@ -726,7 +744,7 @@ userdata_collection_entry_name_round_trip :: proc(t: ^testing.T) {
 
     testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
     loaded := new(collections.Set, context.allocator)
-    defer free(loaded, context.allocator)
+    defer userdata_test_free_collection_set(loaded)
     testing.expect_value(t, store_load_collections(&store, loaded).kind,
         Store_Error_Kind.None)
     testing.expect_value(t, loaded^.entries[0].id, entry_id)
@@ -749,17 +767,18 @@ userdata_collection_entry_name_clear_stores_null :: proc(t: ^testing.T) {
     entry_id := userdata_test_id(81)
     store: Store
     userdata_test_open_favorites_entry(t, &store, fixture.path, entry_id)
-    set_name, _ := collections.make_entry_name_mutation(entry_id, "Custom")
+    identity := userdata_test_favorite_identity(entry_id)
+    set_name, _ := collections.make_placement_name_mutation(identity, "Custom")
     testing.expect_value(t,
         store_commit_user_data(&store, {}, []collections.Mutation{set_name}).outcome,
         Commit_Outcome.Committed)
-    clear_name, clear_error := collections.make_entry_name_mutation(entry_id, "")
+    clear_name, clear_error := collections.make_placement_name_mutation(identity, "")
     testing.expect_value(t, clear_error, collections.Mutation_Error.None)
     testing.expect_value(t,
         store_commit_user_data(&store, {}, []collections.Mutation{clear_name}).outcome,
         Commit_Outcome.Committed)
     loaded := new(collections.Set, context.allocator)
-    defer free(loaded, context.allocator)
+    defer userdata_test_free_collection_set(loaded)
     testing.expect_value(t, store_load_collections(&store, loaded).kind,
         Store_Error_Kind.None)
     testing.expect_value(t, loaded^.entries[0].custom_name_length, 0)
@@ -780,7 +799,7 @@ userdata_collection_entry_name_rejects_invalid_stored_utf8 :: proc(t: ^testing.T
     userdata_test_open_favorites_entry(
         t, &store, fixture.path, userdata_test_id(81))
     loaded := new(collections.Set, context.allocator)
-    defer free(loaded, context.allocator)
+    defer userdata_test_free_collection_set(loaded)
     testing.expect_value(t, store_exec(&store,
         "UPDATE user_collection_entry SET custom_name=CAST(X'FF' AS TEXT) "+
         "WHERE entry_id=X'00000000000000000000000000000051'").result,
@@ -808,16 +827,18 @@ userdata_collection_entry_name_batch_rolls_back_atomically :: proc(t: ^testing.T
     entry_id := userdata_test_id(81)
     store: Store
     userdata_test_open_favorites_entry(t, &store, fixture.path, entry_id)
-    set_name, _ := collections.make_entry_name_mutation(entry_id, "Custom")
+    identity := userdata_test_favorite_identity(entry_id)
+    set_name, _ := collections.make_placement_name_mutation(identity, "Custom")
     invalid := collections.Mutation{
         kind = .Remove_Favorite,
+        placement = userdata_test_favorite_identity(userdata_test_id(99)),
         entry_id = userdata_test_id(99),
     }
     rollback := store_commit_user_data(
         &store, {}, []collections.Mutation{set_name, invalid})
     testing.expect_value(t, rollback.outcome, Commit_Outcome.Not_Committed)
     loaded := new(collections.Set, context.allocator)
-    defer free(loaded, context.allocator)
+    defer userdata_test_free_collection_set(loaded)
     testing.expect_value(t, store_load_collections(&store, loaded).kind,
         Store_Error_Kind.None)
     testing.expect_value(t, loaded^.entries[0].custom_name_length, 0)
@@ -983,7 +1004,7 @@ userdata_v1_migration_preserves_settings_and_seeds_favorites :: proc(t: ^testing
     store: Store
     testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
     snapshot := new(collections.Set, context.allocator)
-    defer free(snapshot, context.allocator)
+    defer userdata_test_free_collection_set(snapshot)
     testing.expect_value(t, store_load_collections(&store, snapshot).kind,
         Store_Error_Kind.None)
     testing.expect_value(t, snapshot^.collection_count, 1)
@@ -1070,58 +1091,57 @@ userdata_failed_v1_migration_rolls_back_schema_and_version :: proc(t: ^testing.T
 }
 
 // Build a bounded persistence fixture with Favorites and a nested read-only group.
-userdata_test_collection_snapshot :: proc() -> ^collections.Set {
+userdata_test_free_collection_set :: proc(snapshot: ^collections.Set) {
+    collections.destroy(snapshot)
+    free(snapshot, context.allocator)
+}
+
+// Build a bounded persistence fixture with Favorites and a nested read-only group.
+userdata_test_collection_snapshot :: proc(t: ^testing.T) -> ^collections.Set {
     snapshot := new(collections.Set, context.allocator)
-    userdata_test_collection_records(snapshot)
-    userdata_test_collection_entries(snapshot)
+    testing.expect(t, collections.initialize(snapshot))
+    userdata_test_collection_records(t, snapshot)
+    userdata_test_collection_entries(t, snapshot)
     return snapshot
 }
 
 // Add Favorites and named collection metadata to the persistence fixture.
-userdata_test_collection_records :: proc(snapshot: ^collections.Set) {
-    snapshot^.collections[0] = {
-        id = collections.FAVORITES_COLLECTION_ID,
-        role = .Favorites,
-    }
-    snapshot^.collections[1] = {
+userdata_test_collection_records :: proc(t: ^testing.T, snapshot: ^collections.Set) {
+    name := [4]u8{'W', 'o', 'r', 'k'}
+    testing.expect_value(t, collections.append_collection(snapshot, {
         id = userdata_test_id(41),
         role = .User,
+        name = name[:],
         name_length = 4,
         order = 1,
         is_read_only = true,
-    }
-    snapshot^.collections[1].name[0] = 'W'
-    snapshot^.collections[1].name[1] = 'o'
-    snapshot^.collections[1].name[2] = 'r'
-    snapshot^.collections[1].name[3] = 'k'
-    snapshot^.collection_count = 2
+    }), collections.Policy_Error.None)
 }
 
 // Add a nested group placement and its Favorites animation placement.
-userdata_test_collection_entries :: proc(snapshot: ^collections.Set) {
+userdata_test_collection_entries :: proc(t: ^testing.T, snapshot: ^collections.Set) {
     root_id := userdata_test_id(42)
     nested_id := userdata_test_id(43)
     animation_id := userdata_test_id(44)
-    snapshot^.entries[0] = {
+    testing.expect_value(t, collections.append_entry(snapshot, {
         id = root_id,
         collection_id = userdata_test_id(41),
         kind = .Group,
-    }
-    snapshot^.entries[1] = {
+    }), collections.Policy_Error.None)
+    testing.expect_value(t, collections.append_entry(snapshot, {
         id = nested_id,
         collection_id = userdata_test_id(41),
         parent_entry_id = root_id,
         kind = .Animation,
         animation_id = animation_id,
-    }
-    snapshot^.entries[2] = {
+    }), collections.Policy_Error.None)
+    testing.expect_value(t, collections.append_entry(snapshot, {
         id = userdata_test_id(45),
         collection_id = collections.FAVORITES_COLLECTION_ID,
         sibling_order = 0,
         kind = .Animation,
         animation_id = animation_id,
-    }
-    snapshot^.entry_count = 3
+    }), collections.Policy_Error.None)
 }
 
 // Save one snapshot and reopen the same store path for durability assertions.
@@ -1182,16 +1202,104 @@ userdata_collection_snapshot_round_trips_after_reopen :: proc(t: ^testing.T) {
         return
     }
     defer os.remove_all(fixture.directory)
-    snapshot := userdata_test_collection_snapshot()
-    defer free(snapshot, context.allocator)
+    snapshot := userdata_test_collection_snapshot(t)
+    defer userdata_test_free_collection_set(snapshot)
     root_id := userdata_test_id(42)
     animation_id := userdata_test_id(44)
     reopened: Store
     userdata_test_save_and_reopen(t, fixture.path, snapshot, &reopened)
     loaded := new(collections.Set, context.allocator)
-    defer free(loaded, context.allocator)
+    defer userdata_test_free_collection_set(loaded)
     testing.expect_value(t, store_load_collections(&reopened, loaded).kind,
         Store_Error_Kind.None)
     userdata_test_expect_collection_snapshot(t, loaded, root_id, animation_id)
     testing.expect_value(t, store_close(&reopened).kind, Store_Error_Kind.None)
+}
+
+// Persist and reload more than the retired fixed-capacity row count.
+@(test)
+userdata_collection_snapshot_round_trips_more_than_512_entries :: proc(
+    t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    snapshot := new(collections.Set, context.allocator)
+    defer userdata_test_free_collection_set(snapshot)
+    testing.expect(t, collections.initialize(snapshot))
+    userdata_test_fill_large_favorites(t, snapshot)
+    testing.expect_value(t, collections.validate(snapshot),
+        collections.Validation_Error.None)
+    store: Store
+    userdata_test_replace_and_reopen_collections(t, fixture.path, snapshot, &store)
+    loaded := new(collections.Set, context.allocator)
+    defer userdata_test_free_collection_set(loaded)
+    testing.expect_value(t, store_load_collections(&store, loaded).kind,
+        Store_Error_Kind.None)
+    userdata_test_expect_large_collection_round_trip(t, loaded)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Build 1,024 Favorites rows with sparse optional names and unavailable targets.
+userdata_test_fill_large_favorites :: proc(
+    t: ^testing.T, snapshot: ^collections.Set) {
+    for index in 0..<1024 {
+        custom_name: []u8
+        custom_name_length := 0
+        if index == 256 {
+            custom_label := "Saved offline label"
+            custom_name = transmute([]u8)custom_label
+            custom_name_length = len(custom_name)
+        }
+        entry := collections.Entry{
+            id = userdata_test_index_id(u32(index + 1)),
+            collection_id = collections.FAVORITES_COLLECTION_ID,
+            sibling_order = i64(index),
+            kind = .Animation,
+            animation_id = userdata_test_index_id(u32(index + 10000)),
+            custom_name = custom_name,
+            custom_name_length = custom_name_length,
+        }
+        testing.expect_value(t, collections.append_entry(snapshot, entry),
+            collections.Policy_Error.None)
+    }
+}
+
+// Persist a Set, close the database, and reopen it for replay assertions.
+userdata_test_replace_and_reopen_collections :: proc(
+    t: ^testing.T, path: string, snapshot: ^collections.Set, store: ^Store) {
+    testing.expect_value(t, store_open(store, path).kind, Store_Error_Kind.None)
+    testing.expect_value(t, store_replace_collections(store, snapshot).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, store_close(store).kind, Store_Error_Kind.None)
+    testing.expect_value(t, store_open(store, path).kind, Store_Error_Kind.None)
+}
+
+// Compare every persisted identity, order, target, and optional name after reload.
+userdata_test_expect_large_collection_round_trip :: proc(
+    t: ^testing.T, loaded: ^collections.Set) {
+    testing.expect_value(t, loaded^.entry_count, 1024)
+    testing.expect_value(t, loaded^.entries[0].id, userdata_test_index_id(1))
+    testing.expect_value(t, loaded^.entries[1023].id, userdata_test_index_id(1024))
+    for index in 0..<1024 {
+        entry_id := userdata_test_index_id(u32(index + 1))
+        testing.expect_value(t, collections.find_entry(loaded, entry_id), index)
+        testing.expect_value(t, loaded^.entries[index].id, entry_id)
+        testing.expect_value(t,
+            loaded^.entries[index].animation_id,
+            userdata_test_index_id(u32(index + 10000)))
+        testing.expect_value(t, loaded^.entries[index].sibling_order, i64(index))
+        if index == 256 {
+            testing.expect_value(t, loaded^.entries[index].custom_name_length, 19)
+            testing.expect_value(t,
+                string(loaded^.entries[index].custom_name), "Saved offline label")
+        } else {
+            testing.expect_value(t, loaded^.entries[index].custom_name_length, 0)
+            testing.expect_value(t, len(loaded^.entries[index].custom_name), 0)
+        }
+    }
+    testing.expect_value(t, collections.validate(loaded),
+        collections.Validation_Error.None)
 }

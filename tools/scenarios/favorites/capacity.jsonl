@@ -11,6 +11,34 @@
 {"library_placement":"expand_all"}
 {"wait_state":"tree_settled","timeout_ms":10000}
 {"assert_favorites":"capacity"}
+{"assert_favorites":"large_store"}
+{"library_placement":"focus:favorite:Point"}
+{"key":"home"}
+{"key":"end"}
+{"library_placement":"focus:favorite:Point"}
+{"screenshot":".build/favorites-large-focused.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"library_placement":"press:favorite:Point"}
+{"library_placement":"release:favorite:Point"}
+{"assert_favorites":"selected:favorite:Point"}
+{"library_placement":"focus:favorite:Point"}
+{"key":"tab"}
+{"key":"enter"}
+{"assert_favorites":"actions_open:favorite:Point"}
+{"assert_favorites":"name_editor_active"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"name_press:favorite:Point"}
+{"library_placement":"name_release:favorite:Point"}
+{"key":{"name":"a","ctrl":true}}
+{"type_library_name":"Large store persisted name"}
+{"key":"enter"}
+{"assert_favorites":"name:favorite:Point|Large store persisted name"}
+{"library_placement":"move_up:favorite:Point"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"move_down:favorite:Point"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"wait_state":"settings_saved","timeout_ms":10000}
+{"assert_favorites":"large_store"}
 {"screenshot":".build/favorites-maximum.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"assert_no_bad_frees":true}

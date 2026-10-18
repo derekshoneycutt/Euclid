@@ -1,6 +1,8 @@
 #+test
 package native_accessibility
 
+import storage "../../../core/storage"
+
 import accesskit "../../../../libs/accesskit"
 import portable "../../../accessibility"
 
@@ -48,6 +50,7 @@ accesskit_shared_favorites_controls :: proc() -> [5]Adapter_Control_Input {
 accesskit_shared_favorites_disclosure_hierarchy_and_retirement :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
+    defer adapter_close_admission(owner)
     controls := accesskit_shared_favorites_controls()
     input := Adapter_Tree_Input{root_bounds = {0, 0, 800, 600}, controls = controls[:]}
     testing.expect(t, adapter_publish_controls(owner, input))
@@ -57,7 +60,7 @@ accesskit_shared_favorites_disclosure_hierarchy_and_retirement :: proc(t: ^testi
         publication^.controls[2].native_id)
     testing.expect_value(t, publication^.controls[4].parent_native_id,
         publication^.controls[2].native_id)
-    testing.expect_value(t, publication^.controls[0].set_size, u16(3))
+    testing.expect_value(t, publication^.controls[0].set_size, u32(3))
     testing.expect(t, publication^.controls[4].focused)
     request := portable.Queued_Action{kind = u16(accesskit.Action.Click),
         target_native_id = retired, publication_generation = publication^.generation}
@@ -98,6 +101,7 @@ accesskit_shared_favorites_disclosure_translates_actions :: proc(t: ^testing.T) 
     controls := accesskit_shared_favorites_controls()
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
+    defer adapter_close_admission(owner)
     testing.expect(t, adapter_publish_controls(owner, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:]}))
     update := accesskit_control_tree_update(&owner^.control_publication.current)
@@ -155,6 +159,9 @@ accesskit_shared_scales_logical_bounds :: proc(t: ^testing.T) {
 // accesskit_shared_builds_mixed_control_tree verifies Phase 2 control translation.
 @(test)
 accesskit_shared_builds_mixed_control_tree :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect(t, storage.tlsf_owner_init(&memory, context.allocator) == .Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [6]portable.Control_Publication_Input{
         {native_id = 2, role = .Button, bounds = {10, 10, 50, 34},
             label = "Restart animation", actions = {.Focus, .Activate},
@@ -181,7 +188,7 @@ accesskit_shared_builds_mixed_control_tree :: proc(t: ^testing.T) {
     testing.expect_value(t, portable.control_tree_build(&publication, {
         root_bounds = {0, 0, 800, 600}, window_focused = true,
         controls = controls[:],
-    }), portable.Publication_Status.Ok)
+    }, &memory), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {
@@ -192,6 +199,11 @@ accesskit_shared_builds_mixed_control_tree :: proc(t: ^testing.T) {
 // accesskit_shared_builds_search_tree_hierarchy verifies nested translation.
 @(test)
 accesskit_shared_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
+    memory: storage.Tlsf_Owner
+    testing.expect_value(t,
+        storage.tlsf_owner_init(&memory, context.allocator),
+        storage.Tlsf_Owner_Status.Ok)
+    defer storage.tlsf_owner_destroy(&memory)
     controls := [4]portable.Control_Publication_Input{
         {native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
             label = "Search animations", enabled = true, focusable = true},
@@ -207,7 +219,7 @@ accesskit_shared_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
     publication: portable.Control_Tree_Publication
     testing.expect_value(t, portable.control_tree_build(&publication, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
-    }), portable.Publication_Status.Ok)
+    }, &memory), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {

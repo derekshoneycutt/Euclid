@@ -217,6 +217,7 @@ accordion_hidden_release_cancels_only_child_capture :: proc(t: ^testing.T) {
 accordion_visual_checkbox_preserves_actions_and_press_ownership :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     id := uisemantics.semantic_control_id(.Settings_Control, 4006)
     semantic^.commands[0] = {target = id, kind = .Toggle}
@@ -241,6 +242,7 @@ accordion_visual_checkbox_preserves_actions_and_press_ownership :: proc(t: ^test
 accordion_semantic_children_respect_the_selected_reveal :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     semantic^.staging_accordion_clip_set = true
     semantic^.staging_accordion_clip = {0, 0, 100, 10}
@@ -284,6 +286,7 @@ accordion_settings_scroll_is_retained_and_visual_preparation_is_pure :: proc(
     defer free(state, context.allocator)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     accordion_settings_scroll_page_command(t, state, semantic)
     command, amount := uisemantics.semantic_command_for_event(
         {role = .Panel, actions = {.Scroll}},

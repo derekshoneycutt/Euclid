@@ -67,17 +67,18 @@ function fresh_artifact_path(name::String; root=ARTIFACT_ROOT)
 end
 
 """Run one command while retaining output needed for concise failure reporting."""
-function capture_process(command::Cmd; cwd::AbstractString=REPOSITORY_ROOT)
+function capture_process(command::Cmd;
+    cwd::AbstractString=REPOSITORY_ROOT, input::IO=stdin)
     output = IOBuffer()
     errors = IOBuffer()
     exit_code = 0
     try
         cd(cwd) do
-            run(pipeline(command; stdout=output, stderr=errors))
+            run(pipeline(command; stdin=input, stdout=output, stderr=errors))
         end
     catch error_object
-        exit_code = error_object isa Base.ProcessFailedException ?
-            error_object.procs[1].exitcode : 1
+        error_object isa Base.ProcessFailedException || rethrow()
+        exit_code = error_object.procs[1].exitcode
     end
     return ProcessResult(exit_code, String(take!(output)), String(take!(errors)))
 end

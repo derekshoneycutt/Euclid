@@ -10,6 +10,7 @@ import sync "core:sync"
 import preferencesmodel "model"
 import core "../../core"
 import collections "../../collections"
+import viewmodel "../ui/model"
 
 SETTINGS_SAVE_MAX_ATTEMPTS :: 3
 SETTINGS_SAVE_RETRY_DELAY_FRAMES :: 60
@@ -62,40 +63,68 @@ settings_save_note_edit :: proc(state: ^core.Euclid_General_State) {
 // Accept one in-memory Favorites edit and retain it for ordered durable replay.
 settings_save_collection_mutation :: proc(
     state: ^core.Euclid_General_State,
-    mutation: collections.Mutation) -> collections.Mutation_Error {
+    mutation: collections.Mutation,
+    canonical_name: string = "") -> collections.Mutation_Error {
     if state == nil {
         return .Invalid_Entry
     }
     runtime := &state^.preferences_runtime
-    staged := new(collections.Set, context.temp_allocator)
-    defer free(staged, context.temp_allocator)
-    staged^ = runtime^.collections_state
-    mutation_error := collections.apply_mutation(staged, mutation)
-    if mutation_error != .None {
-        return mutation_error
-    }
-    in_flight_mutation_count := 0
-    if runtime^.settings_save_active {
-        in_flight_mutation_count = runtime^.settings_save_payload.mutation_count
-    }
-    if runtime^.settings_store != nil &&
-        runtime^.collection_mutation_count + in_flight_mutation_count >=
-            collections.MUTATION_CAPACITY {
+    if !settings_save_collection_mutation_has_capacity(runtime) {
         return .Capacity
     }
-    runtime^.collections_state = staged^
+    projection := &state^.ui_runtime.library.tree.projection
+    prepare_error := viewmodel.ui_tree_projection_prepare_mutation(
+        projection, mutation, canonical_name)
+    if prepare_error != .None {
+        return prepare_error
+    }
+    mutation_error := collections.apply_mutation(
+        &runtime^.collections_state, mutation)
+    if mutation_error != .None {
+        viewmodel.ui_tree_projection_abort_mutation(projection)
+        return mutation_error
+    }
+    settings_save_publish_collection_mutation(state, mutation)
+    return .None
+}
+
+// Publish an accepted mutation to the display projection and ordered save queue.
+settings_save_publish_collection_mutation :: proc(
+    state: ^core.Euclid_General_State,
+    mutation: collections.Mutation) {
+    runtime := &state^.preferences_runtime
+    projection := &state^.ui_runtime.library.tree.projection
     if mutation.kind == .Remove_Favorite &&
         state^.ui_runtime.library.entry_name.active &&
         state^.ui_runtime.library.entry_name.entry_id == mutation.entry_id {
         state^.ui_runtime.library.entry_name = {}
     }
     runtime^.collection_revision += 1
+    if !viewmodel.ui_tree_projection_commit_mutation(
+        &state^.ui_runtime, &runtime^.collections_state, mutation,
+        runtime^.collection_revision) {
+        log.error("library_projection_mutation_commit_failed")
+        projection.valid = false
+    }
     if runtime^.settings_store != nil {
         runtime^.collection_mutations[runtime^.collection_mutation_count] = mutation
         runtime^.collection_mutation_count += 1
     }
     settings_save_note_edit(state)
-    return .None
+}
+
+// Check pending and active batches against the bounded replay capacity.
+settings_save_collection_mutation_has_capacity :: proc(
+    runtime: ^preferencesmodel.Settings_Save_Runtime) -> bool {
+    if runtime == nil || runtime^.settings_store == nil {
+        return runtime != nil
+    }
+    in_flight_mutation_count := 0
+    if runtime^.settings_save_active {
+        in_flight_mutation_count = runtime^.settings_save_payload.mutation_count
+    }
+    return runtime^.collection_mutation_count + in_flight_mutation_count <
+        collections.MUTATION_CAPACITY
 }
 
 // Restore failed operations ahead of edits accepted during the worker transaction.

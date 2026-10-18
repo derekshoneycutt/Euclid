@@ -6,6 +6,7 @@ import uuid "core:encoding/uuid"
 import viewmodel "../model"
 import theme "../theme"
 import uiaccordion "../layout/accordion"
+import log "core:log"
 
 // Tree_Reorder_Admission holds current facts that can interrupt a sampled swap.
 Tree_Reorder_Admission :: struct {
@@ -27,14 +28,22 @@ tree_reorder_capture :: proc(
     if params.reduce_motion {
         return
     }
-    layout: Tree_Prepared_Layout
-    tree_prepare_layout(params, &layout)
+    projection := &params.ui_runtime^.library.tree.projection
+    if !viewmodel.ui_tree_projection_reserve_reorder(
+        projection, projection^.count) {
+        log.error("library_tree_reorder_workspace_allocation_failed")
+        return
+    }
+    result^.rows = projection^.reorder_rows
+    layout: viewmodel.Ui_Tree_Prepared_Layout
+    if !tree_prepare_layout_scratch(params, &layout) {
+        return
+    }
     result^.owner = params.ui_runtime^.library.tree.selected_item_id
     result^.generation = params.ji^.content_generation
     result^.panel = params.list_panel
     result^.start_seconds = params.mouse_input.sample_time_seconds
     result^.drawer_height = params.ui_runtime^.library.actions.drawer.height
-    projection := &params.ui_runtime^.library.tree.projection
     for row in layout.rows[:layout.count] {
         parent := row.item^.parent
         if !row.logical || row.item^.kind != .Placement || parent == TREE_NO_ITEM ||
@@ -96,7 +105,7 @@ tree_reorder_apply :: proc(
     drawer: ^viewmodel.Ui_Tree_Actions_Motion,
     current: Tree_Reorder_Admission,
     now: f64,
-    layout: ^Tree_Prepared_Layout) {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
     if !motion^.active {
         return
     }
@@ -122,7 +131,8 @@ tree_reorder_apply :: proc(
 }
 
 // tree_reorder_translate_row keeps a placement, disclosure, and attached drawer together.
-tree_reorder_translate_row :: proc(row: ^Tree_Prepared_Row, offset: f32) {
+tree_reorder_translate_row :: proc(
+    row: ^viewmodel.Ui_Tree_Prepared_Row, offset: f32) {
     row^.content_y += offset
     row^.actions.toggle_rect.y += offset
     row^.actions.drawer_rect.y += offset
@@ -133,7 +143,7 @@ tree_reorder_translate_row :: proc(row: ^Tree_Prepared_Row, offset: f32) {
 // tree_reorder_foreground finds the selected visual block during a running exchange.
 tree_reorder_foreground :: proc(
     motion: ^viewmodel.Ui_Tree_Reorder_Motion,
-    layout: ^Tree_Prepared_Layout) -> int {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout) -> int {
     if !motion^.active {
         return -1
     }
@@ -147,7 +157,7 @@ tree_reorder_foreground :: proc(
 
 // tree_reorder_block_clip bounds the opaque foreground row and drawer in screen space.
 tree_reorder_block_clip :: proc(
-    row: Tree_Prepared_Row,
+    row: viewmodel.Ui_Tree_Prepared_Row,
     panel: geometry.Rectangle, scroll_y: f32) -> geometry.Rectangle {
     bounds := tree_row_screen_geometry(row, panel, scroll_y)
     block := bounds.bounds
@@ -157,8 +167,9 @@ tree_reorder_block_clip :: proc(
 
 // tree_reorder_visible_geometry excludes foreground occlusion from addressed row admission.
 tree_reorder_visible_geometry :: proc(
-    motion: ^viewmodel.Ui_Tree_Reorder_Motion, layout: ^Tree_Prepared_Layout,
-    row: Tree_Prepared_Row, panel: geometry.Rectangle,
+    motion: ^viewmodel.Ui_Tree_Reorder_Motion,
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout,
+    row: viewmodel.Ui_Tree_Prepared_Row, panel: geometry.Rectangle,
     scroll_y: f32) -> viewmodel.Ui_Control_Geometry {
     result := tree_row_screen_geometry(row, panel, scroll_y)
     foreground := tree_reorder_foreground(motion, layout)
@@ -188,8 +199,10 @@ tree_reorder_command_visible :: proc(
     if !params.ui_runtime^.library.actions.reorder.active {
         return true
     }
-    layout: Tree_Prepared_Layout
-    tree_prepare_layout(params, &layout)
+    layout: viewmodel.Ui_Tree_Prepared_Layout
+    if !tree_prepare_layout_scratch(params, &layout) {
+        return false
+    }
     row := tree_layout_find_item(&layout, item)
     if row == nil {
         return false

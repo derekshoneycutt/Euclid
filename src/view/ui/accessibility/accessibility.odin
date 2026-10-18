@@ -1,6 +1,7 @@
 package uiaccessibility
 
 import native "../../native"
+import native_accessibility "../../native/accessibility"
 import accessibility "../../../accessibility"
 import uuid "core:encoding/uuid"
 import log "core:log"
@@ -321,33 +322,58 @@ accessibility_control_input :: proc(
     }
 }
 
-// publish_accessibility_controls projects all committed ordinary controls.
-publish_accessibility_controls :: proc(
+// accessibility_project_controls borrows native-owner workspace for the committed projection.
+accessibility_project_controls :: proc(
     semantic: ^viewmodel.Ui_Semantic_Focus_State,
-    platform: ^native.Sdl_Platform) {
+    owner: ^native_accessibility.Adapter) -> (
+        []native.Sdl_Accessibility_Control_Input, bool) {
     snapshot := uisemantics.semantic_snapshot(semantic)
-    root_bounds := accessibility.Bounds{0, 0,
-        f64(platform^.metrics.logical_width), f64(platform^.metrics.logical_height)}
-    controls: [accessibility.CONTROL_NODE_CAPACITY]native.Sdl_Accessibility_Control_Input
-    control_count := 0
+    if snapshot == nil {
+        return nil, false
+    }
+    count := 0
+    for node in snapshot^.nodes[:snapshot^.node_count] {
+        _, supported := accessibility_publication_role(node.role)
+        if supported && .Visible in node.states {
+            count += 1
+        }
+    }
+    controls, ok := native_accessibility.adapter_projection_workspace(owner, count)
+    if !ok {
+        return nil, false
+    }
+    index := 0
     for node in snapshot^.nodes[:snapshot^.node_count] {
         role, supported := accessibility_publication_role(node.role)
         if !supported || .Visible not_in node.states {
             continue
         }
-        if control_count >= len(controls) {
-            log.warn("accessibility_control_capacity_exceeded")
-            return
-        }
-        controls[control_count] = accessibility_control_input(
-            semantic, snapshot, node, role)
-        control_count += 1
+        controls[index] = accessibility_control_input(semantic, snapshot, node, role)
+        index += 1
     }
+    return controls, true
+}
+
+// publish_accessibility_controls projects all committed controls without fixed staging limits.
+publish_accessibility_controls :: proc(
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    platform: ^native.Sdl_Platform) {
+    if platform == nil {
+        return
+    }
+    controls, ready := accessibility_project_controls(semantic, &platform^.accessibility)
+    if !ready {
+        log.warn("accessibility_control_workspace_failed")
+        return
+    }
+    defer native_accessibility.adapter_projection_release(&platform^.accessibility)
+    root_bounds := accessibility.Bounds{0, 0,
+        f64(platform^.metrics.logical_width), f64(platform^.metrics.logical_height)}
     if !native.sdl_platform_publish_accessibility_controls(platform, {
             root_bounds = root_bounds,
             bounds_scale = f64(platform^.metrics.display_scale),
             window_focused = semantic^.window_focused,
-            controls = controls[:control_count],
+            controls = controls,
         }) {
         log.warn("accessibility_control_publication_failed")
     }

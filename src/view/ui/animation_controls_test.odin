@@ -13,6 +13,13 @@ import uisemantics "semantics"
 import theme "theme"
 import uuid "core:encoding/uuid"
 import native "../native"
+import uilibrary "library"
+
+Animation_Favorite_Test_Projection :: struct {
+    node: ^viewmodel.Ui_Tree_Item,
+    build_count: u64,
+    selected_key: uuid.Identifier,
+}
 
 // Build one selected animation with a live collection store for control tests.
 animation_controls_test_state :: proc(
@@ -26,6 +33,7 @@ animation_controls_test_state :: proc(
     state^.preferences_runtime.settings_store = store
     animation^.stable_id[0] = 71
     animation^.node_kind = .Animation
+    animation^.name = "Animation"
     ji^.selected_animation = animation
     state^.julia_interface = ji
     state^.ui_runtime.layout.ui_regions.world_rect = {0, 0, 640, 480}
@@ -59,31 +67,65 @@ animation_controls_favorites_toggle_and_reappend :: proc(t: ^testing.T) {
         free(store, context.allocator)
         destroy_shell_test_state(state)
     }
+    ji.animation_head = &first
+    ji.animation_count = 1
+    ji.content_generation = 1
+    second.stable_id[0] = 72
+    second.node_kind = .Animation
+    stable := animation_controls_test_prepare_favorite_projection(t, state, &ji)
+    animation_controls_test_click_favorite(state)
+    first_entry_id := state^.preferences_runtime.collections_state.entries[0].id
+    ji.selected_animation = &second
+    animation_controls_test_click_favorite(state)
+    ji.selected_animation = &first
+    animation_controls_test_click_favorite(state)
+    animation_controls_test_expect_reappend(
+        t, state, first_entry_id, second.stable_id, first.stable_id)
+    testing.expect_value(t, ji.selected_animation, &first)
+    testing.expect(t, state^.ui_runtime.playback.simulation_paused)
+    testing.expect(t, !ji.pending_animation_reset)
+    testing.expect_value(t,
+        state^.ui_runtime.library.tree.selected_item_id, stable.selected_key)
+    projection := &state^.ui_runtime.library.tree.projection
+    testing.expect_value(t, projection^.build_count, stable.build_count)
+    testing.expect_value(t, projection^.items[0], stable.node)
+}
+
+// Prepare one Favorites projection and retain its identity expectations.
+animation_controls_test_prepare_favorite_projection :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface) -> Animation_Favorite_Test_Projection {
+    params := uilibrary.Tree_List_Params{
+        general_state = state,
+        ji = ji,
+        collections = &state^.preferences_runtime.collections_state,
+        ui_runtime = &state^.ui_runtime,
+    }
+    testing.expect(t, uilibrary.tree_projection_prepare(params))
+    projection := &state^.ui_runtime.library.tree.projection
     state^.ui_runtime.playback.simulation_paused = true
     selected_key: uuid.Identifier
     selected_key[0] = 99
     state^.ui_runtime.library.tree.selected_item_id = selected_key
-    animation_controls_test_click_favorite(state)
-    first_entry_id := state^.preferences_runtime.collections_state.entries[0].id
-    ji.selected_animation = &second
-    second.stable_id[0] = 72
-    second.node_kind = .Animation
-    animation_controls_test_click_favorite(state)
-    ji.selected_animation = &first
-    animation_controls_test_click_favorite(state)
+    return {projection^.items[0], projection^.build_count, selected_key}
+}
+
+// Verify re-append ordering while preserving the selected animation and UI state.
+animation_controls_test_expect_reappend :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    first_entry_id: uuid.Identifier,
+    second_id, first_id: uuid.Identifier) {
     testing.expect_value(t,
         state^.preferences_runtime.collections_state.entry_count, 1)
     animation_controls_test_click_favorite(state)
     set := &state^.preferences_runtime.collections_state
-    testing.expect_value(t, set^.entries[0].animation_id, second.stable_id)
-    testing.expect_value(t, set^.entries[1].animation_id, first.stable_id)
+    testing.expect_value(t, set^.entries[0].animation_id, second_id)
+    testing.expect_value(t, set^.entries[1].animation_id, first_id)
     testing.expect(t, set^.entries[1].id != first_entry_id)
     testing.expect_value(t, state^.preferences_runtime.collection_mutation_count, 4)
     testing.expect_value(t, state^.preferences_runtime.collection_revision, u64(4))
-    testing.expect_value(t, ji.selected_animation, &first)
-    testing.expect(t, state^.ui_runtime.playback.simulation_paused)
-    testing.expect(t, !ji.pending_animation_reset)
-    testing.expect_value(t, state^.ui_runtime.library.tree.selected_item_id, selected_key)
 }
 
 // Keyboard activation uses the semantic button action and exposes checked focus state.
@@ -98,6 +140,7 @@ animation_controls_favorite_semantics_and_keyboard_activation :: proc(t: ^testin
     }
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(focus, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(focus)
     state^.ui_runtime.semantic_focus = focus
     _, accepted := uianimation.toggle_animation_favorite(state, &animation)
     testing.expect(t, accepted)
@@ -111,7 +154,7 @@ animation_controls_favorite_semantics_and_keyboard_activation :: proc(t: ^testin
     index := uisemantics.semantic_node_index(snapshot, id)
     node := snapshot^.nodes[index]
     testing.expect(t, .Checked in node.states && .Tab_Stop in node.states)
-    testing.expect_value(t, node.traversal_order, u16(2))
+    testing.expect_value(t, node.traversal_order, u32(2))
     testing.expect(t, .Activate in node.actions)
     testing.expect(t, uisemantics.semantic_append_command(focus, {
         target = id, kind = .Activate,
@@ -161,6 +204,7 @@ animation_controls_favorite_semantics_use_separate_panel :: proc(t: ^testing.T) 
     }
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(focus, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(focus)
     state^.ui_runtime.semantic_focus = focus
     testing.expect(t, uisemantics.semantic_begin(focus))
     prepared := uianimation.prepare_animation_controls(state, {})

@@ -74,6 +74,11 @@ Scenario_Runtime :: struct {
     reorder_sample_floor: f64,
     reorder_frame_time: f64,
     pending_reorder_command: viewmodel.Ui_Focus_Command,
+    native_memory: storage.Tlsf_Owner_Diagnostics,
+    native_control_count: int,
+    native_text_bytes: int,
+    native_toolkit_updates: u64,
+    native_toolkit_nodes: u64,
 }
 
 // Resolved owner-domain identity and its synchronized arena diagnostics.
@@ -831,6 +836,22 @@ scenario_issue_input_action :: proc(
     }
 }
 
+// Report the actual focused identity when a stable scenario focus assertion fails.
+scenario_focus_matches :: proc(runtime: ^Scenario_Runtime, name: string) -> bool {
+    focus := runtime^.state^.ui_runtime.semantic_focus
+    if focus == nil {
+        log.debugf("scenario_focus_mismatch expected=%s semantic_focus_unavailable", name)
+        return false
+    }
+    accepted := ui.semantic_focus_matches_name(focus, name)
+    if !accepted {
+        log.debugf("scenario_focus_mismatch expected=%s logical=%v effective=%v",
+            name, focus^.logical_focus,
+            runtime^.state^.ui_runtime.input.interaction_frame.effective_focus)
+    }
+    return accepted
+}
+
 // Route one generic scenario command through ordinary Euclid request state and APIs.
 scenario_issue_generic_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -842,8 +863,7 @@ scenario_issue_generic_action :: proc(
     }
     #partial switch command.kind {
     case .Assert_Focus:
-        return true, ui.semantic_focus_matches_name(
-            runtime.state^.ui_runtime.semantic_focus, text)
+        return true, scenario_focus_matches(runtime, text)
     case .Assert_Library_Search:
         search := &runtime.state^.ui_runtime.library.search
         return true, string(search^.query[:search^.query_length]) == text

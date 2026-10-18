@@ -11,6 +11,7 @@ import uisemantics "../semantics"
 input_box_semantics_use_owner_control_relation :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     input_state: viewmodel.Ui_Input_Box_State
     target := viewmodel.Ui_Node_Id{domain = .Gif_Control, local_id = 8}
@@ -299,6 +300,7 @@ input_box_descriptor_projects_utf8_selection_geometry :: proc(t: ^testing.T) {
 input_box_semantic_text_actions_preserve_utf8_boundaries :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     id := viewmodel.Ui_Node_Id{domain = .Library_Control, local_id = 11}
     buffer: [16]u8
     copy(buffer[:], "aβc")
@@ -327,6 +329,7 @@ input_box_semantic_text_actions_preserve_utf8_boundaries :: proc(t: ^testing.T) 
 input_box_semantic_full_text_action_replaces_all :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     id := viewmodel.Ui_Node_Id{domain = .Library_Control, local_id = 11}
     buffer: [16]u8
     copy(buffer[:], "old")
@@ -601,6 +604,7 @@ input_box_read_only_double_click_supports_copy_navigation :: proc(t: ^testing.T)
 input_box_multi_click_publishes_semantic_selection :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
     state := viewmodel.Ui_Input_Box_State{content_revision = 1}
     owner: viewmodel.Ui_Press_Owner_State
     params := input_box_test_pointer_params(&state, "αβ end", 2, 14)

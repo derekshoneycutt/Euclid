@@ -16,7 +16,13 @@ import viewmessages "../../messages"
 
 LIBRARY_ENTRY_NAME_DEBOUNCE_SECONDS :: 0.4
 LIBRARY_ENTRY_NAME_DEBOUNCE_EPSILON_SECONDS :: 0.000001
-LIBRARY_ENTRY_NAME_INPUT_TRAVERSAL_ORDER :: u16(5)
+LIBRARY_ENTRY_NAME_INPUT_TRAVERSAL_ORDER :: u32(5)
+
+Library_Entry_Name_Prefill :: struct {
+    identity: collections.Placement_Identity,
+    placement: collections.Placement_View,
+    valid: bool,
+}
 
 // library_entry_name_visible exposes only the selected, logically open Library field.
 library_entry_name_visible :: #force_inline proc(
@@ -93,56 +99,76 @@ library_entry_name_begin :: proc(
     if state == nil {
         return false
     }
-    entry_index := library_entry_name_find_prefill_entry(state, entry_id, prefill)
-    if entry_index < 0 {
+    prefill_result := library_entry_name_resolve_prefill(state, entry_id, prefill)
+    if !prefill_result.valid {
         return false
     }
-    set := &state^.preferences_runtime.collections_state
     draft := &state^.ui_runtime.library.entry_name
-    if draft^.active && draft^.entry_id == entry_id {
+    if draft^.active && draft^.placement == prefill_result.identity {
         return true
     }
     if draft^.active && !library_entry_name_flush(state) {
         return false
     }
-    entry := set.entries[entry_index]
+    library_entry_name_initialize_draft(
+        draft, entry_id, prefill_result, prefill)
+    return true
+}
+
+// Initialize one editor draft from an owner-resolved placement view.
+library_entry_name_initialize_draft :: proc(
+    draft: ^viewmodel.Ui_Library_Entry_Name_Draft,
+    entry_id: uuid.Identifier,
+    prefill_result: Library_Entry_Name_Prefill,
+    prefill: string) {
     revision := draft^.revision + 1
     draft^ = {
         entry_id = entry_id,
-        accepted_name_length = entry.custom_name_length,
+        placement = prefill_result.identity,
+        accepted_name_length = prefill_result.placement.custom_name_length,
         revision = revision,
         active = true,
     }
-    draft^.accepted_name = entry.custom_name
+    if prefill_result.placement.custom_name_length > 0 {
+        copy(
+            draft^.accepted_name[:prefill_result.placement.custom_name_length],
+            prefill_result.placement.custom_name[
+                :prefill_result.placement.custom_name_length])
+    }
     if len(prefill) > 0 {
         copy(draft^.value[:len(prefill)], transmute([]u8)prefill)
     }
     draft^.value_length = len(prefill)
     draft^.input.cursor_byte = len(prefill)
     draft^.input.content_revision = 1
-    return true
 }
 
-// Validate a prefill and resolve its current Favorites placement.
-library_entry_name_find_prefill_entry :: proc(
+// Validate a prefill and resolve its current Favorites placement view.
+library_entry_name_resolve_prefill :: proc(
     state: ^core.Euclid_General_State,
     entry_id: uuid.Identifier,
-    prefill: string) -> int {
+    prefill: string) -> Library_Entry_Name_Prefill {
     if entry_id == (uuid.Identifier{}) ||
         len(prefill) > collections.ENTRY_NAME_MAX_BYTES ||
         !collections.entry_name_bytes_are_valid(
             transmute([]u8)prefill, len(prefill)) {
         log.error("library_entry_name_begin_rejected_invalid_prefill")
-        return -1
+        return {}
     }
     set := &state^.preferences_runtime.collections_state
-    entry_index := collections.find_entry(set, entry_id)
-    if entry_index < 0 ||
-        set.entries[entry_index].collection_id != collections.FAVORITES_COLLECTION_ID {
+    identity, identity_error :=
+        collections.placement_identity_for_entry(set, entry_id)
+    if identity_error != .None ||
+        identity.collection_id != collections.FAVORITES_COLLECTION_ID {
         log.error("library_entry_name_begin_rejected_missing_favorite")
-        return -1
+        return {}
     }
-    return entry_index
+    placement, placement_error := collections.placement_resolve(set, identity)
+    if placement_error != .None {
+        log.errorf("library_entry_name_begin_rejected policy=%v", placement_error)
+        return {}
+    }
+    return {identity = identity, placement = placement, valid = true}
 }
 
 // Replace the owned text immediately and restart its idle-admission deadline.
@@ -194,7 +220,11 @@ library_entry_name_flush :: proc(
         return true
     }
     set := &state^.preferences_runtime.collections_state
-    if collections.find_entry(set, draft^.entry_id) < 0 {
+    _, placement_error := collections.placement_resolve(set, draft^.placement)
+    if placement_error != .None {
+        if placement_error != .Missing_Entry {
+            log.warnf("library_entry_name_draft_discarded policy=%v", placement_error)
+        }
         draft^ = {}
         return true
     }
@@ -213,8 +243,8 @@ library_entry_name_commit :: proc(
         library_entry_name_accept_local(draft, normalized)
         return true
     }
-    mutation, mutation_error := collections.make_entry_name_mutation(
-        draft^.entry_id, normalized)
+    mutation, mutation_error := collections.make_placement_name_mutation(
+        draft^.placement, normalized)
     if mutation_error == .None {
         mutation_error = viewpreferences.settings_save_collection_mutation(
             state, mutation)

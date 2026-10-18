@@ -215,6 +215,7 @@ tooltip_control_source_follows_pointer_and_keyboard_focus :: proc(t: ^testing.T)
     owner := semantic_test_id(.Animation_Control, 7)
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(focus, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(focus)
     focus^.window_focused = true
     focus^.logical_focus = owner
     focus^.focus_origin = .Keyboard

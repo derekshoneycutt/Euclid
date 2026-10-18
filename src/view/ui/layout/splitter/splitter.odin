@@ -495,7 +495,7 @@ register_splitter_semantics :: proc(
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound, .Set_Value},
             region = .Pane_Layout,
-            traversal_order = u16(order),
+            traversal_order = u32(order),
             bounds = entry.prepared.control_geometry.bounds,
             clip_bounds = entry.prepared.control_geometry.clip_bounds,
             numeric_range = {f64(entry.prepared.minimum),

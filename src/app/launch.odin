@@ -101,15 +101,15 @@ launch_run_session :: proc(
     launch: Launch_Configuration,
     settings: ^core.Euclid_Run_Settings) -> int {
     resolved: setting_model.Preferences
-    // This large bounded bootstrap snapshot is heap-owned, copied into display state,
-    // and freed when the synchronous launch session returns.
-    collection_state := new(collections.Set, context.allocator)
-    defer free(collection_state, context.allocator)
     store: user_data.Store
     store_opened := false
     if !launch_prepare_preferences(
-        launch, &resolved, &store, &store_opened, collection_state) {
+        launch, &resolved, &store, &store_opened) {
         return 1
+    }
+    collection_state: ^collections.Set
+    if store_opened {
+        collection_state = &store.collection_replay_workspace
     }
     return launch_run_view(
         settings, resolved, collection_state, &store, &store_opened)
@@ -162,8 +162,9 @@ launch_prepare_preferences :: proc(
         return false
     }
     preferences^ = setting_model.default_preferences()
-    if collection_state != nil {
-        collections.initialize(collection_state)
+    if collection_state != nil && !collections.initialize(collection_state) {
+        fmt.eprintln("Unable to initialize collection replay storage.")
+        return false
     }
     if !state.no_user_db {
         store_available := launch_open_store(store, state, store_opened)
@@ -204,7 +205,10 @@ launch_load_collections :: proc(
         return false
     }
     preferences^ = setting_model.default_preferences()
-    collections.initialize(collection_state)
+    if !collections.initialize(collection_state) {
+        fmt.eprintln("Unable to initialize collection replay storage.")
+        return false
+    }
     return true
 }
 

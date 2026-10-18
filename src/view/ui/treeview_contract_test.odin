@@ -8,15 +8,11 @@ import treeviewmodel "widgets/treeview/model"
 import viewmodel "model"
 import testing "core:testing"
 
-// Verify widget, Library storage, and semantic budgets cover the 512-node tree.
+// Keep the standalone widget's historical fixture bound independent of dynamic owners.
 @(test)
 treeview_contract_preserves_v1_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, treeviewmodel.NODE_CAPACITY, 512)
     testing.expect_value(t, viewmodel.UI_TREE_NODE_CAPACITY, treeviewmodel.NODE_CAPACITY)
-    testing.expect_value(t, viewmodel.LIBRARY_SEARCH_VISIBLE_ID_CAPACITY,
-        viewmodel.UI_TREE_NODE_CAPACITY)
-    testing.expect_value(t, viewmodel.UI_SEMANTIC_NODE_CAPACITY,
-        viewmodel.UI_TREE_NODE_CAPACITY + 1024 + 64)
 }
 
 // Verify catalogue UUIDs and existing semantic identities fit the independent contract.

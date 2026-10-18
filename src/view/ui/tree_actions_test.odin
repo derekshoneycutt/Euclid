@@ -135,8 +135,8 @@ tree_actions_test_expand_favorites :: proc(params: uilibrary.Tree_List_Params) {
 
 // tree_actions_test_row finds a prepared row by stable placement identity.
 tree_actions_test_row :: proc(
-    layout: ^uilibrary.Tree_Prepared_Layout, key: uuid.Identifier) ->
-        ^uilibrary.Tree_Prepared_Row {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout, key: uuid.Identifier) ->
+        ^viewmodel.Ui_Tree_Prepared_Row {
     for index in 0..<layout^.count {
         if layout^.rows[index].item^.key == key {
             return &layout^.rows[index]
@@ -218,7 +218,7 @@ tree_actions_test_open_drawer :: proc(
 // tree_actions_test_expect_order checks authoritative sibling enumeration after a move.
 tree_actions_test_expect_order :: proc(
     t: ^testing.T, set: ^collections.Set) {
-    ordered_indexes: [collections.ENTRY_CAPACITY]int
+    ordered_indexes: [collections.ENTRY_INDEX_BUFFER_CAPACITY]int
     count, failure := collections.ordered_siblings(
         set, collections.FAVORITES_COLLECTION_ID, {}, ordered_indexes[:])
     testing.expect_value(t, failure, collections.Policy_Error.None)
@@ -309,7 +309,7 @@ tree_actions_motion_uses_disclosure_policy_without_closing_actions :: proc(
 tree_actions_test_advance_motion :: proc(
     params: ^uilibrary.Tree_List_Params,
     fraction: f64,
-    layout: ^uilibrary.Tree_Prepared_Layout) {
+    layout: ^viewmodel.Ui_Tree_Prepared_Layout) {
     params^.mouse_input.sample_time_seconds +=
         uiaccordion.INTERFACE_TRANSITION_SECONDS * fraction
     uilibrary.tree_prepare_layout(params^, layout)
@@ -318,14 +318,16 @@ tree_actions_test_advance_motion :: proc(
 // tree_actions_test_closing_controls verifies the visible closing tail cannot issue moves.
 tree_actions_test_closing_controls :: proc(
     t: ^testing.T, params: ^uilibrary.Tree_List_Params,
-    row: ^uilibrary.Tree_Prepared_Row) {
+    row: ^viewmodel.Ui_Tree_Prepared_Row) {
     hit: uilibrary.Tree_Hit
     params^.mouse_input.mouse_position = {
         params^.list_panel.x + row^.actions.move_down_rect.x + 4,
         params^.list_panel.y + row^.actions.move_down_rect.y + 4,
     }
+    prepared: uilibrary.Tree_List_Preparation
     uilibrary.tree_actions_prepare_controls(
-        params^, row, {panel = params^.list_panel, allow_clicks = true}, &hit)
+        params^, row, &prepared,
+        {panel = params^.list_panel, allow_clicks = true}, &hit)
     testing.expect_value(t, hit.actions_move_id, uuid.Identifier{})
 }
 
@@ -342,7 +344,7 @@ tree_actions_geometry_stacks_and_clips_disabled_endpoints :: proc(t: ^testing.T)
     state^.ui_runtime.library.tree.selected_item_id = first_id
     uilibrary.tree_actions_toggle(params, first_id)
     params.list_panel.width = 220
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     row := tree_actions_test_row(&layout, first_id)
     testing.expect(t, row^.actions.open)
@@ -385,7 +387,7 @@ tree_actions_geometry_disables_singleton_endpoints :: proc(t: ^testing.T) {
     middle_id := params.collections^.entries[0].id
     state^.ui_runtime.library.tree.selected_item_id = middle_id
     uilibrary.tree_actions_toggle(params, middle_id)
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     row := tree_actions_test_row(&layout, middle_id)
     testing.expect(t, !row^.actions.move_up_enabled)
@@ -407,7 +409,7 @@ tree_actions_close_when_owner_context_changes :: proc(t: ^testing.T) {
     uilibrary.tree_actions_reconcile(params)
     testing.expect_value(t, state^.ui_runtime.library.actions.drawer.entry_id,
         uuid.Identifier{})
-    layout: uilibrary.Tree_Prepared_Layout
+    layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
     testing.expect_value(t, state^.ui_runtime.library.actions.drawer.entry_id,
         uuid.Identifier{})
@@ -488,7 +490,8 @@ tree_actions_draw_geometry_balances_clips :: proc(t: ^testing.T) {
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {800, 800}, {800, 800}))
     uilibrary.draw_tree_actions_drawer_surfaces(
-        &encoder, row^, params.list_panel, prepared.scroll.scroll_y_out)
+        {encoder = &encoder, panel = params.list_panel,
+            scroll_y = prepared.scroll.scroll_y_out}, row^)
     testing.expect_value(t, encoder.scissor_count, 1)
     testing.expect_value(t, encoder.statistics.scissor_overflows, u32(0))
     testing.expect_value(t, encoder.statistics.command_overflows, u32(0))

@@ -388,13 +388,22 @@ not imply that their owners or lifetimes should be merged.
 | Tracking allocator wrapper | Debug allocation evidence around allocations routed through a tracked domain. Accounting is not ownership of the tracked objects' lifecycles. | [`core:mem`](https://pkg.odin-lang.org/core/mem/) |
 | Inline arrays and retained buffers | Bounded worlds, slots, commands, queues, and reusable workspaces. Logical clearing often changes counts rather than allocating or freeing. | [Odin arrays and slices](https://odin-lang.org/docs/overview/) |
 
-The repository's arena wrapper deserves separate attention:
+The repository's owned storage wrappers deserve separate attention:
 
 - [`Arena_Owner`](../../../src/core/storage/arena_owner.odin) owns a growing virtual
   arena, publishes its allocator, and retains lifecycle diagnostics. Reset retains
   the first block and releases growth blocks; destruction releases the arena.
   Used, reserved, and committed bytes are separate measurements. The initialized
   owner must remain at a stable address and must not be copied.
+- [`TLSF_Owner`](../../../src/core/storage/tlsf_owner.odin) retains stable TLSF
+  controls, backing-pool records, and aligned pools for individually reusable
+  allocations. Its caller supplies the real backing allocator domain, which must
+  outlive the owner; every pool and record is released through that same allocator.
+  Growth admits a pool only after its metadata, backing, and TLSF initialization
+  succeed, and sizes pools for TLSF's mapping slack as well as the request.
+  Allocation, free, resize, diagnostics, and destruction belong to one owner
+  thread; the initialized owner must remain at a stable address and must not be
+  copied. Failed replacement leaves the previous allocation valid.
 
 An arena is a good fit when data dies together. A reusable free-list allocator is
 a better fit when independently edited objects die at different times. Neither
@@ -420,7 +429,7 @@ Exact quotas and byte sizes belong to the linked models and implementations.
 | Dynview derived cache | Dedicated cache arena and persistent shaping workspaces | Rebuild under exclusive worker access, then joined display use | [Simulation executor](../../../src/view/simulation/simulation_executor.odin), [compiler](../../../src/dynview/compile/compile.odin) |
 | Task scheduler | Fixed virtual backing, mutex-wrapped TLSF, retained workers/queues/slots | Join task results and fences; stop pool before backing release | [Task pool](../../../src/taskpool/taskpool.odin) |
 | Fonts | Cache-owned metadata TLSF for canonical glyphs, optional-raster records, and visible-ink samples; separate static preparation arena and display-owned atlas resources | Join preparation; copy/publish accepted data; release generation metadata on retirement and destroy cache storage after all consumers stop | [Font Rasterization](FontRasterization.md), [font cache](../../../src/view/font/font.odin) |
-| Collections and Library | Bounded pointer-free collection snapshots and display-owned UI projection | Edits stage and replace values; retained display state lasts through its owner lifetime | [Collections](../../../src/collections/model.odin), [Library section](#library-and-persistence-memory) |
+| Collections and Library | Display-owned TLSF records and stable UI nodes, optional copied labels, UUID indexes, and an independent Store replay owner | Same-generation edits patch only affected nodes; display and replay Sets own separate TLSF domains and are deep-copied between owners | [Collections](../../../src/collections/model.odin), [Library projection](../../../src/view/ui/model/tree_projection_storage.odin), [Library section](#library-and-persistence-memory) |
 | User-data persistence | App-owned store, sequentially owned SQLite connection/statements, operation-scoped replay snapshots | Join save work before payload reuse or connection/store close; reclaim scratch at its operation boundary | [User-data model](../../../src/userdata/model.odin), [save coordinator](../../../src/view/preferences/settings_save.odin) |
 | Terminal graphics and shell | Display-lifetime service owners, generation-bound attachments, joined jobs, native process resources | Unbind/close generation consumers before reset; stop services before pool destruction | [Graphics service](../../../src/view/terminal/service/terminal_graphics_service.odin), [shell service](../../../src/view/terminal/service/shell_service.odin) |
 | Renderer and capture | Fixed CPU staging, SDL GPU resources, framebuffer owner, capture-owned GIF arena, native encoder, and output transaction | Reuse staged pixels within a capture; close/abort native work before resetting storage; retain published path until capture policy copies it | [Draw runtime](../../../src/view/native/sdl_draw_runtime.odin), [capture backend](../../../src/view/capture/backend/sdl_gif_capture.odin), [GIF encoder](../../../src/view/native/sdl_gif_encoder.odin) |
@@ -574,25 +583,62 @@ their native lifecycle APIs; resetting an Odin arena is not their destructor.
 
 ## Library And Persistence Memory
 
-The [collection model](../../../src/collections/model.odin) is a bounded,
-pointer-free value snapshot. Collection and placement records, including name
-bytes, live inline in `Set`. Copying this value copies its data; it does not create
-shared ownership of separately allocated records.
+The [collection model](../../../src/collections/model.odin) stores actual-sized
+collection and placement arrays, UUID indexes, and optional names in a TLSF domain
+owned by each initialized `Set`. `Set` is not a freely copyable value: callers
+transfer data with `clone`, and each initialized owner must be destroyed exactly
+once. Optional custom and canonical labels are separately owned; canonical labels
+are copied from the active catalogue generation and refreshed when that generation's
+projection is replaced. A placement view borrows those bytes only for the query's
+immediate consumer.
 
-The display owns editable collection state and its
-[Library UI projection](../../../src/view/ui/library/). The
-[save coordinator](../../../src/view/preferences/settings_save.odin) stages an
-edit in temporary snapshot storage before replacing accepted display state and
-queuing its mutation. Scratch used for admission must not escape into retained
-display state.
+The display owns the editable collection `Set` and its
+[Library UI projection](../../../src/view/ui/library/). The projection allocates
+each tree node and copied canonical label from its own TLSF owner; a growable pointer
+table and UUID index may move without relocating live nodes. Same-generation
+membership and order changes patch topology in place, while names resolve through
+the current collection owner. Catalogue changes are built in a staged projection and
+replace the live tree only after the complete candidate succeeds. A mutation is
+admitted against the display owner after pending/in-flight save capacity and tree
+resources are reserved; it does not stage or replace a complete collection snapshot.
+The bounded immutable mutation crosses to persistence, while frame scratch and
+borrowed placement views must not escape their operation.
+
+The projection also owns typed reusable frame rows, independent scratch rows,
+motion branches, reorder rows, and iterative traversal frames. These buffers grow
+with actual catalogue demand, not a fixed node ceiling. Preliminary preparation
+is discarded before a projection mutation or replacement. Final preparation is
+borrowed by semantic publication, pointer handling, drawing, and the final scroll
+decision in that frame; the next preparation may overwrite it only after those
+consumers finish. Scratch queries do not overwrite frame rows. Stable node identity
+does not make a row pointer valid after workspace growth.
+
+Search has a separate display-owned TLSF domain with accepted and staging
+visibility-ID buffers. Admission failure retains the accepted result, and only a
+complete result exchanges the buffers. Projection, search, and semantic snapshot
+domains are destroyed during display shutdown.
+
+Each semantic focus slot owns actual-sized node, UTF-8, identity-index, and
+traversal-index buffers in its own TLSF domain. The owner header is not a copyable
+snapshot value. Registration admits node/index/text growth before copying a node;
+rejection leaves the committed slot authoritative. Identity and hierarchy checks
+use complete qualified IDs and reusable indexes; parent-cycle validation and tree
+publication are iterative. Text lengths, tree facts, and traversal order use checked
+32-bit representation rather than the former fixed capacities and 16-bit widths.
+Only populated logical content affects publication generation; retained capacity
+and diagnostic work counters do not. Offscreen expanded nodes remain in the logical
+semantic tree with clipped bounds, while outgoing visual-only rows have no actions.
 
 Persistence has a separate consumption lifetime:
 
 - A bounded immutable mutation batch crosses to save work; the worker does not
   borrow the display's mutable collection state.
 - [Durable replay](../../../src/userdata/collections.odin) loads a separate
-  operation-scoped snapshot, validates and applies the batch, and persists it
-  within the database transaction.
+  Store-owned TLSF `Set`, backed by the explicit runtime heap allocator. It is
+  reused to validate and apply the batch, persists it within the database
+  transaction, and is destroyed when the Store closes. Launch deep-clones the
+  loaded replay into the display owner; the display never retains the replay
+  allocator or records.
 - The save coordinator joins outstanding work before reusing its payload or
   closing the sequentially accessed user-data store.
 
@@ -775,6 +821,10 @@ peaks, not necessarily a simultaneously observed process-wide peak.
 arena checkpoint and assertion-time observations. Combine those with scenario
 result/completeness, semantic events, and the exercised workload; an unchanged
 counter alone does not prove correct rendering or publication.
+
+The bundle also records separate Library TLSF domains through the
+[display adapter](../../../src/view/evidence/library_storage.odin). Replay is sampled
+only after saves join; retained free-list backing is not an arena checkpoint.
 
 ### How to read the numbers
 

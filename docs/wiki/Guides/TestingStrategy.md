@@ -120,6 +120,9 @@ evidence, not proof that the scenario passed.
 Scenarios are intentionally separate from `check`: headed scenarios require a display.
 Required evidence loss makes a scenario inconclusive, never passed.
 
+Large-store, save/reopen, and warmed-reuse coverage starts at the
+[Favorites runner](../../../tools/favorites_scenarios.jl) and owner-local storage tests.
+
 ## Harness And Semantic Traces
 
 The optional CMake `harness` target runs a deterministic headless runtime case and
