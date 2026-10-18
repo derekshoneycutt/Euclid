@@ -1,0 +1,29 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_state":"dynview_enabled","timeout_ms":10000}
+{"set_setting":{"key":"interface.reduce_motion","value":false}}
+{"select_animation":"Proposition I","as":"warmup"}
+{"wait_event":"animation_selected","correlation":"warmup","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"warmup","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"set_arrival_style":"falling_ink"}
+{"assert_state":"presentation_reclaim_mode"}
+{"set_view_content":{"mime":"text/latex","source":"\\[a^2+b^2=c^2\\quad x+y=z\\]"},"as":"first"}
+{"wait_event":"presentation_semantic_published","correlation":"first","timeout_ms":10000}
+{"wait_state":"presentation_arrival_particles","timeout_ms":10000}
+{"assert_state":"presentation_reclaimed"}
+{"assert_state":"presentation_pool_bounded"}
+{"set_view_content":{"mime":"text/latex","source":"\\[x^2+y^2=z^2\\quad a+b=c\\]"},"as":"second"}
+{"wait_event":"presentation_semantic_published","correlation":"second","timeout_ms":10000}
+{"wait_state":"presentation_arrival_particles","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"\\[a+b+c=x+y+z\\]"},"as":"third"}
+{"wait_event":"presentation_semantic_published","correlation":"third","timeout_ms":10000}
+{"wait_state":"presentation_arrival_particles","timeout_ms":10000}
+{"screenshot":".build/dynview-dust-reclaim.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"assert_state":"presentation_arrival_quick"}
+{"assert_state":"presentation_cancelled"}
+{"assert_state":"presentation_arrival_idle"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

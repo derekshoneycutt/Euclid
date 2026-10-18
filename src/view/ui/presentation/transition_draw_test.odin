@@ -7,6 +7,82 @@ import geometry "../../../core/geometry"
 import native "../../native"
 import uidust "../../../particles/ui_dust"
 
+// Presentation_Dust_Test_Draw keeps maximum-capacity encoder storage off the stack.
+Presentation_Dust_Test_Draw :: struct {
+    vertices: [16]native.Draw_Vertex,
+    indices: [24]u32,
+    batches: [4]native.Draw_Batch,
+    commands: [4]native.Draw_Command,
+    instances: [uidust.UI_DUST_TOTAL_PARTICLES]native.Dust_Instance,
+    draws: [2]native.Dust_Draw,
+    custom: native.Draw_Custom_Storage,
+    encoder: native.Draw_Encoder,
+}
+
+// Allocate one encoder with exactly the shared pane capacity and no native resources.
+presentation_test_dust_draw :: proc(t: ^testing.T) -> ^Presentation_Dust_Test_Draw {
+    draw := new(Presentation_Dust_Test_Draw, context.allocator)
+    draw^.custom = {dust_instances = draw^.instances[:], dust_draws = draw^.draws[:]}
+    testing.expect(t, native.draw_encoder_begin(&draw^.encoder,
+        {draw^.vertices[:], draw^.indices[:], draw^.batches[:], draw^.commands[:],
+            &draw^.custom},
+        {5000, 100}, {5000, 100}))
+    native.draw_encoder_enable_dust_instancing(&draw^.encoder, true)
+    return draw
+}
+
+// Fill all phases and force hole reuse, transfer, and eviction before drawing.
+presentation_test_fill_mixed_dust :: proc(
+    t: ^testing.T, dust: ^uidust.Ui_Dust_System) {
+    phases := [4]uidust.Ui_Dust_Phase{
+        .Airborne_Departure, .Resting_Departure, .Fresh_Arrival, .Reclaimed_Arrival}
+    for index in 0..<uidust.UI_DUST_TOTAL_PARTICLES {
+        _ = uidust.ui_dust_slot_emit(dust, {
+            phase = phases[index % 4], pos_x = f32(index), pos_y = 50,
+            target_x = f32(index), target_y = 50, life = 1, size = 1,
+            target_size = 1, target_color = {20, 40, 60, 255},
+            captured = true, captured_alpha = 1, color = {20, 40, 60, 255},
+        })
+    }
+    testing.expect(t, uidust.ui_dust_slot_reassign(dust,
+        {2, dust^.order[2].generation}, .Reclaimed_Arrival))
+    testing.expect(t, uidust.ui_dust_slot_retire(dust,
+        {5, dust^.order[5].generation}))
+    _ = uidust.ui_dust_slot_emit(dust, {
+        phase = .Airborne_Departure, pos_x = 5, size = 1, color = {20, 40, 60, 255},
+    })
+    _ = uidust.ui_dust_slot_emit(dust, {
+        phase = .Airborne_Departure, pos_x = 0, size = 1, color = {20, 40, 60, 255},
+    })
+}
+
+// Verify every live phase is drawn once after hole reuse, transfer, and eviction.
+@(test)
+presentation_effects_draw_shared_pool_without_duplicates :: proc(t: ^testing.T) {
+    draw := presentation_test_dust_draw(t)
+    defer free(draw, context.allocator)
+    dust := new(uidust.Ui_Dust_System, context.allocator)
+    defer free(dust, context.allocator)
+    viewport := geometry.Rectangle{0, 0, 5000, 100}
+    uidust.ui_dust_validate_context(dust, {visible = true, viewport = viewport})
+    uidust.ui_dust_begin_arrival(dust, 1, .Falling_Ink)
+    uidust.ui_dust_begin_formation(dust)
+    dust^.incoming_elapsed = (uidust.UI_DUST_ARRIVAL_HANDOFF_START +
+        uidust.UI_DUST_ARRIVAL_HANDOFF_END) / 2
+    presentation_test_fill_mixed_dust(t, dust)
+    presentation_draw_effects(&draw^.encoder, dust, viewport, rawptr(uintptr(1)))
+    testing.expect_value(t, draw^.encoder.dust_instance_count,
+        uidust.UI_DUST_TOTAL_PARTICLES)
+    testing.expect_value(t, draw^.encoder.dust_draw_count, 1)
+    testing.expect_value(t, draw^.draws[0].scissor, native.Draw_Scissor{0, 0, 5000, 100})
+    seen: [uidust.UI_DUST_TOTAL_PARTICLES]bool
+    for instance in draw^.instances {
+        index := int(instance.center_diameter.x)
+        testing.expect(t, !seen[index])
+        seen[index] = true
+    }
+}
+
 // Verify outgoing and falling-ink dust share one draw clipped to the pane.
 @(test)
 presentation_effects_draw_clips_outgoing_and_incoming_dust :: proc(t: ^testing.T) {

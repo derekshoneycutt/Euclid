@@ -269,8 +269,8 @@ presentation_formation_targets_first_new_ink :: proc(t: ^testing.T) {
     presentation_effects_update(state, presentation, 0.016, frame, 1)
     testing.expect(t, !uidust.ui_dust_arrival_awaiting_targets(&presentation^.dust))
     testing.expect_value(t, presentation^.dust.arrival_count, 2)
-    testing.expect_value(t, presentation^.dust.arrivals.target_x[0], f32(30))
-    testing.expect_value(t, presentation^.dust.arrivals.target_y[1], f32(70))
+    testing.expect_value(t, presentation^.dust.particles.target_x[0], f32(30))
+    testing.expect_value(t, presentation^.dust.particles.target_y[1], f32(70))
     testing.expect_value(t,
         len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 2)
 }
@@ -343,7 +343,10 @@ presentation_arrival_style_override_cancels_active_arrival :: proc(t: ^testing.T
         uidust.UI_DUST_ARRIVAL_STYLE)
     testing.expect_value(t, presentation_arrival_style(nil),
         uidust.Ui_Dust_Arrival_Style.Falling_Ink)
-    presentation^.dust.particle_count = 3
+    for index in 0..<3 {
+        testing.expect(t, uidust.ui_dust_emit(&presentation^.dust,
+            {f32(index), 10}, {20, 40, 60, 255}, 255, 1))
+    }
     uidust.ui_dust_begin_arrival(&presentation^.dust, 53, .Falling_Ink)
     testing.expect(t, presentation_effects_observe(presentation).arrival_active)
 
@@ -359,9 +362,9 @@ presentation_arrival_style_override_cancels_active_arrival :: proc(t: ^testing.T
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
 }
 
-// Verify selection consumes drawn ink as dust while reset retires every effect.
+// Verify selection and reset consume drawn ink once while runtime reload settles it.
 @(test)
-presentation_selection_departs_and_reset_settles :: proc(t: ^testing.T) {
+presentation_selection_and_reset_depart_reload_settles :: proc(t: ^testing.T) {
     fixture := presentation_test_fixture_create(t)
     defer presentation_test_fixture_destroy(fixture)
     state, service, presentation :=
@@ -370,28 +373,68 @@ presentation_selection_departs_and_reset_settles :: proc(t: ^testing.T) {
         &state^.font_cache, context.allocator))
     defer viewfont.cache_ink_capture_destroy(
         &state^.font_cache, context.allocator)
-    viewfont.cache_ink_capture_begin(&state^.font_cache)
-    viewfont.cache_ink_capture_sample(
-        &state^.font_cache, {20, 30}, {240, 160, 80, 255}, 255)
-    viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
-    viewfont.cache_ink_capture_publish(&state^.font_cache)
     presentation_sync_lifecycle(state, presentation)
     selected: bridgemodel.Euclid_Julia_Animation_Interface
     state^.julia_interface^.current_animation = &selected
-    service^.animation_generation += 1
-
-    presentation_sync_lifecycle(state, presentation)
-    testing.expect_value(t, presentation^.dust.particle_count, 1)
-    testing.expect(t, !presentation^.suppress_next_departure)
-    testing.expect_value(t,
-        len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 0)
-
-    service^.animation_generation += 1
+    for cycle in 0..<2 {
+        presentation_test_publish_ink(state, {{20, 30}})
+        service^.animation_generation += 1
+        presentation_sync_lifecycle(state, presentation)
+        testing.expect_value(t, presentation^.dust.particle_count, cycle + 1)
+        testing.expect(t, !presentation^.suppress_next_departure)
+        testing.expect_value(t,
+            len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 0)
+        presentation^.dust.particles.pos_y[0] = 40
+        presentation_sync_lifecycle(state, presentation)
+        testing.expect_value(t, presentation^.dust.particles.pos_y[0], f32(40))
+    }
+    presentation_test_publish_ink(state, {{20, 30}})
+    service^.runtime_generation += 1
     presentation_sync_lifecycle(state, presentation)
     testing.expect_value(t, presentation^.dust.particle_count, 0)
     testing.expect(t, presentation^.suppress_next_departure)
+    testing.expect_value(t,
+        len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 0)
     state^.julia_interface^.current_animation =
         &state^.julia_interface^.null_animation
+}
+
+// Verify a pending refresh keeps ink and advances effects, unlike runtime reload.
+@(test)
+presentation_pending_reset_preserves_ink_and_effects :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    testing.expect(t, viewfont.cache_ink_capture_init(
+        &state^.font_cache, context.allocator))
+    defer viewfont.cache_ink_capture_destroy(
+        &state^.font_cache, context.allocator)
+    presentation_test_publish_ink(state, {{30, 40}})
+    state^.ui_runtime.presentation.visible = true
+    uidust.ui_dust_begin_departure(&presentation^.dust, 23)
+    testing.expect(t, uidust.ui_dust_emit(
+        &presentation^.dust, {30, 50}, {240, 160, 80, 255}, 255, 1))
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 24, .Fade)
+    frame := uipresentation.Presentation_Preparation{
+        scroll = {view_rect = {0, 0, 200, 120}},
+    }
+    state^.julia_interface^.pending_animation_reset = true
+
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+
+    testing.expect_value(t, presentation^.dust.particle_count, 1)
+    testing.expect(t, presentation^.dust.particles.pos_y[0] > 50)
+    testing.expect(t, presentation^.dust.incoming_active)
+    testing.expect_value(t,
+        len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 1)
+    testing.expect(t, !presentation^.suppress_next_departure)
+    fixture.service^.reload_state = .Quiescing
+    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    testing.expect_value(t, presentation^.dust.particle_count, 0)
+    testing.expect(t, !presentation^.dust.incoming_active)
+    testing.expect_value(t,
+        len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 0)
+    testing.expect(t, presentation^.suppress_next_departure)
 }
 
 //   Verify a miss publishes after poll/join and its exact repeat uses the cache.

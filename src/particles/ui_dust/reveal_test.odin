@@ -64,7 +64,7 @@ ui_dust_reveal_accents_follow_contact :: proc(t: ^testing.T) {
     testing.expect(t, ui_dust_test_reveal(system))
     target := geometry.Vector2{55, 20}
     testing.expect(t, ui_dust_emit_arrival(system, target, {20, 40, 60, 255}, 255))
-    contact := system^.arrivals.delay[0]
+    contact := system^.particles.delay[0]
     row := system^.reveal_rows[0]
     testing.expect(t, contact > row.start && contact < row.start + row.sweep)
     testing.expect_value(t, ui_dust_arrival_alpha(system, 0), f32(0))

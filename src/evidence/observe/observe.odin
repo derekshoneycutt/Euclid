@@ -41,7 +41,8 @@ Trace_State :: struct {
 //
 // The presentation owner copies these scalars at a display-thread boundary; the
 // selection is the style the next accepted document arrives with, while
-// arrival_style reports the active, possibly degraded, arrival.
+// arrival_style reports the active, possibly degraded, arrival. Completion duration
+// is the logical effect endpoint, excluding a coarse frame's unused remainder.
 Presentation_Effects :: struct {
     arrival_selection: uidust.Ui_Dust_Arrival_Style,
     arrival_style: uidust.Ui_Dust_Arrival_Style,
@@ -49,6 +50,20 @@ Presentation_Effects :: struct {
     arrival_awaiting_targets: bool,
     arrival_particle_count: int,
     departure_particle_count: int,
+    transition: uidust.Ui_Dust_Transition,
+    airborne_count: int,
+    resting_count: int,
+    reclaimed_count: int,
+    fresh_count: int,
+    live_count: int,
+    eviction_count: u64,
+    formation_reclaimed: int,
+    formation_fresh: int,
+    arrival_elapsed: f32,
+    arrival_duration: f32,
+    arrival_completed_count: u64,
+    arrival_cancelled_count: u64,
+    arrival_completed_duration: f32,
 }
 
 // Pointer-free snapshot of state authoritative to the display owner.

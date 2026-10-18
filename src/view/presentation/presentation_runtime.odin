@@ -40,7 +40,6 @@ Presentation_Runtime :: struct {
     newest_generation: u64,
     observed_runtime_generation: u64,
     observed_animation_generation: u64,
-    observed_animation: rawptr,
     lifecycle_observed: bool,
     suppress_next_departure: bool,
     staging: ^dynviewmodel.Dynview_System,
@@ -193,7 +192,6 @@ presentation_sync_lifecycle :: proc(
     if !runtime^.lifecycle_observed {
         runtime^.observed_runtime_generation = service^.runtime_generation
         runtime^.observed_animation_generation = service^.animation_generation
-        runtime^.observed_animation = presentation_current_animation(state)
         runtime^.lifecycle_observed = true
         return
     }
@@ -221,18 +219,15 @@ presentation_sync_lifecycle :: proc(
 }
 
 // presentation_lifecycle_effects records a lifecycle commit and applies its dust policy.
-// Selection breaks the last drawn text into dust; reset and reload retire every effect
-// and the retained ink, and suppress the next admitted replacement.
+// Selection and reset break the last drawn text into dust; runtime reload retires
+// every effect and the retained ink, and suppresses the next admitted replacement.
 presentation_lifecycle_effects :: proc(
     state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
     service := state^.julia_runtime_service
-    animation := presentation_current_animation(state)
-    selected := runtime^.observed_runtime_generation == service^.runtime_generation &&
-        animation != runtime^.observed_animation
+    same_runtime := runtime^.observed_runtime_generation == service^.runtime_generation
     runtime^.observed_runtime_generation = service^.runtime_generation
     runtime^.observed_animation_generation = service^.animation_generation
-    runtime^.observed_animation = animation
-    if selected {
+    if same_runtime {
         presentation_effects_begin_departure(
             state, runtime, service^.animation_generation)
     } else {
@@ -247,14 +242,6 @@ presentation_effects_retire :: proc(
     runtime^.suppress_next_departure = true
     uidust.ui_dust_settle(&runtime^.dust)
     viewfont.cache_ink_capture_discard(&state^.font_cache)
-}
-
-// presentation_current_animation returns the selected animation identity, or nil.
-presentation_current_animation :: proc(state: ^core.Euclid_General_State) -> rawptr {
-    if state == nil || state^.julia_interface == nil {
-        return nil
-    }
-    return state^.julia_interface^.current_animation
 }
 
 //   Report whether pre-completion lifecycle content became current at generation commit.
@@ -514,14 +501,33 @@ presentation_effects_observe :: proc(
         return {arrival_selection = uidust.UI_DUST_ARRIVAL_STYLE}
     }
     dust := &runtime^.dust
-    return {
+    result := observe.Presentation_Effects{
         arrival_selection = presentation_arrival_style(runtime),
         arrival_style = dust.incoming_style,
         arrival_active = dust.incoming_active,
         arrival_awaiting_targets = dust.incoming_awaiting_targets,
         arrival_particle_count = dust.arrival_count,
         departure_particle_count = dust.particle_count,
+        transition = dust.transition,
+        live_count = dust.live_count,
+        eviction_count = dust.eviction_count,
+        formation_reclaimed = dust.formation_reclaimed,
+        formation_fresh = dust.formation_fresh,
+        arrival_elapsed = dust.incoming_elapsed,
+        arrival_duration = uidust.ui_dust_arrival_duration(dust.incoming_style),
+        arrival_completed_count = dust.arrival_completed_count,
+        arrival_cancelled_count = dust.arrival_cancelled_count,
+        arrival_completed_duration = dust.arrival_completed_duration,
     }
+    for phase in dust.particles.phase[:dust.initialized_slots] {
+        #partial switch phase {
+        case .Airborne_Departure: result.airborne_count += 1
+        case .Resting_Departure: result.resting_count += 1
+        case .Reclaimed_Arrival: result.reclaimed_count += 1
+        case .Fresh_Arrival: result.fresh_count += 1
+        }
+    }
+    return result
 }
 
 // presentation_effects_begin_departure breaks the last drawn ink into dust.
@@ -537,17 +543,23 @@ presentation_effects_begin_departure :: proc(
         return
     }
     samples := viewfont.cache_visible_ink_samples(&state^.font_cache)
-    if len(samples) == 0 {
+    reclaim := runtime^.dust.transition == .Reclaim &&
+        runtime^.dust.incoming_style == .Falling_Ink
+    if len(samples) == 0 && !reclaim {
         uidust.ui_dust_cancel_arrival(&runtime^.dust)
         return
     }
-    visible_alpha := uidust.ui_dust_incoming_alpha(&runtime^.dust)
-    uidust.ui_dust_begin_departure(&runtime^.dust, generation)
-    count := min(len(samples), uidust.UI_DUST_MAX_PARTICLES)
+    visibility := uidust.ui_dust_crisp_visibility(&runtime^.dust)
+    uidust.ui_dust_begin_departure(
+        &runtime^.dust, generation, presentation_arrival_style(runtime))
+    count := min(len(samples), uidust.UI_DUST_MAX_DEPARTURE_SAMPLES)
     for index in 0..<count {
         sample := samples[((2*index + 1)*len(samples))/(2*count)]
-        _ = uidust.ui_dust_emit(&runtime^.dust, sample.position,
-            sample.color, sample.coverage, visible_alpha)
+        alpha := uidust.ui_dust_crisp_sample_alpha(&visibility, sample.position)
+        if alpha > 0 {
+            _ = uidust.ui_dust_emit(&runtime^.dust, sample.position,
+                sample.color, sample.coverage, alpha)
+        }
     }
     viewfont.cache_ink_capture_discard(&state^.font_cache)
     log.debugf("dynview_dust_departure samples=%d particles=%d",
@@ -573,13 +585,16 @@ presentation_effects_begin_formation :: proc(
     for sample in samples {
         uidust.ui_dust_reveal_include(&runtime^.dust, sample.position)
     }
-    uidust.ui_dust_begin_formation(&runtime^.dust)
-    count := min(len(samples), uidust.ui_dust_arrival_budget(&runtime^.dust))
+    count := min(len(samples), uidust.UI_DUST_MAX_ARRIVAL_PARTICLES)
+    if runtime^.dust.incoming_style == .Draw_In {
+        count = min(count, uidust.UI_DUST_DRAW_IN_ACCENT_MAX)
+    }
     for index in 0..<count {
         sample := samples[((2*index + 1)*len(samples))/(2*count)]
-        _ = uidust.ui_dust_emit_arrival(
+        uidust.ui_dust_target_include(
             &runtime^.dust, sample.position, sample.color, sample.coverage)
     }
+    uidust.ui_dust_form_targets(&runtime^.dust)
 }
 
 // presentation_effects_update advances visual effects under the effective motion policy.
@@ -590,15 +605,12 @@ presentation_effects_update :: proc(
     if state == nil || runtime == nil {
         return
     }
-    resetting := state^.julia_interface != nil &&
-        state^.julia_interface^.pending_animation_reset
     reloading := state^.julia_runtime_service != nil &&
         state^.julia_runtime_service^.reload_state != .Idle
-    if resetting || reloading {
+    if reloading {
         presentation_effects_retire(state, runtime)
         return
     }
-    presentation_effects_begin_formation(state, runtime)
     visual_presentation := presentation
     if visual_presentation.scroll.view_rect.width <= 0 ||
         visual_presentation.scroll.view_rect.height <= 0 {
@@ -616,6 +628,7 @@ presentation_effects_update :: proc(
             scroll_y = presentation.scroll.scroll_y_out,
             visual_signature = visual_signature,
         })
+    presentation_effects_begin_formation(state, runtime)
     uidust.ui_dust_advance(&runtime^.dust, delta_seconds)
 }
 

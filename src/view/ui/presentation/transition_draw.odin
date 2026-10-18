@@ -95,31 +95,23 @@ presentation_draw_fade_mask :: proc(
 presentation_draw_dust :: proc(
     encoder: ^native.Draw_Encoder, dust: ^uidust.Ui_Dust_System,
     dust_atlas: rawptr) {
-    if dust_atlas == nil || dust^.particle_count + dust^.arrival_count == 0 {
+    if dust_atlas == nil || dust^.live_count == 0 {
         return
     }
     staging := native.draw_encoder_dust_staging(encoder)
     count := 0
-    for index in 0..<dust^.particle_count {
-        alpha := uidust.ui_dust_particle_alpha(dust, index)
-        if alpha <= 0 || count >= len(staging) {
+    cursor := dust^.live_head
+    for cursor != 0 {
+        index := cursor - 1
+        cursor = dust^.order[index].next
+        appearance, valid := uidust.ui_dust_evaluate(
+            dust, {index, dust^.order[index].generation})
+        if !valid || appearance.alpha <= 0 || count >= len(staging) {
             continue
         }
         staging[count] = presentation_dust_instance(
-            {dust^.particles.pos_x[index], dust^.particles.pos_y[index]},
-            dust^.particles.size[index], dust^.particles.color[index], alpha,
-            dust^.particles.dust_sprite_index[index])
-        count += 1
-    }
-    for index in 0..<dust^.arrival_count {
-        alpha := uidust.ui_dust_arrival_alpha(dust, index)
-        if alpha <= 0 || count >= len(staging) {
-            continue
-        }
-        staging[count] = presentation_dust_instance(
-            uidust.ui_dust_arrival_position(dust, index),
-            dust^.arrivals.size[index], dust^.arrivals.color[index], alpha,
-            dust^.arrivals.dust_sprite_index[index])
+            appearance.position, appearance.size, appearance.tint,
+            appearance.alpha, appearance.sprite_index)
         count += 1
     }
     _ = native.draw_encoder_commit_dust(encoder, count, dust_atlas)

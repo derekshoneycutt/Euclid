@@ -22,7 +22,7 @@ ui_dust_test_emit_line :: proc(system: ^Ui_Dust_System, count: int) -> int {
     return emitted
 }
 
-// Verify emission is deterministic, bounded by fixed capacity, and falls slowly.
+// Verify emission is deterministic, bounded by fixed capacity, and moves downward.
 @(test)
 ui_dust_departure_is_deterministic_and_bounded :: proc(t: ^testing.T) {
     viewport := geometry.Rectangle{0, 0, 5000, 100}
@@ -33,12 +33,12 @@ ui_dust_departure_is_deterministic_and_bounded :: proc(t: ^testing.T) {
     ui_dust_begin_departure(first, 71)
     ui_dust_begin_departure(second, 71)
     testing.expect_value(t, ui_dust_test_emit_line(first, 4096),
-        UI_DUST_MAX_PARTICLES)
+        UI_DUST_TOTAL_PARTICLES)
     testing.expect_value(t, ui_dust_test_emit_line(second, 4096),
-        UI_DUST_MAX_PARTICLES)
-    testing.expect_value(t, first^.particle_count, UI_DUST_MAX_PARTICLES)
+        UI_DUST_TOTAL_PARTICLES)
+    testing.expect_value(t, first^.particle_count, UI_DUST_TOTAL_PARTICLES)
     testing.expect_value(t, first^.particles[0], second^.particles[0])
-    last := UI_DUST_MAX_PARTICLES - 1
+    last := UI_DUST_TOTAL_PARTICLES - 1
     testing.expect_value(t, first^.particles[last], second^.particles[last])
     testing.expect(t, first^.particles.vel_y[0] >= UI_DUST_VY_MIN)
     testing.expect(t, first^.particles.dust_sprite_index[0] <
@@ -61,10 +61,10 @@ ui_dust_departure_rests_at_floor_before_fading :: proc(t: ^testing.T) {
     ui_dust_begin_departure(system, 71)
     testing.expect(t, ui_dust_emit(system, {50, 10}, {20, 40, 60, 255}, 255, 1))
     initial_alpha := ui_dust_particle_alpha(system, 0)
-    ui_dust_advance(system, 1.5)
+    ui_dust_advance(system, UI_DUST_DEPARTURE_DURATION + 0.2)
     testing.expect_value(t, system^.particle_count, 1)
     particle := system^.particles[0]
-    testing.expect(t, particle.resting)
+    testing.expect_value(t, particle.phase, Ui_Dust_Phase.Resting_Departure)
     testing.expect_value(t, particle.pos_y,
         viewport.y + viewport.height - particle.size)
     testing.expect(t, particle.rest_age > 0)

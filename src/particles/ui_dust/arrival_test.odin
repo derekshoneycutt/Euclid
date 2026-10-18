@@ -18,8 +18,8 @@ ui_dust_arrival_converges_onto_targets :: proc(t: ^testing.T) {
     defer free(system, context.allocator)
     target := geometry.Vector2{50, 80}
     testing.expect(t, ui_dust_test_formation(system, 5, target))
-    delay := system^.arrivals.delay[0]
-    duration := system^.arrivals.duration[0]
+    delay := system^.particles.delay[0]
+    duration := system^.particles.duration[0]
     ui_dust_advance(system, delay + 0.01)
     start := ui_dust_arrival_position(system, 0)
     testing.expect(t, start.y < target.y - UI_DUST_ARRIVAL_DROP_MIN * 0.5)
@@ -69,9 +69,9 @@ ui_dust_arrival_is_deterministic_and_bounded :: proc(t: ^testing.T) {
         testing.expect_value(t, emitted, UI_DUST_MAX_ARRIVAL_PARTICLES)
     }
     last := UI_DUST_MAX_ARRIVAL_PARTICLES - 1
-    testing.expect_value(t, first^.arrivals[0], second^.arrivals[0])
-    testing.expect_value(t, first^.arrivals[last], second^.arrivals[last])
-    testing.expect(t, first^.arrivals.delay[0] <= UI_DUST_ARRIVAL_DELAY_MAX)
+    testing.expect_value(t, first^.particles[0], second^.particles[0])
+    testing.expect_value(t, first^.particles[last], second^.particles[last])
+    testing.expect(t, first^.particles.delay[0] <= UI_DUST_ARRIVAL_DELAY_MAX)
 }
 
 // Verify content stays hidden while awaiting targets and degrades to the fade.

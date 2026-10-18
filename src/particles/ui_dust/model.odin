@@ -5,13 +5,13 @@ import geometry "../../core/geometry"
 import particlemodel "../model"
 import rand "core:math/rand"
 
-UI_DUST_MAX_PARTICLES :: 2048
+UI_DUST_MAX_DEPARTURE_SAMPLES :: 2048
 UI_DUST_SPRITE_VARIANT_COUNT :: particlemodel.DUST_ATLAS_VARIANT_COUNT
 UI_DUST_RANDOM_SEED :: u64(0x9e3779b97f4a7c15)
 UI_DUST_FADE_DURATION :: f32(0.20)
 UI_DUST_REST_LIFE_MIN :: f32(0.85)
 UI_DUST_REST_LIFE_MAX :: f32(1.15)
-UI_DUST_DOWNWARD_ACCELERATION :: f32(90)
+UI_DUST_DEPARTURE_DURATION :: f32(0.30)
 UI_DUST_VX_MIN :: f32(-6)
 UI_DUST_VX_MAX :: f32(6)
 UI_DUST_VY_MIN :: f32(24)
@@ -24,21 +24,25 @@ UI_DUST_SIZE_MIN :: f32(1)
 UI_DUST_SIZE_COVERAGE_SCALE :: f32(1.4)
 
 UI_DUST_MAX_ARRIVAL_PARTICLES :: 2048
-// Outgoing and incoming populations share this explicit total pane budget.
-UI_DUST_TOTAL_PARTICLES :: UI_DUST_MAX_PARTICLES + UI_DUST_MAX_ARRIVAL_PARTICLES
+UI_DUST_TOTAL_PARTICLES :: 4096
+UI_DUST_MATCH_GRID :: 16
+UI_DUST_MATCH_CANDIDATES :: 64
+UI_DUST_RECLAIM_MIN_DURATION :: f32(0.04)
+#assert(UI_DUST_MAX_DEPARTURE_SAMPLES <= UI_DUST_TOTAL_PARTICLES)
+#assert(UI_DUST_MAX_ARRIVAL_PARTICLES <= UI_DUST_TOTAL_PARTICLES)
 UI_DUST_ARRIVAL_RANDOM_SEED :: u64(0xd1b54a32d192ed03)
 UI_DUST_ARRIVAL_TARGET_WAIT_LIMIT :: f32(0.25)
-UI_DUST_ARRIVAL_DELAY_MAX :: f32(0.12)
-UI_DUST_ARRIVAL_FALL_MIN :: f32(0.34)
-UI_DUST_ARRIVAL_FALL_MAX :: f32(0.46)
+UI_DUST_ARRIVAL_DELAY_MAX :: f32(0.03)
+UI_DUST_ARRIVAL_FALL_MIN :: f32(0.16)
+UI_DUST_ARRIVAL_FALL_MAX :: f32(0.21)
 UI_DUST_ARRIVAL_DROP_MIN :: f32(14)
 UI_DUST_ARRIVAL_DROP_MAX :: f32(30)
 UI_DUST_ARRIVAL_LATERAL_MAX :: f32(5)
 UI_DUST_ARRIVAL_APPEAR_FRACTION :: f32(0.25)
-UI_DUST_ARRIVAL_HANDOFF_START :: f32(0.42)
-UI_DUST_ARRIVAL_HANDOFF_END :: f32(0.66)
+UI_DUST_ARRIVAL_HANDOFF_START :: f32(0.24)
+UI_DUST_ARRIVAL_HANDOFF_END :: f32(0.30)
 #assert(UI_DUST_ARRIVAL_DELAY_MAX + UI_DUST_ARRIVAL_FALL_MAX <=
-    UI_DUST_ARRIVAL_HANDOFF_END)
+    UI_DUST_ARRIVAL_HANDOFF_START)
 #assert(UI_DUST_ARRIVAL_HANDOFF_START < UI_DUST_ARRIVAL_HANDOFF_END)
 
 // Draw-in derives ink rows from fixed vertical occupancy bins over the viewport.
@@ -92,31 +96,73 @@ Ui_Dust_Reveal_Row :: struct {
     sweep: f32,
 }
 
-// Ui_Dust_Arrival_Particle descends from a short local offset onto one fixed ink
-// target. Its position is a closed-form function of arrival time, so it lands
-// exactly on the target regardless of frame timing.
-Ui_Dust_Arrival_Particle :: struct {
-    target_x: f32,
-    target_y: f32,
-    drop: f32,
-    lateral: f32,
-    delay: f32,
-    duration: f32,
-    size: f32,
-    sway_amplitude: f32,
-    sway_frequency: f32,
-    sway_phase: f32,
-    color: color.Color_RGBA8,
-    dust_sprite_index: u8,
+// Ui_Dust_Phase gives each shared slot exactly one live material owner.
+Ui_Dust_Phase :: enum u8 {
+    Free,
+    Airborne_Departure,
+    Resting_Departure,
+    Fresh_Arrival,
+    Reclaimed_Arrival,
 }
 
-// Ui_Dust_Particle stores one pane-space fragment in the standard particle shape.
-// `age` counts seconds since emission; `life` is the fade duration after resting.
+// Ui_Dust_Transition keeps Independent available for internal comparisons.
+Ui_Dust_Transition :: enum u8 {
+    Reclaim,
+    Independent,
+}
+
+// Ui_Dust_Target retains one bounded sampled destination and its generation-safe claim.
+Ui_Dust_Target :: struct {
+    position: geometry.Vector2,
+    ink: [4]u8,
+    coverage: u8,
+    claim: Ui_Dust_Slot_Ref,
+}
+
+// Ui_Dust_Match_Link supports constant-time removal from spatial and fallback chains.
+Ui_Dust_Match_Link :: struct {
+    previous: int,
+    next: int,
+    older: int,
+    newer: int,
+    bin: int,
+}
+
+// Ui_Dust_Match_Search bounds candidate work for one deterministic target search.
+Ui_Dust_Match_Search :: struct {
+    tested: int,
+    best: int,
+    distance: f32,
+}
+
+// Ui_Dust_Slot_Ref rejects borrowers after retirement or reuse of a physical slot.
+Ui_Dust_Slot_Ref :: struct {
+    index: int,
+    generation: u64,
+}
+
+// Ui_Dust_Slot_Order links original emissions independently of phase changes.
+// Links store index + 1, with zero meaning none; free slots use only `next`.
+Ui_Dust_Slot_Order :: struct {
+    generation: u64,
+    previous: int,
+    next: int,
+}
+
+// Ui_Dust_Particle owns one pane-space fragment and any assigned arrival target.
+// `age` counts seconds since emission; `flight_elapsed` is the departure clock,
+// independent of original age. `life` is the fade duration after resting.
 Ui_Dust_Particle :: struct {
+    phase: Ui_Dust_Phase,
     pos_x: f32,
     pos_y: f32,
     vel_x: f32,
     vel_y: f32,
+    start_x: f32,
+    start_y: f32,
+    start_velocity_x: f32,
+    start_velocity_y: f32,
+    flight_elapsed: f32,
 
     age: f32,
     rest_age: f32,
@@ -125,9 +171,28 @@ Ui_Dust_Particle :: struct {
     sway_amplitude: f32,
     sway_frequency: f32,
     sway_phase: f32,
+    target_color: color.Color_RGBA8,
     color: color.Color_RGBA8,
     dust_sprite_index: u8,
-    resting: bool,
+    target_x: f32,
+    target_y: f32,
+    drop: f32,
+    lateral: f32,
+    delay: f32,
+    duration: f32,
+    captured: bool,
+    captured_alpha: f32,
+    target_size: f32,
+}
+
+// Ui_Dust_Appearance is a copied visible state for drawing and future transfers.
+Ui_Dust_Appearance :: struct {
+    position: geometry.Vector2,
+    velocity: geometry.Vector2,
+    tint: color.Color_RGBA8,
+    alpha: f32,
+    size: f32,
+    sprite_index: u8,
 }
 
 // Ui_Dust_Visual_Context identifies one valid visible presentation viewport.
@@ -139,18 +204,35 @@ Ui_Dust_Visual_Context :: struct {
     visual_signature: u64,
 }
 
-// Ui_Dust_System owns fixed presentation dust storage and the arrival effect.
-// Live outgoing particles occupy `particles[:particle_count]`; incoming formation
-// particles and draw-in accents occupy `arrivals[:arrival_count]`; draw-in bands
-// occupy `reveal_rows[:reveal_row_count]`.
+// Ui_Dust_System owns a shared fixed pool and one arrival effect. Live slots are
+// linked in original emission order; holes are reused before oldest-live eviction.
+// `particle_count` counts departures, `arrival_count` arrivals, and `live_count` both.
 Ui_Dust_System :: struct {
-    particles: #soa[UI_DUST_MAX_PARTICLES]Ui_Dust_Particle,
+    transition: Ui_Dust_Transition,
+    particles: #soa[UI_DUST_TOTAL_PARTICLES]Ui_Dust_Particle,
+    order: [UI_DUST_TOTAL_PARTICLES]Ui_Dust_Slot_Order,
+    initialized_slots: int,
+    free_head: int,
+    live_head: int,
+    live_tail: int,
+    live_count: int,
+    eviction_count: u64,
+    formation_reclaimed: int,
+    formation_fresh: int,
+    arrival_completed_count: u64,
+    arrival_cancelled_count: u64,
+    arrival_completed_duration: f32,
     particle_count: int,
     rng_state: rand.Xoshiro256_Random_State,
 
-    arrivals: #soa[UI_DUST_MAX_ARRIVAL_PARTICLES]Ui_Dust_Arrival_Particle,
     arrival_count: int,
+    arrival_emitted: int,
     arrival_rng_state: rand.Xoshiro256_Random_State,
+    targets: [UI_DUST_MAX_ARRIVAL_PARTICLES]Ui_Dust_Target,
+    target_count: int,
+    match_bins: [UI_DUST_MATCH_GRID * UI_DUST_MATCH_GRID]int,
+    match_links: [UI_DUST_TOTAL_PARTICLES]Ui_Dust_Match_Link,
+    match_head: int,
 
     reveal_bins: [UI_DUST_DRAW_IN_ROW_BINS]Ui_Dust_Reveal_Bin,
     reveal_rows: [UI_DUST_DRAW_IN_MAX_ROWS]Ui_Dust_Reveal_Row,

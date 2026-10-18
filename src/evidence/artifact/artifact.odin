@@ -270,10 +270,26 @@ artifact_presentation_effects_state_json :: proc(
     return fmt.tprintf("\"presentation_effects\":{{\"arrival_selection\":\"%v\"," +
         "\"arrival_style\":\"%v\",\"arrival_active\":%v," +
         "\"arrival_awaiting_targets\":%v,\"arrival_particle_count\":%d," +
-        "\"departure_particle_count\":%d}}",
+        "\"departure_particle_count\":%d,%s}}",
         effects.arrival_selection, effects.arrival_style, effects.arrival_active,
         effects.arrival_awaiting_targets, effects.arrival_particle_count,
-        effects.departure_particle_count)
+        effects.departure_particle_count, artifact_reclamation_state_json(effects))
+}
+
+// Serialize bounded material populations and retained formation outcomes.
+artifact_reclamation_state_json :: proc(effects: observe.Presentation_Effects) -> string {
+    return fmt.tprintf("\"transition\":\"%v\",\"airborne_count\":%d," +
+        "\"resting_count\":%d,\"reclaimed_count\":%d,\"fresh_count\":%d," +
+        "\"live_count\":%d,\"eviction_count\":%d,\"formation_reclaimed\":%d," +
+        "\"formation_fresh\":%d,\"arrival_elapsed\":%g,\"arrival_duration\":%g," +
+        "\"arrival_completed_count\":%d,\"arrival_cancelled_count\":%d," +
+        "\"arrival_completed_duration\":%g",
+        effects.transition, effects.airborne_count, effects.resting_count,
+        effects.reclaimed_count, effects.fresh_count, effects.live_count,
+        effects.eviction_count, effects.formation_reclaimed, effects.formation_fresh,
+        effects.arrival_elapsed, effects.arrival_duration,
+        effects.arrival_completed_count, effects.arrival_cancelled_count,
+        effects.arrival_completed_duration)
 }
 
 // Serialize current tree motion count and fractional visual scroll geometry.

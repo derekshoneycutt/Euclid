@@ -9,7 +9,7 @@ ui_dust_settle :: proc(system: ^Ui_Dust_System) {
     if system == nil {
         return
     }
-    system^.particle_count = 0
+    ui_dust_slots_clear(system)
     ui_dust_cancel_arrival(system)
     system^.viewport_initialized = false
     system^.departure_context_pending = false
@@ -34,7 +34,7 @@ ui_dust_validate_context :: proc(
     if system^.viewport_initialized &&
         (system^.viewport != visual.viewport || scroll_changed ||
          system^.visual_signature != visual.visual_signature) {
-        system^.particle_count = 0
+        ui_dust_slots_clear(system)
         ui_dust_cancel_arrival(system)
     }
     system^.viewport = visual.viewport
@@ -43,13 +43,20 @@ ui_dust_validate_context :: proc(
     system^.viewport_initialized = true
 }
 
-// ui_dust_begin_departure clears the previous batch and reseeds the private stream.
-// Callers then emit one particle per selected ink sample with ui_dust_emit.
-ui_dust_begin_departure :: proc(system: ^Ui_Dust_System, generation: u64) {
+// ui_dust_begin_departure releases forming material in Reclaim mode; Independent
+// and comparison arrivals keep replacement semantics. Surplus retains its clocks.
+ui_dust_begin_departure :: proc(
+    system: ^Ui_Dust_System, generation: u64,
+    next_style: Ui_Dust_Arrival_Style = UI_DUST_ARRIVAL_STYLE) {
     if system == nil {
         return
     }
-    system^.particle_count = 0
+    if system^.transition == .Reclaim && next_style == .Falling_Ink &&
+        (system^.incoming_style == .Falling_Ink || !system^.incoming_active) {
+        ui_dust_release_arrivals(system)
+    } else {
+        ui_dust_slots_clear(system)
+    }
     ui_dust_cancel_arrival(system)
     system^.departure_context_pending = true
     rand.reset(UI_DUST_RANDOM_SEED ~ generation,
@@ -60,13 +67,14 @@ ui_dust_begin_departure :: proc(system: ^Ui_Dust_System, generation: u64) {
 ui_dust_emit :: proc(
     system: ^Ui_Dust_System, position: geometry.Vector2, ink: [4]u8,
     coverage: u8, visible_alpha: f32) -> bool {
-    if system == nil || system^.particle_count >= UI_DUST_MAX_PARTICLES {
+    if system == nil {
         return false
     }
     generator := rand.xoshiro256_random_generator(&system^.rng_state)
     coverage_unit := f32(coverage) / 255
     alpha := f32(ink[3]) / 255 * coverage_unit * clamp(visible_alpha, 0, 1)
-    system^.particles[system^.particle_count] = {
+    particle := Ui_Dust_Particle{
+        phase = .Airborne_Departure,
         pos_x = position.x,
         pos_y = position.y,
         vel_x = rand.float32_range(UI_DUST_VX_MIN, UI_DUST_VX_MAX, generator),
@@ -83,7 +91,11 @@ ui_dust_emit :: proc(
         dust_sprite_index = u8(rand.int32_range(
             0, UI_DUST_SPRITE_VARIANT_COUNT, generator)),
     }
-    system^.particle_count += 1
+    particle.start_x = position.x
+    particle.start_y = position.y
+    particle.start_velocity_x = particle.vel_x
+    particle.start_velocity_y = particle.vel_y
+    _ = ui_dust_slot_emit(system, particle)
     return true
 }
 
@@ -94,59 +106,60 @@ ui_dust_advance :: proc(system: ^Ui_Dust_System, delta_seconds: f32) {
     }
     ui_dust_arrival_advance(system, delta_seconds)
     floor_y := system^.viewport.y + system^.viewport.height
-    live_count := 0
-    for index in 0..<system^.particle_count {
+    cursor := system^.live_head
+    for cursor != 0 {
+        index := cursor - 1
+        cursor = system^.order[index].next
         particle := system^.particles[index]
-        ui_dust_particle_advance(&particle, floor_y, delta_seconds)
-        if particle.resting && particle.rest_age >= particle.life {
+        if ui_dust_phase_is_arrival(particle.phase) {
+            system^.particles.age[index] += delta_seconds
             continue
         }
-        system^.particles[live_count] = particle
-        live_count += 1
+        ui_dust_particle_advance(&particle, floor_y, delta_seconds)
+        if particle.phase == .Resting_Departure && particle.rest_age >= particle.life {
+            retired := ui_dust_slot_retire(
+                system, {index, system^.order[index].generation})
+            assert(retired)
+            continue
+        }
+        system^.particles[index] = particle
     }
-    system^.particle_count = live_count
 }
 
-// ui_dust_particle_advance drops one fragment onto the floor, then ages its rest.
+// ui_dust_particle_advance reaches the floor at the fixed deadline and consumes
+// the same frame's remainder into stationary fade, independently of frame partition.
 ui_dust_particle_advance :: proc(
     particle: ^Ui_Dust_Particle, floor_y, delta_seconds: f32) {
     particle^.age += delta_seconds
-    if particle^.resting {
+    if particle^.phase == .Resting_Departure {
         particle^.rest_age += delta_seconds
         return
     }
-    sway_velocity := particle^.sway_amplitude * particle^.sway_frequency *
-        math.cos(particle^.age * particle^.sway_frequency + particle^.sway_phase)
-    start_y := particle^.pos_y
-    start_velocity_y := particle^.vel_y
-    particle^.pos_x += (particle^.vel_x + sway_velocity) * delta_seconds
-    particle^.pos_y += start_velocity_y * delta_seconds +
-        0.5 * UI_DUST_DOWNWARD_ACCELERATION * delta_seconds * delta_seconds
-    particle^.vel_y += UI_DUST_DOWNWARD_ACCELERATION * delta_seconds
-    rest_y := floor_y - particle^.size
-    if particle^.pos_y < rest_y {
-        return
+    particle^.flight_elapsed += delta_seconds
+    position, velocity := ui_dust_departure_motion(particle^, floor_y)
+    particle^.pos_x = position.x
+    particle^.pos_y = position.y
+    particle^.vel_x = velocity.x
+    particle^.vel_y = velocity.y
+    if particle^.flight_elapsed >= UI_DUST_DEPARTURE_DURATION {
+        particle^.phase = .Resting_Departure
+        particle^.rest_age = particle^.flight_elapsed - UI_DUST_DEPARTURE_DURATION
     }
-    distance := max(0, rest_y - start_y)
-    impact_time := (-start_velocity_y + math.sqrt(
-        start_velocity_y * start_velocity_y +
-        2 * UI_DUST_DOWNWARD_ACCELERATION * distance)) /
-        UI_DUST_DOWNWARD_ACCELERATION
-    particle^.pos_y = rest_y
-    particle^.vel_x = 0
-    particle^.vel_y = 0
-    particle^.resting = true
-    particle^.rest_age = max(delta_seconds - impact_time, 0)
 }
 
 // ui_dust_particle_alpha returns one live particle's opacity in [0, 1].
 // Falling fragments keep their ink opacity; resting fragments fade smoothly out.
 ui_dust_particle_alpha :: proc(system: ^Ui_Dust_System, index: int) -> f32 {
-    if system == nil || index < 0 || index >= system^.particle_count {
+    if system == nil || index < 0 || index >= system^.initialized_slots ||
+        (system^.particles.phase[index] != .Airborne_Departure &&
+         system^.particles.phase[index] != .Resting_Departure) {
         return 0
     }
     base_alpha := f32(system^.particles.color[index].a) / 255
-    if !system^.particles.resting[index] {
+    if system^.particles.captured[index] {
+        base_alpha = system^.particles.captured_alpha[index]
+    }
+    if system^.particles.phase[index] != .Resting_Departure {
         return base_alpha
     }
     life := system^.particles.life[index]

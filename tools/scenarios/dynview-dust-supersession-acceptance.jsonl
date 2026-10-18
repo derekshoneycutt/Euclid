@@ -17,6 +17,8 @@
 {"wait_state":"presentation_arrival_active","timeout_ms":10000}
 {"set_arrival_style":"immediate"}
 {"assert_state":"presentation_arrival_idle"}
+{"assert_state":"presentation_cancelled"}
+{"assert_state":"presentation_pool_bounded"}
 {"wait_state":"presentation_effects_settled","timeout_ms":10000}
 {"screenshot":".build/dynview-dust-cancelled.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}

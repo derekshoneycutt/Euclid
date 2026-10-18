@@ -10,10 +10,12 @@
 {"wait_event":"animation_selected","correlation":"falling","timeout_ms":10000}
 {"wait_event":"dynview_published","correlation":"falling","timeout_ms":10000}
 {"wait_state":"presentation_arrival_particles","timeout_ms":10000}
+{"assert_state":"presentation_pool_bounded"}
 {"screenshot":".build/dynview-dust-falling-ink.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"wait_state":"presentation_effects_settled","timeout_ms":10000}
 {"screenshot":".build/dynview-dust-falling-ink-settled.png"}
+{"assert_state":"presentation_arrival_quick"}
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"set_arrival_style":"draw_in"}
 {"select_animation":"Proposition I","as":"draw-in"}

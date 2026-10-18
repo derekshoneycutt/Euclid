@@ -1,0 +1,18 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_state":"dynview_enabled","timeout_ms":10000}
+{"set_setting":{"key":"interface.reduce_motion","value":false}}
+{"select_animation":"Axiom I,1","as":"warmup"}
+{"wait_event":"animation_selected","correlation":"warmup","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"warmup","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"set_arrival_style":"fade"}
+{"do":"reset_animation"}
+{"wait_event":"animation_reset_committed","timeout_ms":10000}
+{"wait_event":"dynview_published","timeout_ms":10000}
+{"assert_state":"presentation_dust_active"}
+{"assert_state":"presentation_arrival_active"}
+{"screenshot":".build/dynview-dust-refresh.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

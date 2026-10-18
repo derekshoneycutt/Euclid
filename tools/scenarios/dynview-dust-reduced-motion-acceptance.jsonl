@@ -2,6 +2,8 @@
 {"wait_state":"dynview_enabled","timeout_ms":10000}
 {"set_setting":{"key":"interface.reduce_motion","value":true}}
 {"wait_state":"interface_reduced_motion","timeout_ms":10000}
+{"assert_state":"presentation_reclaim_mode"}
+{"assert_state":"presentation_pool_bounded"}
 {"select_animation":"Proposition I","as":"first"}
 {"wait_event":"animation_selected","correlation":"first","timeout_ms":10000}
 {"wait_event":"dynview_published","correlation":"first","timeout_ms":10000}

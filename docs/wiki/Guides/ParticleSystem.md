@@ -218,68 +218,30 @@ and [`src/view/native/sdl_dust_pipeline.odin`](../../../src/view/native/sdl_dust
 
 ## Pane-Local UI Dust
 
-Dynview departure dust is a separate display-owned effect, not another world-particle
-layer. `Ui_Dust_System` follows the same storage pattern as `Particle_System`: a fixed
-`#soa` particle array with a live prefix and a private Xoshiro state reseeded for each
-departure, with no heap allocation of its own. It advances using UI frame time, so
-simulation and authored animation pauses do not freeze it, and it has no ground
-contacts, world projection, or shared random state.
+Presentation dust is display-owned and separate from world particles. It uses one
+fixed 4,096-slot pool and advances on UI time, even while animation is paused.
 
-Departures start when accepted content replaces the current document and when an
-animation selection commits. The presentation coordinator emits one fragment per
-evenly strided ink sample from the last frame that actually drew structured
-presentation content. Glyphs contribute coverage-weighted cell samples; solid
-geometry such as rules, radicals, and shape strokes contributes deterministic samples
-spread over each triangle at about a 3 px pitch, scaled by edge length and area and
-capped per triangle. Frames that draw no Dynview content, such as those after a
-selection releases the old snapshot but before the transition is observed, keep that
-ink. Each departure consumes it so the same text never breaks twice. Reset and runtime
-reload settle the effect and discard the retained ink instead. Accepted
-supersession replaces rather than queues departure particles. Departing ink falls to
-the bottom of the text viewport, rests there, then fades over about a second.
+- Replacing content, selecting an animation, or refreshing releases the old text
+  as dust. It reaches the pane floor in 0.30 seconds and fades over about a second.
+- Falling Ink reuses visible airborne dust to form the new text, emitting fresh
+  fragments only for shortages. Floor residue is not reused.
+- Interrupted arrivals continue from their visible position and motion. Unused dust
+  keeps aging; particles do not restart or duplicate the text's opacity.
+- New text finishes forming within 0.30 seconds of its ink samples becoming
+  available. Missing samples fall back to a fade rather than leaving text hidden.
+- Hidden panes, visual-context changes, and runtime reload clear effects.
+  Reduced motion skips them.
 
-Rendering uses the shared dust pipeline. World dust and pane dust append separate
-batches to the same encoder instance stream through `draw_encoder_dust_staging` and
-`draw_encoder_commit_dust`; the instance capacity reserves room for both. Pane dust is
-clipped to the current Presentation viewport and drawn after document content but
-before focus outlines and overlays. Outgoing and incoming fragments share one batch.
+Falling Ink is the product style. Immediate, Fade, and Draw In remain debug
+comparison styles. Reclaim is the product policy; Independent remains internal.
 
-New structured content arrives in the style named by `UI_DUST_ARRIVAL_STYLE` in
-[`src/particles/ui_dust/model.odin`](../../../src/particles/ui_dust/model.odin), the
-single configuration point: `Immediate`, a short stationary-layout `Fade`, `Falling_Ink`
-(the fixed product style), or `Draw_In`. Debug scenarios may override the style with
-`set_arrival_style`, which cancels any active arrival and leaves departure dust falling;
-outside debug scenarios the configured constant always applies. Every animated style
-reveals the ordinary glyph, rule, and shape rendering through background-colored masks
-without rewriting semantic styles. Falling ink and draw-in keep the new content masked
-until a published ink frame proves its samples belong to that content (the font cache's
-visible-ink serial advances past the value recorded at publication). For falling ink,
-the coordinator then emits evenly strided arrival fragments into a separate fixed `#soa`
-budget, reseeded from the presentation generation, while leaving the ink retained for a
-later departure. Each fragment drops a short distance with damped sway onto its exact
-target, then cross-fades into the crisp drawing: fragment opacity is the sampled ink
-alpha times the inverse of the mask reveal, so the sum never flashes brighter than the
-text. Fragments are discarded when the handoff completes; particles never become
-persistent typography.
+For implementation and exact limits, start with:
 
-Draw-in bins every new ink sample into fixed vertical occupancy bins, merges nearby
-bins into at most `UI_DUST_DRAW_IN_MAX_ROWS` ink rows, and tiles the viewport with one
-band per row so ink without samples still waits for its band. Rows start with a short
-overlapping stagger and sweep for a time proportional to their width, all within
-`UI_DUST_DRAW_IN_DURATION`. Each unfinished band is covered from an eased front to the
-pane edge, with a stepped feather in place of a gradient. A sparse budget of
-`UI_DUST_DRAW_IN_ACCENT_MAX` deposition accents uses the same arrival storage: each
-accent settles onto its ink exactly when the feather midpoint reaches it, then fades.
-Content with no visible ink, or targets
-that do not arrive within a short bound, degrades to the fade so new content is never
-left hidden. Hidden panes, viewport, scroll, scale or font changes, departures, and
-effective reduced motion settle the effect immediately; reduced motion skips particle
-creation and every incoming animation.
-
-Start with [`src/particles/ui_dust/`](../../../src/particles/ui_dust/),
-[`src/view/presentation/presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin),
-and [`src/view/ui/presentation/transition_draw.odin`](../../../src/view/ui/presentation/transition_draw.odin).
-The world particle model and grounded field remain unchanged.
+- [`ui_dust/`](../../../src/particles/ui_dust/): pool, motion, matching, and visibility.
+- [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin):
+  content lifecycle and captured ink.
+- [`transition_draw.odin`](../../../src/view/ui/presentation/transition_draw.odin):
+  pane-clipped rendering.
 
 ## Where To Trace A Change
 
@@ -292,6 +254,8 @@ The world particle model and grounded field remain unchanged.
 | Runtime evidence or scenario observations | [`src/evidence/`](../../../src/evidence/), [`tools/scenarios/`](../../../tools/scenarios/) |
 | Deterministic field and particle behavior | [`src/particles/field_test.odin`](../../../src/particles/field_test.odin), [`src/particles/particles_test.odin`](../../../src/particles/particles_test.odin) |
 | Pane-local UI dust and transition timing | [`src/particles/ui_dust/effects_test.odin`](../../../src/particles/ui_dust/effects_test.odin), [`src/view/presentation/presentation_runtime_test.odin`](../../../src/view/presentation/presentation_runtime_test.odin) |
+| Shared dust slot ownership and rendering | [`src/particles/ui_dust/slots_test.odin`](../../../src/particles/ui_dust/slots_test.odin), [`src/view/ui/presentation/transition_draw_test.odin`](../../../src/view/ui/presentation/transition_draw_test.odin) |
+| Reclamation and interrupted arrivals | [`reclaim_test.odin`](../../../src/particles/ui_dust/reclaim_test.odin), [`presentation_reclaim_test.odin`](../../../src/view/presentation/presentation_reclaim_test.odin) |
 
 ## Evidence And Exploration
 
@@ -301,15 +265,14 @@ transitions, and the interaction between field state and particle state. The che
 [`dust-emission-acceptance`](../../../tools/scenarios/dust-emission-acceptance.jsonl),
 [`dust-settling-acceptance`](../../../tools/scenarios/dust-settling-acceptance.jsonl), and
 [`dust-pic-dense-acceptance`](../../../tools/scenarios/dust-pic-dense-acceptance.jsonl)
-scenarios exercise progressively broader runtime behavior. Pane dust has its own
-[`dynview-dust-departure-acceptance`](../../../tools/scenarios/dynview-dust-departure-acceptance.jsonl),
-[`dynview-dust-arrival-acceptance`](../../../tools/scenarios/dynview-dust-arrival-acceptance.jsonl),
-[`dynview-dust-supersession-acceptance`](../../../tools/scenarios/dynview-dust-supersession-acceptance.jsonl),
-and
-[`dynview-dust-reduced-motion-acceptance`](../../../tools/scenarios/dynview-dust-reduced-motion-acceptance.jsonl)
-scenarios. They select each arrival style, wait on the `presentation_dust_active`,
-`presentation_arrival_particles`, and `presentation_effects_settled` predicates, and
-record the `presentation_effects` observation in `state.json`.
+scenarios exercise progressively broader runtime behavior.
+
+For pane dust, run [`reclaim acceptance`](../../../tools/scenarios/dynview-dust-reclaim-acceptance.jsonl)
+for interrupted reuse and [`capacity acceptance`](../../../tools/scenarios/dynview-dust-capacity-acceptance.jsonl)
+for shortages, floor residue, and eviction. `state.json` retains phase counts and
+the latest formation outcome. Completion duration is logical effect time, not
+wall-clock frame latency. Predicate names live in
+[`scenario.odin`](../../../src/evidence/scenario/scenario.odin).
 
 Use observations and scenario artifacts to support claims about settling, contact
 response, rendered particles, allocation behavior, or shutdown. A screenshot can help

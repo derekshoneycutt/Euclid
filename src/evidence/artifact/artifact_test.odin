@@ -11,6 +11,23 @@ import "core:os"
 import "core:strings"
 import "core:testing"
 
+// Reclamation evidence preserves scalar counts, policy, and logical completion time.
+@(test)
+artifact_reclamation_preserves_json_contract :: proc(t: ^testing.T) {
+    effects := observe.Presentation_Effects{
+        transition = .Independent, airborne_count = 3, resting_count = 4,
+        reclaimed_count = 5, fresh_count = 6, live_count = 18, eviction_count = 7,
+        formation_reclaimed = 8, formation_fresh = 9, arrival_elapsed = 0.12,
+        arrival_duration = 0.30, arrival_completed_count = 10,
+        arrival_cancelled_count = 11, arrival_completed_duration = 0.30,
+    }
+    text := artifact_state_json({presentation_effects = effects}, {}, {})
+    decoded: struct {presentation_effects: observe.Presentation_Effects}
+    testing.expect(t,
+        json.unmarshal_string(text, &decoded, allocator = context.allocator) == nil)
+    testing.expect_value(t, decoded.presentation_effects, effects)
+}
+
 // TLSF domains stay typed and distinct from arena-reset and outer heap evidence.
 @(test)
 artifact_library_storage_preserves_domain_diagnostics :: proc(t: ^testing.T) {

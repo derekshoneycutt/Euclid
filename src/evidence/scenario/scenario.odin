@@ -1423,6 +1423,28 @@ presentation_effects_state_matches :: proc(
     case "presentation_arrival_idle": return !effects.arrival_active
     case "presentation_arrival_particles": return effects.arrival_particle_count > 0
     }
+    return presentation_material_state_matches(name, effects)
+}
+
+// Evaluate live material populations and retained reclamation outcomes.
+presentation_material_state_matches :: proc(
+    name: string, effects: observe.Presentation_Effects) -> bool {
+    switch name {
+    case "presentation_reclaimed": return effects.reclaimed_count > 0
+    case "presentation_fresh": return effects.fresh_count > 0
+    case "presentation_floor_dust": return effects.resting_count > 0
+    case "presentation_evicted": return effects.eviction_count > 0
+    case "presentation_cancelled": return effects.arrival_cancelled_count > 0
+    case "presentation_reclaim_mode": return effects.transition == .Reclaim
+    case "presentation_pool_bounded":
+        return effects.live_count >= 0 &&
+            effects.live_count <= uidust.UI_DUST_TOTAL_PARTICLES
+    case "presentation_arrival_completed":
+        return effects.arrival_completed_count > 0
+    case "presentation_arrival_quick":
+        return effects.arrival_completed_count > 0 &&
+            effects.arrival_completed_duration <= 0.30
+    }
     return false
 }
 

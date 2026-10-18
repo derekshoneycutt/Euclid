@@ -324,6 +324,36 @@ scenario_test_presentation_effect_predicates :: proc(t: ^testing.T) {
     testing.expect(t, !state_matches("presentation_dust_active", falling))
 }
 
+// Reclamation predicates distinguish live material from retained completion facts.
+@(test)
+scenario_test_reclamation_predicates :: proc(t: ^testing.T) {
+    effects := observe.Presentation_Effects{
+        reclaimed_count = 2, fresh_count = 1, resting_count = 3,
+        live_count = 6, eviction_count = 1, arrival_cancelled_count = 1,
+        arrival_completed_count = 1, arrival_completed_duration = 0.30,
+    }
+    for name in ([9]string{
+        "presentation_reclaimed", "presentation_fresh", "presentation_floor_dust",
+        "presentation_evicted", "presentation_cancelled", "presentation_reclaim_mode",
+        "presentation_pool_bounded", "presentation_arrival_completed",
+        "presentation_arrival_quick",
+    }) {
+        testing.expect(t, presentation_effects_state_matches(name, effects))
+    }
+    effects.arrival_completed_duration = 0.31
+    effects.live_count = 4097
+    effects.transition = .Independent
+    testing.expect(t, !presentation_effects_state_matches("presentation_arrival_quick",
+        effects))
+    testing.expect(t, !presentation_effects_state_matches("presentation_pool_bounded",
+        effects))
+    testing.expect(t, !presentation_effects_state_matches("presentation_reclaim_mode",
+        effects))
+    testing.expect(t, !presentation_effects_state_matches("presentation_reclaimed", {}))
+    testing.expect(t,
+        !presentation_effects_state_matches("presentation_arrival_completed", {}))
+}
+
 // Verify view-content actions preserve exact source, MIME, alias, and empty content.
 @(test)
 scenario_test_parse_view_content_actions :: proc(t: ^testing.T) {
