@@ -25,6 +25,8 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "FPS {fps}", "User data saved", "User data not saved yet", "Saving user data...",
     "User-data storage unavailable", "User data could not be saved",
     "Reduce interface motion", "System requests reduced motion",
+    "UI Dust particles: {count}",
+    "Peaks per 5-second interval.",
     "Output scale", "Capture every", "Playback timing", "Animation",
     "Recorded", "Use animation timing", "Use recorded timing", "Downsample", "Path",
     "Saved GIF path", "100%", "50%", "33%", "25%", "frame", "{count} frames",
@@ -94,7 +96,8 @@ content_message_test_signature :: proc(
          .Gif_Cadence_Multiple:
         return "count", .Uint32
     case .Settings_Stats_Dust, .Settings_Stats_Trail, .Settings_Stats_Flicker,
-         .Settings_Stats_Animation_Entries, .Gif_Status_Recording:
+         .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,
+         .Gif_Status_Recording:
         return "count", .Int64
     case .Fps_Overlay: return "fps", .Float32_One_Decimal
     case: return "", .Text

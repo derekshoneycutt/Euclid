@@ -184,9 +184,9 @@ General features:
   - [X] Localization tables
   - [X] Basic initial user settings structure
   - [ ] Persistent REPL history
+  - [ ] Optional completed checkboxes in tree
   - [ ] Search and use history
   - [ ] Search auto-completion features
-  - [ ] Optional completed checkboxes in tree
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
     - [X] Favorites/Collection organization

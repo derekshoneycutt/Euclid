@@ -471,6 +471,13 @@ encode_sdl_geometry_frame :: proc(
         &encoder, ctx.draw_runtime^.dust_ready)
     font.cache_ink_capture_begin(&state^.font_cache)
     encode_sdl_world_geometry(state, ctx, &encoder)
+    viewtelemetry.collect_particle_counts(&state^.telemetry.particle_counts,
+        native.sdl_time_ticks(), {
+            dust = state^.particle_system.last_render_low,
+            trail = state^.particle_system.last_render_mid,
+            flicker = state^.particle_system.last_render_high,
+            ui_dust = ctx.presentation^.dust.live_count,
+        })
     encode_sdl_ui_geometry(state, ctx, &encoder, prepared)
     result := native.sdl_platform_present_draw(
         ctx.platform, ctx.draw_runtime, &encoder,

@@ -348,15 +348,15 @@ settings_max_particles_params :: proc(
     }
 }
 
-// Render particle render-count statistics and Julia animation-entry counts in Settings.
+// Draw completed particle interval peaks separately from the live animation-entry count.
 draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
     state := ctx.state
-    panel := ctx.panel
-    ps := &state^.particle_system
-    statistics := [4]struct{id: contentdata.Content_Message_Id, count: int}{
-        {.Settings_Stats_Dust, ps.last_render_low},
-        {.Settings_Stats_Trail, ps.last_render_mid},
-        {.Settings_Stats_Flicker, ps.last_render_high},
+    counts := state^.telemetry.particle_counts.published
+    statistics := [5]struct{id: contentdata.Content_Message_Id, count: int}{
+        {.Settings_Stats_Dust, counts.dust},
+        {.Settings_Stats_Trail, counts.trail},
+        {.Settings_Stats_Flicker, counts.flicker},
+        {.Settings_Stats_Ui_Dust, counts.ui_dust},
         {.Settings_Stats_Animation_Entries, ctx.animation_entries_added},
     }
     storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
@@ -364,19 +364,31 @@ draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
         label := viewmessages.shell_format(state, statistic.id,
             []contentdata.Content_Format_Argument{{"count", i64(statistic.count)}},
             storage[:])
-        viewtext.ui_text_shaped({
-            encoder = ctx.encoder,
-            resolver = ctx.font_resolver,
-            key = .Regular,
-            text = label,
-            position = {
-                panel.x + theme.SETTINGS_PANEL_INSET,
-                ctx.stats_y + f32(row)*theme.SETTINGS_STATS_ROW_GAP,
-            },
-            color = theme.UI_TEXT_COLOR,
-            font = viewtext.ui_text_font(ctx.font),
-        })
+        display_row := row
+        if statistic.id == .Settings_Stats_Animation_Entries {
+            display_row += 1
+        }
+        draw_settings_stat_row(ctx, label, display_row)
     }
+    draw_settings_stat_row(ctx,
+        viewmessages.shell_message(state, .Settings_Stats_Interval), 4)
+}
+
+// Draw one statistic or explanation at its shared Settings row spacing.
+draw_settings_stat_row :: proc(
+    ctx: Settings_Particle_Stats_Context, label: string, row: int) {
+    viewtext.ui_text_shaped({
+        encoder = ctx.encoder,
+        resolver = ctx.font_resolver,
+        key = .Regular,
+        text = label,
+        position = {
+            ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+            ctx.stats_y + f32(row)*theme.SETTINGS_STATS_ROW_GAP,
+        },
+        color = theme.UI_TEXT_COLOR,
+        font = viewtext.ui_text_font(ctx.font),
+    })
 }
 
 //   Place one fixed-size settings row and return it with the advanced cursor.

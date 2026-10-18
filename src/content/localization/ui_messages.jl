@@ -202,22 +202,37 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
         "Maximum Dust particles"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1209), "ui.settings.stats.dust",
-            "Rendered dust-particle statistic.", LocalizedContent.MessageArgument[
+            "Peak rendered dust count in the previous five-second interval.",
+            LocalizedContent.MessageArgument[
                 LocalizedContent.MessageArgument("count",
                     LocalizedContent.Int64Argument)]),
         "Dust particles Rendered: {count}"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1210), "ui.settings.stats.trail",
-            "Rendered trail-particle statistic.", LocalizedContent.MessageArgument[
+            "Peak rendered trail count in the previous five-second interval.",
+            LocalizedContent.MessageArgument[
                 LocalizedContent.MessageArgument("count",
                     LocalizedContent.Int64Argument)]),
         "Trail particles Rendered: {count}"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1211), "ui.settings.stats.flicker",
-            "Rendered flicker-particle statistic.", LocalizedContent.MessageArgument[
+            "Peak rendered flicker count in the previous five-second interval.",
+            LocalizedContent.MessageArgument[
                 LocalizedContent.MessageArgument("count",
                     LocalizedContent.Int64Argument)]),
         "Flicker particles Rendered: {count}"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1221), "ui.settings.stats.ui_dust",
+            "Peak total live UI dust count in the previous five-second interval.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count",
+                    LocalizedContent.Int64Argument)]),
+        "UI Dust particles: {count}"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1222), "ui.settings.stats.interval",
+            "Explains the particle counters' fixed five-second peak reporting.",
+            LocalizedContent.MessageArgument[]),
+        "Peaks per 5-second interval."),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1212),
             "ui.settings.stats.animation_entries",

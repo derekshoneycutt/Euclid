@@ -52,7 +52,7 @@ end
             for record in canonical])
         counts = [count(record -> record["kind"] == kind, canonical)
             for kind in 1:11]
-        @test counts == [6, 1, 88, counts[4], 88, 139, 138, 138, 3, 139, 138]
+        @test counts == [6, 1, 90, counts[4], 90, 139, 138, 138, 3, 139, 138]
         @test counts[4] <= 32
         catalog_nodes = filter(record -> record["kind"] == 7, canonical)
         @test count(record -> record["node_kind"] == 2, catalog_nodes) == 1

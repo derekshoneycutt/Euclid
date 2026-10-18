@@ -57,6 +57,8 @@ Content_Message_Id :: enum u16 {
     Settings_Save_Failed = 1218,
     Settings_Reduce_Motion = 1219,
     Settings_System_Reduce_Motion = 1220,
+    Settings_Stats_Ui_Dust = 1221,
+    Settings_Stats_Interval = 1222,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -106,7 +108,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 88
+CONTENT_SHIPPED_MESSAGE_COUNT :: 90
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -155,6 +157,8 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1218, "ui.settings.save.failed"},
     {1219, "ui.settings.reduce_motion"},
     {1220, "ui.settings.system_reduce_motion"},
+    {1221, "ui.settings.stats.ui_dust"},
+    {1222, "ui.settings.stats.interval"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},
@@ -257,7 +261,8 @@ content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Sig
          .Gif_Cadence_Multiple:
         return {"count", .Uint32}
     case .Settings_Stats_Dust, .Settings_Stats_Trail, .Settings_Stats_Flicker,
-         .Settings_Stats_Animation_Entries, .Gif_Status_Recording:
+         .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,
+         .Gif_Status_Recording:
         return {"count", .Int64}
     case .Fps_Overlay: return {"fps", .Float32_One_Decimal}
     }

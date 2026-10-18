@@ -366,10 +366,11 @@ settings_capability_labels_match_prepared_availability :: proc(t: ^testing.T) {
 settings_statistic_messages_preserve_rendered_counts :: proc(t: ^testing.T) {
     state := make_shell_test_state(t)
     defer destroy_shell_test_state(state)
-    statistics := [4]struct{id: contentdata.Content_Message_Id, expected: string}{
+    statistics := [5]struct{id: contentdata.Content_Message_Id, expected: string}{
         {.Settings_Stats_Dust, "Dust particles Rendered: 12"},
         {.Settings_Stats_Trail, "Trail particles Rendered: 12"},
         {.Settings_Stats_Flicker, "Flicker particles Rendered: 12"},
+        {.Settings_Stats_Ui_Dust, "UI Dust particles: 12"},
         {.Settings_Stats_Animation_Entries, "Julia animation entries added: 12"},
     }
     storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
@@ -390,6 +391,7 @@ gif_and_settings_static_messages_preserve_labels :: proc(t: ^testing.T) {
         {.Settings_Limit_Fps, "Limit FPS"},
         {.Settings_Drawing_Sound, "Enable Drawing Sound"},
         {.Settings_Maximum_Dust, "Maximum Dust particles"},
+        {.Settings_Stats_Interval, "Peaks per 5-second interval."},
         {.Gif_Output_Scale, "Output scale"},
         {.Gif_Capture_Every, "Capture every"},
         {.Gif_Playback_Timing, "Playback timing"},
@@ -506,6 +508,7 @@ animation_controls_apply_existing_actions :: proc(t: ^testing.T) {
 @(test)
 settings_drawing_sound_row_is_unconditional_and_user_owned :: proc(t: ^testing.T) {
     rows := uisettings.settings_view_layout_rows({0, 0, 320, 480})
+    testing.expect(t, rows.fps_y >= rows.stats_y + 6 * theme.SETTINGS_STATS_ROW_GAP)
     testing.expect(t, rows.sound_y > rows.limit_y)
     testing.expect(t, rows.simd_y > rows.sound_y)
 

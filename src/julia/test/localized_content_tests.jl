@@ -30,8 +30,8 @@ end
 @testset "localized content declarations" begin
     @test validate_content_manifest(AuthoredManifest, AnimationDescriptors) ===
         AuthoredManifest
-    @test length(AuthoredManifest.ui_messages) == 88
-    @test length(AuthoredManifest.translations) == 88
+    @test length(AuthoredManifest.ui_messages) == 90
+    @test length(AuthoredManifest.translations) == 90
     unicode_message = only(filter(entry -> entry.key == "ui.library.unicode_completion",
         AuthoredManifest.ui_messages))
     @test unicode_message.native_id == UInt16(1115)
