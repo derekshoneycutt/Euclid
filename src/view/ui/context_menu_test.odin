@@ -19,7 +19,7 @@ import theme "theme"
 context_menu_test_state :: proc(t: ^testing.T) -> ^core.Euclid_General_State {
     state := make_shell_test_state(t)
     runtime := &state^.ui_runtime
-    runtime^.semantic_focus = new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    runtime^.semantic_focus = &state^.semantic_focus
     runtime^.layout.window = {640, 400}
     runtime^.presentation.visible = true
     runtime^.layout.ui_regions.text_rect = {100, 100, 400, 200}
@@ -36,7 +36,6 @@ context_menu_test_state :: proc(t: ^testing.T) -> ^core.Euclid_General_State {
 
 // context_menu_test_destroy releases synthetic owners without native teardown.
 context_menu_test_destroy :: proc(state: ^core.Euclid_General_State) {
-    free(state^.ui_runtime.semantic_focus, context.allocator)
     destroy_shell_test_state(state)
 }
 

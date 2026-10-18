@@ -28,9 +28,7 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     presentation := create_presentation_runtime()
     testing.expect(t, state != nil && service != nil && presentation != nil)
-    link_error := bridge.communication_link_init(
-        &service^.event_link, bridge.JULIA_EVENT_CAPACITY,
-        bridge.JULIA_EVENT_LINK_POOL_CAPACITY)
+    link_error := bridge.init_julia_runtime_channels(service)
     testing.expect_value(t, link_error, runtime.Allocator_Error.None)
     state^.julia_runtime_service = service
     state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
@@ -75,12 +73,12 @@ presentation_test_fixture_destroy :: proc(
     taskpool.task_pool_destroy(&state^.simulation_executor^.pool)
     free(state^.simulation_executor)
     bridge.view_snapshot_slots_destroy(service)
-    bridge.communication_link_destroy(&service^.event_link)
+    bridge.destroy_julia_runtime_channels(service)
     bridge.animation_storage_destroy(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents)
     free(state^.julia_interface)
-    free(service)
+    free(service, context.allocator)
     free(state)
 }
 
@@ -181,7 +179,8 @@ presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
     state, presentation := fixture.state, fixture.presentation
     testing.expect(t, viewfont.cache_ink_capture_init(
         &state^.font_cache, context.allocator))
-    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    defer viewfont.cache_ink_capture_destroy(
+        &state^.font_cache, context.allocator)
     viewfont.cache_ink_capture_begin(&state^.font_cache)
     viewfont.cache_ink_capture_sample(
         &state^.font_cache, {20, 30}, {240, 160, 80, 255}, 255)
@@ -251,7 +250,8 @@ presentation_formation_targets_first_new_ink :: proc(t: ^testing.T) {
     state, presentation := fixture.state, fixture.presentation
     testing.expect(t, viewfont.cache_ink_capture_init(
         &state^.font_cache, context.allocator))
-    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    defer viewfont.cache_ink_capture_destroy(
+        &state^.font_cache, context.allocator)
     presentation_test_publish_ink(state, {{5, 5}})
     state^.ui_runtime.presentation.visible = true
     uidust.ui_dust_begin_arrival(&presentation^.dust, 50, .Falling_Ink)
@@ -283,7 +283,8 @@ presentation_formation_draws_in_first_new_ink :: proc(t: ^testing.T) {
     state, presentation := fixture.state, fixture.presentation
     testing.expect(t, viewfont.cache_ink_capture_init(
         &state^.font_cache, context.allocator))
-    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    defer viewfont.cache_ink_capture_destroy(
+        &state^.font_cache, context.allocator)
     state^.ui_runtime.presentation.visible = true
     uidust.ui_dust_begin_arrival(&presentation^.dust, 52, .Draw_In)
     presentation^.arrival_ink_serial =
@@ -312,7 +313,8 @@ presentation_formation_without_ink_uses_fade :: proc(t: ^testing.T) {
     state, presentation := fixture.state, fixture.presentation
     testing.expect(t, viewfont.cache_ink_capture_init(
         &state^.font_cache, context.allocator))
-    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    defer viewfont.cache_ink_capture_destroy(
+        &state^.font_cache, context.allocator)
     state^.ui_runtime.presentation.visible = true
     uidust.ui_dust_begin_arrival(&presentation^.dust, 51, .Falling_Ink)
     presentation^.arrival_ink_serial =
@@ -366,7 +368,8 @@ presentation_selection_departs_and_reset_settles :: proc(t: ^testing.T) {
         fixture.state, fixture.service, fixture.presentation
     testing.expect(t, viewfont.cache_ink_capture_init(
         &state^.font_cache, context.allocator))
-    defer viewfont.cache_ink_capture_destroy(&state^.font_cache)
+    defer viewfont.cache_ink_capture_destroy(
+        &state^.font_cache, context.allocator)
     viewfont.cache_ink_capture_begin(&state^.font_cache)
     viewfont.cache_ink_capture_sample(
         &state^.font_cache, {20, 30}, {240, 160, 80, 255}, 255)

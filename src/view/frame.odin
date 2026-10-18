@@ -398,14 +398,14 @@ encode_sdl_world_geometry :: proc(
         encoder, state^.ui_runtime.layout.ui_regions.world_rect)
     world.draw_encoded_drawing_surface(state, encoder)
     world.draw_encoded_cached_basic_pass(state, encoder, false)
-    world.encode_low_particles(state^.particle_system, state, encoder,
+    world.encode_low_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)
     world.draw_encoded_cached_shadow_pass(state, encoder)
     world.draw_encoded_cached_tool_shadow_pass(state, encoder)
-    world.encode_mid_particles(state^.particle_system, state, encoder,
+    world.encode_mid_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)
     world.draw_encoded_shapes_high_merged_cached(state, encoder)
-    world.encode_high_particles(state^.particle_system, state, encoder)
+    world.encode_high_particles(&state^.particle_system, state, encoder)
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 

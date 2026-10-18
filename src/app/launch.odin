@@ -101,6 +101,8 @@ launch_run_session :: proc(
     launch: Launch_Configuration,
     settings: ^core.Euclid_Run_Settings) -> int {
     resolved: setting_model.Preferences
+    // This large bounded bootstrap snapshot is heap-owned, copied into display state,
+    // and freed when the synchronous launch session returns.
     collection_state := new(collections.Set, context.allocator)
     defer free(collection_state, context.allocator)
     store: user_data.Store
@@ -276,12 +278,12 @@ launch_open_store :: proc(
         opened^ = true
         return true
     }
-    path, path_error := user_data.default_database_path(context.allocator)
+    path, path_error := user_data.default_database_path(context.temp_allocator)
     if path_error != .None {
         fmt.eprintln("Unable to resolve default settings database path: ", path_error)
         return false
     }
-    defer delete(path, context.allocator)
+    defer delete(path, context.temp_allocator)
     failure := user_data.store_open(store, path)
     if failure.kind != .None {
         log.warnf("default_settings_store_unavailable error=%d", int(failure.kind))

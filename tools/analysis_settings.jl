@@ -75,7 +75,7 @@ const RuleResponses = Dict(
     "ODIN-CYCLOMATIC-FAIL" => Fail,
     "ODIN-ALLOCATION-IMPLICIT" => Fail,
     "ODIN-ALLOCATION-UNKNOWN" => Fail,
-    "ODIN-ALLOCATION-CONTEXT" => Warn,
+    "ODIN-ALLOCATION-CONTEXT" => Fail,
     "ODIN-ALLOCATION-HEAP" => Warn,
     "ODIN-ALLOCATION-ARENA" => Warn,
     "ODIN-ALLOCATION-HIDDEN" => Warn,
@@ -474,6 +474,136 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "debug-allocation-context-restoration",
+                "src/main.odin",
+                "run_debug_application",
+                :context,
+                "The original process allocator seeds the debug tracking domain and is restored after the application returns.";
+                operation="allocator-alias",
+                target="original_allocator",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "harness-asset-config-owner-allocator",
+                "src/harness/main.odin",
+                "run_harness",
+                :context,
+                "The harness root selects one allocator for its asset-root config and passes that same owner to destruction before returning.";
+                operation="allocator-pass",
+                target="files.make_asset_root_config",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "harness-asset-config-owner-destroy",
+                "src/harness/main.odin",
+                "run_harness",
+                :context,
+                "The harness releases the asset-root config with the allocator selected when its owner was created.";
+                operation="allocator-pass",
+                target="files.destroy_asset_root_config",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "app-launch-collection-snapshot-owner-release",
+                "src/app/launch.odin",
+                "launch_run_session",
+                :context,
+                "The launch owner releases its explicitly allocated collection snapshot with the same process allocator after the synchronous view session returns.";
+                operation="allocator-pass",
+                target="free",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "runtime-session-general-state-owner-release",
+                "src/view/runtime_session.odin",
+                "make_animations_state",
+                :context,
+                "The runtime-session owner releases its startup state with the same process allocator when resource initialization fails.";
+                operation="allocator-pass",
+                target="free",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-graphics-service-owner-release",
+                "src/view/terminal/service/terminal_graphics_service.odin",
+                "terminal_graphics_runtime_destroy",
+                :context,
+                "The display owner frees the reusable graphics service with the process allocator after service shutdown and before task-pool teardown.";
+                operation="allocator-pass",
+                target="free",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-window-platform-owner-release",
+                "src/view/view.odin",
+                "run_window_loop",
+                :context,
+                "The window-loop owner frees its platform state with the same process allocator after the display loop ends.";
+                operation="allocator-pass",
+                target="free",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "content-builder-process-input",
+                "tools/content_builder/main.odin",
+                "main",
+                :context,
+                "The process entry point reads the bounded canonical input into its root allocator and releases the bytes before exit.";
+                operation="allocator-pass",
+                target="os.read_entire_file",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "runtime-session-julia-service-owner-allocator",
+                "src/view/runtime_session.odin",
+                "session_start_julia_service",
+                :context,
+                "The runtime-session boundary selects the process tracking allocator for the Julia service, whose constructor retains it through service teardown.";
+                operation="allocator-pass",
+                target="julia.create_julia_runtime_service",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "loading-julia-service-owner-allocator",
+                "src/view/loading.odin",
+                "loading_start_julia_service",
+                :context,
+                "The startup owner selects the process tracking allocator for the Julia service, whose constructor retains it through service teardown.";
+                operation="allocator-pass",
+                target="julia.create_julia_runtime_service",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "view-sdl-draw-runtime-reservation",
                 "src/view/native/sdl_draw_runtime.odin",
                 "sdl_draw_runtime_allocate_storage",
@@ -484,12 +614,22 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "view-font-cache-metadata-reservation",
+                "src/view/font/font.odin",
+                "font_metadata_arena_init",
+                :arena,
+                "The cache reserves one bounded metadata arena and destroys it only after canonical, optional, and ink allocations are released.";
+                operation="arena_init_static",
+                target="arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
                 "view-font-optional-raster-glyph-metadata",
                 "src/view/font/font.odin",
                 "font_raster_instance_glyphs_init",
                 :custom,
-                "Optional raster glyph tables use the cache-owned 64 MiB TLSF pool. " *
-                    "Retirement reuses freed blocks; cache teardown releases the backing.";
+                "Optional raster glyph tables use the cache-owned TLSF domain and retain a separate 64 MiB admission budget. " *
+                    "Retirement reuses freed blocks without charging canonical metadata.";
                 operation="make",
                 target="[]Font_Glyph_Record",
                 allocator_source="allocator",
@@ -1434,18 +1574,20 @@ AnalysisSettings(
                 target="[]bridgemodel.Euclid_Julia_Animation_Lookup_Entry",
                 certainty=:definite,
                 response=Ignore),
-            # Bridge Runtime Service Allocations ; these allocate the main bridge runtime
+            # Communication links own one bounded TLSF pool and reclaim transferred data.
             ReviewedAllocationPolicy(
-                "bridge-runtime-create-services",
+                "bridge-runtime-service-bootstrap",
                 "src/bridge/runtime_service.odin",
-                "create_julia_runtime_service",
-                :implicit,
-                "Single one-time creation of the julia runtime service structure.";
+                "create_julia_runtime_service_with_worker",
+                :custom,
+                "The service object is allocated with the caller-supplied bootstrap allocator, retained by the service, and freed only after worker shutdown and service-owned storage teardown.";
                 operation="new",
                 target="Julia_Runtime_Service",
+                allocator_source="allocator",
                 certainty=:definite,
-                response=Ignore),
-            # Communication links own one bounded TLSF pool and reclaim transferred data.
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "bridge-terminal-highlight-result-runs",
                 "src/bridge/terminal_highlighting.odin",
@@ -1462,9 +1604,9 @@ AnalysisSettings(
             ReviewedAllocationPolicy(
                 "bridge-communication-link-backing",
                 "src/bridge/communication_link.odin",
-                "communication_link_init",
+                "communication_link_allocate_pool_backing",
                 :custom,
-                "Fixed pool backing is stored on the link and deleted after both channels are destroyed.";
+                "Aligned fixed-pool backing is retained on the link and reclaimed with the service arena after both channels are destroyed.";
                 operation="make",
                 target="[]byte",
                 certainty=:definite,
@@ -1714,65 +1856,7 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "input-runtime",
-                "src/view/input/runtime.odin",
-                "input_runtime_create",
-                :custom,
-                "The display owner allocates one fixed-layout input runtime before the " *
-                    "window loop and releases it during orderly display teardown.";
-                operation="new",
-                target="Input_Runtime",
-                allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore),
             # Primary Runtime Allocations -- These are all single allocations made once
-            ReviewedAllocationPolicy(
-                "view-runtime-session-iso-scale",
-                "src/view/runtime_session.odin",
-                "make_iso_scale",
-                :context,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="new",
-                target="worldmodel.Iso_Scale",
-                allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "view-runtime-session-drawing-surface",
-                "src/view/runtime_session.odin",
-                "make_drawing_surface",
-                :context,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="new",
-                target="worldmodel.Euclid_Drawing_Surface",
-                allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "view-runtime-session-shape-world",
-                "src/view/runtime_session.odin",
-                "make_shape_storage",
-                :context,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="new",
-                target="shapemodel.Shape_World",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "view-runtime-session-particle-system",
-                "src/view/runtime_session.odin",
-                "make_animations_state",
-                :context,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="new",
-                target="particlemodel.Particle_System",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-runtime-session-general-state",
                 "src/view/runtime_session.odin",
@@ -1793,19 +1877,6 @@ AnalysisSettings(
                 "Window-session native state is allocated once and explicitly destroyed and freed when the display loop ends.";
                 operation="new",
                 target="native.Sdl_Platform",
-                allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "view-runtime-session-semantic-focus",
-                "src/view/runtime_session.odin",
-                "init_ui_semantic_focus",
-                :context,
-                "Fixed-capacity semantic snapshots are allocated once per display session and explicitly freed during runtime teardown.";
-                operation="new",
-                target="viewmodel.Ui_Semantic_Focus_State",
                 allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore,
@@ -1841,15 +1912,13 @@ AnalysisSettings(
                 target="cache.preparation_arena",
                 certainty=:definite,
                 response=Ignore),
-            # TODO : This next is allocated on context.allocator i.e. the heap
-            #        re-review if safer allocator can fill
             ReviewedAllocationPolicy(
                 "view-font-generation-glyph-metadata",
                 "src/view/font/font.odin",
                 "font_generation_glyphs_init",
                 :custom,
-                "Exact-size glyph state allocated once per resident font generation " *
-                    "and released during generation teardown.";
+                "Exact-size glyph state uses the font cache's bounded TLSF metadata " *
+                    "allocator and is released before that cache-owned domain is destroyed.";
                 operation="make",
                 target="[]Font_Glyph_Record",
                 allocator_source="allocator",
@@ -2036,18 +2105,6 @@ AnalysisSettings(
                 "Single display-owned service allocated at runtime initialization, reused across Terminal generations, and freed after service shutdown before its task-pool owner.";
                 operation="new",
                 target="viewgraphics.Service",
-                allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore),
-            # Evidence export allocates only at an explicit durable-output boundary.
-            ReviewedAllocationPolicy(
-                "evidence-artifact-trace-buffer",
-                "src/evidence/artifact/artifact.odin",
-                "artifact_trace_bytes",
-                :context,
-                "Bounded serialized trace buffer deleted by standalone and bundle writers after the write completes.";
-                operation="make",
-                target="[]byte",
                 allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),

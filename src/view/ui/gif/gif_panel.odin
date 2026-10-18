@@ -592,7 +592,7 @@ prepare_gif_view :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     mouse_input: input.Input_Frame, interactive := true) -> Gif_View_Preparation {
-    if state == nil || state.particle_system == nil {
+    if state == nil {
         return {}
     }
     ctx := Gif_Panel_Context{state, panel, mouse_input, &state.ui_runtime,

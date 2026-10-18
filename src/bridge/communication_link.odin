@@ -3,21 +3,38 @@ package bridge
 import bridgemodel "model"
 
 import "base:runtime"
+import "core:mem"
 import "core:mem/tlsf"
 import "core:sync/chan"
 
+// Allocate padded backing so its retained pool view can be aligned.
+communication_link_allocate_pool_backing :: proc(
+    pool_size: int, allocator: mem.Allocator) ->
+        ([]byte, runtime.Allocator_Error) {
+    alignment := align_of(uintptr)
+    return make([]byte, pool_size + int(alignment) - 1, allocator)
+}
+
+// Return the aligned fixed-size TLSF view inside its retained allocation.
+communication_link_pool_backing_view :: proc(backing: []byte, pool_size: int) -> []byte {
+    alignment := uintptr(align_of(uintptr))
+    offset := int(
+        (alignment - uintptr(raw_data(backing)) % alignment) % alignment)
+    return backing[offset:offset + pool_size]
+}
+
 // Initialize fixed TLSF backing and equally bounded outbound and return channels.
 communication_link_init :: proc(
-    link: ^bridgemodel.Communication_Link($T), channel_capacity: int, pool_size: int,
-    allocator := context.allocator) -> runtime.Allocator_Error {
-    backing, backing_error := make([]byte, pool_size, allocator)
+    link: ^bridgemodel.Communication_Link($T),
+    channel_capacity: int,
+    pool_size: int,
+    allocator: mem.Allocator) -> runtime.Allocator_Error {
+    backing, backing_error := communication_link_allocate_pool_backing(
+        pool_size, allocator)
     if backing_error != .None {
         return backing_error
     }
-    if tlsf.init_from_buffer(&link.pool, backing) != .None {
-        delete(backing, allocator)
-        return .Out_Of_Memory
-    }
+    pool_backing := communication_link_pool_backing_view(backing, pool_size)
     outbound, outbound_error := chan.create(
         chan.Chan(^T), channel_capacity, allocator)
     if outbound_error != .None {
@@ -31,18 +48,28 @@ communication_link_init :: proc(
         delete(backing, allocator)
         return returns_error
     }
+    if tlsf.init_from_buffer(&link.pool, pool_backing) != .None {
+        _ = chan.destroy(outbound)
+        _ = chan.destroy(returns)
+        delete(backing, allocator)
+        link^ = {}
+        return .Out_Of_Memory
+    }
     link.outbound = outbound
     link.returns = returns
     link.backing = backing
-    link.backing_allocator = allocator
     return .None
 }
 
 // Destroy one stopped link after every borrowed envelope has returned to its producer.
-communication_link_destroy :: proc(link: ^bridgemodel.Communication_Link($T)) {
+communication_link_destroy :: proc(
+    link: ^bridgemodel.Communication_Link($T), allocator: mem.Allocator) {
+    if link == nil || link.backing == nil {
+        return
+    }
     _ = chan.destroy(link.outbound)
     _ = chan.destroy(link.returns)
-    delete(link.backing, link.backing_allocator)
+    delete(link.backing, allocator)
     link^ = {}
 }
 

@@ -47,7 +47,7 @@ bridge_shape_world :: proc(
     if state == nil {
         return nil
     }
-    return state.shape_world
+    return &state.shape_world
 }
 
 // Decode and validate one packed entity against the authoritative registry.
@@ -102,7 +102,7 @@ shape_create_point :: proc "c" (
     input: Bridge_Positioned_Shape_Input) -> Bridge_Shape_Entity_Result {
     context = state.saved_context
     handle, status := shapes.world_create_point(
-        state.shape_world, input.position, bridge_shape_style(input.style))
+        &state.shape_world, input.position, bridge_shape_style(input.style))
     return bridge_shape_entity_result(handle.entity, status)
 }
 
@@ -119,7 +119,7 @@ shape_create_label :: proc "c" (
         return {BRIDGE_STATUS_INVALID_ARGUMENT, 0}
     }
     text := string(source)
-    handle, status := shapes.world_create_label(state.shape_world, {
+    handle, status := shapes.world_create_label(&state.shape_world, {
         source = text, mime = shapemodel.Shape_Text_Mime(mime),
         position = input.position, style = bridge_shape_style(input.style)})
     return bridge_shape_entity_result(handle.entity, status)
@@ -133,7 +133,7 @@ shape_create_line :: proc "c" (
     style: Bridge_Shape_Style) -> Bridge_Shape_Line_Result {
     context = state.saved_context
     handle, status := shapes.world_create_line(
-        state.shape_world, first, second, bridge_shape_style(style))
+        &state.shape_world, first, second, bridge_shape_style(style))
     return {
         bridge_shape_status(status),
         shapemodel.shape_entity_pack(handle.shape),
@@ -150,7 +150,7 @@ shape_create_arc :: proc "c" (
     arc: shapemodel.Bridge_Arc_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
     context = state.saved_context
-    handle, status := shapes.world_create_arc(state.shape_world, {
+    handle, status := shapes.world_create_arc(&state.shape_world, {
         center = center, radius = arc.radius, start_theta = arc.start_theta,
         sweep_theta = arc.sweep_theta, style = bridge_shape_style(style)})
     return {
@@ -167,7 +167,7 @@ shape_create_filled_arc :: proc "c" (
     arc: shapemodel.Bridge_Arc_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
     context = state.saved_context
-    handle, status := shapes.world_create_filled_arc(state.shape_world, {
+    handle, status := shapes.world_create_filled_arc(&state.shape_world, {
         center = center, radius = arc.radius, start_theta = arc.start_theta,
         sweep_theta = arc.sweep_theta, style = bridge_shape_style(style)})
     return {
@@ -193,7 +193,7 @@ shape_create_circle_region :: proc "c" (
         second_radius = geometry.second_radius,
         operation = shapemodel.Shape_Circle_Region_Operation(geometry.operation),
         style = bridge_shape_style(style)}
-    handle, status := shapes.world_create_circle_region(state.shape_world, input)
+    handle, status := shapes.world_create_circle_region(&state.shape_world, input)
     return {bridge_shape_status(status),
         shapemodel.shape_entity_pack(handle.shape),
         shapemodel.shape_entity_pack(handle.first_center),
@@ -252,7 +252,7 @@ shape_create_trochoid :: proc "c" (
     style: Bridge_Shape_Style) -> Bridge_Shape_Trochoid_Result {
     context = state.saved_context
     value := bridge_trochoid_value(geometry)
-    handle, status := shapes.world_create_trochoid(state.shape_world, {
+    handle, status := shapes.world_create_trochoid(&state.shape_world, {
         center = center, mode = value.mode, fixed_radius = value.fixed_radius,
         rolling_radius = value.rolling_radius, tracer_distance = value.tracer_distance,
         tracer_phase = value.tracer_phase, rotation = value.rotation,
@@ -271,7 +271,7 @@ shape_create_cycloid :: proc "c" (
     style: Bridge_Shape_Style) -> Bridge_Shape_Cycloid_Result {
     context = state.saved_context
     value := bridge_cycloid_value(geometry)
-    handle, status := shapes.world_create_cycloid(state.shape_world, {
+    handle, status := shapes.world_create_cycloid(&state.shape_world, {
         first = first, second = second, rolling_radius = value.rolling_radius,
         tracer_distance = value.tracer_distance, tracer_phase = value.tracer_phase,
         parameter_start = value.parameter_start,
@@ -291,7 +291,7 @@ shape_create_triangle :: proc "c" (
     style: Bridge_Shape_Style) -> Bridge_Shape_Triangle_Result {
     context = state.saved_context
     handle, status := shapes.world_create_triangle(
-        state.shape_world, vertices, bridge_shape_style(style))
+        &state.shape_world, vertices, bridge_shape_style(style))
     return {
         bridge_shape_status(status),
         shapemodel.shape_entity_pack(handle.shape),
@@ -309,7 +309,7 @@ shape_create_square :: proc "c" (
     style: Bridge_Shape_Style) -> Bridge_Shape_Square_Result {
     context = state.saved_context
     handle, status := shapes.world_create_square(
-        state.shape_world, vertices.vertices, bridge_shape_style(style))
+        &state.shape_world, vertices.vertices, bridge_shape_style(style))
     packed: [4]u64
     for entity, index in handle.vertices {
         packed[index] = shapemodel.shape_entity_pack(entity)
@@ -329,7 +329,7 @@ shape_create_pentagon :: proc "c" (
     style: Bridge_Shape_Style) -> Bridge_Shape_Pentagon_Result {
     context = state.saved_context
     handle, status := shapes.world_create_pentagon(
-        state.shape_world, vertices.vertices, bridge_shape_style(style))
+        &state.shape_world, vertices.vertices, bridge_shape_style(style))
     packed: [5]u64
     for entity, index in handle.vertices {
         packed[index] = shapemodel.shape_entity_pack(entity)
@@ -710,9 +710,9 @@ shape_set_visible_local :: proc(
     }
     if style^.visible && !target_visible {
         emitted = particles.emit_shape_world_hide_burst(
-            state^.particle_system, state^.shape_world, entity, kick_dust)
-        if emitted && kick_dust && state^.iso_scale != nil {
-            projection.screenshake_on_dust_kick(state^.iso_scale)
+            &state^.particle_system, &state^.shape_world, entity, kick_dust)
+        if emitted && kick_dust {
+            projection.screenshake_on_dust_kick(&state^.iso_scale)
         }
     }
     style^.visible = target_visible

@@ -65,7 +65,7 @@ encoded_ring_fallback :: proc(
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
         world := trochoid_tool_ring_point(draw.center, draw.radius, angle)
         projected[index] = geometry.Vector2(
-            projection.iso_to_cartesian(world, state^.iso_scale^))
+            projection.iso_to_cartesian(world, state^.iso_scale))
     }
     style := native.Draw_Polyline_Style{width = draw.thickness,
         miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw.color,
@@ -127,8 +127,8 @@ draw_encoded_trochoid_tool :: proc(
         tool^.fixed_radius, tool^.brush_size, tool^.color})
     draw_encoded_tool_ring(state, encoder, {tool^.rolling_center,
         tool^.rolling_radius, tool^.brush_size, tool^.color})
-    first := projection.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
-    second := projection.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
+    first := projection.iso_to_cartesian(tool^.handle_start, state^.iso_scale)
+    second := projection.iso_to_cartesian(tool^.handle_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {first, second,
         tool^.brush_size, tool^.color, nil})
 }
@@ -138,17 +138,17 @@ draw_encoded_cycloid_tool :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
     baseline_start := projection.iso_to_cartesian(
-        tool^.baseline_start, state^.iso_scale^)
+        tool^.baseline_start, state^.iso_scale)
     baseline_finish := projection.iso_to_cartesian(
-        tool^.baseline_finish, state^.iso_scale^)
+        tool^.baseline_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {baseline_start,
         baseline_finish, tool^.brush_size, tool^.color, nil})
     draw_encoded_tool_ring(state, encoder, {tool^.rolling_center,
         tool^.rolling_radius, tool^.brush_size, tool^.color})
     handle_start := projection.iso_to_cartesian(
-        tool^.handle_start, state^.iso_scale^)
+        tool^.handle_start, state^.iso_scale)
     handle_finish := projection.iso_to_cartesian(
-        tool^.handle_finish, state^.iso_scale^)
+        tool^.handle_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {handle_start,
         handle_finish, tool^.brush_size, tool^.color, nil})
 }
@@ -164,7 +164,7 @@ encoded_compass_arc_fallback :: proc(
         angle := step * f32(index)
         direction := basis.u * math.cos(angle) + basis.v * math.sin(angle)
         current := projection.iso_to_cartesian(
-            center + direction * basis.radius, draw.state^.iso_scale^)
+            center + direction * basis.radius, draw.state^.iso_scale)
         projected[index] = geometry.Vector2(current)
     }
     style := native.Draw_Polyline_Style{width = draw.brush_size,
@@ -232,11 +232,11 @@ encoded_compass_arc_submit :: proc(
         max(compass^.brush_size * 0.5, 0.0001)
     uniforms.arc_intersections_enabled = 1
     uniforms.intersection_depth_width = compass^.brush_size /
-        max(state^.iso_scale^.half_scale, 0.0001)
+        max(state^.iso_scale.half_scale, 0.0001)
     uniforms.attachment_extent = compass_arc_attachment_extent(
         compass^.brush_size, submission.basis.radius,
         submission.basis.theta_out,
-        state^.iso_scale^.half_scale)
+        state^.iso_scale.half_scale)
     encoded_strip_color(&uniforms, compass^.color)
     encoded_stroke_pack_occluders(
         &uniforms, encoder, submission.occluders)
@@ -263,7 +263,7 @@ encoded_compass_active_dot :: proc(
     if compass^.active_child == 3 {
         point = compass^.joint2
     }
-    center := projection.iso_to_cartesian(point, state^.iso_scale^)
+    center := projection.iso_to_cartesian(point, state^.iso_scale)
     _ = native.draw_encoder_circle(
         encoder, geometry.Vector2(center), compass^.brush_size, active)
 }
@@ -295,9 +295,9 @@ encoded_compass_context :: proc(
     state: ^core.Euclid_General_State, compass: ^shapemodel.Shapes_Compass_Draw,
     pen_caster: ^shapemodel.Shapes_Pen_Draw) -> Compass_Leg_Draw_Context {
     result := Compass_Leg_Draw_Context{state = state, comp = compass,
-        c0 = projection.iso_to_cartesian(compass^.joint1, state^.iso_scale^),
-        c1 = projection.iso_to_cartesian(compass^.pivot, state^.iso_scale^),
-        c2 = projection.iso_to_cartesian(compass^.joint2, state^.iso_scale^),
+        c0 = projection.iso_to_cartesian(compass^.joint1, state^.iso_scale),
+        c1 = projection.iso_to_cartesian(compass^.pivot, state^.iso_scale),
+        c2 = projection.iso_to_cartesian(compass^.joint2, state^.iso_scale),
         leg1 = make_tool_brush_occluder(state, compass^.joint1,
             compass^.pivot, compass^.brush_size),
         leg2 = make_tool_brush_occluder(state, compass^.pivot,
@@ -337,16 +337,16 @@ draw_encoded_pen_crossing :: proc(
     compass_caster: ^shapemodel.Shapes_Compass_Draw) {
     pen := &crossing^.pen
     if crossing^.has_back {
-        first := projection.iso_to_cartesian(crossing^.back0, state^.iso_scale^)
-        second := projection.iso_to_cartesian(crossing^.back1, state^.iso_scale^)
+        first := projection.iso_to_cartesian(crossing^.back0, state^.iso_scale)
+        second := projection.iso_to_cartesian(crossing^.back1, state^.iso_scale)
         draw_encoded_pen_fragment(state, encoder, {
             pen = pen, first = first, second = second,
             compass = compass_caster})
     }
     draw_encoded_cached_polygon(state, encoder, &crossing^.polygon)
     if crossing^.has_front {
-        first := projection.iso_to_cartesian(crossing^.front0, state^.iso_scale^)
-        second := projection.iso_to_cartesian(crossing^.front1, state^.iso_scale^)
+        first := projection.iso_to_cartesian(crossing^.front0, state^.iso_scale)
+        second := projection.iso_to_cartesian(crossing^.front1, state^.iso_scale)
         draw_encoded_pen_fragment(state, encoder, {
             pen = pen, first = first, second = second,
             compass = compass_caster})
@@ -386,7 +386,7 @@ draw_encoded_high_instrument :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Draw_Cache_Item,
     pen_receives_compass, compass_receives_pen: bool) -> bool {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     switch &typed in item {
     case shapemodel.Shapes_Trochoid_Tool_Draw:
         draw_encoded_trochoid_tool(state, encoder, &typed)
@@ -449,7 +449,7 @@ draw_encoded_shapes_high_merged_cached :: proc(
     ctx.crossing.pen_index = -1
     ctx.crossing.polygon_index = -1
     ctx.has_crossing = find_pen_polygon_crossing(state, &ctx.crossing)
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     _, pen_index := find_cached_pen_item(cache)
     _, compass_index := find_cached_compass_item(cache)
     _, guide_index := find_cached_trochoid_tool_item(cache)
@@ -596,7 +596,7 @@ draw_encoded_cycloid_shadow :: proc(
 // draw_encoded_cached_tool_shadow_pass restores tool shadows in cache order.
 draw_encoded_cached_tool_shadow_pass :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     for index in 0..<cache^.item_count {
         switch &typed in &cache^.items[index] {
         case shapemodel.Shapes_Trochoid_Tool_Draw:

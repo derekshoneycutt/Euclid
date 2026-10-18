@@ -126,21 +126,19 @@ capture_animation_query_snapshot :: proc(
         snapshot^.content_specification = service^.active_content_specification
         snapshot^.animation_generation = service^.animation_generation
     }
-    world := state^.shape_world
-    if world != nil {
-        snapshot^.shapes.registry = world^.registry
-        snapshot^.shapes.transforms = world^.transforms
-        snapshot^.shapes.arcs = world^.arcs
-        snapshot^.shapes.trochoids = world^.trochoids
-        snapshot^.shapes.trochoid_tools = world^.trochoid_tools
-        snapshot^.shapes.cycloids = world^.cycloids
-        snapshot^.shapes.cycloid_tools = world^.cycloid_tools
-        snapshot^.shapes.render_styles = world^.render_styles
-        snapshot^.shapes.active_features = world^.active_features
-        snapshot^.shapes.geometries = world^.geometries
-        snapshot^.shapes.labels = world^.labels
-        snapshot^.shapes.label_store = world^.label_store
-    }
+    world := &state^.shape_world
+    snapshot^.shapes.registry = world^.registry
+    snapshot^.shapes.transforms = world^.transforms
+    snapshot^.shapes.arcs = world^.arcs
+    snapshot^.shapes.trochoids = world^.trochoids
+    snapshot^.shapes.trochoid_tools = world^.trochoid_tools
+    snapshot^.shapes.cycloids = world^.cycloids
+    snapshot^.shapes.cycloid_tools = world^.cycloid_tools
+    snapshot^.shapes.render_styles = world^.render_styles
+    snapshot^.shapes.active_features = world^.active_features
+    snapshot^.shapes.geometries = world^.geometries
+    snapshot^.shapes.labels = world^.labels
+    snapshot^.shapes.label_store = world^.label_store
     snapshot^.animation_values_valid =
         animation_model.animation_value_store_pack(
             &state^.animation_values,
@@ -230,7 +228,7 @@ validate_command_shape_transform :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
     return found && shapemodel.shape_component_contains(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
 }
 
 // Validate one packed command target that requires a render-style component.
@@ -238,7 +236,7 @@ validate_command_shape_style :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
     return found && shapemodel.shape_component_contains(
-        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+        &state^.shape_world.render_styles, &state^.shape_world.registry, entity)
 }
 
 // Validate one complete arc mutation against host membership and value rules.
@@ -246,7 +244,7 @@ validate_command_shape_arc :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
     return found && shapemodel.shape_component_contains(
-        &state^.shape_world^.arcs, &state^.shape_world^.registry, entity) &&
+        &state^.shape_world.arcs, &state^.shape_world.registry, entity) &&
         shapemodel.shape_arc_is_valid(command^.arc)
 }
 
@@ -258,9 +256,9 @@ validate_command_shape_trochoid :: proc(
         return false
     }
     current, has_value := shapemodel.shape_component_get(
-        &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
+        &state^.shape_world.trochoids, &state^.shape_world.registry, entity)
     style, has_style := shapemodel.shape_component_get(
-        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+        &state^.shape_world.render_styles, &state^.shape_world.registry, entity)
     return has_value && has_style &&
         (current.mode == command^.trochoid.mode || !style.visible)
 }
@@ -273,7 +271,7 @@ validate_command_shape_trochoid_frontier :: proc(
         return false
     }
     value, has_value := shapemodel.shape_component_get(
-        &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
+        &state^.shape_world.trochoids, &state^.shape_world.registry, entity)
     return has_value && shapemodel.shape_scalar_is_finite(command^.scalar) &&
         shapemodel.shape_parameter_is_in_directed_domain(value.parameter_start,
             value.parameter_finish, command^.scalar)
@@ -288,10 +286,10 @@ validate_command_trochoid_tool :: proc(
         return false
     }
     current, has_value := shapemodel.shape_component_get(
-        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry,
+        &state^.shape_world.trochoid_tools, &state^.shape_world.registry,
         state^.world_trochoid_tool.shape)
     style, has_style := shapemodel.shape_component_get(
-        &state^.shape_world^.render_styles, &state^.shape_world^.registry,
+        &state^.shape_world.render_styles, &state^.shape_world.registry,
         state^.world_trochoid_tool.shape)
     return has_value && has_style &&
         (current.mode == command^.trochoid_tool.mode || !style.visible)
@@ -303,8 +301,8 @@ validate_command_trochoid_tool_parameter :: proc(
     expected := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
     return command^.entity == expected &&
         shapemodel.shape_scalar_is_finite(command^.scalar) &&
-        shapemodel.shape_component_contains(&state^.shape_world^.trochoid_tools,
-            &state^.shape_world^.registry, state^.world_trochoid_tool.shape)
+        shapemodel.shape_component_contains(&state^.shape_world.trochoid_tools,
+            &state^.shape_world.registry, state^.world_trochoid_tool.shape)
 }
 
 // Resolve one canonical Cycloid host's current literal endpoint positions.
@@ -312,7 +310,7 @@ command_cycloid_line :: proc(state: ^core.Euclid_General_State,
     entity: shapemodel.Shape_Entity,
     kind: shapemodel.Shape_Geometry_Kind) -> (Command_Cycloid_Line, bool) {
     geometry, found := shapemodel.shape_component_get(
-        &state^.shape_world^.geometries, &state^.shape_world^.registry, entity)
+        &state^.shape_world.geometries, &state^.shape_world.registry, entity)
     if !found || geometry.kind != kind {
         return {}, false
     }
@@ -323,9 +321,9 @@ command_cycloid_line :: proc(state: ^core.Euclid_General_State,
         second_entity = geometry.payload.cycloid_tool.second
     }
     first, first_ok := shapemodel.shape_component_get(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry, first_entity)
+        &state^.shape_world.transforms, &state^.shape_world.registry, first_entity)
     second, second_ok := shapemodel.shape_component_get(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry, second_entity)
+        &state^.shape_world.transforms, &state^.shape_world.registry, second_entity)
     if !first_ok || !second_ok {
         return {}, false
     }
@@ -336,8 +334,8 @@ command_cycloid_line :: proc(state: ^core.Euclid_General_State,
 validate_command_shape_cycloid :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    if !found || !shapemodel.shape_component_contains(&state^.shape_world^.cycloids,
-        &state^.shape_world^.registry, entity) ||
+    if !found || !shapemodel.shape_component_contains(&state^.shape_world.cycloids,
+        &state^.shape_world.registry, entity) ||
         !shapemodel.shape_cycloid_is_valid(command^.cycloid) {
         return false
     }
@@ -354,8 +352,8 @@ validate_command_shape_cycloid_frontier :: proc(
     if !found {
         return false
     }
-    value, has_value := shapemodel.shape_component_get(&state^.shape_world^.cycloids,
-        &state^.shape_world^.registry, entity)
+    value, has_value := shapemodel.shape_component_get(&state^.shape_world.cycloids,
+        &state^.shape_world.registry, entity)
     return has_value && shapemodel.shape_parameter_is_in_directed_domain(
         value.parameter_start, value.parameter_finish, command^.scalar)
 }
@@ -365,7 +363,7 @@ validate_command_cycloid_tool_line :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
     value, found := shapemodel.shape_component_get(
-        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        &state^.shape_world.cycloid_tools, &state^.shape_world.registry,
         state^.world_cycloid_tool.shape)
     return command^.entity == expected && found &&
         shapemodel.shape_cycloid_line_is_valid(command^.position,
@@ -394,7 +392,7 @@ validate_command_cycloid_tool_parameter :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
     value, found := shapemodel.shape_component_get(
-        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        &state^.shape_world.cycloid_tools, &state^.shape_world.registry,
         state^.world_cycloid_tool.shape)
     return command^.entity == expected && found &&
         shapemodel.shape_parameter_is_in_directed_domain(
@@ -406,7 +404,7 @@ validate_command_shape_active_feature :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
     return found && shapemodel.shape_component_contains(
-        &state^.shape_world^.active_features, &state^.shape_world^.registry, entity)
+        &state^.shape_world.active_features, &state^.shape_world.registry, entity)
 }
 
 // Validate one packed tool target whose direct snap constraint must exist.
@@ -608,7 +606,7 @@ validate_scene_command_batch :: proc(
     }
     contact_count := scene_command_batch_tool_contact_count(batch)
     return contact_count == 0 || particles.can_queue_dust_tool_contacts(
-        state^.particle_system, contact_count)
+        &state^.particle_system, contact_count)
 }
 
 //   Apply one emit-trailing-particle command and record its emission.

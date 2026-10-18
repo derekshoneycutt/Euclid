@@ -15,7 +15,6 @@ Sdl_Gif_Encoder :: struct {
     frame_count: u64,
     staged_pixels: []u8,
     staged: bool,
-    allocator: mem.Allocator,
 }
 
 // Sdl_Gif_Frame describes one borrowed RGBA32 frame copied into native staging.
@@ -26,7 +25,8 @@ Sdl_Gif_Frame :: struct {
     pitch_bytes: int,
 }
 
-// sdl_gif_encoder_begin opens one GIF stream at an exact temporary path.
+// Open a GIF stream and allocate staged pixels from the caller's capture domain.
+// The allocator is not retained; the caller supplies the same live domain at teardown.
 sdl_gif_encoder_begin :: proc(
     encoder: ^Sdl_Gif_Encoder, path: cstring, width, height: int,
     allocator: mem.Allocator) -> bool {
@@ -52,7 +52,7 @@ sdl_gif_encoder_begin :: proc(
         return false
     }
     encoder^ = {handle = handle, width = width, height = height,
-        staged_pixels = staged_pixels, allocator = allocator}
+        staged_pixels = staged_pixels}
     return true
 }
 
@@ -104,15 +104,15 @@ sdl_gif_encoder_commit_frame :: proc(
     return true
 }
 
-// sdl_gif_encoder_close closes one nonempty stream exactly once.
-sdl_gif_encoder_close :: proc(encoder: ^Sdl_Gif_Encoder) -> bool {
+// Close one nonempty stream and release staging through its original owner allocator.
+sdl_gif_encoder_close :: proc(
+    encoder: ^Sdl_Gif_Encoder, allocator: mem.Allocator) -> bool {
     if encoder == nil || encoder.handle == nil || encoder.staged {
        return false
     }
     handle := encoder.handle
     has_frames := encoder.frame_count > 0
     staged_pixels := encoder.staged_pixels
-    allocator := encoder.allocator
     encoder^ = {}
     closed := image.CloseAnimationEncoder(handle)
     delete(staged_pixels, allocator)
@@ -122,16 +122,17 @@ sdl_gif_encoder_close :: proc(encoder: ^Sdl_Gif_Encoder) -> bool {
     return has_frames && closed
 }
 
-// sdl_gif_encoder_abort closes and clears one stream without publishing it.
-sdl_gif_encoder_abort :: proc(encoder: ^Sdl_Gif_Encoder) {
+// Close and clear one stream without publication, releasing staging through its owner.
+sdl_gif_encoder_abort :: proc(
+    encoder: ^Sdl_Gif_Encoder, allocator: mem.Allocator) {
     if encoder == nil {
        return
     }
     if encoder.handle != nil {
         _ = image.CloseAnimationEncoder(encoder.handle)
     }
-    if len(encoder.staged_pixels) > 0 && encoder.allocator.procedure != nil {
-        delete(encoder.staged_pixels, encoder.allocator)
+    if len(encoder.staged_pixels) > 0 && allocator.procedure != nil {
+        delete(encoder.staged_pixels, allocator)
     }
     encoder^ = {}
 }

@@ -74,21 +74,21 @@ sdl_gif_encoder_streams_two_frames_and_tears_down_safely :: proc(t: ^testing.T) 
         pixels = pixels[:], width = 2, height = 1, pitch_bytes = 7}))
     testing.expect(t, sdl_gif_encoder_stage_frame(&encoder, {
         pixels = pixels[:], width = 2, height = 1, pitch_bytes = 12}))
-    testing.expect(t, !sdl_gif_encoder_close(&encoder))
+    testing.expect(t, !sdl_gif_encoder_close(&encoder, context.allocator))
     testing.expect(t, sdl_gif_encoder_commit_frame(&encoder, 40))
     pixels = {0, 0, 255, 64, 255, 255, 255, 0, 0, 0, 0, 0}
     testing.expect(t, sdl_gif_encoder_stage_frame(&encoder, {
         pixels = pixels[:], width = 2, height = 1, pitch_bytes = 12}))
     pixels = {}
     testing.expect(t, sdl_gif_encoder_commit_frame(&encoder, 80))
-    testing.expect(t, sdl_gif_encoder_close(&encoder))
+    testing.expect(t, sdl_gif_encoder_close(&encoder, context.allocator))
     testing.expect(t, gif_encoder_test_decode(c_path))
-    sdl_gif_encoder_abort(&encoder)
-    sdl_gif_encoder_abort(&encoder)
+    sdl_gif_encoder_abort(&encoder, context.allocator)
+    sdl_gif_encoder_abort(&encoder, context.allocator)
 
     _ = os.remove(path)
     testing.expect(t, sdl_gif_encoder_begin(
         &encoder, c_path, 1, 1, context.allocator))
-    testing.expect(t, !sdl_gif_encoder_close(&encoder))
-    sdl_gif_encoder_abort(&encoder)
+    testing.expect(t, !sdl_gif_encoder_close(&encoder, context.allocator))
+    sdl_gif_encoder_abort(&encoder, context.allocator)
 }

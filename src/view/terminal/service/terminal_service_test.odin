@@ -49,8 +49,7 @@ terminal_service_test_runtime_destroy :: proc(state: ^core.Euclid_General_State)
     bridge.clear_julia_egress_dispatch(service)
     _ = bridge.drain_julia_ingress_returns(service)
     _ = bridge.drain_julia_egress_returns(service)
-    bridge.communication_link_destroy(&service^.event_link)
-    bridge.communication_link_destroy(&service^.request_link)
+    bridge.destroy_julia_runtime_channels(service)
     free(service, context.allocator)
     state^.julia_runtime_service = nil
 }

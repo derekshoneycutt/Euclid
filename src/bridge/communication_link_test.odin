@@ -8,8 +8,11 @@ import "../core"
 import protocol "../core/protocol"
 
 import "base:runtime"
+import "core:mem"
 import "core:testing"
+import "core:thread"
 import "core:time"
+import storage "../core/storage"
 
 Communication_Link_Test_Message :: struct {
     sequence: u64,
@@ -108,9 +111,89 @@ communication_link_test_service_destroy :: proc(service: ^Julia_Runtime_Service)
     if service.pending_view_content != nil {
         destroy_julia_egress_message(service, service.pending_view_content)
     }
-    communication_link_destroy(&service.event_link)
-    communication_link_destroy(&service.request_link)
-    free(service)
+    destroy_julia_runtime_channels(service)
+    free(service, context.allocator)
+}
+
+// Fail request-link setup before publishing any link storage.
+communication_link_test_fail_request_links :: proc(
+    service: ^Julia_Runtime_Service,
+    allocator: mem.Allocator) -> runtime.Allocator_Error {
+    _ = service
+    _ = allocator
+    return .Out_Of_Memory
+}
+
+// Initialize the request link, then fail event-link setup to exercise rollback.
+communication_link_test_fail_event_links :: proc(
+    service: ^Julia_Runtime_Service,
+    allocator: mem.Allocator) -> runtime.Allocator_Error {
+    error := communication_link_init(
+        &service^.request_link, JULIA_REQUEST_CAPACITY,
+        JULIA_REQUEST_LINK_POOL_CAPACITY, allocator)
+    if error != .None {
+        return error
+    }
+    return .Out_Of_Memory
+}
+
+// Reject worker startup to verify complete service-construction rollback.
+communication_link_test_fail_worker_start :: proc(data: rawptr) -> ^thread.Thread {
+    _ = data
+    return nil
+}
+
+// Verify request-link initialization failure releases the shared arena.
+@(test)
+julia_request_link_initialization_failure_releases_backing :: proc(t: ^testing.T) {
+    service := new(Julia_Runtime_Service, context.allocator)
+    defer free(service, context.allocator)
+    error := init_julia_runtime_channels_with(
+        service, storage.arena_owner_growing_init,
+        communication_link_test_fail_request_links)
+    testing.expect_value(t, error, runtime.Allocator_Error.Out_Of_Memory)
+    testing.expect(t, !service^.communication_storage.initialized)
+    testing.expect(t, service^.request_link.backing == nil)
+    testing.expect(t, service^.event_link.backing == nil)
+}
+
+// Verify event-link initialization failure rolls back the request link and arena.
+@(test)
+julia_event_link_initialization_failure_releases_request_backing :: proc(
+    t: ^testing.T) {
+    service := new(Julia_Runtime_Service, context.allocator)
+    defer free(service, context.allocator)
+    error := init_julia_runtime_channels_with(
+        service, storage.arena_owner_growing_init,
+        communication_link_test_fail_event_links)
+    testing.expect_value(t, error, runtime.Allocator_Error.Out_Of_Memory)
+    testing.expect(t, !service^.communication_storage.initialized)
+    testing.expect(t, service^.request_link.backing == nil)
+    testing.expect(t, service^.event_link.backing == nil)
+}
+
+// Verify service channel storage can complete more than one full lifetime.
+@(test)
+julia_runtime_channels_support_repeated_lifecycle :: proc(t: ^testing.T) {
+    service := new(Julia_Runtime_Service, context.allocator)
+    defer free(service, context.allocator)
+    for _ in 0..<2 {
+        testing.expect_value(t, init_julia_runtime_channels(service),
+            runtime.Allocator_Error.None)
+        testing.expect(t, service^.communication_storage.initialized)
+        destroy_julia_runtime_channels(service)
+        testing.expect(t, !service^.communication_storage.initialized)
+    }
+}
+
+// Verify a failed worker start tears down the constructed service.
+@(test)
+julia_worker_start_failure_releases_service :: proc(t: ^testing.T) {
+    service, error := create_julia_runtime_service_with_worker(
+        context.allocator, "", nil,
+        communication_link_test_fail_worker_start)
+    testing.expect(t, service == nil)
+    testing.expect_value(t, error, runtime.Allocator_Error.Out_Of_Memory)
 }
 
 // Verify evaluation source ownership survives saturation and pooled storage recovers.
@@ -287,9 +370,10 @@ terminal_transport_rejects_all_messages_during_shutdown :: proc(t: ^testing.T) {
 @(test)
 communication_link_round_trip_and_saturation :: proc(t: ^testing.T) {
     link: bridgemodel.Communication_Link(Communication_Link_Test_Message)
-    testing.expect_value(t, communication_link_init(&link, 2, 64 * 1024),
+    testing.expect_value(t, communication_link_init(
+        &link, 2, 64 * 1024, context.allocator),
         runtime.Allocator_Error.None)
-    defer communication_link_destroy(&link)
+    defer communication_link_destroy(&link, context.allocator)
 
     first, first_error := communication_link_alloc(&link)
     second, second_error := communication_link_alloc(&link)
@@ -320,9 +404,10 @@ communication_link_round_trip_and_saturation :: proc(t: ^testing.T) {
 @(test)
 communication_link_reports_allocation_failure :: proc(t: ^testing.T) {
     link: bridgemodel.Communication_Link(Communication_Link_Oversized_Message)
-    testing.expect_value(t, communication_link_init(&link, 1, 4 * 1024),
+    testing.expect_value(t, communication_link_init(
+        &link, 1, 4 * 1024, context.allocator),
         runtime.Allocator_Error.None)
-    defer communication_link_destroy(&link)
+    defer communication_link_destroy(&link, context.allocator)
 
     message, allocation_error := communication_link_alloc(&link)
     testing.expect(t, message == nil)

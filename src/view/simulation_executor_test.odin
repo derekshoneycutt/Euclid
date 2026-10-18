@@ -19,7 +19,6 @@ import math "core:math"
 import os "core:os"
 import filepath "core:path/filepath"
 import testing "core:testing"
-import worldmodel "world/model"
 import viewsimulation "simulation"
 import viewevidence "evidence"
 
@@ -87,7 +86,7 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
     testing.expect(t, bin_join_err == nil)
     defer delete(bin_dir)
     asset_root_config := app_files.make_asset_root_config(bin_dir, context.allocator)
-    defer app_files.destroy_asset_root_config(&asset_root_config)
+    defer app_files.destroy_asset_root_config(&asset_root_config, context.allocator)
     testing.expect(t, app_files.reload_packaged_assets_root_with_config(
         &asset_root_config))
 
@@ -121,10 +120,6 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
-    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
-    defer free(state^.particle_system)
-    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
-    defer free(state^.shape_world)
     init_test_evidence(state)
 
     executor := viewsimulation.create_simulation_executor(state)
@@ -186,12 +181,8 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     state^.julia_runtime_service =
         new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(state^.julia_runtime_service)
-    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
-    defer free(state^.particle_system)
-    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
-    defer free(state^.shape_world)
     _, point_status := shapes.world_create_point(
-        state^.shape_world, {1, 2, 3}, {})
+        &state^.shape_world, {1, 2, 3}, {})
     testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
     init_test_evidence(state)
 
@@ -214,22 +205,17 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
 parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
-    defer free(state^.particle_system)
-    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
-    defer free(state^.shape_world)
-
-    particles := state^.particle_system
+    particles := &state^.particle_system
     particles^.use_max_dust_particles = 1
     particles^.low_particles.alive[0] = true
     particles^.low_particles.life[0] = 10
     particles^.low_particles.vel_x[0] = 0.25
 
     point, point_status := shapes.world_create_point(
-        state^.shape_world, {0, 0, -1}, {})
+        &state^.shape_world, {0, 0, -1}, {})
     testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
     _, constraint_status := shapes.world_create_floor_constraint(
-        state^.shape_world, {point = point.entity, height = 0, enabled = true})
+        &state^.shape_world, {point = point.entity, height = 0, enabled = true})
     testing.expect_value(t, constraint_status, shapemodel.Shape_World_Status.Ok)
 
     executor := viewsimulation.create_simulation_executor(state)
@@ -242,7 +228,7 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     testing.expect_value(t, first_batch_x, f32(0.25))
     testing.expect(t, particles^.low_particles.pos_x[0] > first_batch_x)
     transform, found := shapemodel.shape_component_get(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        &state^.shape_world.transforms, &state^.shape_world.registry,
         point.entity)
     testing.expect(t, found)
     testing.expect_value(t, transform^.position.z, f32(0))
@@ -253,11 +239,8 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
 parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
-    defer free(state^.particle_system)
-    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
-    defer free(state^.shape_world)
-    state^.particle_system^.use_max_dust_particles = 16
+    particle_system := &state^.particle_system
+    state^.particle_system.use_max_dust_particles = 16
     executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
@@ -273,12 +256,12 @@ parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T)
     settled := viewevidence.observe_display_state(state)
     testing.expect_value(t, settled.dust_live_count, 16)
     testing.expect_value(t, settled.dust_grounded_count, 16)
-    velocity_before := state^.particle_system^.low_particles.vel_x[0]
+    velocity_before := state^.particle_system.low_particles.vel_x[0]
     for index in 0..<16 {
         testing.expect(t, particles.queue_dust_tool_contact(
-            state^.particle_system, {endpoint = {
-                state^.particle_system^.low_particles.pos_x[index],
-                state^.particle_system^.low_particles.pos_y[index], 0}}))
+            particle_system, {endpoint = {
+                state^.particle_system.low_particles.pos_x[index],
+                state^.particle_system.low_particles.pos_y[index], 0}}))
     }
 
     viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
@@ -286,7 +269,7 @@ parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T)
     disturbed := viewevidence.observe_display_state(state)
     testing.expect_value(t, disturbed.dust_grounded_count, 16)
     testing.expect(t,
-        state^.particle_system^.low_particles.vel_x[0] != velocity_before)
+        state^.particle_system.low_particles.vel_x[0] != velocity_before)
 }
 
 //   Verify terminal Dynview arena diagnostics after executor destruction.
@@ -306,7 +289,7 @@ expect_parallel_frame_cache_ready :: proc(
     t: ^testing.T,
     state: ^app_core.Euclid_General_State,
     executor: ^app_core.Simulation_Executor) {
-    testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
+    testing.expect_value(t, state^.shape_world.draw_cache.item_count, 1)
     testing.expect(t, state^.dynview.compile_cache.is_valid)
     testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
@@ -342,15 +325,11 @@ expect_failed_dynview_rebuild :: proc(
 parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
-    defer free(state^.iso_scale)
-    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
-    defer free(state^.shape_world)
     point, point_status := shapes.world_create_point(
-        state^.shape_world, {1, 2, 3}, {})
+        &state^.shape_world, {1, 2, 3}, {})
     testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
     style, found := shapemodel.shape_component_get(
-        &state^.shape_world^.render_styles, &state^.shape_world^.registry,
+        &state^.shape_world.render_styles, &state^.shape_world.registry,
         point.entity)
     testing.expect(t, found)
     style^.visible = true
@@ -370,7 +349,7 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     expect_parallel_frame_cache_ready(t, state, executor)
 
     viewsimulation.run_parallel_frame_preparation(state, 0.75, {})
-    testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
+    testing.expect_value(t, state^.shape_world.draw_cache.item_count, 1)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
 
@@ -388,10 +367,6 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
 dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
-    defer free(state^.iso_scale)
-    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
-    defer free(state^.shape_world)
     state^.dynview.enabled = true
 
     executor := viewsimulation.create_simulation_executor(state)

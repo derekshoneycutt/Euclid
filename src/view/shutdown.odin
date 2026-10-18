@@ -86,7 +86,7 @@ shutdown_julia_runtime :: proc(
         &state^.evidence_session, &state^.evidence_ring)
 }
 
-//   Release runtime state allocations and finalize Julia/GIF runtime resources.
+//   Release the application root and finalize Julia/GIF runtime resources.
 //
 // Notes:
 //   - Must be paired with initiate_animations_state to release owned allocations.
@@ -103,10 +103,6 @@ free_animations_state :: proc(state : ^core.Euclid_General_State) {
         &state^.animation_values,
         &state^.dynview_documents)
     julia.destroy_julia_interface_resources(state)
-    free(state^.ui_runtime.semantic_focus, context.allocator)
-    free(state^.particle_system)
-    free(state^.shape_world)
-    free(state^.draw_surface)
-    free(state^.iso_scale)
-    free(state)
+    allocator := state^.saved_context.allocator
+    free(state, allocator)
 }

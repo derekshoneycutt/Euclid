@@ -29,8 +29,8 @@ observe_display_state :: proc(
         gif_capture_status = &state.gif_capture_status,
         terminal = &state.terminal,
         dynview = &state.dynview,
-        shape_world = state.shape_world,
-        particle_system = state.particle_system,
+        shape_world = &state.shape_world,
+        particle_system = &state.particle_system,
         julia_service = state.julia_runtime_service,
         required_evidence_complete =
             state.evidence_session.required_evidence_complete,

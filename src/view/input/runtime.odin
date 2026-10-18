@@ -1,7 +1,5 @@
 package input
 
-import "core:mem"
-
 import "../../core/protocol"
 
 // Maximum device-independent events retained in one device-poll frame.
@@ -20,9 +18,8 @@ INPUT_PASTE_MAX_BYTES :: INPUT_BYTE_QUEUE_CAPACITY - 12
 INPUT_HOTKEY_CAPACITY :: 32
 
 // Display-lifetime fixed storage for input capture and queued terminal bytes.
-//
-// One instance is allocated before the display loop and reused until orderly
-// shutdown. Frame views borrow its storage and remain valid only until the next poll.
+// The application root owns one stable instance, reused until orderly shutdown.
+// Frame views borrow its storage and remain valid only until the next poll.
 Input_Runtime :: struct {
     // Current device-frame events and cumulative overflow evidence.
     events: [INPUT_EVENT_CAPACITY]Input_Event,
@@ -211,34 +208,6 @@ input_runtime_update_mouse_position :: proc(
     return moved
 }
 
-// Allocate one zeroed fixed-layout input runtime for the display lifetime.
-//
-// Parameters:
-//   - allocator: Allocator that owns the returned runtime storage.
-//
-// Returns:
-//   - Newly allocated zeroed runtime, or nil when allocation fails.
-//
-// Side effects:
-//   - Allocates one Input_Runtime through allocator.
-input_runtime_create :: proc(allocator: mem.Allocator) -> ^Input_Runtime {
-    return new(Input_Runtime, allocator)
-}
-
-// Release a display-owned input runtime through its creating allocator.
-//
-// Parameters:
-//   - runtime: Runtime allocated by input_runtime_create; nil is accepted.
-//   - allocator: The same allocator used to create runtime.
-//
-// Side effects:
-//   - Invalidates runtime and every slice borrowed from it.
-input_runtime_destroy :: proc(runtime: ^Input_Runtime, allocator: mem.Allocator) {
-    if runtime == nil {
-        return
-    }
-    free(runtime, allocator)
-}
 
 // Reset frame-local capture while preserving queues and lifetime diagnostics.
 //
@@ -798,4 +767,3 @@ input_runtime_commit_registry :: proc(
     result.accepted = true
     return result
 }
-

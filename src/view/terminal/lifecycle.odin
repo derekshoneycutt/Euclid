@@ -206,24 +206,6 @@ terminal_init_for_animation :: proc(
         generation, ambiguous_width)
 }
 
-//   Allocate test-owned terminal state with the explicitly supplied context allocator.
-//
-// Parameters:
-//   - term: The terminal state field owned by the caller.
-//
-// Returns:
-//   - true if the backing term history state was created.
-//
-// Side effects:
-//   - Initializes history, reserves terminal virtual storage, allocates retained buffers
-//     and display resources, and rolls back every acquired resource on failure.
-terminal_init :: proc(
-    term: ^viewterminalmodel.Terminal_State,
-    ambiguous_width: termgrid.Ambiguous_Width_Mode = .Narrow) -> bool {
-    return terminal_init_with_allocator(
-        term, context.allocator, 1, ambiguous_width)
-}
-
 //   Initialize checkpoint and interpreter state after all display grids exist.
 //
 // Parameters:

@@ -24,11 +24,10 @@ import runtime "base:runtime"
 import worldmodel "../view/world/model"
 import viewmodel "../view/ui/model"
 import capturemodel "../view/capture/model"
+import inputmodel "../view/input"
 
-// Defines the core structures used in the Euclid Application.
-// The general bias is to just allocate memory upfront inside Euclid_General_State and
-// stick to that memory, except for a few UI helpers using temp_allocator, Julia's GC, and GIFs.
-// This creates some hard caps on e.g. the particle system, but it also prevents wildness.
+// Defines the core structures used in the Euclid application.
+// Euclid_General_State owns its same-lifetime runtime values directly.
 
 // Compile application scenario automation only for repository debug and test builds.
 SCENARIOS_ENABLED :: #config(EUCLID_ENABLE_SCENARIOS, false)
@@ -88,9 +87,12 @@ Julia_Interface_Slots ::
 Euclid_General_State :: struct {
     saved_context : runtime.Context,
 
-    iso_scale: ^worldmodel.Iso_Scale,
-
-    draw_surface: ^worldmodel.Euclid_Drawing_Surface,
+    iso_scale: worldmodel.Iso_Scale,
+    draw_surface: worldmodel.Euclid_Drawing_Surface,
+    shape_world: shapemodel.Shape_World,
+    particle_system: particlemodel.Particle_System,
+    semantic_focus: viewmodel.Ui_Semantic_Focus_State,
+    input_runtime: inputmodel.Input_Runtime,
 
     julia_runtime_service: ^bridgemodel.Julia_Runtime_Service,
     content_service: ^contentmodel.Content_Service,
@@ -98,13 +100,10 @@ Euclid_General_State :: struct {
     julia_interface_active_slot: int,
     julia_interface: ^bridgemodel.Euclid_Julia_Interface,
 
-    shape_world: ^shapemodel.Shape_World,
     world_trochoid_tool: shapemodel.Shape_Trochoid_Tool_Handle,
     world_cycloid_tool: shapemodel.Shape_Cycloid_Tool_Handle,
     world_compass: shapemodel.Shape_Compass_Handle,
     world_pen: shapemodel.Shape_Pen_Handle,
-
-    particle_system: ^particlemodel.Particle_System,
 
     dynview: dynviewmodel.Dynview_System,
 

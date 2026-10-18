@@ -1,6 +1,5 @@
 package view
 
-import input "input"
 import native "native"
 import core "../core"
 import evidence_profile "../evidence/profile"
@@ -76,12 +75,6 @@ run_sdl_platform_session :: proc(
     defer native.sdl_draw_runtime_destroy(&draw_runtime, platform^.device)
     admit_optional_draw_pipelines(&draw_runtime, platform)
 
-    input_runtime := input.input_runtime_create(context.allocator)
-    if input_runtime == nil {
-        return 1
-    }
-    defer input.input_runtime_destroy(input_runtime, context.allocator)
-
     session, ok := initialize_window_runtime_with_loading(
         settings, display_profile, platform, &draw_runtime, startup)
     evidence_profile.zone_end(display_profile)
@@ -89,6 +82,7 @@ run_sdl_platform_session :: proc(
         log.error("display_runtime_start_failed")
         return 1
     }
+    input_runtime := &session.state^.input_runtime
     display := display_loop_context(
         platform, &draw_runtime, input_runtime, session, display_profile)
     result := initialize_and_run_sdl_session(settings, session, display)

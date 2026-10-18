@@ -5,6 +5,10 @@ for this repository. This guide defines the reviewable human standard;
 `tools/analysis_settings.jl` is the living configuration for its automated
 enforcement.
 
+[Memory Architecture](MemoryArchitecture.md) owns the normative memory allocation,
+ownership, reuse, and retirement standard. This document delegates those rules
+there rather than maintaining a separate memory policy.
+
 ## Table Of Contents
 
 1. [Purpose](#purpose)
@@ -56,7 +60,8 @@ When guidance conflicts, use this precedence:
 
 1. Safety, correctness, ownership, and ABI requirements.
 1. Active automated policy in `tools/analysis_settings.jl`.
-1. Repository-specific rules in this document.
+1. Repository-specific rules in this document and its delegated
+   [memory standard](MemoryArchitecture.md#allocation-and-lifetime-standard).
 1. Established local module conventions.
 1. Upstream Odin or Julia style guidance.
 
@@ -138,123 +143,11 @@ import only with a corresponding ownership and architecture update.
 
 ## Allocation And Lifetime
 
-Euclid uses initialization-first allocation in production: storage is established
-at the boundary that knows its owner and lifetime, reused while that lifetime is
-active, and released or reset by that owner. Steady-state frame and worker paths
-should use bounded or preallocated storage rather than silently growing the
-default heap.
-
-### Choose Storage By Lifetime
-
-Before adding an allocation, identify who owns it, who may mutate it, how long
-it must remain valid, who reclaims it, and what happens if allocation fails.
-The allocator should make those answers natural:
-
-| Lifetime or use | Preferred storage | Required reasoning |
-| --- | --- | --- |
-| One operation | Caller-owned scratch or temporary storage | Do not retain it past its reset boundary. |
-| Frame or task | Frame/task scratch or operation result storage | Reclaim only after consumers have joined. |
-| Subsystem | Owned allocator, pool, or arena | State owner and teardown; keep allocator with storage. |
-| Generation | Generation-owned storage, often arena | Detach borrowers before reset or replacement. |
-| Process | Explicit process-owned storage | Initialize once; document intentional permanence. |
-| Julia heap | GC-managed values and rooted handles | Root handles during native calls; distinct from Odin storage. |
-
-### Reusable Allocators
-
-Prefer an existing allocator when its lifetime matches the data instead of
-creating another pool or arena for each feature:
-
-| Allocator | Intended use | Lifetime boundary |
-| --- | --- | --- |
-| `context.temp_allocator` | Operation/frame scratch | Invalidated at the temporary-storage reset |
-| Shared animation arena | Native data needed for one active animation | Retire borrowers before generation reset |
-
-The animation allocator is deliberately reusable across feature-level stores.
-The animation-value store and Dynview document store are two existing larger
-management schemes that borrow it; they do not make it exclusive to those
-systems. New native data whose useful lifetime is exactly one animation
-generation SHOULD use this allocator rather than introducing a parallel
-generation arena. Keep its owner and generation contract explicit, and ensure
-all borrowers and derived aliases are detached before the shared reset.
-The allocator API is [`animation_memory_allocator`](../../../src/core/animation/memory.odin);
-its shared borrowers are coordinated in
-[`animation_storage.odin`](../../../src/bridge/animation_storage.odin).
-
-Use `context.temp_allocator` only when the data is truly temporary and cannot
-escape the operation/frame reset. Do not use it for generation-lived state.
-Conversely, do not place frame scratch in the animation arena merely because
-that allocator is available. Data that must outlive an animation generation,
-or has an independent subsystem lifecycle, needs storage owned for that longer
-or separate lifetime.
-
-Production Odin code MUST pass an allocator explicitly. It SHOULD use a
-dedicated allocator whose owner and lifetime match the allocation. Use
-`context.allocator` only when no more appropriate lifetime-bound allocator
-exists; make the allocation owner, retention period, and teardown explicit.
-Explicit context allocation may still produce an analyzer warning; do not hide
-the warning by omitting the allocator or changing it to an unowned default.
-
-In tests, `context.allocator` is the normal choice for fixture allocations and
-is preferred over artificial allocators. The analyzer intentionally ignores
-context allocations in `*_test.odin`; use a reviewed
-`ReviewedAllocationPolicy` only for a justified exception not covered by that
-test-file rule.
-
-### Initialize, Reuse, And Retire
-
-- Known steady-state capacity SHOULD be reserved during initialization. Reuse
-  the buffer or slot rather than rebuilding it on every frame or tick.
-- Hot paths MUST NOT introduce hidden default-heap growth. Dynamic collections
-  still need an intentional capacity and growth policy even where the analyzer
-  does not classify each `append`, `reserve`, or `resize` call.
-- Storage SHOULD be bounded when inputs, traffic, or operation duration can
-  grow. Capacity exhaustion must have an explicit status, backpressure, retry,
-  coalescing, or rejection policy; do not silently truncate or grow without bound.
-- An arena reset invalidates every allocation from that arena. Owners MUST
-  detach or retire all borrowed slices, pointers, and derived aliases before
-  reset or destruction.
-- Keep allocation and release visible as a lifecycle pair. Partial
-  initialization and failure paths MUST clean up only resources they acquired,
-  and MUST leave the object in a documented usable or failed state.
-- Event-driven allocations MAY be appropriate when the event is bounded and
-  their owner and release point are explicit. They MUST NOT become accidental
-  recurring frame/tick allocations.
-
-The following are intentional patterns, not blanket exemptions:
-
-- Frame-scoped scratch is valid until the frame reset; joined task results are
-  valid until the operation owner consumes and reclaims them.
-- Julia GC-managed allocations are appropriate inside Julia's ownership model.
-  Native code MUST keep Julia handles rooted across the call that uses them and
-  copy Julia-owned bytes before their preservation window ends.
-- Dedicated arenas MAY grow within their explicit owner lifetime. Reset only
-  after borrowers are detached, and destroy only after consumers have joined
-  or stopped. Prefer the shared animation allocator for animation-generation
-  data; use another subsystem arena only when its lifetime differs.
-- Narrow event-driven output, such as completed GIF bytes, asset staging, or
-  candidate font metadata, MAY allocate outside a continuous frame/tick path
-  when bounded and reclaimed by a clear owner.
-
-For example, the shared animation arena is borrowed by the animation-value
-store and Dynview document store; both borrowers are cleared before one
-generation reset. Julia host roots and per-call GC frames have separate lifetimes.
-See [Julia Thread Architecture](JuliaThreadArchitecture.md) for these concrete
-boundary patterns.
-
-### Analyzer Policy And Exceptions
-
-The analyzer classifies Odin allocation sites by allocator source. An
-unclassified allocation is a blocking analysis failure; use an explicit,
-traceable allocator expression rather than relying on implicit defaults.
-Dynamic-array mutators are treated separately because the collection carries
-its allocator from creation; that classification does not waive the reuse and
-bounded-growth rules above.
-
-An exception that the analyzer must permit belongs in
-`ReviewedAllocationPolicy` in `tools/analysis_settings.jl`, with an exact site,
-reason, and expected match count. The policy is drift-checked. Do not add a
-broad suppression, weaken classification, or turn a warning off without
-reviewing the allocation's actual owner and lifetime.
+Follow the normative
+[Allocation And Lifetime Standard](MemoryArchitecture.md#allocation-and-lifetime-standard)
+in Memory Architecture. That guide owns storage selection, explicit allocators,
+reuse and growth, borrower retirement, Julia rooting, and allocation-policy
+exceptions, with the application-wide context behind those rules.
 
 ## Verification Gate
 
@@ -908,8 +801,8 @@ declaration's review contract.
 - Prefer algorithm, data-layout, and work-elimination improvements over
   incidental syntax tricks.
 - Measure representative workloads before and after a non-obvious optimization.
-- Follow [Allocation And Lifetime](#allocation-and-lifetime) for storage and
-  allocation policy.
+- Follow the [memory standard](MemoryArchitecture.md#allocation-and-lifetime-standard)
+  for storage and allocation policy.
 - Keep Julia performance-critical code inside functions and avoid untyped mutable globals.
 - Do not make a Julia API artificially concrete for performance; Julia
   specializes generic methods.
@@ -923,13 +816,11 @@ declaration's review contract.
 - Validate external/input data at boundaries.
 - Keep interop assumptions explicit and documented.
 - Keep pointer validity, count/span relationships, ABI widths, and nullability explicit.
-- Never let a borrowed slice, pointer, arena allocation, or generation-bound
-  handle outlive its owner.
+- Follow [memory lifetime and retirement rules](MemoryArchitecture.md#initialize-reuse-and-retire)
+  for borrowed storage and generation-bound handles.
 - Thread-affine Julia, rendering, window, and audio operations must remain on
   their owning threads.
 - Prefer bounded failure over unchecked truncation, overflow, or queue growth.
-- Process-scoped allocator instrumentation must restore `context.allocator` before
-  reporting or destroying tracking metadata; runtime state may only borrow that domain.
 
 ## Standard Updates
 

@@ -342,11 +342,9 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
     defer free(interface)
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(shapemodel.Shape_World, context.allocator)
-    defer free(world)
+    world := &state^.shape_world
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.shape_world = world
     first := scene_command_test_entity(world, {})
     second := scene_command_test_entity(world, {})
     batch := app_bridge.Scene_Command_Batch{animation = animation}
@@ -380,11 +378,9 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     defer free(interface)
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(shapemodel.Shape_World, context.allocator)
-    defer free(world)
+    world := &state^.shape_world
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.shape_world = world
     entity := scene_command_test_entity(world, {9, 9, 9})
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
     batch.commands[0] = app_bridge.Scene_Command{
@@ -469,11 +465,9 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     defer free(interface)
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(shapemodel.Shape_World, context.allocator)
-    defer free(world)
+    world := &state^.shape_world
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.shape_world = world
     entity := scene_command_test_entity(world, {9, 9, 9})
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
     batch.commands[0] = app_bridge.Scene_Command{
@@ -492,9 +486,7 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
 animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    world := new(shapemodel.Shape_World, context.allocator)
-    defer free(world)
-    state^.shape_world = world
+    world := &state^.shape_world
     status := shapemodel.shape_world_create_entity(world, &state^.world_pen.joint1)
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     status = shapemodel.shape_component_insert(&world^.transforms, &world^.registry,

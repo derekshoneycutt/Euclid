@@ -73,7 +73,7 @@ artifact_test_expect_failure_trace :: proc(t: ^testing.T, directory: string) {
 artifact_test_expect_standalone_trace :: proc(
     t: ^testing.T, directory: string, events: []trace.Event) {
     standalone_path := fmt.tprintf("%s/standalone.bin", directory)
-    testing.expect(t, write_trace(standalone_path, events))
+    testing.expect(t, write_trace(standalone_path, events, context.allocator))
     standalone, standalone_error := os.read_entire_file(
         standalone_path, context.allocator)
     defer delete(standalone)
@@ -167,7 +167,8 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     arenas.observed_present[allocation.Arena_Domain_Kind.Animation] = true
     arenas.matched[allocation.Arena_Domain_Kind.Animation] = true
     written := write_bundle(
-        directory, artifact_test_failure_bundle_data(events[:], arenas))
+        directory, artifact_test_failure_bundle_data(events[:], arenas),
+        context.allocator)
     testing.expect(t, written)
     if !written {
         return
@@ -178,6 +179,6 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     artifact_test_expect_standalone_trace(t, directory, events[:])
     artifact_test_expect_arena_allocations(t, directory)
     artifact_test_expect_viewport_state(t, directory)
-    testing.expect(t, !write_bundle("../outside", {}))
-    testing.expect(t, !write_trace("../outside.bin", events[:]))
+    testing.expect(t, !write_bundle("../outside", {}, context.allocator))
+    testing.expect(t, !write_trace("../outside.bin", events[:], context.allocator))
 }

@@ -7,6 +7,7 @@ import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import julialib "../../../libs/julia/bindings"
+import storage "../../core/storage"
 
 import "core:encoding/uuid"
 import "core:mem"
@@ -273,17 +274,18 @@ Julia_Host_Egress :: union {
 Julia_Egress_Dispatch_Proc :: #type proc(
     user_data: rawptr, message: ^Julia_Host_Egress) -> bool
 
-// Communication_Link owns bounded channels and producer-side envelope storage.
+// Communication_Link retains bounded channels and one producer-owned TLSF pool.
 Communication_Link :: struct($T: typeid) {
     outbound: chan.Chan(^T),
     returns: chan.Chan(^T),
     pool: tlsf.Allocator,
     backing: []byte,
-    backing_allocator: mem.Allocator,
 }
 
-// Julia_Runtime_Service owns bridge queues, checked slots, and lifecycle bookkeeping.
+// Julia_Runtime_Service owns bridge backing, queues, slots, and lifecycle bookkeeping.
 Julia_Runtime_Service :: struct {
+    bootstrap_allocator: mem.Allocator,
+    communication_storage: storage.Arena_Owner,
     active_content_specification: contentmodel.Animation_Content_Specification,
     pending_content_specification: contentmodel.Animation_Content_Specification,
     evidence_ring: evidence_trace.Ring,

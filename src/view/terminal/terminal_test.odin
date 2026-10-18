@@ -44,6 +44,14 @@ Terminal_Test_Clipboard_Writes :: struct {
     count: int,
 }
 
+// Initialize test-owned terminal state with the test context allocator.
+terminal_init :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    ambiguous_width: termgrid.Ambiguous_Width_Mode = .Narrow) -> bool {
+    return terminal_init_with_allocator(
+        term, context.allocator, 1, ambiguous_width)
+}
+
 // Verify Terminal glyph emission records linear texture filtering.
 @(test)
 terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {

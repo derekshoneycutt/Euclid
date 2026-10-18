@@ -162,7 +162,7 @@ initialize_harness_assets :: proc(
 run_harness :: proc(options: Harness_Options) -> bool {
     asset_root_config := files.make_asset_root_config(
         options.asset_root, context.allocator)
-    defer files.destroy_asset_root_config(&asset_root_config)
+    defer files.destroy_asset_root_config(&asset_root_config, context.allocator)
     if !initialize_harness_assets(&asset_root_config) {
         return false
     }

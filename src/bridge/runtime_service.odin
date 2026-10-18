@@ -20,6 +20,7 @@ import evidence_trace "../evidence/trace"
 import "core:c"
 import "core:fmt"
 import "core:log"
+import "core:mem"
 import "core:os"
 import "core:strings"
 import "core:thread"
@@ -39,6 +40,14 @@ VIEW_SNAPSHOT_SLOT_COUNT :: bridgemodel.VIEW_SNAPSHOT_SLOT_COUNT
 VIEW_SNAPSHOT_TEXT_CAPACITY :: bridgemodel.VIEW_SNAPSHOT_TEXT_CAPACITY
 ANIMATION_TICK_SLOT_COUNT :: bridgemodel.ANIMATION_TICK_SLOT_COUNT
 MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
+JULIA_COMMUNICATION_RESERVATION :: uint(
+    JULIA_REQUEST_LINK_POOL_CAPACITY + JULIA_EVENT_LINK_POOL_CAPACITY +
+    2 * (JULIA_REQUEST_CAPACITY + JULIA_EVENT_CAPACITY) * size_of(rawptr) +
+    64 * 1024)
+Julia_Communication_Links_Init_Proc :: #type proc(
+    service: ^Julia_Runtime_Service, allocator: mem.Allocator) ->
+        runtime.Allocator_Error
+Julia_Runtime_Worker_Start_Proc :: #type proc(data: rawptr) -> ^thread.Thread
 
 // Stack-local Julia host handle retained by the worker's persistent GC frame.
 Julia_Runtime_Host :: struct {
@@ -1642,81 +1651,171 @@ julia_runtime_diagnostics :: proc(
     }
 }
 
-//   Create both directional links, rolling back request ownership on event-link failure.
+//   Create both directional links inside one service-lifetime backing arena.
 init_julia_runtime_channels :: proc(
     service: ^Julia_Runtime_Service) -> runtime.Allocator_Error {
-    request_err := communication_link_init(
+    return init_julia_runtime_channels_with(
+        service, storage.arena_owner_growing_init,
+        julia_runtime_links_initialize)
+}
+
+//   Initialize the arena and link set through injectable startup primitives.
+init_julia_runtime_channels_with :: proc(
+    service: ^Julia_Runtime_Service,
+    arena_init: storage.Arena_Owner_Init_Proc,
+    links_init: Julia_Communication_Links_Init_Proc) -> runtime.Allocator_Error {
+    if service == nil || service^.communication_storage.initialized ||
+        links_init == nil {
+        return .Invalid_Argument
+    }
+    if !storage.arena_owner_init_with(
+        &service^.communication_storage, JULIA_COMMUNICATION_RESERVATION,
+        arena_init) {
+        return .Out_Of_Memory
+    }
+    allocator := storage.arena_owner_allocator(&service^.communication_storage)
+    links_error := links_init(service, allocator)
+    if links_error != .None {
+        destroy_julia_runtime_channels(service)
+        return links_error
+    }
+    return .None
+}
+
+//   Initialize request then event links from the service-owned backing arena.
+julia_runtime_links_initialize :: proc(
+    service: ^Julia_Runtime_Service,
+    allocator: mem.Allocator) -> runtime.Allocator_Error {
+    request_error := communication_link_init(
         &service^.request_link, JULIA_REQUEST_CAPACITY,
-        JULIA_REQUEST_LINK_POOL_CAPACITY)
-    if request_err != .None {
-        return request_err
+        JULIA_REQUEST_LINK_POOL_CAPACITY, allocator)
+    if request_error != .None {
+        return request_error
     }
     event_err := communication_link_init(
         &service^.event_link, JULIA_EVENT_CAPACITY,
-        JULIA_EVENT_LINK_POOL_CAPACITY)
+        JULIA_EVENT_LINK_POOL_CAPACITY, allocator)
     if event_err != .None {
-        communication_link_destroy(&service^.request_link)
+        communication_link_destroy(&service^.request_link, allocator)
         return event_err
     }
     return .None
+}
+
+//   Start the persistent Julia owner worker with its service payload.
+julia_runtime_worker_start :: proc(data: rawptr) -> ^thread.Thread {
+    return thread.create_and_start_with_data(data, julia_runtime_worker)
+}
+
+//   Destroy both channels before releasing their shared arena-backed allocations.
+destroy_julia_runtime_channels :: proc(service: ^Julia_Runtime_Service) {
+    if service == nil {
+        return
+    }
+    allocator := storage.arena_owner_allocator(&service^.communication_storage)
+    communication_link_destroy(&service^.event_link, allocator)
+    communication_link_destroy(&service^.request_link, allocator)
+    storage.arena_owner_destroy(&service^.communication_storage)
 }
 
 //   Initialize display-independent state before starting the Julia owner worker.
 initialize_julia_runtime_state :: proc(
     service: ^Julia_Runtime_Service,
     profile_path: string,
-    asset_config: ^files.Asset_Root_Config) {
+    asset_config: ^files.Asset_Root_Config) -> bool {
     service^.next_request_id = 1
     service^.lifecycle = .Not_Started
     service^.published_view_snapshot_index = -1
     if asset_config != nil && len(asset_config^.asset_root_override) > 0 {
         service^.asset_root_override = strings.clone(
-            asset_config^.asset_root_override, context.allocator)
+            asset_config^.asset_root_override,
+            service^.bootstrap_allocator)
+        if len(service^.asset_root_override) == 0 {
+            return false
+        }
     }
     if len(profile_path) > 0 &&
         !evidence_profile.init_spall(&service^.profile, profile_path) {
         fmt.eprintln("Failed to initialize Julia worker profile output.")
         log.warn("julia_worker_profile_init_failed")
     }
+    return true
 }
 
 //   Create the bounded channels, staging storage, and persistent Julia owner worker.
 // On partial failure, resources are released in reverse construction order. The caller owns
 // the returned service and must stop Julia before destroy_julia_runtime_service.
 create_julia_runtime_service :: proc(
+    allocator: mem.Allocator,
     profile_path: string = "",
     asset_config: ^files.Asset_Root_Config = nil) -> (
     ^Julia_Runtime_Service, runtime.Allocator_Error) {
-    service := new(Julia_Runtime_Service)
-    evidence_trace.ring_init(&service^.evidence_ring, .Julia_Host)
-    channel_error := init_julia_runtime_channels(service)
-    if channel_error != .None {
-        free(service)
-        return nil, channel_error
+    return create_julia_runtime_service_with_worker(
+        allocator, profile_path, asset_config, julia_runtime_worker_start)
+}
+
+//   Create and unwind the service using an injectable worker-start operation.
+create_julia_runtime_service_with_worker :: proc(
+    allocator: mem.Allocator,
+    profile_path: string,
+    asset_config: ^files.Asset_Root_Config,
+    worker_start: Julia_Runtime_Worker_Start_Proc) -> (
+    ^Julia_Runtime_Service, runtime.Allocator_Error) {
+    if worker_start == nil {
+        return nil, .Invalid_Argument
     }
-    if !view_snapshot_slots_init(service) {
-        communication_link_destroy(&service^.event_link)
-        communication_link_destroy(&service^.request_link)
-        free(service)
+    service := new(Julia_Runtime_Service, allocator)
+    if service == nil {
         return nil, .Out_Of_Memory
     }
-
-    initialize_julia_runtime_state(service, profile_path, asset_config)
-    service^.worker =
-        thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
+    service^.bootstrap_allocator = allocator
+    evidence_trace.ring_init(&service^.evidence_ring, .Julia_Host)
+    storage_error := initialize_julia_runtime_service_storage(
+        service, profile_path, asset_config)
+    if storage_error != .None {
+        free(service, allocator)
+        return nil, storage_error
+    }
+    service^.worker = worker_start(rawptr(service))
     if service^.worker == nil {
-        evidence_profile.destroy(&service^.profile)
-        view_snapshot_slots_destroy(service)
-        communication_link_destroy(&service^.event_link)
-        communication_link_destroy(&service^.request_link)
-        delete(service^.asset_root_override)
-        free(service)
+        destroy_unstarted_julia_runtime_service(service)
         return nil, .Out_Of_Memory
     }
 
     log.infof("julia_service_created request_capacity=%d event_capacity=%d",
         JULIA_REQUEST_CAPACITY, JULIA_EVENT_CAPACITY)
     return service, .None
+}
+
+//   Initialize all non-worker storage, unwinding each completed stage on failure.
+initialize_julia_runtime_service_storage :: proc(
+    service: ^Julia_Runtime_Service,
+    profile_path: string,
+    asset_config: ^files.Asset_Root_Config) -> runtime.Allocator_Error {
+    channel_error := init_julia_runtime_channels(service)
+    if channel_error != .None {
+        return channel_error
+    }
+    if !view_snapshot_slots_init(service) {
+        destroy_julia_runtime_channels(service)
+        return .Out_Of_Memory
+    }
+    if !initialize_julia_runtime_state(service, profile_path, asset_config) {
+        view_snapshot_slots_destroy(service)
+        destroy_julia_runtime_channels(service)
+        delete(service^.asset_root_override, service^.bootstrap_allocator)
+        return .Out_Of_Memory
+    }
+    return .None
+}
+
+//   Release initialized service storage before a worker has started.
+destroy_unstarted_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
+    evidence_profile.destroy(&service^.profile)
+    view_snapshot_slots_destroy(service)
+    destroy_julia_runtime_channels(service)
+    delete(service^.asset_root_override, service^.bootstrap_allocator)
+    free(service, service^.bootstrap_allocator)
 }
 
 //   Report whether one cumulative occurrence count is a power of two.
@@ -2897,10 +2996,10 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     if service^.pending_view_content != nil {
         destroy_julia_egress_message(service, service^.pending_view_content)
     }
-    communication_link_destroy(&service^.event_link)
-    communication_link_destroy(&service^.request_link)
-    delete(service^.asset_root_override)
-    free(service)
+    destroy_julia_runtime_channels(service)
+    allocator := service^.bootstrap_allocator
+    delete(service^.asset_root_override, allocator)
+    free(service, allocator)
 }
 
 //   Resolve Julia callbacks and register content into unpublished host state.

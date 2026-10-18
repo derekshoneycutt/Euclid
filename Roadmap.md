@@ -194,6 +194,7 @@ General features:
   - [ ] Persistent REPL history
   - [ ] Search and use history
   - [ ] Search auto-completion features
+  - [ ] Optional completed checkboxes in tree
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
     - [X] Favorites/Collection organization

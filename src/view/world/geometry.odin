@@ -310,8 +310,8 @@ make_tool_brush_occluder :: #force_inline proc(
         tangent = linalg.normalize(tool_brush_light_to_view(direction))
     }
     return Tool_Brush_Occluder{
-        p0 = projection.iso_to_cartesian(p0, state^.iso_scale^),
-        p1 = projection.iso_to_cartesian(p1, state^.iso_scale^),
+        p0 = projection.iso_to_cartesian(p0, state^.iso_scale),
+        p1 = projection.iso_to_cartesian(p1, state^.iso_scale),
         thickness = thickness,
         depth0 = tool_brush_view_depth(p0),
         depth1 = tool_brush_view_depth(p1),
@@ -386,7 +386,7 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
 // draw_encoded_drawing_surface encodes the projected plane and border triangles.
 draw_encoded_drawing_surface :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
-    room := state^.draw_surface
+    room := &state^.draw_surface
     edge_size := room.edge_size
     world_points := [8]geometry.Vector3{room.zeros, room.right_up, room.left_down,
         room.right_down, room^.zeros + {edge_size, edge_size, 0},
@@ -432,11 +432,11 @@ draw_encoded_basic_label :: proc(
     if shadow_point_is_elevated(item^.point1) != high {
         return
     }
-    source, found := shapes.shape_world_draw_label_source(state^.shape_world, item^)
+    source, found := shapes.shape_world_draw_label_source(&state^.shape_world, item^)
     if !found {
         return
     }
-    screen := projection.iso_to_cartesian(item^.point1, state^.iso_scale^)
+    screen := projection.iso_to_cartesian(item^.point1, state^.iso_scale)
     resolver := view_font.cache_terminal_resolver(&state^.font_cache)
     viewtext.ui_text_shaped({
         encoder = encoder,
@@ -513,7 +513,7 @@ draw_encoded_cached_basic_item :: proc(
 // draw_encoded_cached_basic_pass encodes points and lines in one depth layer.
 draw_encoded_cached_basic_pass :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder, high: bool) {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     for index in 0..<cache^.item_count {
         draw_encoded_cached_basic_item(
             state, encoder, &cache^.items[index], high)
@@ -540,7 +540,7 @@ encoded_stroke_fragment_uniforms :: proc(
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
     average_scale := (scale_x + scale_y) * 0.5
-    light := linalg.normalize(-state^.iso_scale^.main_light_dir)
+    light := linalg.normalize(-state^.iso_scale.main_light_dir)
     light = tool_brush_light_to_view(light)
     material := STROKE3D_TITANIUM_MATERIAL
     return {
@@ -635,8 +635,8 @@ draw_encoded_cached_pen :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     pen: ^shapemodel.Shapes_Pen_Draw,
     compass_caster: ^shapemodel.Shapes_Compass_Draw = nil) {
-    first := projection.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
-    second := projection.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
+    first := projection.iso_to_cartesian(pen^.joint1, state^.iso_scale)
+    second := projection.iso_to_cartesian(pen^.joint2, state^.iso_scale)
     if pen^.active_child == 1 || pen^.active_child == 2 {
         active := pen^.color
         if pen^.has_active_color {
@@ -668,7 +668,7 @@ draw_encoded_cached_pen :: proc(
 // draw_encoded_cached_shadow_pass encodes ordinary floor shadows in cache order.
 draw_encoded_cached_shadow_pass :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     for index in 0..<cache^.item_count {
         switch &item in &cache^.items[index] {
         case shapemodel.Shapes_Point_Draw:
@@ -712,7 +712,7 @@ draw_cached_filledcircle_is_elevated :: #force_inline proc(
 draw_cached_curve_is_elevated :: #force_inline proc(
     state: ^core.Euclid_General_State,
     curve: ^shapemodel.Shapes_Curve_Draw) -> bool {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
     return has_any_elevated_shadow_point(vertices)
@@ -723,7 +723,7 @@ draw_cached_polygon_is_elevated :: #force_inline proc(
     state: ^core.Euclid_General_State,
     poly: ^shapemodel.Shapes_Polygon_Draw) -> bool {
 
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
     return has_any_elevated_shadow_point(vertices)
@@ -747,9 +747,9 @@ build_trochoid_tool_ring_samples :: proc(
         angle := 2 * math.PI * parameter
         center3d := trochoid_tool_ring_point(center, radius, angle)
         tangent3d := geometry.Vector3{-math.sin(angle), math.cos(angle), 0}
-        projected := projection.iso_to_cartesian(center3d, state^.iso_scale^)
+        projected := projection.iso_to_cartesian(center3d, state^.iso_scale)
         tangent_point := projection.iso_to_cartesian(
-            center3d + tangent3d, state^.iso_scale^)
+            center3d + tangent3d, state^.iso_scale)
 
         tangent := tangent_point - projected
         tangent_length := linalg.length(tangent)
@@ -1379,7 +1379,7 @@ polygon_plane :: proc(
         return false
     }
 
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.polygon_vertices[
         polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
     triangles := cache^.polygon_triangles[
@@ -1417,7 +1417,7 @@ point_inside_polygon :: proc(
     polygon: ^shapemodel.Shapes_Polygon_Draw,
     point: geometry.Vector3) -> bool {
 
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.polygon_vertices[
         polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
     triangles := cache^.polygon_triangles[
@@ -1713,7 +1713,7 @@ find_pen_crossing_polygon :: proc(
     pen_index: int,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case shapemodel.Shapes_Polygon_Draw:
@@ -1752,7 +1752,7 @@ find_pen_polygon_crossing :: proc(
     state: ^core.Euclid_General_State,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     pen, pen_index := find_cached_pen_item(cache)
     if pen_index < 0 {
         return false
@@ -1796,8 +1796,8 @@ project_to_floor_shadow :: proc(
 shadow_to_screen :: proc(
     p: geometry.Vector3,
     state: ^core.Euclid_General_State) -> geometry.Vector2 {
-    p_shadow := project_to_floor_shadow(p, state^.iso_scale^)
-    return projection.iso_to_cartesian(p_shadow, state^.iso_scale^)
+    p_shadow := project_to_floor_shadow(p, state^.iso_scale)
+    return projection.iso_to_cartesian(p_shadow, state^.iso_scale)
 }
 
 //   Package direct canonical arc parameters for shared sampling passes.
@@ -1865,7 +1865,7 @@ project_iso_points_batch_with_components :: proc(
         params.ys[:count],
         params.zs[:count],
         params.out[:count],
-        state^.iso_scale^,
+        state^.iso_scale,
     }, state^.ui_runtime.rendering.use_simd_batch_projection)
 }
 
@@ -1876,7 +1876,7 @@ project_iso_points_batch_with_components :: proc(
 draw_encoded_cached_point :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     point: ^shapemodel.Shapes_Point_Draw) {
-    screen := projection.iso_to_cartesian(point^.point1, state^.iso_scale^)
+    screen := projection.iso_to_cartesian(point^.point1, state^.iso_scale)
     _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
         point^.brush_size, color.Color_RGBA8(point^.color))
 }
@@ -1898,8 +1898,8 @@ draw_encoded_cached_line :: proc(
         faded := z_split_lower_fragment_color(color.Color_RGBA8(draw_color))
         draw_color = shapemodel.Color(faded)
     }
-    first := projection.iso_to_cartesian(clipped0, state^.iso_scale^)
-    second := projection.iso_to_cartesian(clipped1, state^.iso_scale^)
+    first := projection.iso_to_cartesian(clipped0, state^.iso_scale)
+    second := projection.iso_to_cartesian(clipped1, state^.iso_scale)
     points := [2]geometry.Vector2{geometry.Vector2(first), geometry.Vector2(second)}
     style := native.Draw_Polyline_Style{width = line^.brush_size,
         miter_limit = COLORED_STROKE_MITER_LIMIT,
@@ -1933,7 +1933,7 @@ draw_encoded_curve_visible_runs :: proc(
 draw_encoded_cached_curve :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     curve: ^shapemodel.Shapes_Curve_Draw, keep_above: bool) {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
     kinds := cache^.curve_vertex_kinds[
@@ -1942,13 +1942,13 @@ draw_encoded_cached_curve :: proc(
     projected_kinds: [MAX_CURVE_VISIBLE_POINTS]shapemodel.Curve_Point_Kind
     runs: [MAX_CURVE_VISIBLE_RUNS]Curve_Visible_Run
     buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
-    result := build_projected_curve_visible_runs({state^.iso_scale^,
+    result := build_projected_curve_visible_runs({state^.iso_scale,
         vertices, kinds, curve^.topology, keep_above, false}, buffers)
     if !result.ok {
         return
     }
     reduction := reduce_projected_curve_visible_runs(buffers, result,
-        curve^.brush_size, curve_reduction_budget(state^.iso_scale^.half_scale))
+        curve^.brush_size, curve_reduction_budget(state^.iso_scale.half_scale))
     if !reduction.ok {
         return
     }
@@ -2012,7 +2012,7 @@ draw_encoded_cached_filled_circle :: proc(
         world_points = arc_world[:], xs = xs[:], ys = ys[:],
         zs = zs[:], out = projected[:]})
     center := geometry.Vector2(
-        projection.iso_to_cartesian(geometry_value.center, state^.iso_scale^))
+        projection.iso_to_cartesian(geometry_value.center, state^.iso_scale))
     for index in 1..<len(projected) {
         _ = native.draw_encoder_triangle(encoder, center,
             geometry.Vector2(projected[index - 1]),
@@ -2031,7 +2031,7 @@ draw_encoded_cached_polygon :: proc(
     if !project_cached_polygon_vertices(state, polygon, projected[:]) {
         return
     }
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
     for triangle in triangles {
@@ -2091,7 +2091,7 @@ draw_encoded_cached_line_shadow :: proc(
 draw_encoded_cached_curve_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     curve: ^shapemodel.Shapes_Curve_Draw) {
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
     if !has_any_elevated_shadow_point(vertices) {
@@ -2103,14 +2103,14 @@ draw_encoded_cached_curve_shadow :: proc(
     projected_kinds: [MAX_CURVE_VISIBLE_POINTS]shapemodel.Curve_Point_Kind
     runs: [MAX_CURVE_VISIBLE_RUNS]Curve_Visible_Run
     buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
-    result := build_projected_curve_visible_runs({state^.iso_scale^,
+    result := build_projected_curve_visible_runs({state^.iso_scale,
         vertices, kinds, curve^.topology, true, true}, buffers)
     if !result.ok {
         return
     }
     thickness := math.max(curve^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     reduction := reduce_projected_curve_visible_runs(buffers, result, thickness,
-        curve_reduction_budget(state^.iso_scale^.half_scale))
+        curve_reduction_budget(state^.iso_scale.half_scale))
     if !reduction.ok {
         return
     }
@@ -2172,7 +2172,7 @@ draw_encoded_cached_polygon_shadow :: proc(
     if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
         return
     }
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.polygon_vertices[
         polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
     if !has_any_elevated_shadow_point(vertices) {
@@ -2206,7 +2206,7 @@ project_cached_polygon_vertices :: #force_inline proc(
     poly: ^shapemodel.Shapes_Polygon_Draw,
     projected: []geometry.Vector2) -> bool {
 
-    cache := &state^.shape_world^.draw_cache
+    cache := &state^.shape_world.draw_cache
     vertices := cache^.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
     xs, ys, zs: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]f32
@@ -2295,9 +2295,9 @@ build_compass_arc_samples :: proc(
         direction := basis.u * math.cos(angle) + basis.v * math.sin(angle)
         tangent3d := -basis.u * math.sin(angle) + basis.v * math.cos(angle)
         center3d := center + direction * basis.radius
-        projected := projection.iso_to_cartesian(center3d, draw.state^.iso_scale^)
+        projected := projection.iso_to_cartesian(center3d, draw.state^.iso_scale)
         tangent_point := projection.iso_to_cartesian(
-            center3d + tangent3d, draw.state^.iso_scale^)
+            center3d + tangent3d, draw.state^.iso_scale)
         tangent := tangent_point - projected
         tangent_length := linalg.length(tangent)
         if tangent_length <= 0.0001 {

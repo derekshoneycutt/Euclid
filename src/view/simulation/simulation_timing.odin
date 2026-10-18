@@ -16,14 +16,14 @@ import capturemodel "../capture/model"
 accumulate_and_update_systems :: proc(
     state: ^core.Euclid_General_State, frame_dt: f32,
     gif_extents: capturemodel.Gif_Capture_Extents) -> f32 {
-    projection.recompute_iso_scale_precompute(state^.iso_scale)
+    projection.recompute_iso_scale_precompute(&state^.iso_scale)
 
     clamped_dt := frame_dt
     if clamped_dt > simulationmodel.MAX_FRAME_DT {
         clamped_dt = simulationmodel.MAX_FRAME_DT
     }
     viewtelemetry.update_average_fps(state, clamped_dt)
-    projection.screenshake_update(state^.iso_scale, clamped_dt)
+    projection.screenshake_update(&state^.iso_scale, clamped_dt)
 
     if state^.ui_runtime.playback.simulation_paused {
         julia.publish_available_animation_tick(state)
@@ -37,7 +37,7 @@ accumulate_and_update_systems :: proc(
     step_count := 0
     for state^.accumulator >= simulationmodel.FIXED_DT {
         // Never expose worker-commanded tool dimensions before constraints normalize them.
-        shapes.shape_world_update_previous_values(state^.shape_world)
+        shapes.shape_world_update_previous_values(&state^.shape_world)
         run_windowed_fixed_step(state, simulationmodel.FIXED_DT, gif_extents)
 
         state^.accumulator -= simulationmodel.FIXED_DT

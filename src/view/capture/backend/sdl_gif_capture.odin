@@ -3,15 +3,15 @@ package capturebackend
 import native "../../native"
 import files "../../../files"
 import log "core:log"
-import mem "core:mem"
 import strings "core:strings"
 import capturemodel "../model"
+import storage "../../../core/storage"
 
-// Sdl_Gif_Capture_Context owns native encoding and transactional output paths.
+// Sdl_Gif_Capture_Context owns one arena spanning encoding and published-path use.
 Sdl_Gif_Capture_Context :: struct {
     encoder: native.Sdl_Gif_Encoder,
     transaction: files.Gif_Output_Transaction,
-    allocator: mem.Allocator,
+    storage: storage.Arena_Owner,
 }
 
 // sdl_gif_capture_abort closes native state and removes unpublished output.
@@ -20,31 +20,54 @@ sdl_gif_capture_abort :: proc(user_data: rawptr) {
     if owner == nil {
         return
     }
-    native.sdl_gif_encoder_abort(&owner.encoder)
-    files.destroy_gif_output_transaction(&owner.transaction, owner.allocator)
+    allocator := storage.arena_owner_allocator(&owner.storage)
+    native.sdl_gif_encoder_abort(&owner.encoder, allocator)
+    files.destroy_gif_output_transaction(&owner.transaction, allocator)
+    storage.arena_owner_reset(&owner.storage)
 }
 
 // sdl_gif_capture_begin reserves output and opens one native GIF stream.
 sdl_gif_capture_begin :: proc(
     user_data: rawptr, width, height: int) -> bool {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil || owner.allocator.procedure == nil {
+    if owner == nil || !owner.storage.initialized {
         return false
     }
     sdl_gif_capture_abort(user_data)
-    transaction, reserved := files.reserve_gif_output_transaction(owner.allocator)
+    allocator := storage.arena_owner_allocator(&owner.storage)
+    transaction, reserved := files.reserve_gif_output_transaction(allocator)
     if !reserved {
         log.error("sdl_gif_capture_reserve_failed")
         return false
     }
+    return sdl_gif_capture_begin_transaction(owner, transaction, width, height)
+}
+
+// Open a previously reserved transaction using this capture's storage domain.
+sdl_gif_capture_begin_transaction :: proc(
+    owner: ^Sdl_Gif_Capture_Context, transaction: files.Gif_Output_Transaction,
+    width, height: int) -> bool {
+    if owner == nil {
+        return false
+    }
+    if !owner.storage.initialized {
+        log.error("sdl_gif_capture_storage_uninitialized")
+        return false
+    }
     owner.transaction = transaction
+    if len(transaction.temporary_path) == 0 || len(transaction.final_path) == 0 {
+        log.error("sdl_gif_capture_transaction_invalid")
+        sdl_gif_capture_abort(rawptr(owner))
+        return false
+    }
     temporary_path := strings.clone_to_cstring(
         owner.transaction.temporary_path, context.temp_allocator)
+    allocator := storage.arena_owner_allocator(&owner.storage)
     if !native.sdl_gif_encoder_begin(
-        &owner.encoder, temporary_path, width, height, owner.allocator) {
+        &owner.encoder, temporary_path, width, height, allocator) {
         log.errorf(
             "sdl_gif_capture_open_failed width=%d height=%d", width, height)
-        sdl_gif_capture_abort(user_data)
+        sdl_gif_capture_abort(rawptr(owner))
         return false
     }
     return true
@@ -77,7 +100,11 @@ sdl_gif_capture_commit_frame :: proc(user_data: rawptr, duration_ms: u64) -> boo
 // sdl_gif_capture_close closes and atomically publishes one completed stream.
 sdl_gif_capture_close :: proc(user_data: rawptr) -> bool {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil || !native.sdl_gif_encoder_close(&owner.encoder) {
+    if owner == nil || !owner.storage.initialized {
+        return false
+    }
+    allocator := storage.arena_owner_allocator(&owner.storage)
+    if !native.sdl_gif_encoder_close(&owner.encoder, allocator) {
         sdl_gif_capture_abort(user_data)
         return false
     }
@@ -88,7 +115,7 @@ sdl_gif_capture_close :: proc(user_data: rawptr) -> bool {
     return true
 }
 
-// sdl_gif_capture_published_path returns the current published path while owned.
+// Borrow the published path; capture policy must copy it before the next reset/unbind.
 sdl_gif_capture_published_path :: proc(user_data: rawptr) -> string {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
     if owner == nil {
@@ -121,9 +148,17 @@ bind_sdl_gif_capture :: proc(
     if owner == nil || session == nil {
         return false
     }
-    owner.allocator = context.allocator
-    return capturemodel.gif_capture_bind_operations(
-        session, sdl_gif_capture_operations(owner))
+    if !storage.arena_owner_init(&owner.storage) {
+        log.error("sdl_gif_capture_storage_init_failed")
+        return false
+    }
+    if !capturemodel.gif_capture_bind_operations(
+        session, sdl_gif_capture_operations(owner)) {
+        log.error("sdl_gif_capture_bind_failed")
+        storage.arena_owner_destroy(&owner.storage)
+        return false
+    }
+    return true
 }
 
 // unbind_sdl_gif_capture releases any retained native or path state.
@@ -132,5 +167,5 @@ unbind_sdl_gif_capture :: proc(owner: ^Sdl_Gif_Capture_Context) {
         return
     }
     sdl_gif_capture_abort(rawptr(owner))
-    owner.allocator = {}
+    storage.arena_owner_destroy(&owner.storage)
 }

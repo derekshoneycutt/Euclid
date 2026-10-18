@@ -68,6 +68,13 @@ navigation_order = 30
 owner = "guide_authors"
 
 [[guides]]
+title = "Memory Architecture"
+path = "Guides/MemoryArchitecture.md"
+summary = "Normative allocator ownership, storage lifetime, reuse, and reclamation policy."
+navigation_order = 35
+owner = "guide_authors"
+
+[[guides]]
 title = "Julia Thread Architecture"
 path = "Guides/JuliaThreadArchitecture.md"
 summary = "Embedded Julia ownership, command flow, and thread lifecycle."

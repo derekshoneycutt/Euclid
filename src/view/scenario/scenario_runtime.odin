@@ -770,8 +770,8 @@ scenario_queue_dust_emission :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> bool {
     executor := runtime.state^.simulation_executor
-    particle_system := runtime.state^.particle_system
-    if executor == nil || particle_system == nil ||
+    particle_system := &runtime.state^.particle_system
+    if executor == nil ||
         command.dust_count > u32(particle_system^.use_max_dust_particles) {
         return false
     }
@@ -796,19 +796,16 @@ scenario_issue_particle_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     executor := runtime.state^.simulation_executor
-    particle_system := runtime.state^.particle_system
+    particle_system := &runtime.state^.particle_system
     #partial switch command.kind {
     case .Contact_Dust:
-        if particle_system == nil {
-            return true, false
-        }
         accepted := particles.queue_dust_tool_contact(
             particle_system, {
                 endpoint = {command.value, command.secondary_value, 0},
                 source = .Scenario})
         return true, accepted
     case .Kick_Dust:
-        if executor == nil || particle_system == nil ||
+        if executor == nil ||
             executor^.particle_task.scenario_dust_kick_requested {
             return true, false
         }

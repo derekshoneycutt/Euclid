@@ -561,7 +561,7 @@ make_asset_root_config :: proc(
 // Returns:
 //   - none.
 destroy_asset_root_config :: proc(
-    config: ^Asset_Root_Config, allocator := context.allocator) {
+    config: ^Asset_Root_Config, allocator: mem.Allocator) {
     if config == nil {
         return
     }
@@ -953,7 +953,7 @@ resolve_asset_unpack_dir :: proc(
 //   Resolve the cache generation committed beside one executable directory.
 resolve_current_asset_unpack_dir :: proc(
     exe_dir: string,
-    allocator := context.temp_allocator) -> (string, bool) {
+    allocator: mem.Allocator) -> (string, bool) {
     sidecar, sidecar_ok := read_asset_package_sidecar(
         exe_dir, context.temp_allocator)
     if !sidecar_ok {

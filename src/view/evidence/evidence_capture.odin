@@ -8,12 +8,12 @@ import evidence_trace "../../evidence/trace"
 
 //   Record one post-join constraint summary for semantic trace consumers.
 record_constraint_trace_summary :: proc(state: ^core.Euclid_General_State) {
-    if state == nil || state^.shape_world == nil {
+    if state == nil {
         return
     }
     active_constraints := 0
-    for constraint in state^.shape_world^.constraints.values[
-        :state^.shape_world^.constraints.count] {
+    for constraint in state^.shape_world.constraints.values[
+        :state^.shape_world.constraints.count] {
         if constraint.enabled {
             active_constraints += 1
         }
@@ -27,7 +27,7 @@ record_constraint_trace_summary :: proc(state: ^core.Euclid_General_State) {
             tick = state^.fixed_step,
             payload = {counts = {
                 first = u32(active_constraints),
-                second = u32(state^.shape_world^.constraints.count),
+                second = u32(state^.shape_world.constraints.count),
             }},
         })
 }
@@ -40,8 +40,7 @@ record_constraint_trace_summary :: proc(state: ^core.Euclid_General_State) {
 record_evidence_checkpoint :: proc(
     state: ^core.Euclid_General_State,
     required: bool) -> evidence_checkpoint.Handle {
-    if state == nil || state^.shape_world == nil ||
-        state^.julia_runtime_service == nil {
+    if state == nil || state^.julia_runtime_service == nil {
         return {}
     }
 
@@ -98,7 +97,7 @@ capture_evidence_point :: proc(
 //   Copy authoritative post-join Euclid state into one fixed checkpoint value.
 capture_evidence_checkpoint :: proc(
     state: ^core.Euclid_General_State) -> evidence_checkpoint.Snapshot {
-    world := state^.shape_world
+    world := &state^.shape_world
     snapshot := evidence_checkpoint.Snapshot{
         fixed_step = state^.fixed_step,
         simulation_time = state^.simulation_time,

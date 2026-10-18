@@ -137,7 +137,7 @@ settings_view_context :: proc(
         settings_panel = &state^.ui_runtime.settings_panel,
         press_owner = &state^.ui_runtime.input.press_owner,
         semantic_focus = state^.ui_runtime.semantic_focus,
-        preferences = preferences, particle_system = state^.particle_system,
+        preferences = preferences, particle_system = &state^.particle_system,
         gpu_dust_available = gpu_available,
         platform_reduce_motion = state^.ui_runtime.platform_reduce_motion,
         simd_available = simd_available, labels = labels,
@@ -230,7 +230,7 @@ draw_encoded_settings_text :: proc(
     panel := prepared.scroll.view_rect
     rows := prepared.rows
     x := panel.x + theme.SETTINGS_PANEL_INSET
-    value := fmt.tprintf("%d", state^.particle_system^.use_max_dust_particles)
+    value := fmt.tprintf("%d", state^.particle_system.use_max_dust_particles)
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     value_width, measured := viewtext.ui_text_measure_monospace(
         value, face, theme.TREE_FONT_SIZE, 0)
@@ -352,7 +352,7 @@ settings_max_particles_params :: proc(
 draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
     state := ctx.state
     panel := ctx.panel
-    ps := state^.particle_system
+    ps := &state^.particle_system
     statistics := [4]struct{id: contentdata.Content_Message_Id, count: int}{
         {.Settings_Stats_Dust, ps.last_render_low},
         {.Settings_Stats_Trail, ps.last_render_mid},
@@ -546,7 +546,7 @@ prepare_settings_view :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     mouse_input: input.Input_Frame, interactive := true) -> Settings_View_Preparation {
-    if state == nil || state.particle_system == nil {
+    if state == nil {
         return {}
     }
     ctx := settings_view_context(state, panel, mouse_input)
@@ -669,7 +669,7 @@ settings_control_available :: proc(
 settings_apply_control_edit :: proc(
     state: ^core.Euclid_General_State, id: setting_model.Setting_Id,
     value: setting_model.Setting_Value) -> bool {
-    if state == nil || state^.particle_system == nil ||
+    if state == nil ||
         !setting_model.valid_setting_value(id, value) {
         return false
     }

@@ -27,7 +27,7 @@ queue_tool_dust_contact :: proc(
         return
     }
     accepted := particles.queue_dust_tool_contact(
-        state^.particle_system, {endpoint = endpoint, source = .Point})
+        &state^.particle_system, {endpoint = endpoint, source = .Point})
     assert(accepted)
 }
 
@@ -36,7 +36,7 @@ queue_revealed_label_dust_contact :: proc(
     state: ^core.Euclid_General_State,
     entity: shapemodel.Shape_Entity,
     font_size: f32) {
-    if state == nil || state^.particle_system == nil || state^.iso_scale == nil {
+    if state == nil {
         return
     }
     label, has_label := shapemodel.shape_component_get(
@@ -53,8 +53,8 @@ queue_revealed_label_dust_contact :: proc(
         return
     }
     _ = particles.queue_dust_label_reveal_contact(
-        state^.particle_system, transform^.position, text, font_size,
-        state^.iso_scale^.scale)
+        &state^.particle_system, transform^.position, text, font_size,
+        state^.iso_scale.scale)
 }
 
 // Queue one compound filled-compass sweep when both legs lie on the floor.
@@ -68,7 +68,7 @@ queue_compass_filled_dust_contact :: proc(
         queue_tool_dust_contact(state, current_second)
         return
     }
-    accepted := particles.queue_dust_tool_contact(state^.particle_system, {
+    accepted := particles.queue_dust_tool_contact(&state^.particle_system, {
         endpoint = current_second,
         previous_segment_first = previous_first,
         previous_segment_second = previous_second,

@@ -321,7 +321,7 @@ encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     iso_scale := worldmodel.Iso_Scale{main_light_dir = {0, 0, -1}}
-    state.iso_scale = &iso_scale
+    state.iso_scale = iso_scale
     draw_encoded_tool_segment(state, &encoder, {
         first = {10, 20}, second = {30, 20}, thickness = 4,
         color = color.Color_RGBA8{255, 0, 0, 255}})

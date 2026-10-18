@@ -144,7 +144,7 @@ prepare_ui_geometry :: proc(
     prepare_ui_accordion_geometry(ui_runtime, mouse_input)
     regions = ui_runtime^.layout.ui_regions
     projection.fit_iso_scale_to_viewport(
-        state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
+        &state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
     track_ui_dynview_geometry(state, regions)
     return {capture_for_frame, dyncompile.compile_is_needed(&state^.dynview),

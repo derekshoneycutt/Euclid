@@ -24,11 +24,8 @@ tool_position :: proc(
         }
         return {}, false
     }
-    if state^.shape_world == nil {
-        return {}, false
-    }
     transform, found := shapemodel.shape_component_get(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
     if !found {
         return {}, false
     }
@@ -115,10 +112,10 @@ set_cycloid_tool_line :: proc "c" (state: ^core.Euclid_General_State,
         return BRIDGE_STATUS_OK
     }
     first_transform, first_ok := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        &state^.shape_world.transforms, &state^.shape_world.registry,
         state^.world_cycloid_tool.first)
     second_transform, second_ok := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        &state^.shape_world.transforms, &state^.shape_world.registry,
         state^.world_cycloid_tool.second)
     if !first_ok || !second_ok {
         return BRIDGE_STATUS_NOT_FOUND
@@ -153,7 +150,7 @@ set_cycloid_tool_geometry :: proc "c" (state: ^core.Euclid_General_State,
         return BRIDGE_STATUS_OK
     }
     current, found := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        &state^.shape_world.cycloid_tools, &state^.shape_world.registry,
         state^.world_cycloid_tool.shape)
     if !found {
         return BRIDGE_STATUS_NOT_FOUND
@@ -193,7 +190,7 @@ set_cycloid_tool_parameter :: proc "c" (
         return BRIDGE_STATUS_OK
     }
     mutable, has_value := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        &state^.shape_world.cycloid_tools, &state^.shape_world.registry,
         state^.world_cycloid_tool.shape)
     if !has_value {
         return BRIDGE_STATUS_NOT_FOUND
@@ -262,12 +259,12 @@ set_trochoid_tool_geometry :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     current, has_value := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry, entity)
+        &state^.shape_world.trochoid_tools, &state^.shape_world.registry, entity)
     if !has_value {
         return BRIDGE_STATUS_NOT_FOUND
     }
     style, has_style := shapemodel.shape_component_get(
-        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+        &state^.shape_world.render_styles, &state^.shape_world.registry, entity)
     if !has_style || current.mode != value.mode && style.visible {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
@@ -299,7 +296,7 @@ set_trochoid_tool_parameter :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     current, has_value := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry, entity)
+        &state^.shape_world.trochoid_tools, &state^.shape_world.registry, entity)
     if !has_value {
         return BRIDGE_STATUS_NOT_FOUND
     }
@@ -311,9 +308,6 @@ set_trochoid_tool_parameter :: proc "c" (
 tool_lock_constraint :: proc(
     state: ^core.Euclid_General_State,
     entity: shapemodel.Shape_Entity) -> (^shapemodel.Shape_Constraint, bool) {
-    if state^.shape_world == nil {
-        return nil, false
-    }
     index: u16
     switch entity {
     case state^.world_pen.joint1:
@@ -327,10 +321,10 @@ tool_lock_constraint :: proc(
     case:
         return nil, false
     }
-    if index >= state^.shape_world^.constraints.count {
+    if index >= state^.shape_world.constraints.count {
         return nil, false
     }
-    constraint := &state^.shape_world^.constraints.values[index]
+    constraint := &state^.shape_world.constraints.values[index]
     if constraint^.kind != .Snap_Point ||
         constraint^.payload.snap_point.point != entity {
         return nil, false
@@ -348,7 +342,7 @@ set_tool_position :: proc(
         command^.position = position
         command^.flag = sweep
     }
-    if captured || state^.shape_world == nil {
+    if captured {
         return
     }
     previous_first, previous_first_found := tool_position(
@@ -356,7 +350,7 @@ set_tool_position :: proc(
     previous_second, previous_second_found := tool_position(
         state, state^.world_compass.joint2)
     transform, found := shapemodel.shape_component_get_mut(
-        &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
     if !found {
         return
     }
@@ -726,7 +720,7 @@ emit_trailing_particle :: proc "c" (
     }
     context = state^.saved_context
     particles.emit_trail_particles(
-        state^.particle_system, state^.current_delta_time, {pos, color})
+        &state^.particle_system, state^.current_delta_time, {pos, color})
 }
 
 //   Emit flicker particles at a position using bridge color data.
@@ -744,5 +738,5 @@ emit_flicker_particle :: proc "c" (
     }
     context = state^.saved_context
     particles.emit_flicker_particles(
-        state^.particle_system, {pos, color}, 10)
+        &state^.particle_system, {pos, color}, 10)
 }

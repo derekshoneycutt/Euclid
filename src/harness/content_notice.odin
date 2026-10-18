@@ -24,8 +24,8 @@ content_notice_observation_copy :: proc(
     service := state^.julia_runtime_service
     count := 0
     parts := [?][]u8{
-        content_notice_observation_bytes(state^.shape_world),
-        content_notice_observation_bytes(state^.particle_system),
+        content_notice_observation_bytes(&state^.shape_world),
+        content_notice_observation_bytes(&state^.particle_system),
         content_notice_observation_bytes(&state^.ui_runtime),
         content_notice_observation_bytes(&state^.fixed_step),
         content_notice_observation_bytes(&state^.simulation_time),
@@ -60,8 +60,7 @@ copy_animation_notice_observation :: proc "c" (
         return -1
     }
     context = state^.saved_context
-    if state^.shape_world == nil || state^.particle_system == nil ||
-        state^.julia_runtime_service == nil || capacity < 0 {
+    if state^.julia_runtime_service == nil || capacity < 0 {
         log.error("animation_notice_observation_invalid_state")
         return -1
     }

@@ -141,9 +141,7 @@ scenario_favorites_hidden_and_disabled_rows_reject_input :: proc(t: ^testing.T) 
 scenario_runtime_settings_use_control_owner :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    particles := new(particlemodel.Particle_System, context.allocator)
-    defer free(particles, context.allocator)
-    state^.particle_system = particles
+    particles := &state^.particle_system
     state^.ui_runtime.preferences.values = setting_model.default_preferences()
     runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
@@ -331,12 +329,10 @@ scenario_runtime_animation_pause_uses_display_owned_state :: proc(t: ^testing.T)
 scenario_runtime_dust_emission_queues_particle_request :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    particle_system := new(particlemodel.Particle_System, context.allocator)
-    defer free(particle_system)
+    particle_system := &state^.particle_system
     executor := new(core.Simulation_Executor, context.allocator)
     defer free(executor)
     particle_system^.use_max_dust_particles = 100
-    state^.particle_system = particle_system
     state^.simulation_executor = executor
     runtime := viewscenario.Scenario_Runtime{state = state}
     command := scenario.Command{
@@ -363,11 +359,9 @@ scenario_runtime_dust_emission_queues_particle_request :: proc(t: ^testing.T) {
 scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    particle_system := new(particlemodel.Particle_System, context.allocator)
-    defer free(particle_system)
+    particle_system := &state^.particle_system
     executor := new(core.Simulation_Executor, context.allocator)
     defer free(executor)
-    state^.particle_system = particle_system
     state^.simulation_executor = executor
     runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
@@ -393,13 +387,11 @@ scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
 scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    particle_system := new(particlemodel.Particle_System, context.allocator)
-    defer free(particle_system)
+    particle_system := &state^.particle_system
     particle_system^.use_max_dust_particles = 1
     particle_system^.low_particles[0].alive = true
     particle_system^.low_particles[0].life = 1
     before_velocity := particle_system^.low_particles.vel_z[0]
-    state^.particle_system = particle_system
     data := core.Simulation_Task_Data{
         state = state, scenario_dust_kick_requested = true}
 
@@ -414,10 +406,8 @@ scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
 scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    particle_system := new(particlemodel.Particle_System, context.allocator)
-    defer free(particle_system)
+    particle_system := &state^.particle_system
     particle_system^.use_max_dust_particles = 16
-    state^.particle_system = particle_system
     state^.evidence_session.enabled = true
     state^.evidence_session.lanes = evidence_session.ALL_LANES
     state^.evidence_session.required_evidence_complete = true
@@ -520,8 +510,9 @@ runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
         window = {width = 640, height = 720, layout = .Portrait},
     }
     runtime: viewmodel.Euclid_Ui_Runtime_State
-    testing.expect(t, init_ui_runtime_fields(&runtime, &settings))
-    defer free(runtime.semantic_focus, context.allocator)
+    focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(focus, context.allocator)
+    testing.expect(t, init_ui_runtime_fields(&runtime, focus, &settings))
     testing.expect_value(t, runtime.layout.current_layout_mode,
         viewmodel.Ui_Layout_Mode.Portrait)
     testing.expect_value(t, runtime.layout.active_accordion_section,
@@ -598,7 +589,7 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
-    defer free(service)
+    defer free(service, context.allocator)
     state^.julia_runtime_service = service
     ji := &state^.julia_interface_slots[0]
     state^.julia_interface = ji
@@ -777,8 +768,7 @@ scenario_view_content_submits_typed_owner_request :: proc(t: ^testing.T) {
     defer free(service)
     testing.expect_value(t, julia.init_julia_runtime_channels(service),
         runtime.Allocator_Error.None)
-    defer julia.communication_link_destroy(&service^.event_link)
-    defer julia.communication_link_destroy(&service^.request_link)
+    defer julia.destroy_julia_runtime_channels(service)
     state^.julia_runtime_service = service
     state^.julia_interface = &state^.julia_interface_slots[0]
     animation := &state^.julia_interface^.null_animation

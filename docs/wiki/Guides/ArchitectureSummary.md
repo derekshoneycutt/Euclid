@@ -66,7 +66,7 @@ tables group code by the architectural question a contributor is likely to ask.
 | Area | Responsibility | Start in |
 | --- | --- | --- |
 | Process and app setup | Arguments, startup composition, resolved settings, user-store lifetime | [`src/main.odin`](../../../src/main.odin), [`src/app/`](../../../src/app/) |
-| Application composition | Whole-app state and run settings; does not own every reachable model | [`src/core/core.odin`](../../../src/core/core.odin) |
+| Application composition | Whole-app state and run settings; its stable heap root contains same-lifetime fixed children but does not own every reachable model | [`src/core/core.odin`](../../../src/core/core.odin), [`src/view/runtime_session.odin`](../../../src/view/runtime_session.odin) |
 | Display coordinator | Frame order, UI preparation, simulation, presentation, drawing | [`src/view/`](../../../src/view/) |
 | Julia host and bridge | Julia lifetime, typed transport, ABI exports, request/result routing | [`src/bridge/`](../../../src/bridge/), [`src/julia/host/`](../../../src/julia/host/) |
 | Native backend | SDL3 window, input, GPU, audio, and platform-affine work | [`src/view/native/`](../../../src/view/native/) |
@@ -240,11 +240,14 @@ questions.
 
 ## Allocation Strategy: Init-First with Explicit Exceptions
 
-Allocation policy is normative in [Coding Standards](CodingStandards.md#allocation-and-lifetime).
-In brief, choose storage by owner and lifetime, reuse bounded storage in steady-state
-paths, and detach borrowers before resetting arenas. The shared animation allocator is
-available for native data that should live for one animation generation; temporary
-scratch and Julia GC roots follow separate lifetimes.
+Allocation policy is normative in
+[Memory Architecture](MemoryArchitecture.md#allocation-and-lifetime-standard).
+In brief, same-lifetime fixed application state belongs in the primary application
+root, independently lived work belongs in a matching owner domain, and scratch must
+not escape its operation or frame reset. Use explicit allocation sites, match release
+to the owning domain, and detach borrowers before resetting arenas. The shared
+animation allocator is available for native data that should live for one animation
+generation; Julia GC roots follow their separate lifetime.
 
 ## Build And Packaging
 

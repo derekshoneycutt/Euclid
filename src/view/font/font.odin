@@ -6,6 +6,7 @@ import color "../../core/color"
 import fontmodel "model"
 
 import "core:mem"
+import "base:runtime"
 import tlsf "core:mem/tlsf"
 import vmem "core:mem/virtual"
 import "core:log"
@@ -19,6 +20,20 @@ FONT_SEED_CODEPOINT_CAPACITY :: fontmodel.FONT_SEED_CODEPOINT_CAPACITY
 FONT_GLYPH_PAGE_REQUEST_CAPACITY :: 256
 FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY :: fontmodel.FONT_GLYPH_COVERAGE_SAMPLE_CAPACITY
 FONT_VISIBLE_INK_SAMPLE_CAPACITY :: fontmodel.FONT_VISIBLE_INK_SAMPLE_CAPACITY
+FONT_METADATA_INITIAL_POOL_SIZE :: int(mem.Megabyte)
+FONT_METADATA_GROWTH_POOL_SIZE :: 16 * mem.Megabyte
+FONT_METADATA_ARENA_OVERHEAD :: 2 * mem.Megabyte
+FONT_METADATA_ARENA_RESERVATION :: uint(
+    fontmodel.FONT_CANONICAL_GLYPH_METADATA_BYTE_BUDGET +
+    fontmodel.FONT_OPTIONAL_GLYPH_METADATA_BYTE_BUDGET +
+    fontmodel.FONT_VISIBLE_INK_METADATA_BYTE_BUDGET +
+    u64(FONT_METADATA_GROWTH_POOL_SIZE) +
+    u64(FONT_METADATA_ARENA_OVERHEAD))
+FONT_METADATA_ARENA_INITIAL_COMMIT :: uint(mem.Megabyte)
+
+Font_Metadata_Arena_Init_Proc :: #type proc(
+    arena: ^vmem.Arena, reservation, initial_commit: uint) ->
+        runtime.Allocator_Error
 
 // Number of indexed font variants through the final `Font_Key` value.
 FONT_KEY_COUNT :: fontmodel.FONT_KEY_COUNT
@@ -61,6 +76,7 @@ Font_Glyph_State :: fontmodel.Font_Glyph_State
 Font_Glyph_Record :: fontmodel.Font_Glyph_Record
 Font_Glyph_Coverage_Sample :: fontmodel.Font_Glyph_Coverage_Sample
 Font_Ink_Sample :: fontmodel.Font_Ink_Sample
+FONT_RASTER_GLYPH_RECORD_CAPACITY :: fontmodel.FONT_RASTER_GLYPH_RECORD_CAPACITY
 Font_Raster_Instance :: fontmodel.Font_Raster_Instance
 Font_Glyph_Page :: fontmodel.Font_Glyph_Page
 Font_Texture :: fontmodel.Font_Texture
@@ -332,47 +348,126 @@ font_raster_instance_glyphs_init :: proc(
         return 0, false
     }
     raster.glyphs = glyphs
-    raster.glyph_allocator = allocator
     return metadata_bytes, true
 }
 
-// Reserve one reusable cache-owned allocator for optional raster glyph records.
-cache_raster_metadata_allocator_init :: proc(cache: ^Font_Cache) -> bool {
+// Initialize the bounded shared domain for all persistent cache metadata.
+cache_metadata_allocator_init :: proc(cache: ^Font_Cache) -> bool {
+    return cache_metadata_allocator_init_with(
+        cache, font_metadata_arena_init)
+}
 
+// Initialize metadata storage through a seam used to verify failed initialization.
+cache_metadata_allocator_init_with :: proc(
+    cache: ^Font_Cache,
+    arena_init: Font_Metadata_Arena_Init_Proc) -> bool {
     if cache == nil {
         return false
     }
-    if cache.raster_metadata_allocator_initialized {
+    if cache.metadata_allocator_initialized {
         return true
     }
-    capacity := uint(fontmodel.FONT_OPTIONAL_GLYPH_METADATA_BYTE_BUDGET +
-        fontmodel.FONT_OPTIONAL_GLYPH_METADATA_POOL_OVERHEAD)
-    backing, allocation_error := vmem.reserve_and_commit(capacity)
-    if allocation_error != nil {
+    if arena_init == nil || arena_init(
+        &cache.metadata_arena, FONT_METADATA_ARENA_RESERVATION,
+        FONT_METADATA_ARENA_INITIAL_COMMIT) != nil {
+        if cache.metadata_arena.curr_block != nil {
+            vmem.arena_destroy(&cache.metadata_arena)
+        }
+        cache.metadata_arena = {}
         return false
     }
-    if tlsf.init_from_buffer(&cache.raster_metadata_allocator, backing) != .None {
-        vmem.release(raw_data(backing), uint(len(backing)))
+    cache.metadata_arena_initialized = true
+    if tlsf.init_from_allocator(
+        &cache.metadata_allocator,
+        vmem.arena_allocator(&cache.metadata_arena),
+        FONT_METADATA_INITIAL_POOL_SIZE,
+        FONT_METADATA_GROWTH_POOL_SIZE) != .None {
+        tlsf.destroy(&cache.metadata_allocator)
+        vmem.arena_destroy(&cache.metadata_arena)
+        cache.metadata_arena = {}
+        cache.metadata_allocator = {}
+        cache.metadata_arena_initialized = false
         return false
     }
-    cache.raster_metadata_backing = backing
-    cache.raster_metadata_allocator_initialized = true
+    cache.metadata_allocator_initialized = true
     return true
 }
 
-// Destroy reusable metadata storage after every optional raster has been released.
-cache_raster_metadata_allocator_destroy :: proc(cache: ^Font_Cache) {
+// Initialize one bounded static arena for the metadata TLSF domain.
+font_metadata_arena_init :: proc(
+    arena: ^vmem.Arena, reservation, initial_commit: uint) ->
+        runtime.Allocator_Error {
+    return vmem.arena_init_static(arena, reservation, initial_commit)
+}
 
-    if cache == nil || !cache.raster_metadata_allocator_initialized {
+// Destroy cache metadata storage after all canonical, optional, and ink data is freed.
+cache_metadata_allocator_destroy :: proc(cache: ^Font_Cache) {
+    if cache == nil || !cache.metadata_allocator_initialized {
         return
     }
-    assert(cache.raster_budget.optional_glyph_metadata_bytes == 0)
-    tlsf.destroy(&cache.raster_metadata_allocator)
-    vmem.release(
-        raw_data(cache.raster_metadata_backing),
-        uint(len(cache.raster_metadata_backing)))
-    cache.raster_metadata_backing = nil
-    cache.raster_metadata_allocator_initialized = false
+    assert(cache.metadata_budget.canonical_glyph_bytes == 0)
+    assert(cache.metadata_budget.optional_glyph_bytes == 0)
+    assert(cache.metadata_budget.visible_ink_bytes == 0)
+    tlsf.destroy(&cache.metadata_allocator)
+    vmem.arena_destroy(&cache.metadata_arena)
+    cache.metadata_allocator = {}
+    cache.metadata_arena_initialized = false
+    cache.metadata_allocator_initialized = false
+}
+
+// Allocate and account canonical generation metadata within its independent budget.
+cache_generation_glyphs_init :: proc(
+    cache: ^Font_Cache, entry: ^Font_Cache_Entry, glyph_count: int) -> bool {
+    if cache == nil || glyph_count <= 0 ||
+        glyph_count > FONT_RASTER_GLYPH_RECORD_CAPACITY ||
+        !cache_metadata_allocator_init(cache) {
+        return false
+    }
+    bytes := u64(glyph_count) * u64(size_of(Font_Glyph_Record))
+    budget := fontmodel.FONT_CANONICAL_GLYPH_METADATA_BYTE_BUDGET
+    if cache.metadata_budget.canonical_glyph_bytes > budget ||
+        bytes > budget - cache.metadata_budget.canonical_glyph_bytes {
+        return false
+    }
+    if !font_generation_glyphs_init(
+        entry, glyph_count, tlsf.allocator(&cache.metadata_allocator)) {
+        return false
+    }
+    cache.metadata_budget.canonical_glyph_bytes += bytes
+    return true
+}
+
+// Release and uncharge one cache-owned canonical glyph table.
+cache_generation_glyphs_destroy :: proc(
+    cache: ^Font_Cache, entry: ^Font_Cache_Entry) {
+    if cache == nil || entry == nil || entry.canonical_raster.glyphs == nil {
+        return
+    }
+    bytes := u64(len(entry.canonical_raster.glyphs)) *
+        u64(size_of(Font_Glyph_Record))
+    font_generation_glyphs_destroy(
+        entry, tlsf.allocator(&cache.metadata_allocator))
+    assert(cache.metadata_budget.canonical_glyph_bytes >= bytes)
+    cache.metadata_budget.canonical_glyph_bytes -= bytes
+}
+
+// Copy prepared records into a budgeted, cache-owned canonical glyph table.
+cache_generation_seed_records_init :: proc(
+    cache: ^Font_Cache, entry: ^Font_Cache_Entry,
+    prepared: ^Prepared_Font) -> bool {
+    if cache == nil || entry == nil || prepared == nil ||
+        prepared.face_glyph_count <= 0 {
+        return false
+    }
+    if !cache_generation_glyphs_init(
+        cache, entry, int(prepared.face_glyph_count)) {
+        return false
+    }
+    if !font_generation_seed_records_copy(entry, prepared) {
+        cache_generation_glyphs_destroy(cache, entry)
+        return false
+    }
+    return true
 }
 
 // Destroy one optional raster and release all owned atlas textures and records.
@@ -404,10 +499,11 @@ cache_optional_raster_destroy :: proc(
             &cache.raster_budget, raster.charged_rgba_bytes, true)
     }
     if raster.glyphs != nil {
-        delete(raster.glyphs, raster.glyph_allocator)
+        delete(raster.glyphs, tlsf.allocator(&cache.metadata_allocator))
     }
     _ = font_raster_budget_release_instance(&cache.raster_budget)
-    cache.raster_budget.optional_glyph_metadata_bytes -= metadata_bytes
+    assert(cache.metadata_budget.optional_glyph_bytes >= metadata_bytes)
+    cache.metadata_budget.optional_glyph_bytes -= metadata_bytes
     raster^ = {}
     return true
 }
@@ -584,7 +680,7 @@ cache_optional_raster_admit :: proc(
     }
     if !cache_optional_raster_initialize(
         cache, request, slot_index, glyph_count) {
-        cache.raster_budget.optional_glyph_metadata_bytes -=
+        cache.metadata_budget.optional_glyph_bytes -=
             u64(glyph_count) * u64(size_of(Font_Glyph_Record))
         _ = font_raster_budget_release_instance(&cache.raster_budget)
         return -1, false
@@ -637,12 +733,12 @@ cache_optional_raster_reserve_metadata :: proc(
     if cache == nil || byte_count > budget {
         return false
     }
-    for cache.raster_budget.optional_glyph_metadata_bytes > budget - byte_count {
+    for cache.metadata_budget.optional_glyph_bytes > budget - byte_count {
         if !cache_optional_raster_retire_lru(cache) {
             return false
         }
     }
-    cache.raster_budget.optional_glyph_metadata_bytes += byte_count
+    cache.metadata_budget.optional_glyph_bytes += byte_count
     return true
 }
 
@@ -692,12 +788,12 @@ cache_optional_raster_initialize :: proc(
         },
         state = .Reserved,
     }
-    if !cache_raster_metadata_allocator_init(cache) {
+    if !cache_metadata_allocator_init(cache) {
         raster^ = {}
         return false
     }
     _, initialized := font_raster_instance_glyphs_init(
-        raster, glyph_count, tlsf.allocator(&cache.raster_metadata_allocator))
+        raster, glyph_count, tlsf.allocator(&cache.metadata_allocator))
     if !initialized {
         raster^ = {}
         return false
@@ -825,6 +921,7 @@ font_generation_glyphs_init :: proc(
     allocator: mem.Allocator) -> bool {
 
     if entry == nil || glyph_count <= 0 ||
+        glyph_count > FONT_RASTER_GLYPH_RECORD_CAPACITY ||
         entry.canonical_raster.glyphs != nil {
         return false
     }
@@ -834,21 +931,20 @@ font_generation_glyphs_init :: proc(
         return false
     }
     entry.canonical_raster.glyphs = glyphs
-    entry.canonical_raster.glyph_allocator = allocator
     return true
 }
 
 //   Release generation metadata after every page texture has been retired.
-font_generation_glyphs_destroy :: proc(entry: ^Font_Cache_Entry) {
+font_generation_glyphs_destroy :: proc(
+    entry: ^Font_Cache_Entry, allocator: mem.Allocator) {
     if entry == nil {
         return
     }
     raster := &entry.canonical_raster
     if raster.glyphs != nil {
-        delete(raster.glyphs, raster.glyph_allocator)
+        delete(raster.glyphs, allocator)
     }
     raster.glyphs = nil
-    raster.glyph_allocator = {}
     raster.page_count = 0
     raster.pending_glyph_count = 0
     raster.queued_demand_count = 0
@@ -922,9 +1018,22 @@ font_generation_seed_records_init :: proc(
             entry, int(prepared.face_glyph_count), allocator) {
         return false
     }
+    if !font_generation_seed_records_copy(entry, prepared) {
+        font_generation_glyphs_destroy(entry, allocator)
+        return false
+    }
+    return true
+}
+
+// Copy prepared glyph metrics into an already allocated canonical record table.
+font_generation_seed_records_copy :: proc(
+    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font) -> bool {
+    if entry == nil || prepared == nil ||
+        entry.canonical_raster.glyphs == nil {
+        return false
+    }
     for glyph, index in prepared.glyphs {
         if glyph.glyph_id >= u32(len(entry.canonical_raster.glyphs)) {
-            font_generation_glyphs_destroy(entry)
             return false
         }
         rectangle := prepared.rectangles[index]
@@ -948,7 +1057,9 @@ font_generation_seed_records_init :: proc(
 
 //   Destroy every display and native resource owned by one font generation.
 font_generation_destroy :: proc(
-    entry: ^Font_Cache_Entry, operations: Font_Texture_Operations = {}) {
+    entry: ^Font_Cache_Entry,
+    operations: Font_Texture_Operations,
+    allocator: mem.Allocator) {
     if entry == nil {
         return
     }
@@ -963,7 +1074,24 @@ font_generation_destroy :: proc(
         operations.release(operations.user_data, raster.texture)
     }
     font_shaping_destroy(&entry.shaping)
-    font_generation_glyphs_destroy(entry)
+    font_generation_glyphs_destroy(entry, allocator)
+}
+
+// Destroy one cache generation and release its canonical metadata budget.
+cache_generation_destroy :: proc(
+    cache: ^Font_Cache, entry: ^Font_Cache_Entry) {
+    if cache == nil || entry == nil {
+        return
+    }
+    bytes := u64(len(entry.canonical_raster.glyphs)) *
+        u64(size_of(Font_Glyph_Record))
+    font_generation_destroy(
+        entry, cache.texture_operations,
+        tlsf.allocator(&cache.metadata_allocator))
+    if bytes > 0 {
+        assert(cache.metadata_budget.canonical_glyph_bytes >= bytes)
+        cache.metadata_budget.canonical_glyph_bytes -= bytes
+    }
 }
 
 //   Read transient source through the preparation arena and acquire a native shaper.
@@ -1017,7 +1145,6 @@ cache_publish_required_seed :: proc(
         texture = candidate.texture,
         charged_rgba_bytes = rgba_bytes,
         glyphs = entry.canonical_raster.glyphs,
-        glyph_allocator = entry.canonical_raster.glyph_allocator,
     }
     entry.shaping = shaping^
     entry.raster_ascent = raster_ascent
@@ -1030,7 +1157,7 @@ cache_finalize_required_seed :: proc(
     prepared: ^Prepared_Font, shaping: ^Font_Shaping_Resource,
     rgba_bytes: u64) -> (Font_Face, bool) {
 
-    if !font_generation_seed_records_init(entry, prepared, context.allocator) {
+    if !cache_generation_seed_records_init(cache, entry, prepared) {
         font_shaping_destroy(shaping)
         return {}, false
     }
@@ -1038,14 +1165,14 @@ cache_finalize_required_seed :: proc(
         u64(prepared.key) + 1, prepared.generation)
     if !finalized {
         font_shaping_destroy(shaping)
-        font_generation_glyphs_destroy(entry)
+        cache_generation_glyphs_destroy(cache, entry)
         return {}, false
     }
     if !font_raster_budget_publish(&cache.raster_budget, rgba_bytes) {
         cache.texture_operations.release(
             cache.texture_operations.user_data, candidate.texture)
         font_shaping_destroy(shaping)
-        font_generation_glyphs_destroy(entry)
+        cache_generation_glyphs_destroy(cache, entry)
         return {}, false
     }
     return candidate, true
@@ -1135,12 +1262,10 @@ cache_init :: proc(
     assert(cache != nil)
     cache^ = {}
     cache.texture_operations = operations
-    if !cache_ink_capture_init(cache, context.allocator) {
-        log.error("font_ink_capture_storage_init_failed")
+    if !cache_owned_storage_init(cache) {
         cache^ = {}
         return false
     }
-    cache_source_paths_init(cache)
     required_keys := [?]Font_Key{.Regular, .Math_Regular}
     ready := true
     for key in required_keys {
@@ -1179,16 +1304,33 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     assert(!cache.frame_active && cache.frame_pin_count == 0)
     for entry_index in 0..<FONT_KEY_COUNT {
         entry := &cache.entries[entry_index]
-        font_generation_destroy(entry, cache.texture_operations)
+        cache_generation_destroy(cache, entry)
     }
     for _, raster_index in cache.optional_rasters {
         cache_optional_raster_destroy(
             cache, &cache.optional_rasters[raster_index])
     }
-    cache_raster_metadata_allocator_destroy(cache)
+    cache_ink_capture_destroy(
+        cache, tlsf.allocator(&cache.metadata_allocator))
+    cache_metadata_allocator_destroy(cache)
     cache_preparation_arena_destroy(cache)
-    cache_ink_capture_destroy(cache)
     cache^ = {}
+}
+
+// Initialize persistent metadata and cached source paths for one font cache.
+cache_owned_storage_init :: proc(cache: ^Font_Cache) -> bool {
+    if !cache_metadata_allocator_init(cache) {
+        log.error("font_metadata_storage_init_failed")
+        return false
+    }
+    if !cache_ink_capture_init(
+        cache, tlsf.allocator(&cache.metadata_allocator)) {
+        log.error("font_ink_capture_storage_init_failed")
+        cache_metadata_allocator_destroy(cache)
+        return false
+    }
+    cache_source_paths_init(cache)
+    return true
 }
 
 //   Build and atomically install one resident math-font shaping candidate.
@@ -1197,12 +1339,12 @@ math_shaping_replace :: proc(
     entry: ^Font_Cache_Entry,
     capability: ^Font_Math_Shaping_Capability) -> bool {
     path := cache_source_path(cache, .Math_Regular)
-    source, read_error := os.read_entire_file(path, context.allocator)
+    source, read_error := os.read_entire_file(path, context.temp_allocator)
     if read_error != nil {
         capability.failed_generation = entry.generation
         return false
     }
-    defer delete(source)
+    defer delete(source, context.temp_allocator)
     candidate := Font_Math_Shaping_Capability{
         generation = entry.generation,
         raster_ascent = entry.raster_ascent,
@@ -1889,24 +2031,32 @@ cache_ink_capture_init :: proc(
     if cache == nil || cache.visible_ink_samples != nil {
         return false
     }
+    byte_count := u64(2*FONT_VISIBLE_INK_SAMPLE_CAPACITY) *
+        u64(size_of(Font_Ink_Sample))
+    if byte_count > fontmodel.FONT_VISIBLE_INK_METADATA_BYTE_BUDGET {
+        return false
+    }
     samples, allocation_error := make(
         []Font_Ink_Sample, 2*FONT_VISIBLE_INK_SAMPLE_CAPACITY, allocator)
     if allocation_error != nil {
         return false
     }
     cache.visible_ink_samples = samples
-    cache.visible_ink_allocator = allocator
+    cache.metadata_budget.visible_ink_bytes = byte_count
     return true
 }
 
 // Release the cache-owned fixed sample buffers.
-cache_ink_capture_destroy :: proc(cache: ^Font_Cache) {
+cache_ink_capture_destroy :: proc(
+    cache: ^Font_Cache, allocator: mem.Allocator) {
     if cache == nil || cache.visible_ink_samples == nil {
         return
     }
-    delete(cache.visible_ink_samples, cache.visible_ink_allocator)
+    delete(cache.visible_ink_samples, allocator)
+    assert(cache.metadata_budget.visible_ink_bytes ==
+        fontmodel.FONT_VISIBLE_INK_METADATA_BYTE_BUDGET)
+    cache.metadata_budget.visible_ink_bytes = 0
     cache.visible_ink_samples = nil
-    cache.visible_ink_allocator = {}
     cache.visible_ink_counts = {}
 }
 
@@ -2032,14 +2182,13 @@ cache_publication_candidates :: proc(
         return false
     }
     candidate.raster_ascent = prepared.raster_ascent
-    if !font_generation_seed_records_init(
-        candidate, prepared, context.allocator) {
-        font_generation_destroy(candidate, cache.texture_operations)
+    if !cache_generation_seed_records_init(cache, candidate, prepared) {
+        cache_generation_destroy(cache, candidate)
         return false
     }
     finalized, valid := prepared_face(prepared, texture)
     if !valid {
-        font_generation_destroy(candidate, cache.texture_operations)
+        cache_generation_destroy(cache, candidate)
         return false
     }
     candidate.font = finalized
@@ -2125,7 +2274,7 @@ cache_publish_texture_commit :: proc(
     generation := prepared.generation
     if !font_raster_budget_publish(&cache.raster_budget, rgba_bytes) {
         candidate^.canonical_raster.texture = {}
-        font_generation_destroy(candidate, cache.texture_operations)
+        cache_generation_destroy(cache, candidate)
         return false
     }
     candidate^.canonical_raster.charged_rgba_bytes = rgba_bytes
@@ -2158,7 +2307,7 @@ cache_retire_published_generation :: proc(
         assert(font_raster_budget_begin_retirement(
             &cache.raster_budget, retired_bytes))
     }
-    font_generation_destroy(previous, cache.texture_operations)
+    cache_generation_destroy(cache, previous)
     if retired_bytes > 0 {
         _ = font_raster_budget_release_bytes(
             &cache.raster_budget, retired_bytes, true)

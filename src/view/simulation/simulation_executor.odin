@@ -22,7 +22,7 @@ consume_scenario_dust_requests :: proc(data: ^core.Simulation_Task_Data) {
     for index in 0..<queue^.count {
         request := queue^.items[index]
         emitted := particles.emit_scenario_dust(
-            data^.state^.particle_system, request)
+            &data^.state^.particle_system, request)
         _ = evidence_session.session_record(
             &data^.state^.evidence_session, &data^.evidence_ring, {
                 lane = .Domain,
@@ -40,7 +40,7 @@ consume_scenario_dust_requests :: proc(data: ^core.Simulation_Task_Data) {
     }
     queue^.count = 0
     if data^.scenario_dust_kick_requested {
-        particles.kick_existing_dust(data^.state^.particle_system)
+        particles.kick_existing_dust(&data^.state^.particle_system)
         data^.scenario_dust_kick_requested = false
     }
 }
@@ -106,7 +106,7 @@ update_particles_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^core.Simulation_Task_Data)payload
     consume_scenario_dust_requests(data)
-    particles.update_particles(data^.state^.particle_system, data^.dt)
+    particles.update_particles(&data^.state^.particle_system, data^.dt)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {
             lane = .Domain,
@@ -115,7 +115,7 @@ update_particles_task :: proc(
             correlation = data^.state^.fixed_step + 1,
             tick = data^.state^.fixed_step + 1,
             payload = {counts = {
-                first = u32(max(data^.state^.particle_system^.next_index, 0)),
+                first = u32(max(data^.state^.particle_system.next_index, 0)),
             }},
         })
     return .Succeeded
@@ -126,7 +126,7 @@ solve_constraints_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^core.Simulation_Task_Data)payload
     shapes.world_apply_all_constraints_to_error(
-        data^.state^.shape_world, simulationmodel.ALLOWED_CONSTRAINT_ERROR)
+        &data^.state^.shape_world, simulationmodel.ALLOWED_CONSTRAINT_ERROR)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {
             lane = .Domain,
@@ -136,7 +136,7 @@ solve_constraints_task :: proc(
             tick = data^.state^.fixed_step + 1,
             flags = {.Required},
             payload = {counts = {
-                first = u32(data^.state^.shape_world^.constraints.count),
+                first = u32(data^.state^.shape_world.constraints.count),
             }},
         })
     return .Succeeded
@@ -147,7 +147,7 @@ build_shape_cache_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^core.Frame_Preparation_Task_Data)payload
     shapes.build_shape_world_draw_cache(
-        data^.state^.shape_world, data^.interpolation_alpha)
+        &data^.state^.shape_world, data^.interpolation_alpha)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {
             lane = .Presentation,
@@ -157,7 +157,7 @@ build_shape_cache_task :: proc(
             tick = data^.state^.fixed_step,
             payload = {counts = {
                 first = u32(max(
-                    data^.state^.shape_world^.draw_cache.item_count, 0)),
+                    data^.state^.shape_world.draw_cache.item_count, 0)),
             }},
         })
     return .Succeeded

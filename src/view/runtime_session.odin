@@ -30,7 +30,6 @@ import simulationmodel "simulation/model"
 import viewmodel "ui/model"
 import viewcapture "capture"
 import geometry "../core/geometry"
-import particlemodel "../particles/model"
 import viewpresentation "presentation"
 import terminalservice "terminal/service"
 import viewsimulation "simulation"
@@ -63,15 +62,6 @@ Euclid_Runtime_Session :: struct {
 Session_Julia_Service :: struct {
     service : ^bridgemodel.Julia_Runtime_Service,
     initialize_id : u64,
-}
-
-//   Allocated canonical shape world plus its baseline tools.
-Session_Shape_Storage :: struct {
-    world : ^shapemodel.Shape_World,
-    world_trochoid_tool : shapemodel.Shape_Trochoid_Tool_Handle,
-    world_cycloid_tool : shapemodel.Shape_Cycloid_Tool_Handle,
-    world_compass : shapemodel.Shape_Compass_Handle,
-    world_pen : shapemodel.Shape_Pen_Handle,
 }
 
 // Supply no-database defaults for existing direct runtime-session callers.
@@ -117,7 +107,7 @@ session_start_julia_service :: proc(
     profile_path: string = "",
     asset_config: ^files.Asset_Root_Config = nil) -> bool {
     julia_service, service_err := julia.create_julia_runtime_service(
-        profile_path, asset_config)
+        context.allocator, profile_path, asset_config)
     if service_err != .None || julia_service == nil {
         log.errorf("julia_startup_failed phase=service_create error=%d",
             int(service_err))
@@ -291,7 +281,7 @@ session_apply_startup_preferences :: proc(
     preferences: setting_model.Preferences,
     collection_state: ^collections.Set,
     store: ^user_data.Store) {
-    if state == nil || state^.particle_system == nil {
+    if state == nil {
         return
     }
     state^.ui_runtime.preferences.values = preferences
@@ -307,7 +297,7 @@ session_apply_startup_preferences :: proc(
     state^.ui_runtime.rendering.display_fps = preferences.interface.display_fps
     state^.ui_runtime.rendering.limit_fps = preferences.rendering.limit_fps
     state^.user_drawing_sound_enabled = preferences.drawing.sound_enabled
-    state^.particle_system^.use_max_dust_particles = preferences.drawing.dust_limit
+    state^.particle_system.use_max_dust_particles = preferences.drawing.dust_limit
     state^.ui_runtime.rendering.use_simd_batch_projection =
         preferences.rendering.simd && projection.simd_batch_projection_available()
 }
@@ -351,21 +341,18 @@ create_runtime_session :: proc(
     return session, true
 }
 
-//   Allocate and initialize the isometric projection scale.
-make_iso_scale :: proc() -> ^worldmodel.Iso_Scale {
-    iso_scale := new(worldmodel.Iso_Scale, context.allocator)
+// Initialize the isometric projection scale in its application-owned storage.
+make_iso_scale :: proc(iso_scale: ^worldmodel.Iso_Scale) {
     iso_scale^.scale = worldmodel.ISO_SCALE_VALUE
     iso_scale^.x_offset = worldmodel.ISO_X_OFFSET
     iso_scale^.y_offset = worldmodel.ISO_Y_OFFSET
     projection.recompute_iso_scale_precompute(iso_scale)
     iso_scale^.main_light_dir = linalg.normalize(geometry.Vector3{0.35, -0.45, -1.0})
     iso_scale^.use_directional_shadow = true
-    return iso_scale
 }
 
-//   Allocate and initialize the drawing surface quad.
-make_drawing_surface :: proc() -> ^worldmodel.Euclid_Drawing_Surface {
-    drawing_surface := new(worldmodel.Euclid_Drawing_Surface, context.allocator)
+// Initialize the drawing surface quad in its application-owned storage.
+make_drawing_surface :: proc(drawing_surface: ^worldmodel.Euclid_Drawing_Surface) {
     edge := f32(worldmodel.SURFACE_EDGE_SIZE)
     drawing_surface^.zeros = geometry.Vector3{0 - edge, 0 - edge, 0}
     drawing_surface^.right_up = geometry.Vector3{1 + edge, 0 - edge, 0}
@@ -374,12 +361,11 @@ make_drawing_surface :: proc() -> ^worldmodel.Euclid_Drawing_Surface {
     drawing_surface^.color = color.Color_RGBA8(worldmodel.SURFACE_COLOR)
     drawing_surface^.edge_color = color.Color_RGBA8(worldmodel.SURFACE_EDGE_COLOR)
     drawing_surface^.edge_size = worldmodel.SURFACE_EDGE_SIZE
-    return drawing_surface
 }
 
-//   Allocate the canonical shape world and build its baseline tools.
-make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
-    world := new(shapemodel.Shape_World, context.allocator)
+// Initialize the canonical shape world in the application root and build its baseline tools.
+make_shape_storage :: proc(state: ^core.Euclid_General_State) -> bool {
+    world := &state^.shape_world
     world_trochoid_tool, trochoid_tool_status := shapes.world_create_trochoid_tool(
         world, {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
             style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
@@ -398,17 +384,15 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     if trochoid_tool_status != .Ok || cycloid_tool_status != .Ok ||
         compass_status != .Ok || pen_status != .Ok ||
         shapemodel.shape_world_freeze_baseline(world) != .Ok {
-        free(world)
         return false
     }
     shapes.world_apply_all_constraints_to_error(
         world, simulationmodel.ALLOWED_CONSTRAINT_ERROR)
     shapes.shape_world_update_previous_values(world)
-    out.world = world
-    out.world_trochoid_tool = world_trochoid_tool
-    out.world_cycloid_tool = world_cycloid_tool
-    out.world_compass = world_compass
-    out.world_pen = world_pen
+    state^.world_trochoid_tool = world_trochoid_tool
+    state^.world_cycloid_tool = world_cycloid_tool
+    state^.world_compass = world_compass
+    state^.world_pen = world_pen
     return true
 }
 
@@ -450,20 +434,21 @@ init_ui_active_section :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
 
 //   Initialize display-owned UI policy and layout memory from run settings.
 init_ui_semantic_focus :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    if runtime == nil {
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    focus: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
+    if runtime == nil || focus == nil {
         return false
     }
-    runtime^.semantic_focus = new(
-        viewmodel.Ui_Semantic_Focus_State, context.allocator)
-    return runtime^.semantic_focus != nil
+    runtime^.semantic_focus = focus
+    return true
 }
 
 //   Initialize display-owned UI policy and layout memory from run settings.
 init_ui_runtime_fields :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    focus: ^viewmodel.Ui_Semantic_Focus_State,
     settings: ^core.Euclid_Run_Settings) -> bool {
-    if settings == nil || !init_ui_semantic_focus(runtime) {
+    if settings == nil || !init_ui_semantic_focus(runtime, focus) {
         return false
     }
     runtime^.rendering.limit_fps = settings^.limit_fps
@@ -504,12 +489,13 @@ init_runtime_fields :: proc(
     state^.simulation_time = 0
     state^.current_delta_time = simulationmodel.FIXED_DT
     state^.accumulator = 0
-    if !init_ui_runtime_fields(&state^.ui_runtime, settings) {
+    if !init_ui_runtime_fields(
+        &state^.ui_runtime, &state^.semantic_focus, settings) {
         return false
     }
     init_gif_capture_fields(&state^.gif_capture_status)
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
-    projection.screenshake_clear(state^.iso_scale)
+    projection.screenshake_clear(&state^.iso_scale)
     return true
 }
 
@@ -545,20 +531,19 @@ init_evidence_session :: proc(
 init_animations_state_resources :: proc(
     state: ^core.Euclid_General_State,
     julia_service: ^bridgemodel.Julia_Runtime_Service,
-    settings: ^core.Euclid_Run_Settings,
-    particle_system: ^particlemodel.Particle_System,
-    shapes_state: Session_Shape_Storage) -> bool {
+    settings: ^core.Euclid_Run_Settings) -> bool {
+    if state == nil || settings == nil {
+        return false
+    }
     state^.evidence_allocations = settings^.evidence_allocations
     state^.saved_context = context
     state^.julia_runtime_service = julia_service
-    state^.iso_scale = make_iso_scale()
-    state^.draw_surface = make_drawing_surface()
-    state^.particle_system = particle_system
-    state^.shape_world = shapes_state.world
-    state^.world_trochoid_tool = shapes_state.world_trochoid_tool
-    state^.world_cycloid_tool = shapes_state.world_cycloid_tool
-    state^.world_compass = shapes_state.world_compass
-    state^.world_pen = shapes_state.world_pen
+    state^.particle_system.use_max_dust_particles = settings^.dust_particle_max
+    make_iso_scale(&state^.iso_scale)
+    make_drawing_surface(&state^.draw_surface)
+    if !make_shape_storage(state) {
+        return false
+    }
     return init_runtime_fields(state, settings)
 }
 
@@ -584,6 +569,8 @@ init_runtime_executors :: proc(state: ^core.Euclid_General_State) -> bool {
         return true
     }
     fmt.eprintln("Failed to initialize terminal graphics.")
+    viewsimulation.destroy_simulation_executor(state^.simulation_executor)
+    state^.simulation_executor = nil
     return false
 }
 
@@ -591,21 +578,14 @@ init_runtime_executors :: proc(state: ^core.Euclid_General_State) -> bool {
 make_animations_state :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^core.Euclid_Run_Settings) -> ^core.Euclid_General_State {
-    particle_system := new(particlemodel.Particle_System, context.allocator)
-    particle_system^.use_max_dust_particles = settings^.dust_particle_max
-    shape_storage: Session_Shape_Storage
-    if !make_shape_storage(&shape_storage) {
-        free(particle_system)
+    state := new(core.Euclid_General_State, context.allocator)
+    if state == nil {
         return nil
     }
-    state := new(core.Euclid_General_State, context.allocator)
-    if init_animations_state_resources(
-        state, julia_service, settings, particle_system, shape_storage) {
+    if init_animations_state_resources(state, julia_service, settings) {
         return state
     }
-    free(state)
-    free(particle_system)
-    free(shape_storage.world)
+    free(state, context.allocator)
     return nil
 }
 
@@ -676,7 +656,7 @@ when core.SCENARIOS_ENABLED {
             simulation = simulation,
             allocations = observe.allocation(session.state.evidence_allocations),
             arena_baselines = session.state.evidence_arena_baselines,
-        })
+        }, context.temp_allocator)
     }
 }
 
@@ -687,7 +667,7 @@ write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
     }
     path := string(session.output_path[:session.output_path_count])
     events := session.events[:session.event_count]
-    return evidence_artifact.write_trace(path, events)
+    return evidence_artifact.write_trace(path, events, context.temp_allocator)
 }
 
 //   Shut down one runtime session in reverse ownership order.

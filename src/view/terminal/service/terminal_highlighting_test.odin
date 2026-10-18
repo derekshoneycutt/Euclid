@@ -16,7 +16,8 @@ import "core:testing"
 terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    testing.expect(t, terminalview.terminal_init(&state.terminal))
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        &state.terminal, context.allocator, 1))
     defer terminalview.terminal_destroy(&state.terminal)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
@@ -64,7 +65,8 @@ terminal_service_test_highlight_publication :: proc(
 terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    testing.expect(t, terminalview.terminal_init(&state.terminal))
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        &state.terminal, context.allocator, 1))
     defer terminalview.terminal_destroy(&state.terminal)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
@@ -100,7 +102,8 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
 terminal_service_test_highlight_outcome_evidence :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    testing.expect(t, terminalview.terminal_init(&state.terminal))
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        &state.terminal, context.allocator, 1))
     defer terminalview.terminal_destroy(&state.terminal)
     state.evidence_session.enabled = true
     state.evidence_session.lanes = evidence_session.ALL_LANES

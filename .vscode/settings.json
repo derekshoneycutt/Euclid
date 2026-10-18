@@ -32,4 +32,9 @@
     "scope": "workspace"
   },
   "sarif-viewer.connectToGithubCodeScanning": "off",
+  "editor.rulers": [
+      { "column": 90, "color": "#5a5a5a" },
+      { "column": 100, "color": "#005a5a" },
+      { "column": 120, "color": "#ff0000" }
+  ],
 }

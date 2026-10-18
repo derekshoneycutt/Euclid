@@ -316,7 +316,7 @@ library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
     testing.expect(t, bin_join_err == nil)
     defer delete(bin_dir)
     asset_config := files.make_asset_root_config(bin_dir, context.allocator)
-    defer files.destroy_asset_root_config(&asset_config)
+    defer files.destroy_asset_root_config(&asset_config, context.allocator)
     asset, asset_ok := files.packaged_content_asset_with_config(
         &asset_config, context.allocator)
     defer delete(asset.database_path, context.allocator)

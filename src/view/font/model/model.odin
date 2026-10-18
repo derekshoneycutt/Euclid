@@ -28,7 +28,6 @@ FONT_RASTER_GLYPH_RECORD_CAPACITY :: 65535
 
 // Reusable metadata capacity shared by all cache-owned optional raster instances.
 FONT_OPTIONAL_GLYPH_METADATA_BYTE_BUDGET :: 64 * 1024 * 1024
-FONT_OPTIONAL_GLYPH_METADATA_POOL_OVERHEAD :: 64 * 1024
 
 // Visible optional raster demand ages into priority after this many cache services.
 FONT_RASTER_DEMAND_AGE_TICKS :: 60
@@ -258,7 +257,6 @@ Font_Raster_Budget :: struct {
     candidate_bytes: u64,
     pending_retirement_bytes: u64,
     optional_instance_count: u32,
-    optional_glyph_metadata_bytes: u64,
 }
 
 Font_Raster_Slot_Selection :: struct {
@@ -316,12 +314,27 @@ Font_Glyph_Record :: struct {
     state: Font_Glyph_State,
 }
 
+Font_Metadata_Budget :: struct {
+    canonical_glyph_bytes: u64,
+    optional_glyph_bytes: u64,
+    visible_ink_bytes: u64,
+}
+
 // Font_Ink_Sample is an owned logical-space sample from visible Dynview ink.
 Font_Ink_Sample :: struct {
     position: geometry.Vector2,
     color: [4]u8,
     coverage: u8,
 }
+
+// Canonical metadata budget includes every resident face and one replacement candidate.
+FONT_CANONICAL_GLYPH_METADATA_BYTE_BUDGET :: u64(
+    (FONT_KEY_COUNT + 1) * FONT_RASTER_GLYPH_RECORD_CAPACITY *
+    size_of(Font_Glyph_Record))
+
+// Ink storage retains one published and one in-progress sample buffer.
+FONT_VISIBLE_INK_METADATA_BYTE_BUDGET :: u64(
+    2 * FONT_VISIBLE_INK_SAMPLE_CAPACITY * size_of(Font_Ink_Sample))
 
 // Font_Glyph_Coverage_Cell bounds one deterministic raster-sampling region.
 Font_Glyph_Coverage_Cell :: struct {
@@ -393,7 +406,6 @@ Font_Raster_Instance :: struct {
     raster_ascent: f32,
     texture: Font_Texture,
     glyphs: []Font_Glyph_Record,
-    glyph_allocator: runtime.Allocator,
     pages: [FONT_GLYPH_PAGE_CAPACITY]Font_Glyph_Page,
     page_count: i32,
     pending_glyph_count: i32,
@@ -550,9 +562,11 @@ Font_Cache :: struct {
     preparation: Font_Prepare_Operation,
     preparation_arena: vmem.Arena,
     preparation_arena_initialized: bool,
-    raster_metadata_allocator: tlsf.Allocator,
-    raster_metadata_backing: []u8,
-    raster_metadata_allocator_initialized: bool,
+    metadata_arena: vmem.Arena,
+    metadata_allocator: tlsf.Allocator,
+    metadata_arena_initialized: bool,
+    metadata_allocator_initialized: bool,
+    metadata_budget: Font_Metadata_Budget,
     source_monitor: Font_Source_Monitor,
     shutting_down: bool,
     shaping_telemetry: Font_Shaping_Telemetry,
@@ -560,7 +574,6 @@ Font_Cache :: struct {
     texture_operations: Font_Texture_Operations,
     raster_budget: Font_Raster_Budget,
     visible_ink_samples: []Font_Ink_Sample,
-    visible_ink_allocator: runtime.Allocator,
     visible_ink_counts: [2]int,
     visible_ink_active_index: int,
     visible_ink_capture_index: int,

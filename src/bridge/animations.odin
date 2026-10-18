@@ -642,12 +642,12 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
             &state^.simulation_executor^.pool)
     }
     terminalview.terminal_destroy(&state^.terminal)
-    particles.discard_dust_tool_contacts(state^.particle_system)
+    particles.discard_dust_tool_contacts(&state^.particle_system)
     if particles.emit_shape_world_clear_burst(
-        state^.particle_system, state^.shape_world) && state^.iso_scale != nil {
-        projection.screenshake_on_dust_kick(state^.iso_scale)
+        &state^.particle_system, &state^.shape_world) {
+        projection.screenshake_on_dust_kick(&state^.iso_scale)
     }
-    if shapemodel.shape_world_rewind_animation(state^.shape_world) != .Ok {
+    if shapemodel.shape_world_rewind_animation(&state^.shape_world) != .Ok {
         return false
     }
     if animation_storage_begin_generation(

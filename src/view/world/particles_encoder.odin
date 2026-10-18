@@ -146,7 +146,7 @@ encode_low_particles :: proc(
         ps.low_particles.pos_x[:ps^.use_max_dust_particles],
         ps.low_particles.pos_y[:ps^.use_max_dust_particles],
         ps.low_particles.pos_z[:ps^.use_max_dust_particles],
-        ps.low_particle_screens[:], state^.iso_scale^},
+        ps.low_particle_screens[:], state^.iso_scale},
         state^.ui_runtime.rendering.use_simd_batch_projection)
     staging := native.draw_encoder_dust_staging(encoder)
     count := 0
@@ -179,7 +179,7 @@ encode_mid_particles :: proc(
     screens: [MAX_PARTICLES]geometry.Vector2
     projected_count := projection.iso_to_cartesian_components_batch_selected({
         ps.particles.pos_x[:], ps.particles.pos_y[:], ps.particles.pos_z[:],
-        screens[:], state^.iso_scale^},
+        screens[:], state^.iso_scale},
         state^.ui_runtime.rendering.use_simd_batch_projection)
     count := 0
     for screen, index in screens[:projected_count] {
@@ -212,7 +212,7 @@ encode_high_particles :: proc(
     screens: [MAX_PARTICLES]geometry.Vector2
     projected_count := projection.iso_to_cartesian_components_batch_selected({
         ps.high_particles.pos_x[:], ps.high_particles.pos_y[:],
-        ps.high_particles.pos_z[:], screens[:], state^.iso_scale^},
+        ps.high_particles.pos_z[:], screens[:], state^.iso_scale},
         state^.ui_runtime.rendering.use_simd_batch_projection)
     count := 0
     for screen, index in screens[:projected_count] {

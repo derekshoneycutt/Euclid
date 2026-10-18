@@ -5,6 +5,7 @@ package artifact
 import "../observe"
 import trace "../trace"
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import json "core:encoding/json"
 import allocation_evidence "../allocation"
@@ -401,9 +402,10 @@ artifact_encode_event :: proc(destination: []u8, event: trace.Event) {
 //   Allocate and explicitly encode the schema header and trace records.
 //
 // The caller owns and must delete the returned bytes when successful.
-artifact_trace_bytes :: proc(events: []trace.Event) -> ([]byte, bool) {
+artifact_trace_bytes :: proc(
+    events: []trace.Event, allocator: mem.Allocator) -> ([]byte, bool) {
     trace_size := size_of(Trace_Header) + len(events) * size_of(trace.Event)
-    trace_bytes, trace_error := make([]byte, trace_size, context.allocator)
+    trace_bytes, trace_error := make([]byte, trace_size, allocator)
     if trace_error != nil {
         return nil, false
     }
@@ -422,16 +424,26 @@ artifact_trace_bytes :: proc(events: []trace.Event) -> ([]byte, bool) {
 //
 // The destination must be a safe relative path whose parent already exists. Events
 // remain caller-owned and are bounded by the artifact retention capacity.
-write_trace :: proc(path: string, events: []trace.Event) -> bool {
+write_trace :: proc(
+    path: string, events: []trace.Event, allocator: mem.Allocator) -> bool {
     if !artifact_path_safe(path) || len(events) > ARTIFACT_MAX_EVENTS {
         return false
     }
-    trace_bytes, trace_ok := artifact_trace_bytes(events)
+    trace_bytes, trace_ok := artifact_trace_bytes(events, allocator)
     if !trace_ok {
         return false
     }
-    defer delete(trace_bytes)
+    defer delete(trace_bytes, allocator)
     return os.write_entire_file(path, trace_bytes) == nil
+}
+
+//   Write one named artifact using the supplied allocator for its temporary path.
+artifact_write_named_file :: proc(
+    directory, filename, contents: string, allocator: mem.Allocator) -> bool {
+    path := fmt.aprintf(
+        "%s/%s", directory, filename, allocator = allocator)
+    defer delete(path, allocator)
+    return len(path) > 0 && os.write_entire_file(path, contents) == nil
 }
 
 //   Write one canonical bounded evidence bundle beneath a caller-selected directory.
@@ -446,7 +458,8 @@ write_trace :: proc(path: string, events: []trace.Event) -> bool {
 // Side effects:
 //   - Creates the destination directory and writes the manifest, trace, state,
 //     allocation artifacts in canonical filenames.
-//   - Temporarily allocates the complete binary trace buffer from the context allocator.
+//   - Temporarily allocates the complete binary trace buffer from the supplied
+//     operation allocator.
 //
 // Notes:
 //   - The directory must be a safe relative path, and bounded inputs are rejected before
@@ -454,7 +467,7 @@ write_trace :: proc(path: string, events: []trace.Event) -> bool {
 //   - Trace records are copied from their fixed native representation; readers must
 //     validate the header schema and event size before interpreting the payload.
 write_bundle :: proc(
-    directory: string, bundle: Bundle) -> bool {
+    directory: string, bundle: Bundle, allocator: mem.Allocator) -> bool {
     if !artifact_path_safe(directory) ||
         len(bundle.events) > ARTIFACT_MAX_EVENTS ||
         os.make_directory_all(directory) != nil {
@@ -468,13 +481,20 @@ write_bundle :: proc(
         return false
     }
     allocations_json := artifact_allocations_json(bundle)
-    return os.write_entire_file(fmt.tprintf("%s/manifest.json", directory),
-            manifest_json) == nil &&
-        write_trace(fmt.tprintf("%s/evidence.bin", directory), bundle.events) &&
-        os.write_entire_file(fmt.tprintf("%s/state.json", directory),
-            state_json) == nil &&
-        os.write_entire_file(fmt.tprintf("%s/allocations.json", directory),
-            allocations_json) == nil
+    if !artifact_write_named_file(directory, "manifest.json", manifest_json, allocator) {
+        return false
+    }
+    trace_path := fmt.aprintf(
+        "%s/evidence.bin", directory, allocator = allocator)
+    defer delete(trace_path, allocator)
+    if len(trace_path) == 0 || !write_trace(trace_path, bundle.events, allocator) {
+        return false
+    }
+    if !artifact_write_named_file(directory, "state.json", state_json, allocator) {
+        return false
+    }
+    return artifact_write_named_file(
+        directory, "allocations.json", allocations_json, allocator)
 }
 
 //   Return whether a bundle path is relative and contains no parent segment.

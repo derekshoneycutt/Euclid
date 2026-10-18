@@ -2,7 +2,6 @@ package bridge
 
 import bridgemodel "model"
 
-import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
 import contentdata "../core/content"
 
@@ -276,15 +275,11 @@ animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
         return
     }
     defer animation_value_test_state_destroy(state)
-    world := new(shapemodel.Shape_World, context.allocator)
-    defer free(world, context.allocator)
-    particles := new(particlemodel.Particle_System, context.allocator)
-    defer free(particles, context.allocator)
+    world := &state^.shape_world
+    particles := &state^.particle_system
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service, context.allocator)
     service^.animation_generation = 1
-    state^.shape_world = world
-    state^.particle_system = particles
     state^.julia_runtime_service = service
     particles^.use_max_dust_particles = 4
     testing.expect_value(t,

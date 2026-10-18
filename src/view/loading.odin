@@ -63,7 +63,8 @@ finish_julia_startup_request :: proc(
 loading_start_julia_service :: proc(
     out: ^Loading_Julia_Service, display: ^startup.Loading_Display,
     profile_path: string = "") -> bool {
-    julia_service, service_err := julia.create_julia_runtime_service(profile_path)
+    julia_service, service_err := julia.create_julia_runtime_service(
+        context.allocator, profile_path)
     if service_err != .None || julia_service == nil {
         fmt.eprintln("Failed to create Julia runtime service.")
         log.errorf("julia_startup_failed phase=service_create error=%d",
