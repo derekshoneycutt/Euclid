@@ -109,6 +109,7 @@ Shapes_Point_Type :: enum {
 Shapes_Draw_Base :: struct {
     kind: Shapes_Point_Type,
     source_index: int,
+    source_generation: u32,
     brush_size: f32,
     color: Color,
     active_color: Color,

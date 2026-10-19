@@ -55,13 +55,14 @@ end
     @test OdinJuliaBridge.BRIDGE_STATUS_NON_CONVERGED == Int32(7)
     @test OdinJuliaBridge.BRIDGE_STATUS_NOT_FOUND == Int32(8)
     @test OdinJuliaBridge.BRIDGE_STATUS_SCHEMA_MISMATCH == Int32(9)
-    @test OdinJuliaBridge.BRIDGE_VERSION == Int32(11)
+    @test OdinJuliaBridge.BRIDGE_VERSION == Int32(12)
     @test OdinJuliaBridge.BRIDGE_FEATURE_TYPED_ANIMATION_STATE == Int32(1 << 4)
     @test OdinJuliaBridge.BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG == Int32(1 << 5)
     @test OdinJuliaBridge.BRIDGE_FEATURE_MIME_PRESENTATION == Int32(1 << 6)
     @test OdinJuliaBridge.BRIDGE_FEATURE_TROCHOIDS == Int32(1 << 7)
     @test OdinJuliaBridge.BRIDGE_FEATURE_CYCLOIDS == Int32(1 << 8)
     @test OdinJuliaBridge.BRIDGE_FEATURE_CIRCLE_REGIONS == Int32(1 << 9)
+    @test OdinJuliaBridge.BRIDGE_FEATURE_SETTLING_FORMATION == Int32(1 << 11)
 
     @test sizeof(OdinJuliaBridge.BridgeTrochoidGeometry) == 36
     @test sizeof(OdinJuliaBridge.BridgeTrochoidToolGeometry) == 24

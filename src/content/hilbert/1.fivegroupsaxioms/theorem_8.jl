@@ -36,6 +36,7 @@ const DrawLineDuration = 3.8f0
 const ArcMoveDuration = 1.8f0
 const EndLiftDuration = 1.8f0
 const FinalHoldDuration = 0.9f0
+const LabelRevealDuration = 1.4f0
 
 """Complete immutable state for one Theorem 8 animation generation."""
 struct AnimationState
@@ -180,6 +181,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DescendDuration
             OdinJuliaBridge.show_point(state_ptr, labela_id)
+            EuclidAnimations.reveal_label(state_ptr, labela_id;
+                duration=LabelRevealDuration)
             phase = PhaseDrawLineA
             timer = 0f0
         end
@@ -207,6 +210,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= ArcMoveDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, LineBColor)
             OdinJuliaBridge.show_point(state_ptr, labelb_id)
+            EuclidAnimations.reveal_label(state_ptr, labelb_id;
+                duration=LabelRevealDuration)
             phase = PhaseDrawLineB
             timer = 0f0
         end
@@ -234,6 +239,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= ArcMoveDuration
             OdinJuliaBridge.set_pen_active(state_ptr, 0, LineCColor)
             OdinJuliaBridge.show_point(state_ptr, labelc_id)
+            EuclidAnimations.reveal_label(state_ptr, labelc_id;
+                duration=LabelRevealDuration)
             phase = PhaseDrawLineC
             timer = 0f0
         end

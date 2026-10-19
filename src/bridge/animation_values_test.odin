@@ -322,13 +322,50 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     slot.sequence = 1
     slot.animation = animation
     slot.scene_batch.animation = animation
+    slot.effective_progress = 0.25
+    slot.scene_batch.animation_generation = 7
+    slot.scene_batch.tick_sequence = 1
+    slot.scene_batch.animation_progress = slot.effective_progress
     service.animation_tick_pending = true
 
     testing.expect(t, publish_available_animation_tick(state))
     testing.expect_value(t, service.animation_last_committed_sequence, u64(1))
+    testing.expect_value(t, service.animation_progress, 0.25)
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0.25)
     testing.expect(t, !service.animation_tick_pending)
     testing.expect_value(t, slot.state, bridgemodel.Animation_Tick_Slot_State.Free)
     for snapshot in service.view_snapshots {
         testing.expect_value(t, snapshot.state, bridgemodel.View_Snapshot_Slot_State.Free)
     }
+}
+
+// Verify coalesced tick time is copied into its immutable publication candidate.
+@(test)
+animation_tick_effective_progress_includes_accumulated_dt :: proc(t: ^testing.T) {
+    state := animation_value_test_state_create()
+    testing.expect(t, state != nil)
+    defer animation_value_test_state_destroy(state)
+    interface: bridgemodel.Euclid_Julia_Interface
+    service := new(Julia_Runtime_Service, context.allocator)
+    service^.bootstrap_allocator = context.allocator
+    testing.expect_value(t, init_julia_runtime_channels(service),
+        runtime.Allocator_Error.None)
+    defer destroy_julia_runtime_service(service)
+    state^.julia_interface = &interface
+    state^.julia_runtime_service = service
+    interface.current_animation = &interface.null_animation
+    service.animation_generation = 4
+    service.animation_progress = 1.25
+    coalesce_animation_tick(service, 0.1)
+    coalesce_animation_tick(service, 0.1)
+    total_dt := min(0.05 + service.animation_accumulated_dt,
+        MAX_ACCUMULATED_ANIMATION_DT)
+    slot := new(bridgemodel.Animation_Tick_Slot, context.allocator)
+    defer free(slot, context.allocator)
+
+    fill_animation_tick_slot(service, slot, state, total_dt)
+
+    testing.expect_value(t, slot^.dt, 0.25)
+    testing.expect_value(t, slot^.effective_progress, 1.5)
+    testing.expect_value(t, service.animation_progress, 1.25)
 }

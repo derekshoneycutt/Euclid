@@ -2,7 +2,6 @@ const ANIMATION_OPERATION_ENTER = Int32(1)
 const ANIMATION_OPERATION_TICK = Int32(2)
 const ANIMATION_OPERATION_EXIT = Int32(3)
 const ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED = Int32(4)
-
 """Typed non-owning identity for one animation value stored by the native host."""
 struct AnimationKey{T}
     value::UInt64
@@ -25,6 +24,31 @@ const ANIMATION_VALUE_MAX_PAYLOAD_BYTES = 16 * 1024
 const ANIMATION_IMPLEMENTATION_PATH_MAX_BYTES = 2 * 1024
 const ANIMATION_SCHEMA_FNV_OFFSET = UInt128(0x6c62272e07bb014262b821756295c58d)
 const ANIMATION_SCHEMA_FNV_PRIME = UInt128(0x0000000001000000000000000000013b)
+
+"""Capture an authored label reveal for the current animation tick transaction."""
+function reveal_label!(
+    state_ptr::Ptr{Cvoid}, entity::Integer, duration::Real)
+    return @ccall shape_reveal_label(
+        state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
+        Cfloat(duration)::Cfloat)::Int32
+end
+
+"""Capture an authored filled-region reveal for the current animation tick."""
+function reveal_region!(
+    state_ptr::Ptr{Cvoid}, entity::Integer, duration::Real)
+    return @ccall shape_reveal_region(
+        state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
+        Cfloat(duration)::Cfloat)::Int32
+end
+
+"""Capture an authored compass-sector reveal that forms behind the swinging leg."""
+function reveal_sweep!(
+    state_ptr::Ptr{Cvoid}, entity::Integer, duration::Real)
+    return @ccall shape_reveal_sweep(
+        state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
+        Cfloat(duration)::Cfloat)::Int32
+end
+
 
 """Write one unsigned integer in fixed-width little-endian form."""
 function _animation_schema_write_uint(io::IO, value::Unsigned, width::Int)

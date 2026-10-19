@@ -158,6 +158,7 @@ const PenLiftDuration = 1.6f0
 const CompassLiftDuration = 1.8f0
 const CompassSweepDuration = 0.95f0
 const FinalHoldDuration = 0.35f0
+const LabelRevealDuration = 1.4f0
 
 """Complete immutable state for one Theorem 11 animation generation."""
 struct AnimationState
@@ -461,6 +462,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DescendDuration
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeABColor)
             phase = PhaseDrawAB
             timer = 0f0
@@ -477,6 +480,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeBCColor)
             phase = PhaseDrawBC
             timer = 0f0
@@ -493,6 +498,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeCAColor)
             phase = PhaseDrawCA
             timer = 0f0
@@ -517,6 +524,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_prime_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeAPrimeBPrimeColor)
             phase = PhaseDrawAPrimeBPrime
             timer = 0f0
@@ -533,6 +542,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_prime_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeBPrimeCPrimeColor)
             phase = PhaseDrawBPrimeCPrime
             timer = 0f0
@@ -549,6 +560,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_c_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_prime_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeCPrimeAPrimeColor)
             phase = PhaseDrawCPrimeAPrime
             timer = 0f0

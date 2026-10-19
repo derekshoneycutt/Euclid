@@ -31,6 +31,12 @@ DUST_VISCOSITY :: f32(0.000048)
 DUST_DRAG_RATE :: f32(1.5)
 DUST_LABEL_CONTACT_PUSH_RADIUS :: f32(0.024)
 DUST_LABEL_CONTACT_PUSH_SPEED :: f32(0.009)
+// Region pushes throw grounded dust past the nearest outline edge. Grounded drag
+// coasts dust about forty times its impulse, so a gain above 1/40 overshoots the
+// edge in proportion to depth: center dust carries furthest past the outline.
+DUST_REGION_PUSH_MARGIN :: f32(0.025)
+DUST_REGION_PUSH_GAIN :: f32(0.04)
+DUST_REGION_PUSH_SPEED_MAX :: f32(0.009)
 
 // Scalar input for one weighted dust-field tool impulse.
 Dust_Field_Tool_Impulse_Node :: struct {
@@ -260,6 +266,83 @@ dust_field_apply_tool_point :: proc(
 dust_field_apply_tool_motion :: proc(
     field: ^Dust_Field_State, position, direction: Vector2) -> u64 {
     return dust_field_apply_tool_impulse(field, position, direction, true)
+}
+
+// Return the offset to the nearest outline edge and whether the point lies inside.
+dust_region_nearest_exit :: proc(
+    vertices: []Vector2, point: Vector2) -> (offset: Vector2, inside: bool) {
+    best := max(f32)
+    previous := vertices[len(vertices) - 1]
+    for vertex in vertices {
+        if (vertex.y > point.y) != (previous.y > point.y) &&
+            point.x < previous.x + (vertex.x - previous.x) *
+                (point.y - previous.y) / (vertex.y - previous.y) {
+            inside = !inside
+        }
+        edge := vertex - previous
+        length_sq := edge.x * edge.x + edge.y * edge.y
+        t: f32
+        if length_sq > 0 {
+            relative := point - previous
+            t = clamp((relative.x * edge.x + relative.y * edge.y) / length_sq, 0, 1)
+        }
+        delta := previous + edge * t - point
+        distance_sq := delta.x * delta.x + delta.y * delta.y
+        if distance_sq < best {
+            best = distance_sq
+            offset = delta
+        }
+        previous = vertex
+    }
+    return
+}
+
+// Slide occupied nodes inside one floor polygon outward across their nearest edge.
+// Speed grows with the edge distance so interior dust banks just past the outline.
+dust_field_apply_region_push :: proc(
+    field: ^Dust_Field_State, push: ^particlemodel.Dust_Region_Push) -> u64 {
+    support := field^.support_bounds
+    if !support.valid || push^.vertex_count < 3 {
+        return 0
+    }
+    vertices := push^.vertices[:push^.vertex_count]
+    low, high := vertices[0], vertices[0]
+    for vertex in vertices {
+        low = {min(low.x, vertex.x), min(low.y, vertex.y)}
+        high = {max(high.x, vertex.x), max(high.y, vertex.y)}
+    }
+    min_x := max(int(math.ceil(low.x / DUST_FIELD_SPACING)), int(support.min_x))
+    min_y := max(int(math.ceil(low.y / DUST_FIELD_SPACING)), int(support.min_y))
+    max_x := min(int(math.floor(high.x / DUST_FIELD_SPACING)), int(support.max_x))
+    max_y := min(int(math.floor(high.y / DUST_FIELD_SPACING)), int(support.max_y))
+    visits: u64
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            node := y * DUST_FIELD_DIM + x
+            if field^.density[node] <= DUST_DENSITY_EPSILON {
+                continue
+            }
+            visits += 1
+            dust_field_push_node(field, vertices, node, x, y)
+        }
+    }
+    return visits
+}
+
+// Push one occupied node toward its nearest polygon exit when it lies inside.
+dust_field_push_node :: proc(
+    field: ^Dust_Field_State, vertices: []Vector2, node, x, y: int) {
+    point := Vector2{f32(x), f32(y)} * DUST_FIELD_SPACING
+    offset, inside := dust_region_nearest_exit(vertices, point)
+    distance := f32(math.sqrt(f64(offset.x * offset.x + offset.y * offset.y)))
+    if !inside || distance <= DUST_DENSITY_EPSILON {
+        return
+    }
+    speed := min((distance + DUST_REGION_PUSH_MARGIN) * DUST_REGION_PUSH_GAIN,
+        DUST_REGION_PUSH_SPEED_MAX)
+    density := field^.density[node]
+    field^.momentum_x[node] += density * offset.x * speed / distance
+    field^.momentum_y[node] += density * offset.y * speed / distance
 }
 
 // Convert deposited momentum to velocity inside one inclusive rectangle.

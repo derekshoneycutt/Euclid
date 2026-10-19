@@ -4,10 +4,14 @@ import "core:mem"
 
 import sdl "vendor:sdl3"
 
+// LEAPER_LIGHT_GLOW scales the additive warm glow relative to brightening.
+LEAPER_LIGHT_GLOW :: 0.35
+
 // Sdl_Dust_Shader_Paths names the packaged instanced dust artifacts.
 Sdl_Dust_Shader_Paths :: struct {
     vertex: string,
     fragment: string,
+    light: string,
 }
 
 // Sdl_Dust_Vertex_Input owns the fixed instanced dust stream description.
@@ -21,6 +25,13 @@ Sdl_Dust_Upload_Layout :: struct {
     quad_bytes: u32,
     instance_bytes: u32,
     expanded_bytes: u32,
+}
+
+// Sdl_Dust_Fragment_Stage selects the fragment shader, its samplers, and blend target.
+Sdl_Dust_Fragment_Stage :: struct {
+    path: string,
+    samplers: u32,
+    target: sdl.GPUColorTargetDescription,
 }
 
 // sdl_dust_vertex_input describes static-quad and per-instance streams.
@@ -40,24 +51,41 @@ sdl_dust_vertex_input :: proc() -> Sdl_Dust_Vertex_Input {
     }
 }
 
+// sdl_light_target_description blends leaper light into the scene.
+// Brighten scales the destination by (1 + light); glow adds a constant-scaled tint.
+sdl_light_target_description :: proc(glow: bool) -> sdl.GPUColorTargetDescription {
+    return {
+        format = SDL_SCENE_FORMAT,
+        blend_state = {
+            src_color_blendfactor = glow ? .CONSTANT_COLOR : .DST_COLOR,
+            dst_color_blendfactor = .ONE,
+            color_blend_op = .ADD,
+            src_alpha_blendfactor = .ZERO,
+            dst_alpha_blendfactor = .ONE,
+            alpha_blend_op = .ADD,
+            enable_blend = true,
+        },
+    }
+}
+
 // sdl_dust_pipeline_create binds static quad and per-instance vertex streams.
+// The fragment stage and blend target select atlas dust or leaper light.
 sdl_dust_pipeline_create :: proc(
-    device: ^sdl.GPUDevice,
-    paths: Sdl_Dust_Shader_Paths,
+    device: ^sdl.GPUDevice, vertex_path: string, stage: Sdl_Dust_Fragment_Stage,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
-    vertex_shader := sdl_draw_shader_create(device, paths.vertex, .VERTEX, 0, 1)
+    vertex_shader := sdl_draw_shader_create(device, vertex_path, .VERTEX, 0, 1)
     if vertex_shader == nil {
        return nil
     }
     defer sdl.ReleaseGPUShader(device, vertex_shader)
     fragment_shader := sdl_draw_shader_create(
-        device, paths.fragment, .FRAGMENT, 1, 0)
+        device, stage.path, .FRAGMENT, stage.samplers, 0)
     if fragment_shader == nil {
        return nil
     }
     defer sdl.ReleaseGPUShader(device, fragment_shader)
     input := sdl_dust_vertex_input()
-    targets := [1]sdl.GPUColorTargetDescription{sdl_stroke_target_description()}
+    targets := [1]sdl.GPUColorTargetDescription{stage.target}
     return sdl.CreateGPUGraphicsPipeline(device, {
         vertex_shader = vertex_shader,
         fragment_shader = fragment_shader,
@@ -97,11 +125,19 @@ sdl_dust_runtime_admit :: proc(
         sdl_dust_runtime_release(runtime, device)
         return false
     }
-    runtime^.dust_pipeline = sdl_dust_pipeline_create(
-        device, paths, sample_count)
+    runtime^.dust_pipeline = sdl_dust_pipeline_create(device, paths.vertex,
+        {paths.fragment, 1, sdl_stroke_target_description()}, sample_count)
     if runtime^.dust_pipeline == nil {
        return true
     }
+    sdl_dust_light_pipelines_admit(runtime, device, paths, sample_count)
+    sdl_dust_instance_buffers_admit(runtime, device)
+    return true
+}
+
+// sdl_dust_instance_buffers_admit creates buffers for optional instanced drawing.
+sdl_dust_instance_buffers_admit :: proc(
+    runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
     runtime^.dust_quad_buffer = sdl.CreateGPUBuffer(device, {
         usage = {.VERTEX},
         size = u32(size_of(Dust_Quad_Vertex) * DUST_QUAD_VERTEX_COUNT),
@@ -112,7 +148,19 @@ sdl_dust_runtime_admit :: proc(
     })
     runtime^.dust_ready = runtime^.dust_quad_buffer != nil &&
         runtime^.dust_instance_buffer != nil
-    return true
+}
+
+// sdl_dust_light_pipelines_admit creates the optional leaper light blend pipelines.
+// A nil pipeline disables only light drawing; atlas dust remains available.
+sdl_dust_light_pipelines_admit :: proc(
+    runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
+    paths: Sdl_Dust_Shader_Paths, sample_count: sdl.GPUSampleCount) {
+    runtime^.light_brighten_pipeline = sdl_dust_pipeline_create(device,
+        paths.vertex, {paths.light, 0, sdl_light_target_description(false)},
+        sample_count)
+    runtime^.light_glow_pipeline = sdl_dust_pipeline_create(device,
+        paths.vertex, {paths.light, 0, sdl_light_target_description(true)},
+        sample_count)
 }
 
 // sdl_dust_runtime_release releases all optional dust resources in reverse order.
@@ -133,6 +181,14 @@ sdl_dust_runtime_release :: proc(
     if runtime^.dust_pipeline != nil {
         sdl.ReleaseGPUGraphicsPipeline(device, runtime^.dust_pipeline)
     }
+    if runtime^.light_brighten_pipeline != nil {
+        sdl.ReleaseGPUGraphicsPipeline(device, runtime^.light_brighten_pipeline)
+    }
+    if runtime^.light_glow_pipeline != nil {
+        sdl.ReleaseGPUGraphicsPipeline(device, runtime^.light_glow_pipeline)
+    }
+    runtime^.light_brighten_pipeline = nil
+    runtime^.light_glow_pipeline = nil
     runtime^.dust_upload_buffer = nil
     runtime^.dust_expanded_buffer = nil
     runtime^.dust_instance_buffer = nil
@@ -232,6 +288,32 @@ sdl_dust_record_instanced :: proc(
         rawptr(&draw^.viewport_extent), 16)
     sdl.SetGPUScissor(pass, {draw^.scissor.x, draw^.scissor.y,
         i32(draw^.scissor.width), i32(draw^.scissor.height)})
+    sdl.DrawGPUPrimitives(pass, DUST_QUAD_VERTEX_COUNT, draw^.count, 0, draw^.first)
+}
+
+// sdl_dust_record_light brightens then glows the scene under one light prefix.
+// Light draws are skipped when either optional light pipeline is unavailable.
+sdl_dust_record_light :: proc(
+    runtime: ^Sdl_Draw_Runtime, command_buffer: ^sdl.GPUCommandBuffer,
+    pass: ^sdl.GPURenderPass, draw: ^Dust_Draw) {
+    if runtime^.light_brighten_pipeline == nil ||
+        runtime^.light_glow_pipeline == nil {
+        return
+    }
+    bindings := [2]sdl.GPUBufferBinding{
+        {buffer = runtime^.dust_quad_buffer},
+        {buffer = runtime^.dust_instance_buffer},
+    }
+    sdl.BindGPUGraphicsPipeline(pass, runtime^.light_brighten_pipeline)
+    sdl.BindGPUVertexBuffers(pass, 0, raw_data(bindings[:]), len(bindings))
+    sdl.PushGPUVertexUniformData(command_buffer, 0,
+        rawptr(&draw^.viewport_extent), 16)
+    sdl.SetGPUScissor(pass, {draw^.scissor.x, draw^.scissor.y,
+        i32(draw^.scissor.width), i32(draw^.scissor.height)})
+    sdl.DrawGPUPrimitives(pass, DUST_QUAD_VERTEX_COUNT, draw^.count, 0, draw^.first)
+    sdl.BindGPUGraphicsPipeline(pass, runtime^.light_glow_pipeline)
+    sdl.SetGPUBlendConstants(pass, {
+        LEAPER_LIGHT_GLOW, LEAPER_LIGHT_GLOW, LEAPER_LIGHT_GLOW, 1})
     sdl.DrawGPUPrimitives(pass, DUST_QUAD_VERTEX_COUNT, draw^.count, 0, draw^.first)
 }
 

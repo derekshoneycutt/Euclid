@@ -356,6 +356,7 @@ fill_animation_tick_slot :: proc(
         host_state = state,
         animation = state^.julia_interface^.current_animation,
         dt = total_dt,
+        effective_progress = service^.animation_progress + f64(total_dt),
         submitted_at = time.tick_now(),
     }
     capture_animation_query_snapshot(state, &slot^.query_snapshot)
@@ -395,6 +396,7 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
         reject_reason = "invalid_command_batch"
     } else {
         committed = true
+        service^.animation_progress = slot^.effective_progress
     }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
     release_completed_animation_ticks(service)

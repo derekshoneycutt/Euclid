@@ -40,6 +40,7 @@ const ExtremityTrailDuration = 2f0
 const EndMoveToPointBDuration = 2f0
 const EndMoveToPointCDuration = 0.75f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 
 """Complete immutable state for one Axiom I,2 animation generation."""
 struct AnimationState
@@ -180,6 +181,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointA
         EuclidAnimations.animate_draw_point(
@@ -201,6 +204,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointB
         EuclidAnimations.animate_draw_point(
@@ -222,6 +227,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointC
         EuclidAnimations.animate_draw_point(
@@ -255,6 +262,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         if timer / DrawLineDuration >= 0.5
             OdinJuliaBridge.show_point(state_ptr, labellinea_id)
+            if (timer - dt) / DrawLineDuration < 0.5
+                EuclidAnimations.reveal_label(state_ptr, labellinea_id;
+                    duration=LabelRevealDuration)
+            end
         end
 
         timer += dt

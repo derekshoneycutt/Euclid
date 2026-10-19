@@ -57,6 +57,7 @@ const ArcMoveDuration = 1.5f0
 const PenLiftDuration = 1.6f0
 const CompassDrawDuration = 1.25f0
 const CompassLiftDuration = 2.2f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.9f0
 
 struct AnimationState
@@ -202,6 +203,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawPointO
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_o_id)
+            EuclidAnimations.reveal_label(state_ptr, label_o_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawPointO
         EuclidAnimations.animate_draw_point(
@@ -229,6 +232,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToOForK
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_h_id)
+            EuclidAnimations.reveal_label(state_ptr, label_h_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToOForK
         EuclidAnimations.animate_pen_arcmove(
@@ -256,6 +261,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePenLiftForMarker
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_k_id)
+            EuclidAnimations.reveal_label(state_ptr, label_k_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePenLiftForMarker
         EuclidAnimations.animate_pen_rise(

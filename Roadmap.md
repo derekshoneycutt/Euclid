@@ -173,6 +173,7 @@ General features:
 - [X] SDL3 Migration
 - [X] Drawing Sounds
 - [X] Comprehensive mouse/keyboard focus system
+- [ ] Fast-forward option
 - [ ] Animation Slider
   - [ ] Initial slider support
   - [ ] Existing animation slider support

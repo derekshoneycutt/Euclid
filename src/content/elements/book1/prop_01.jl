@@ -47,6 +47,7 @@ const CompassArcMoveDuration = 1.6f0
 const CompassRiseDuration = 2.8f0
 const EndArcMovePenDuration = 2f0
 const HidePauseDuration = 1.5f0
+const LabelRevealDuration = 1.4f0
 
 """Stable native handles for one line owned by the animation."""
 struct LineIds
@@ -215,6 +216,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
 
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawLine
         EuclidAnimations.animate_draw_line(state_ptr,
@@ -232,6 +235,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
 
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePenRise
         EuclidAnimations.animate_pen_rise(
@@ -262,9 +267,17 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         if (timer / CircleDrawDuration) >= 0.15
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            if timer - dt < 0.15f0 * CircleDrawDuration
+                EuclidAnimations.reveal_label(state_ptr, label_c_id;
+                    duration=LabelRevealDuration)
+            end
         end
         if (timer / CircleDrawDuration) >= 0.5
             OdinJuliaBridge.show_point(state_ptr, label_d_id)
+            if timer - dt < 0.5f0 * CircleDrawDuration
+                EuclidAnimations.reveal_label(state_ptr, label_d_id;
+                    duration=LabelRevealDuration)
+            end
         end
 
         timer += dt
@@ -294,6 +307,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         if (timer / CircleDrawDuration) >= 0.5
             OdinJuliaBridge.show_point(state_ptr, label_e_id)
+            if timer - dt < 0.5f0 * CircleDrawDuration
+                EuclidAnimations.reveal_label(state_ptr, label_e_id;
+                    duration=LabelRevealDuration)
+            end
         end
 
         timer += dt

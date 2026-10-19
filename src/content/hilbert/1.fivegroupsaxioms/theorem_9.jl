@@ -72,6 +72,7 @@ const PointDrawDuration = 1.2f0
 const DragLegDuration = 1.1f0
 const EndLiftDuration = 1.8f0
 const FinalHoldDuration = 0.9f0
+const LabelRevealDuration = 1.4f0
 
 """Stable native handles for one line owned by the animation."""
 struct LineIds
@@ -264,6 +265,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= DescendDuration
             OdinJuliaBridge.show_point(state_ptr,
                 state.label_a_line)
+            EuclidAnimations.reveal_label(state_ptr, state.label_a_line;
+                duration=LabelRevealDuration)
             phase = PhaseDrawLineA
             timer = 0f0
         end
@@ -291,6 +294,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= ArcMoveDuration
             label_id = state.labels[point_index + 1]
             OdinJuliaBridge.show_point(state_ptr, label_id)
+            EuclidAnimations.reveal_label(state_ptr, label_id;
+                duration=LabelRevealDuration)
             phase = PhaseDrawUnprimedPoint
             timer = 0f0
         end
@@ -331,6 +336,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= DrawLineDuration
             OdinJuliaBridge.show_point(state_ptr,
                 state.label_a_prime_line)
+            EuclidAnimations.reveal_label(state_ptr, state.label_a_prime_line;
+                duration=LabelRevealDuration)
             phase = PhaseArcToPrimedPoint
             point_index = 0
             timer = 0f0
@@ -344,6 +351,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= ArcMoveDuration
             label_id = state.prime_labels[point_index + 1]
             OdinJuliaBridge.show_point(state_ptr, label_id)
+            EuclidAnimations.reveal_label(state_ptr, label_id;
+                duration=LabelRevealDuration)
             phase = PhaseDrawPrimedPoint
             timer = 0f0
         end

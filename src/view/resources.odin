@@ -56,6 +56,9 @@ sdl_dust_shader_paths :: proc() -> native.Sdl_Dust_Shader_Paths {
         fragment = files.packaged_asset_path(
             "shaders/dust_instanced.frag" + native.SDL_GPU_SHADER_SUFFIX,
             context.temp_allocator),
+        light = files.packaged_asset_path(
+            "shaders/leaper_light.frag" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
     }
 }
 

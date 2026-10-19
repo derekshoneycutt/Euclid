@@ -100,6 +100,7 @@ const PenLiftDuration = 1.6f0
 const MarkerDrawDuration = 1.2f0
 const CompassLiftDuration = 1.8f0
 const CompassSweepDuration = 1.0f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.9f0
 
 """Stable native handles for one line owned by the animation."""
@@ -406,6 +407,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawRayH
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_o_id)
+            EuclidAnimations.reveal_label(state_ptr, label_o_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, RayHColor)
         end
     elseif phase == PhaseDrawRayH
@@ -423,6 +426,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToOForK
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_h_id)
+            EuclidAnimations.reveal_label(state_ptr, label_h_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToOForK
         EuclidAnimations.animate_pen_arcmove(
@@ -450,6 +455,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePenLiftForMarker1
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_k_id)
+            EuclidAnimations.reveal_label(state_ptr, label_k_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePenLiftForMarker1
         EuclidAnimations.animate_pen_rise(
@@ -499,6 +506,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawRayHPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_o_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_o_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawRayHPrime
         EuclidAnimations.animate_draw_line(state_ptr,
@@ -515,6 +524,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToOPrimeForKPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_h_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_h_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToOPrimeForKPrime
         EuclidAnimations.animate_pen_arcmove(
@@ -542,6 +553,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePenLiftForMarker2
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_k_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_k_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePenLiftForMarker2
         EuclidAnimations.animate_pen_rise(
@@ -592,6 +605,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawRayHDoublePrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_o_double_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_o_double_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawRayHDoublePrime
         EuclidAnimations.animate_draw_line(state_ptr,
@@ -608,6 +623,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToODoublePrimeForKDoublePrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_h_double_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_h_double_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToODoublePrimeForKDoublePrime
         EuclidAnimations.animate_pen_arcmove(
@@ -635,6 +652,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePenLiftForMarker3
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_k_double_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_k_double_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePenLiftForMarker3
         EuclidAnimations.animate_pen_rise(

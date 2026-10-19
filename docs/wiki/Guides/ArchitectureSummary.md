@@ -77,7 +77,7 @@ tables group code by the architectural question a contributor is likely to ask.
 | --- | --- | --- |
 | Core substrate | Bounded storage, animation-generation memory, protocols, portable values | [`src/core/storage/`](../../../src/core/storage/), [`src/core/animation/`](../../../src/core/animation/), [`src/core/protocol/`](../../../src/core/protocol/) |
 | Geometry and constraints | Shape world, curves, tools, constraints, render preparation | [`src/shapes/`](../../../src/shapes/) |
-| Particles | Dust and particle state, field physics, worker updates | [`src/particles/`](../../../src/particles/) |
+| Particles | Loose dust/field physics plus bounded authored formation on accepted animation commits; region targets attach to prepared triangles, label targets to crisp label ink, and both render in a dedicated pass above tools | [`src/particles/`](../../../src/particles/) |
 | UI and interaction | Regions, widgets, panels, focus, accessibility semantics | [`src/view/ui/`](../../../src/view/ui/) |
 | Terminal | Display-owned terminal surface and services, connected to Julia session policy | [`src/view/terminal/`](../../../src/view/terminal/) |
 | Dynview | Native semantic text model, compilation, math measurement, and layout | [`src/dynview/`](../../../src/dynview/) |

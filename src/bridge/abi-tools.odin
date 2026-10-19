@@ -722,21 +722,3 @@ emit_trailing_particle :: proc "c" (
     particles.emit_trail_particles(
         &state^.particle_system, state^.current_delta_time, {pos, color})
 }
-
-//   Emit flicker particles at a position using bridge color data.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - pos: Particle emission position.
-//   - color: RGBA color payload in bridge format.
-@(export)
-emit_flicker_particle :: proc "c" (
-    state: ^core.Euclid_General_State, pos: Vector3, color: Bridge_Color) {
-
-    if capture_particle_command(state, .Emit_Flicker_Particle, pos, color) {
-        return
-    }
-    context = state^.saved_context
-    particles.emit_flicker_particles(
-        &state^.particle_system, {pos, color}, 10)
-}

@@ -32,8 +32,6 @@ const PenTopZ = 1.4f0
 const PlaneColor = :palevioletred1
 const PlaneBaseColor = OdinJuliaBridge.bridge_color(PlaneColor)
 const PlaneMaxAlpha01 = 0.45f0
-const FlickerColor = :palevioletred1
-const FlickerSamplesPerFrame = 8
 
 const LineAColor = :steelblue
 const LineBColor = :palevioletred1
@@ -53,6 +51,7 @@ const SurfaceSweepDuration = 3.6f0
 const SurfaceHoverDuration = 1.8f0
 const EndLiftDuration = 1.8f0
 const FinalHoldDuration = 1.2f0
+const RegionRevealDuration = 3.5f0
 
 """Stable native handles for one line owned by the animation."""
 struct LineIds
@@ -110,32 +109,6 @@ function set_plane_alpha(state_ptr::Ptr{Cvoid}, host_id, alpha01)
     OdinJuliaBridge.set_point_color(state_ptr, host_id, color)
 end
 
-"""Pick a random interior point of the triangle with vertices a, b, and c."""
-function random_triangle_point(
-    a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
-    u = rand(Float32)
-    v = rand(Float32)
-
-    if u + v > 1f0
-        u = 1f0 - u
-        v = 1f0 - v
-    end
-
-    [
-        a[1] + u * (b[1] - a[1]) + v * (c[1] - a[1]),
-        a[2] + u * (b[2] - a[2]) + v * (c[2] - a[2]),
-        a[3] + u * (b[3] - a[3]) + v * (c[3] - a[3]),
-    ]
-end
-
-"""Pick a random interior point of the vertical plane built from the current vertices."""
-function random_vertical_plane_point()
-    if rand(Float32) < 0.5f0
-        return random_triangle_point(PlaneEdgeLeft, PlaneTopLeft, PlaneTopRight)
-    end
-
-    random_triangle_point(PlaneEdgeLeft, PlaneTopRight, PlaneEdgeRight)
-end
 
 """Reset the animation cycle while preserving its native handles."""
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
@@ -160,7 +133,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(
         state_ptr, line_b_joint2_id, LineBStart[1], LineBStart[2], LineBStart[3])
 
-    set_plane_alpha(state_ptr, plane_host_id, 0f0)
+    set_plane_alpha(state_ptr, plane_host_id, 1f0)
     OdinJuliaBridge.hide_point(state_ptr, plane_host_id)
 
     OdinJuliaBridge.show_pen(state_ptr)
@@ -286,20 +259,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= PointTrailDuration
             phase = PhasePlaneReveal
             timer = 0f0
+            set_plane_alpha(state_ptr, plane_host_id, 1f0)
+            OdinJuliaBridge.show_point(state_ptr, plane_host_id)
+            EuclidAnimations.reveal_region(
+                state_ptr, plane_host_id; duration=RegionRevealDuration)
         end
     elseif phase == PhasePlaneReveal
-        set_plane_alpha(state_ptr, plane_host_id,
-            (timer / PlaneRevealDuration) * PlaneMaxAlpha01)
-        OdinJuliaBridge.show_point(state_ptr, plane_host_id)
-
         EuclidAnimations.animate_pen_arcmove(
             state_ptr, timer, PlaneRevealDuration,
             IntersectionPoint, LineAStart, 0.25f0, 1, :none)
 
-        for _ in 1:FlickerSamplesPerFrame
-            sample_pos = random_vertical_plane_point()
-            OdinJuliaBridge.emit_flicker_particle(state_ptr, sample_pos, FlickerColor)
-        end
 
         timer += dt
         if timer >= PlaneRevealDuration

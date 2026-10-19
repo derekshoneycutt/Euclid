@@ -352,10 +352,9 @@ settings_max_particles_params :: proc(
 draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
     state := ctx.state
     counts := state^.telemetry.particle_counts.published
-    statistics := [5]struct{id: contentdata.Content_Message_Id, count: int}{
+    statistics := [4]struct{id: contentdata.Content_Message_Id, count: int}{
         {.Settings_Stats_Dust, counts.dust},
         {.Settings_Stats_Trail, counts.trail},
-        {.Settings_Stats_Flicker, counts.flicker},
         {.Settings_Stats_Ui_Dust, counts.ui_dust},
         {.Settings_Stats_Animation_Entries, ctx.animation_entries_added},
     }
@@ -371,7 +370,7 @@ draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
         draw_settings_stat_row(ctx, label, display_row)
     }
     draw_settings_stat_row(ctx,
-        viewmessages.shell_message(state, .Settings_Stats_Interval), 4)
+        viewmessages.shell_message(state, .Settings_Stats_Interval), 3)
 }
 
 // Draw one statistic or explanation at its shared Settings row spacing.

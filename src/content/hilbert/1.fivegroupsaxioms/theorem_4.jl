@@ -47,6 +47,7 @@ const ArcMoveDuration = 1.8f0
 const PointTrailDuration = 2f0
 const DragSegmentDuration = 2.1f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 
 """Stable native handles for one line owned by the animation."""
 struct LineIds
@@ -258,6 +259,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointA
         EuclidAnimations.animate_draw_point(
@@ -279,6 +282,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointB
         EuclidAnimations.animate_draw_point(
@@ -300,6 +305,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointC
         EuclidAnimations.animate_draw_point(
@@ -321,6 +328,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointD
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_d_id)
+            EuclidAnimations.reveal_label(state_ptr, label_d_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointD
         EuclidAnimations.animate_draw_point(
@@ -342,6 +351,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointE
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_e_id)
+            EuclidAnimations.reveal_label(state_ptr, label_e_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointE
         EuclidAnimations.animate_draw_point(
@@ -363,6 +374,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointK
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_k_id)
+            EuclidAnimations.reveal_label(state_ptr, label_k_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointK
         EuclidAnimations.animate_draw_point(

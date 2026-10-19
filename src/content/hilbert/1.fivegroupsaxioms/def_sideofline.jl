@@ -44,6 +44,7 @@ const DrawLineDuration = 4.0f0
 const DrawPointDuration = 1.9f0
 const DrawSegmentDuration = 2.4f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 
 struct AnimationState
     boundary_line_host::Int64
@@ -228,6 +229,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawBoundaryLine
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, alpha_label_id)
+            EuclidAnimations.reveal_label(state_ptr, alpha_label_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawBoundaryLine
         EuclidAnimations.animate_draw_line(state_ptr,
@@ -241,6 +244,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         if timer / DrawLineDuration >= 0.5f0
             OdinJuliaBridge.show_point(state_ptr, line_label_id)
+            if timer - dt < 0.5f0 * DrawLineDuration
+                EuclidAnimations.reveal_label(state_ptr, line_label_id;
+                    duration=LabelRevealDuration)
+            end
         end
 
         timer += dt
@@ -258,6 +265,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointA
         EuclidAnimations.animate_draw_point(
@@ -279,6 +288,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointB
         EuclidAnimations.animate_draw_point(
@@ -326,6 +337,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointAPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointAPrime
         EuclidAnimations.animate_draw_point(

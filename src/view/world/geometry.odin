@@ -12,6 +12,7 @@ import worldmodel "model"
 import projection "projection"
 import viewtext "../ui/text"
 import core "../../core"
+import particles "../../particles"
 
 // We draw the basic surface and all the shapes and tools here
 
@@ -438,13 +439,16 @@ draw_encoded_basic_label :: proc(
     }
     screen := projection.iso_to_cartesian(item^.point1, state^.iso_scale)
     resolver := view_font.cache_terminal_resolver(&state^.font_cache)
+    // Zero-alpha ink still submits so forming glyphs keep their rasters resident.
+    draw_color := color.Color_RGBA8(item^.color)
+    draw_color.a = u8(f32(draw_color.a) * formation_label_draw_opacity(state, item))
     viewtext.ui_text_shaped({
         encoder = encoder,
         resolver = resolver,
         key = .Regular,
         text = source,
         position = geometry.Vector2{screen.x, screen.y},
-        color = color.Color_RGBA8(item^.color),
+        color = draw_color,
         font = {view_font.cache_borrow(&state^.font_cache, .Regular), item^.brush_size},
     })
 }
@@ -2003,8 +2007,14 @@ draw_encoded_cached_filled_circle :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
+    owner := shapemodel.Shape_Entity{
+        slot = u32(circle^.source_index + 1),
+        generation = circle^.source_generation,
+    }
+    sweep := particles.formation_sweep_fill(&state^.particle_system,
+        shapemodel.shape_entity_pack(owner), circle^.sweep_theta)
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
-        circle^.start_theta, circle^.sweep_theta)
+        circle^.start_theta, sweep)
     circle_arc_sample_world(&geometry_value, arc_world[:])
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     projected: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector2
@@ -2034,6 +2044,14 @@ draw_encoded_cached_polygon :: proc(
     cache := &state^.shape_world.draw_cache
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
+    draw_color := color.Color_RGBA8(polygon^.color)
+    owner := shapemodel.Shape_Entity{
+        slot = u32(polygon^.source_index + 1),
+        generation = polygon^.source_generation,
+    }
+    draw_color.a = u8(f32(draw_color.a) *
+        particles.formation_region_opacity(
+            &state^.particle_system, shapemodel.shape_entity_pack(owner)))
     for triangle in triangles {
         first := triangle.a - polygon^.first_vertex
         second := triangle.b - polygon^.first_vertex
@@ -2045,7 +2063,7 @@ draw_encoded_cached_polygon :: proc(
         }
         _ = native.draw_encoder_triangle(encoder,
             geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
-            geometry.Vector2(projected[third]), color.Color_RGBA8(polygon^.color))
+            geometry.Vector2(projected[third]), draw_color)
     }
 }
 
@@ -2152,8 +2170,14 @@ draw_encoded_cached_filled_circle_shadow :: proc(
     if !shadow_point_is_elevated(circle^.center) {
         return
     }
+    owner := shapemodel.Shape_Entity{
+        slot = u32(circle^.source_index + 1),
+        generation = circle^.source_generation,
+    }
+    sweep := particles.formation_sweep_fill(&state^.particle_system,
+        shapemodel.shape_entity_pack(owner), circle^.sweep_theta)
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
-        circle^.start_theta, circle^.sweep_theta)
+        circle^.start_theta, sweep)
     points: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
     circle_arc_sample_world(&geometry_value, points[:])
     center := geometry.Vector2(shadow_to_screen(geometry_value.center, state))

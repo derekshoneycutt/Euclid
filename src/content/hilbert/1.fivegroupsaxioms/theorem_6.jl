@@ -54,6 +54,7 @@ const DrawPointDuration = 1.7f0
 const DrawSegmentDuration = 2.0f0
 const EndLiftDuration = 1.8f0
 const FinalHoldDuration = 0.9f0
+const LabelRevealDuration = 1.4f0
 
 """Complete immutable state for one Theorem 6 animation generation."""
 struct AnimationState
@@ -474,6 +475,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutA
         EuclidAnimations.animate_draw_point(
@@ -495,6 +498,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutB
         EuclidAnimations.animate_draw_point(
@@ -532,6 +537,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutAPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutAPrime
         EuclidAnimations.animate_draw_point(
@@ -594,6 +601,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutBPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutBPrime
         EuclidAnimations.animate_draw_point(

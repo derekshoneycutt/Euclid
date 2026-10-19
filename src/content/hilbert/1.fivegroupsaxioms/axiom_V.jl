@@ -51,6 +51,7 @@ const DrawPointDuration = 1.2f0
 const ArcMoveDuration = 1.2f0
 const DragDuration = 1.1f0
 const PenLiftDuration = 1.5f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.35f0
 
 """Stable native handles for one line owned by the animation."""
@@ -273,6 +274,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawPointDuration
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcToB
             timer = 0f0
         end
@@ -292,6 +295,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawPointDuration
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcToA1
             timer = 0f0
         end
@@ -311,6 +316,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawPointDuration
             OdinJuliaBridge.show_point(state_ptr, label_a1_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a1_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcToA2
             timer = 0f0
         end
@@ -330,6 +337,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawPointDuration
             OdinJuliaBridge.show_point(state_ptr, label_a2_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a2_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcToA3
             timer = 0f0
         end
@@ -349,6 +358,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawPointDuration
             OdinJuliaBridge.show_point(state_ptr, label_a3_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a3_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcToA4
             timer = 0f0
         end
@@ -368,6 +379,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawPointDuration
             OdinJuliaBridge.show_point(state_ptr, label_a4_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a4_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcBackToA
             timer = 0f0
         end

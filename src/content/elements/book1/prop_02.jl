@@ -57,6 +57,7 @@ const CompassArcMoveHeight = 0.25f0
 const CompassRiseDuration = 2.8f0
 const EndArcMovePenDuration = 2f0
 const HidePauseDuration = 1.5f0
+const LabelRevealDuration = 1.4f0
 
 """Complete immutable state for one Proposition II animation generation."""
 struct AnimationState
@@ -163,6 +164,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             timer = 0f0
 
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(
+                state_ptr, label_a_id; duration=LabelRevealDuration)
         end
     elseif phase == PhasePenRise
         EuclidAnimations.animate_pen_rise(

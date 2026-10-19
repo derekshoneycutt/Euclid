@@ -17,11 +17,47 @@ Cached_Glyph_Resolver_Test_State :: struct {
     reject_glyph_id: u32,
 }
 
+Label_Ink_Resolver_Test_State :: struct {
+    coverage: [1]view_font.Font_Glyph_Coverage_Sample,
+}
+
 Text_Ink_Capture_Test_State :: struct {
     count: int,
     position: geometry.Vector2,
     color: color.Color_RGBA8,
     coverage: u8,
+}
+
+// Shape a two-codepoint fixture with the same advances used by its cached glyphs.
+text_test_shape_label_ink :: proc(
+    user_data: rawptr, _: view_font.Font_Key, _: string,
+    output: []view_font.Shaped_Glyph) -> (int, bool) {
+    state := cast(^Label_Ink_Resolver_Test_State)user_data
+    if len(output) < 2 {
+        return 0, false
+    }
+    output[0] = {glyph_id = 11, cluster = 0, x_advance = 640}
+    output[1] = {glyph_id = 12, cluster = 1, x_advance = 640}
+    return 2, true
+}
+
+// Resolve one resident fixture glyph with a bounded coverage centroid.
+text_test_resolve_label_ink_glyph :: proc(
+    user_data: rawptr, _: view_font.Font_Key, glyph_id: u32,
+    _: view_font.Font_Raster_Request) -> (view_font.Resolved_Glyph, bool) {
+    state := cast(^Label_Ink_Resolver_Test_State)user_data
+    return {
+        glyph_id = glyph_id,
+        texture = {handle = rawptr(uintptr(1)), width = 32, height = 32},
+        source = {width = 8, height = 10},
+        raster_pixel_height = 32,
+        raster_ascent = 24,
+        canonical_pixel_height = 32,
+        canonical_raster_ascent = 24,
+        raster_slot_index = 1,
+        raster_slot_incarnation = 2,
+        coverage_samples = state^.coverage[:],
+    }, true
 }
 
 // Retain one mapped glyph sample for text-placement assertions.
@@ -105,6 +141,47 @@ text_test_glyph_coverage_samples_follow_rendered_placement :: proc(
     testing.expect_value(t, capture.position, geometry.Vector2{12.75, 23.75})
     testing.expect_value(t, capture.color, tint)
     testing.expect_value(t, capture.coverage, u8(128))
+}
+
+// Verify copied label ink follows shaped Unicode columns and retains coverage.
+@(test)
+text_test_collect_shaped_ink_samples_matches_draw_placement :: proc(
+    t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    workspace: [4]view_font.Shaped_Glyph
+    state := Label_Ink_Resolver_Test_State{
+        coverage = {{x = 2, y = 3, coverage = 128}},
+    }
+    resolver := view_font.Font_Resolver{
+        user_data = &state,
+        resolve_glyph = text_test_resolve_label_ink_glyph,
+        shape = text_test_shape_label_ink,
+        workspace = workspace[:],
+    }
+    request := Shaped_Text_Draw{
+        encoder = &encoder,
+        resolver = resolver,
+        key = .Regular,
+        text = "A′",
+        position = {10, 20},
+        font = {
+            font = {base_size = 32, space_advance = 16},
+            font_size = 32,
+        },
+    }
+    output: [2]Ui_Text_Ink_Sample
+    count, status := ui_text_collect_shaped_ink_samples(request, output[:])
+
+    testing.expect(t, status == .Ready && count == 2 && output[0].coverage == u8(128))
+    testing.expect(t, output[0].position == geometry.Vector2{12.5, 23.5} &&
+        output[1].position.x == 28.5)
 }
 
 // Verify bitmap metrics use raster height while HarfBuzz offsets stay canonical.

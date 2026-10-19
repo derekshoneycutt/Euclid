@@ -58,6 +58,7 @@ const ArcMoveDuration = 1.4f0
 const PointDrawDuration = 1.6f0
 const DragDuration = 1.5f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.9f0
 
 """Stable native handles for one line owned by the animation."""
@@ -323,6 +324,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawA
         EuclidAnimations.animate_draw_point(
@@ -343,6 +346,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawB
         EuclidAnimations.animate_draw_point(
@@ -388,6 +393,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawAPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawAPrime
         EuclidAnimations.animate_draw_point(
@@ -409,6 +416,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawBPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawBPrime
         EuclidAnimations.animate_draw_point(
@@ -455,6 +464,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawADoublePrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_double_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_double_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawADoublePrime
         EuclidAnimations.animate_draw_point(
@@ -476,6 +487,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawBDoublePrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_double_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_double_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawBDoublePrime
         EuclidAnimations.animate_draw_point(

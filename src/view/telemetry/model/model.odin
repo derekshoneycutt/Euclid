@@ -6,7 +6,6 @@ PARTICLE_COUNT_INTERVAL_NS :: u64(5_000_000_000)
 Particle_Counts :: struct {
     dust: int,
     trail: int,
-    flicker: int,
     ui_dust: int,
 }
 

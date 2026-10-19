@@ -68,25 +68,46 @@ and [`src/view/frame.odin`](../../../src/view/frame.odin).
 
 ## Particle Layers And Lifecycle
 
-The layers are a rendering and effect organization, not three different particle
-frameworks. Low particles are primarily dust; middle particles carry trails and embers;
-high particles provide flicker and sparkle. Their relative ordering helps preserve the
-intended relationship between dust, shadows, tools, and effects.
+The layers are a rendering and effect organization, not separate particle frameworks.
+Low particles are primarily dust; middle particles are the tool trails. Their relative
+ordering helps preserve the intended relationship between dust, shadows, tools, and
+effects.
 
 | Layer | Typical role | Position in the draw order |
 | --- | --- | --- |
 | Low | Grounded and airborne dust | Behind tool shadows and active geometry |
-| Middle | Embers and trails | Between shadows and active tools |
-| High | Flicker and sparkle | Above tools |
+| Middle | Tool trails | Between shadows and active tools |
+| Formation | Authored settling material | Above tools |
+
+Formation is the authored settling material for filled regions and labels. Julia
+requests a reveal, and it plays out only as the animation's accepted ticks advance.
+Material lands on the shape's real geometry or the label's glyph ink. Each piece
+follows one of two roles:
+
+| Role | Lifecycle |
+| --- | --- |
+| Pigment | Fades and grows in, in the shape's color, while falling onto its target. |
+| Leaper | Appears small and pale near its target, makes a few low hops (a rare one pops higher), cools to the shape's color, and settles into place. |
+
+Landings are staggered, and the crisp shape fades in under them. Formation draws above
+tools, back to front.
+
+Outgoing dust comes from what is actually visible: region triangles, label glyph ink,
+or line strokes. Hiding something mid-formation only sends away the part that has
+already appeared.
+
+Tool trails borrow the same two roles. Pigment drops a short way onto the stroke and
+fades where it lands; leapers start small and white, hop off the stroke, and cool to its
+color. Trails follow simulated time rather than accepted animation ticks.
 
 ```mermaid
 flowchart TB
-    High[High: flicker and sparkle]
+    Formation[Formation: settling material]
     Tools[Tools and active geometry]
-    Middle[Middle: embers and trails]
+    Middle[Middle: tool trails]
     Shadows[Tool shadows]
     Low[Low: individual dust sprites]
-    High --> Tools --> Middle --> Shadows --> Low
+    Formation --> Tools --> Middle --> Shadows --> Low
 ```
 
 Dust changes between airborne and grounded motion. Airborne particles follow ballistic

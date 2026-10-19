@@ -344,9 +344,9 @@ choices survive search filtering and temporary emptiness, even though both synth
 roots are omitted while Favorites is empty. Readding an animation creates a fresh
 placement identity without resetting its current playback.
 
-Settings shows independent peak counts for rendered world Dust, Trail, and Flicker
+Settings shows independent peak counts for rendered world Dust and Trail
 particles and total live UI Dust. Display-owned telemetry collects continuously,
-including while Settings is closed or simulation is paused, and publishes all four
+including while Settings is closed or simulation is paused, and publishes all three
 counts together at fixed five-second boundaries. Values remain zero until the first
 interval completes, then hold the previous completed interval's maxima until the next
 boundary. The interval note applies only to particle counts; Julia animation entries

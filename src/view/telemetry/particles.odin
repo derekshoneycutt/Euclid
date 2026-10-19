@@ -24,6 +24,5 @@ collect_particle_counts :: proc(
     peaks := &intervals^.collecting
     peaks^.dust = max(peaks^.dust, counts.dust)
     peaks^.trail = max(peaks^.trail, counts.trail)
-    peaks^.flicker = max(peaks^.flicker, counts.flicker)
     peaks^.ui_dust = max(peaks^.ui_dust, counts.ui_dust)
 }

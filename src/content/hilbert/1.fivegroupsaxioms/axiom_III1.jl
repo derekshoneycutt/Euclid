@@ -35,6 +35,7 @@ const DrawLineDuration = 3.8f0
 const ArcMoveDuration = 1.8f0
 const PointDrawDuration = 2f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.8f0
 
 """Stable native handles for one line owned by the animation."""
@@ -168,6 +169,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawLineA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, labela_id)
+            EuclidAnimations.reveal_label(state_ptr, labela_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawLineA
         EuclidAnimations.animate_draw_line(state_ptr,
@@ -192,6 +195,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
             phase = PhaseDrawPointA
             timer = 0f0
         end

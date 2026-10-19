@@ -142,6 +142,9 @@ valid only with the world lifetime that owns those bytes; consumers that cross a
 ownership boundary copy the source. This is particularly important during animation
 retirement, when the label pool is rewound along with the shape suffix.
 
+An authored label or region reveal fades the shape in while formation particles
+settle onto it; hiding a revealed shape departs it as material.
+
 ## Animation And The Julia Boundary
 
 Julia animation code uses `OdinJuliaBridge`; it does not bind directly to `Shape_World`.

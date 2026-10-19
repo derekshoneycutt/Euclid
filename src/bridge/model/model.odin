@@ -48,12 +48,28 @@ Scene_Command_Kind :: enum u8 {
     Set_Cycloid_Tool,
     Set_Cycloid_Tool_Parameter,
     Set_Shape_Visible,
+    Reveal_Label,
+    Reveal_Region,
+    Reveal_Sweep,
     Set_Shape_Active_Feature,
     Set_Tool_Position,
     Set_Tool_Lock,
     Emit_Trailing_Particle,
-    Emit_Flicker_Particle,
     Notify_Animation_Cycle_Boundary,
+}
+
+// Animation_Reveal_Kind names one authored target without guessing from geometry.
+Animation_Reveal_Kind :: enum u8 {
+    Label,
+    Region,
+    Sweep,
+}
+
+// Animation_Reveal_Descriptor owns one bounded reveal request in a tick batch.
+Animation_Reveal_Descriptor :: struct {
+    kind: Animation_Reveal_Kind,
+    owner_entity: u64,
+    duration: f32,
 }
 
 // Scene_Command carries one bounded semantic mutation across the host boundary.
@@ -71,11 +87,15 @@ Scene_Command :: struct {
     scalar: f32,
     integer: int,
     flag: bool,
+    reveal: Animation_Reveal_Descriptor,
 }
 
 // Scene_Command_Batch owns one animation tick's transactional scene mutations.
 Scene_Command_Batch :: struct {
     animation: ^Euclid_Julia_Animation_Interface,
+    animation_generation: u64,
+    tick_sequence: u64,
+    animation_progress: f64,
     command_count: int,
     overflowed: bool,
     animation_value_writes: animationmodel.Animation_Value_Pending_Writes,

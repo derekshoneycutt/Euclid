@@ -41,6 +41,7 @@ const MoveToPointBDuration = 1.8f0
 const MoveToPointDDuration = 1.8f0
 const PointTrailDuration = 2f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.9f0
 
 struct AnimationState
@@ -199,6 +200,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointA
         EuclidAnimations.animate_draw_point(
@@ -220,6 +223,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointC
         EuclidAnimations.animate_draw_point(

@@ -143,6 +143,8 @@ Sdl_Draw_Runtime :: struct {
     stroke_upload_buffer: ^sdl.GPUTransferBuffer,
     stroke_ready: bool,
     dust_pipeline: ^sdl.GPUGraphicsPipeline,
+    light_brighten_pipeline: ^sdl.GPUGraphicsPipeline,
+    light_glow_pipeline: ^sdl.GPUGraphicsPipeline,
     dust_quad_buffer: ^sdl.GPUBuffer,
     dust_instance_buffer: ^sdl.GPUBuffer,
     dust_expanded_buffer: ^sdl.GPUBuffer,
@@ -499,7 +501,7 @@ sdl_draw_instanced_dust_command_valid :: proc(
     if !encoder^.dust_instancing_enabled ||
         command.index >= u32(encoder^.dust_draw_count) {return false}
     draw := encoder^.dust_draws[command.index]
-    return draw.texture != nil && draw.count > 0 &&
+    return (draw.texture != nil || draw.light) && draw.count > 0 &&
         draw.first + draw.count <= u32(encoder^.dust_instance_count)
 }
 
@@ -922,8 +924,12 @@ sdl_draw_record_commands :: proc(
         case .Batch: sdl_draw_record_batch_command(ctx, &state, command)
         case .Tool: sdl_draw_record_tool_command(ctx, &state, command)
         case .Dust_Instanced:
-            sdl_dust_record_instanced(runtime, command_buffer, pass,
-                &encoder^.dust_draws[command.index])
+            draw := &encoder^.dust_draws[command.index]
+            if draw^.light {
+                sdl_dust_record_light(runtime, command_buffer, pass, draw)
+            } else {
+                sdl_dust_record_instanced(runtime, command_buffer, pass, draw)
+            }
         case .Dust_Expanded:
             sdl_draw_record_expanded_dust_command(ctx, &state, command)
         }

@@ -2,9 +2,14 @@ package bridge
 
 import shapemodel "../shapes/model"
 import core "../core"
+import geometry "../core/geometry"
+import color "../core/color"
 import particles "../particles"
 import shapes "../shapes"
 import projection "../view/world/projection"
+import worldmodel "../view/world/model"
+import view_font "../view/font"
+import viewtext "../view/ui/text"
 
 // Group immutable component sources selected for one bridge query.
 Bridge_Shape_Query_Source :: struct {
@@ -704,19 +709,49 @@ shape_set_visible_local :: proc(
         return BRIDGE_STATUS_NOT_FOUND, false
     }
     target_visible := visible != 0
+    opacity := particles.formation_owner_opacity(&state^.particle_system, packed)
+    if !target_visible {
+        _ = particles.formation_cancel_owner(
+            &state^.particle_system, packed,
+            state^.particle_system.formation.animation_generation)
+    }
     emitted := false
     if !style^.visible && target_visible {
         queue_revealed_label_dust_contact(state, entity, style^.brush_size)
     }
     if style^.visible && !target_visible {
-        emitted = particles.emit_shape_world_hide_burst(
-            &state^.particle_system, &state^.shape_world, entity, kick_dust)
+        emitted = shape_emit_hide_departure(
+            state, entity, style^, kick_dust, opacity)
         if emitted && kick_dust {
             projection.screenshake_on_dust_kick(&state^.iso_scale)
         }
     }
     style^.visible = target_visible
     return BRIDGE_STATUS_OK, emitted
+}
+
+// Emit one owner's captured material before its render visibility is cleared.
+// Opacity is the pre-cancel formation fraction; an unformed owner emits nothing.
+shape_emit_hide_departure :: proc(
+    state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity,
+    style: shapemodel.Shape_Render_Style,
+    kick_dust: bool, opacity: f32) -> bool {
+    if !(opacity > 0) {
+        return false
+    }
+    if shapemodel.shape_component_contains(
+        &state^.shape_world.labels, &state^.shape_world.registry, entity) {
+        emitted := emit_label_departure_material(
+            state, entity, style.color, style.brush_size, opacity)
+        if emitted && kick_dust {
+            particles.kick_existing_dust(&state^.particle_system)
+        }
+        return emitted
+    }
+    return particles.emit_shape_world_hide_burst(
+        &state^.particle_system, &state^.shape_world, entity,
+        {kick_dust, state^.iso_scale.scale, opacity})
 }
 
 // Set one live render style's visibility by packed entity identity.
@@ -735,6 +770,93 @@ shape_set_visible :: proc "c" (
     }
     status, _ := shape_set_visible_local(state, packed, visible, true)
     return status
+}
+
+// Capture one authored label reveal for validation at the animation commit boundary.
+@(export)
+shape_reveal_label :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64, duration: f32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    if !shapemodel.shape_scalar_is_finite(duration) || duration < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if state^.scene_command_batch_target == nil ||
+        state^.animation_query_snapshot_target == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    command, captured := capture_shape_command(state, .Reveal_Label, packed)
+    if command != nil {
+        command^.reveal = {
+            kind = .Label,
+            owner_entity = packed,
+            duration = duration,
+        }
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    return BRIDGE_STATUS_ILLEGAL_STATE
+}
+
+// Capture one authored filled-region reveal for transactional display validation.
+@(export)
+shape_reveal_region :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64, duration: f32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    if !shapemodel.shape_scalar_is_finite(duration) || duration < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if state^.scene_command_batch_target == nil ||
+        state^.animation_query_snapshot_target == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    command, captured := capture_shape_command(state, .Reveal_Region, packed)
+    if command != nil {
+        command^.reveal = {
+            kind = .Region,
+            owner_entity = packed,
+            duration = duration,
+        }
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    return BRIDGE_STATUS_ILLEGAL_STATE
+}
+
+// Capture one authored compass-sector reveal that forms behind the swinging leg.
+@(export)
+shape_reveal_sweep :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64, duration: f32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    if !shapemodel.shape_scalar_is_finite(duration) || duration < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if state^.scene_command_batch_target == nil ||
+        state^.animation_query_snapshot_target == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    command, captured := capture_shape_command(state, .Reveal_Sweep, packed)
+    if command != nil {
+        command^.reveal = {
+            kind = .Sweep,
+            owner_entity = packed,
+            duration = duration,
+        }
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    return BRIDGE_STATUS_ILLEGAL_STATE
 }
 
 // Set one live render style's color by packed entity identity.
@@ -762,6 +884,174 @@ shape_set_color :: proc "c" (
     }
     style.color = {color.r, color.g, color.b, color.a}
     return BRIDGE_STATUS_OK
+}
+
+// Prepare and emit copied coverage points for one visible shaped label.
+// Partial opacity uniformly thins the copied samples to the visible fraction.
+emit_label_departure_material :: proc(
+    state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity,
+    tint: color.Color_RGBA8,
+    font_size: f32, opacity: f32 = 1) -> bool {
+    samples: [particles.MAX_DEPARTURE_MATERIAL_SAMPLES]particles.Departure_Material_Sample
+    count := bridge_prepare_label_departure_samples(
+        state, entity, font_size, samples[:])
+    if count <= 0 {
+        state^.particle_system.departure_capture_failures += 1
+        return false
+    }
+    kept := bridge_thin_departure_samples(samples[:count], opacity)
+    return particles.emit_departure_material_burst(
+        &state^.particle_system, samples[:kept], tint)
+}
+
+// Keep a uniform ceil(count * opacity) subset in place; full opacity keeps all.
+bridge_thin_departure_samples :: proc(
+    samples: []particles.Departure_Material_Sample, opacity: f32) -> int {
+    count := len(samples)
+    if !(opacity > 0) || count == 0 {
+        return 0
+    }
+    kept := min(count, max(1, int(f32(count) * min(opacity, 1) + 0.999)))
+    for index in 0..<kept {
+        samples[index] = samples[index * count / kept]
+    }
+    return kept
+}
+
+// Capture resident glyph coverage and convert it to bounded world-space origins.
+bridge_prepare_label_departure_samples :: proc(
+    state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity,
+    font_size: f32,
+    output: []particles.Departure_Material_Sample) -> int {
+    label, has_label := shapemodel.shape_component_get(
+        &state^.shape_world.labels, &state^.shape_world.registry, entity)
+    transform, has_transform := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
+    if !has_label || !has_transform || len(output) == 0 {
+        return 0
+    }
+    source, has_source := shapemodel.shape_label_source(
+        &state^.shape_world.label_store, label^)
+    if !has_source {
+        return 0
+    }
+    ink: [4096]viewtext.Ui_Text_Ink_Sample
+    ink_count, status := bridge_collect_label_ink(state, source, transform^.position,
+        font_size, ink[:])
+    if status != .Ready {
+        return 0
+    }
+    return bridge_resample_label_ink(
+        ink[:ink_count], transform^.position, state^.iso_scale, output)
+}
+
+// Resolve label source coverage through the same font path as its crisp draw.
+bridge_collect_label_ink :: proc(
+    state: ^core.Euclid_General_State,
+    source: string,
+    position: Vector3, font_size: f32,
+    output: []viewtext.Ui_Text_Ink_Sample) -> (int, viewtext.Ui_Text_Ink_Sample_Status) {
+    screen := projection.iso_to_cartesian(position, state^.iso_scale)
+    resolver := view_font.cache_terminal_resolver(&state^.font_cache)
+    return viewtext.ui_text_collect_shaped_ink_samples({
+        resolver = resolver,
+        key = .Regular,
+        text = source,
+        position = screen,
+        color = color.WHITE,
+        font = {view_font.cache_borrow(&state^.font_cache, .Regular), font_size},
+    }, output)
+}
+
+// Resample coverage-weighted screen ink and invert projection at the label's height.
+bridge_resample_label_ink :: proc(
+    ink: []viewtext.Ui_Text_Ink_Sample,
+    anchor: Vector3,
+    scale: worldmodel.Iso_Scale,
+    output: []particles.Departure_Material_Sample) -> int {
+    if len(ink) == 0 || scale.half_scale <= 0 || scale.quarter_scale <= 0 {
+        return 0
+    }
+    total_weight: u64
+    for sample in ink {
+        total_weight += u64(sample.coverage)
+    }
+    count := min(len(output), len(ink))
+    if total_weight == 0 || count == 0 {
+        return 0
+    }
+    anchor_screen := projection.iso_to_cartesian(anchor, scale)
+    for output_index in 0..<count {
+        target := (u64(output_index)*2+1)*total_weight/u64(count*2)
+        sample := bridge_label_ink_at_weight(ink, target)
+        output[output_index] = {
+            position = bridge_label_ink_world_position(sample.position,
+                anchor, anchor_screen, scale),
+            coverage = sample.coverage,
+        }
+    }
+    return count
+}
+
+// Select one ink centroid at its cumulative coverage weight.
+bridge_label_ink_at_weight :: proc(
+    ink: []viewtext.Ui_Text_Ink_Sample,
+    target: u64) -> viewtext.Ui_Text_Ink_Sample {
+    accumulated: u64
+    for sample in ink {
+        accumulated += u64(sample.coverage)
+        if target < accumulated {
+            return sample
+        }
+    }
+    return ink[len(ink)-1]
+}
+
+// Map one rendered screen ink point to the label's horizontal world plane.
+bridge_label_ink_world_position :: proc(
+    screen: geometry.Vector2, anchor: Vector3,
+    anchor_screen: geometry.Vector2,
+    scale: worldmodel.Iso_Scale) -> Vector3 {
+    dx := (screen.x - anchor_screen.x)/scale.half_scale
+    dy := -(screen.y - anchor_screen.y)/scale.quarter_scale
+    return {
+        anchor.x + (dx + dy)*0.5,
+        anchor.y + (dy - dx)*0.5,
+        anchor.z,
+    }
+}
+
+// Emit one bulk clear from last-presented geometry and freshly copied label ink.
+emit_shape_world_clear_departures :: proc(
+    state: ^core.Euclid_General_State) -> bool {
+    if state == nil || state^.particle_system.use_max_dust_particles < 1 {
+        return false
+    }
+    particles.kick_existing_dust(&state^.particle_system)
+    emitted := false
+    world := &state^.shape_world
+    for index in 0..<world.render_styles.count {
+        entity := world.render_styles.entities[index]
+        style := world.render_styles.values[index]
+        opacity := particles.formation_owner_opacity(
+            &state^.particle_system, shapemodel.shape_entity_pack(entity))
+        if !style.visible || !(opacity > 0) ||
+            !shapemodel.shape_registry_resolves(&world.registry, entity) {
+            continue
+        }
+        if shapemodel.shape_component_contains(
+            &world.labels, &world.registry, entity) {
+            emitted = emit_label_departure_material(
+                state, entity, style.color, style.brush_size, opacity) || emitted
+        } else {
+            emitted = particles.emit_shape_world_hide_burst(
+                &state^.particle_system, world, entity,
+                {false, state^.iso_scale.scale, opacity}) || emitted
+        }
+    }
+    return emitted
 }
 
 // Set one live render style's optional active color by packed entity identity.

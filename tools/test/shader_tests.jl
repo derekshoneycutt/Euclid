@@ -59,7 +59,8 @@ end
         "draw2d_colored.vert", "draw2d_colored.frag",
         "draw2d_textured.vert", "draw2d_textured.frag",
         "stroke3d.vert", "stroke3d.frag",
-        "dust_instanced.vert", "dust_instanced.frag"]
+        "dust_instanced.vert", "dust_instanced.frag",
+        "leaper_light.frag"]
     @test Shaders.validate_pipeline_contracts(specs)
     @test Shaders.shader_abis()["draw2d_colored.vert"].vertex_offsets == [0, 16]
     @test Shaders.shader_abis()["draw2d_textured.vert"].vertex_offsets == [0, 8, 16]

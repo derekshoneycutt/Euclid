@@ -70,8 +70,14 @@ balance of the complete scene, not fixed object types.
   `palevioletred1`: as part of the shared palette, assigned by relationship and
   composition.
 - For Lens and Lune demonstrations, draw the two source circles as distinct
-  constructions before revealing the filled region. Region flickers belong to the
-  reveal itself and should run while fill alpha rises, not as a separate prelude.
+  constructions before revealing the filled region.
+- Show a filled region with `reveal_region` once, on the tick it is shown. The
+  reveal owns the settling particles, the fill, and the slide of floor dust out of
+  its outline; do not hand-fade alpha, emit extra particles, or push dust for it.
+  Leave enough hold after the reveal before the cycle resets.
+- A compass-drawn filled sector (`animate_draw_filledcircle`) starts its own sweep
+  reveal: the fill forms from settling particles just behind the swinging leg.
+  Highlight sweeps keep the sampled radius trail.
 - For order/between demonstrations that use drag passes, the drag color SHOULD
   match the center or emphasized point of that statement. Do not use an
   unrelated shared highlight color when a specific point is the focus.
@@ -184,7 +190,8 @@ Current frame order is:
 | 4 | Tool shadows | Roulette guides, pen, and compass shadows. |
 | 5 | Mid particles | Effects between shadows and active tools. |
 | 6 | High cached tools | Roulette guides, active tool dots, pen, and compass strokes. |
-| 7 | High particles | Effects above tools. |
+| 7 | Formation material | Authored region settling; airborne above the board and tools. |
+| 8 | High particles | Effects above tools. |
 
 Important implications:
 
@@ -241,6 +248,8 @@ Tool crossing guidance for 3D plane barriers:
   for labels placed above a point.
 - Labels should appear only after the related point has been established, unless
   the animation intentionally needs earlier annotation.
+- Call `reveal_label` once, on the tick a label is shown, so it forms from ink.
+  A repeated call restarts the reveal, so guard per-frame shows to fire it once.
 - For primed names in text/output, prefer ASCII apostrophe (`A'`) unless a
   specific UI path is confirmed to support Unicode prime consistently.
 - Decorated labels (prime/hat/bar) should read as one symbol with the base

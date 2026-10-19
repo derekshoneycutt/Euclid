@@ -31,7 +31,8 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend,
     transform_reflect2d_point_y_axis, transform_reflect2d_point_diag_pos,
     transform_reflect2d_point_diag_neg,
     reflected_angle_marker_pose_xy,
-    animate_reflect2d_filled_angle_marker
+    animate_reflect2d_filled_angle_marker,
+    reveal_label, reveal_region
 
 const PenLength = 0.35f0
 
@@ -54,6 +55,16 @@ const GroundLineDuration = 0.7f0
 const GroundLineEndTime = TiltToLineDuration + GroundLineDuration
 
 const MarkerRadialTrailSamples = 8f0
+
+"""Start an animation-owned reveal interval for one label."""
+function reveal_label(state_ptr::Ptr{Cvoid}, label_id::Integer; duration::Real)
+    return OdinJuliaBridge.reveal_label!(state_ptr, label_id, duration)
+end
+
+"""Start an animation-owned reveal interval for one filled region."""
+function reveal_region(state_ptr::Ptr{Cvoid}, region_id::Integer; duration::Real)
+    return OdinJuliaBridge.reveal_region!(state_ptr, region_id, duration)
+end
 
 const ReplToolTravelTopZ = 1.4f0
 const ReplDescendShare = 0.2f0
@@ -1791,6 +1802,9 @@ Parameters:
 - brush : Brush size for the marker host primitive.
 - color : Marker and trail color.
 - marker_host_id : Host id for the filled marker primitive.
+- formation : Form the sector behind the leg from a sweep reveal started at
+  `timer <= 0` while trailing the compass tip; when false, emit the sampled
+  radius trail instead.
 
 Returns:
 
@@ -1803,7 +1817,8 @@ function animate_draw_filledcircle(
     angle_theta::Real, radius::Real;
     brush::Real=0f0,
     color=:black,
-    marker_host_id::Integer=0)
+    marker_host_id::Integer=0,
+    formation::Bool=true)
 
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
@@ -1826,7 +1841,14 @@ function animate_draw_filledcircle(
         state_ptr, marker_host_id, radius, start_theta, angle_theta * t)
     OdinJuliaBridge.show_point(state_ptr, marker_host_id)
 
-    emit_filledcircle_radius_trail(state_ptr, joint_point, end_point, color)
+    if !formation
+        emit_filledcircle_radius_trail(state_ptr, joint_point, end_point, color)
+    else
+        OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
+        if timer <= 0
+            OdinJuliaBridge.reveal_sweep!(state_ptr, marker_host_id, duration)
+        end
+    end
 end
 
 """
@@ -2106,7 +2128,8 @@ function animate_repl_draw_filledcircle(
         animate_draw_filledcircle(
             state_ptr, timer - draw_start, draw_duration,
             joint_point, start_point, angle_theta, radius;
-            brush=brush, color=color, marker_host_id=marker_host_id)
+            brush=brush, color=color, marker_host_id=marker_host_id,
+            formation=false)
         return
     end
 

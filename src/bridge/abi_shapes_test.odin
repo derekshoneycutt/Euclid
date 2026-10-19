@@ -9,6 +9,10 @@ import testing "core:testing"
 import core "../core"
 import particles "../particles"
 import shapes "../shapes"
+import projection "../view/world/projection"
+import worldmodel "../view/world/model"
+import viewtext "../view/ui/text"
+import test_helpers "../test_helpers"
 
 // Build one bridge state with its canonical world in root-owned storage.
 bridge_shape_test_state :: proc() -> ^core.Euclid_General_State {
@@ -22,6 +26,35 @@ bridge_shape_test_input :: proc(
     position: geometry.Vector3) -> Bridge_Positioned_Shape_Input {
     return {position = position,
         style = {color = {10, 20, 30, 255}, brush_size = 4}}
+}
+
+// Verify copied label coverage remains weighted and attached at its world height.
+@(test)
+bridge_label_departure_samples_follow_projected_ink :: proc(t: ^testing.T) {
+    anchor := geometry.Vector3{0.4, 0.6, 0.3}
+    scale := worldmodel.Iso_Scale{scale = 800, half_scale = 100, quarter_scale = 50}
+    anchor_screen := projection.iso_to_cartesian(anchor, scale)
+    ink := [2]viewtext.Ui_Text_Ink_Sample{
+        {position = {anchor_screen.x + 10, anchor_screen.y - 10}, coverage = 128},
+        {position = {anchor_screen.x + 20, anchor_screen.y - 20}, coverage = 255},
+    }
+    output: [2]particles.Departure_Material_Sample
+
+    count := bridge_resample_label_ink(ink[:], anchor, scale, output[:])
+
+    testing.expect_value(t, count, 2)
+    test_helpers.expect_close(t, output[0].position.x, f32(0.55),
+        "first shaped ink x follows inverse projection")
+    test_helpers.expect_close(t, output[0].position.y, f32(0.65),
+        "first shaped ink y follows inverse projection")
+    test_helpers.expect_close(t, output[1].position.x, f32(0.7),
+        "second shaped ink x follows inverse projection")
+    test_helpers.expect_close(t, output[1].position.y, f32(0.7),
+        "second shaped ink y follows inverse projection")
+    testing.expect_value(t, output[0].position.z, f32(0.3))
+    testing.expect_value(t, output[1].position.z, f32(0.3))
+    testing.expect_value(t, output[0].coverage, u8(128))
+    testing.expect_value(t, output[1].coverage, u8(255))
 }
 
 // Verify constructors return packed identities that resolve to direct world components.
@@ -92,6 +125,294 @@ bridge_shape_abi_creates_circle_region :: proc(t: ^testing.T) {
     testing.expect(t, shapemodel.shape_registry_resolves(&world.registry, second))
     testing.expect_value(t, shape_get_view(state, result.shape).kind,
         i32(shapemodel.Shape_Geometry_Kind.Circle_Region))
+}
+
+// Verify label and region reveal intents start at their committed tick endpoint.
+@(test)
+bridge_animation_reveals_are_transactional_and_independent :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    label := shape_create_label(state, cstring("A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    region := shape_create_circle_region(state, {0.3, 0.5, 0}, {0.7, 0.5, 0},
+        {i32(shapemodel.Shape_Circle_Region_Operation.Intersection), 0.4, 0.4},
+        bridge_shape_test_input({}).style)
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.25
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, shape_reveal_label(state, label.entity, 1.5),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, shape_reveal_region(state, region.shape, 0.5),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, batch.command_count, 2)
+    state^.animation_query_snapshot_target = nil
+    end_scene_command_batch(state)
+
+    testing.expect_value(t, state^.particle_system.formation.reveal_count, 0)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    formation := &state^.particle_system.formation
+    testing.expect_value(t, formation.accepted_progress, 0.25)
+    testing.expect_value(t, formation.reveal_count, 2)
+    label_slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, label.entity, 4)
+    region_slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Region, region.shape, 4)
+    testing.expect_value(t, formation.reveals[label_slot].start_progress, 0.25)
+    testing.expect_value(t, formation.reveals[label_slot].duration, 1.5)
+    testing.expect_value(t, formation.reveals[region_slot].start_progress, 0.25)
+    testing.expect_value(t, formation.reveals[region_slot].duration, 0.5)
+}
+
+// Verify zero duration retires an existing interval at the accepted tick endpoint.
+@(test)
+bridge_animation_reveal_zero_duration_completes_immediately :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    label := shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    particles.formation_reset_generation(&state^.particle_system, 4)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 4, 0))
+    testing.expect(t, particles.formation_start_reveal(
+        &state^.particle_system, {
+            kind = .Label,
+            owner_entity = label.entity,
+            animation_generation = 4,
+            progress = 0,
+            duration = 1,
+            seed = 1,
+        }))
+    batch: Scene_Command_Batch
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, shape_reveal_label(state, label.entity, 0),
+        i32(BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    end_scene_command_batch(state)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0.5)
+    testing.expect_value(t, state^.particle_system.formation.reveal_count, 0)
+}
+
+// Verify invalid durations use the ordinary bridge argument status.
+@(test)
+bridge_animation_reveal_rejects_invalid_duration :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    testing.expect_value(t, shape_reveal_label(state, 1, -1),
+        i32(BRIDGE_STATUS_INVALID_ARGUMENT))
+}
+
+// Verify stale generation-qualified targets reject the whole reveal transaction.
+@(test)
+bridge_animation_reveal_preflight_rejects_stale_owner :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    world := &state^.shape_world
+    testing.expect_value(t, shapemodel.shape_world_freeze_baseline(world),
+        shapemodel.Shape_World_Status.Ok)
+    stale := shape_create_label(state, cstring("stale"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    testing.expect_value(t, shapemodel.shape_world_rewind_animation(world),
+        shapemodel.Shape_World_Status.Ok)
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    batch: Scene_Command_Batch
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 2
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, shape_reveal_label(state, stale.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    end_scene_command_batch(state)
+    testing.expect(t, !commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0)
+}
+
+// Verify record-capacity preflight rejects new owners without advancing progress.
+@(test)
+bridge_animation_reveal_preflight_rejects_full_capacity :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    current := shape_create_label(state, cstring("current"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    bridge_test_fill_reveal_slots(t, state, 2)
+    batch: Scene_Command_Batch
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 2
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, shape_reveal_label(state, current.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    end_scene_command_batch(state)
+    testing.expect(t, !commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0)
+    testing.expect_value(t, state^.particle_system.formation.reveal_count,
+        particlemodel.MAX_FORMATION_REVEALS)
+}
+
+// Verify superseded transient reveals need no extra slot at full capacity.
+@(test)
+bridge_animation_reveal_supersession_fits_full_capacity :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    current := shape_create_label(state, cstring("current"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    bridge_test_fill_reveal_slots(t, state, 2)
+    batch: Scene_Command_Batch
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 2
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, shape_reveal_label(state, current.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, shape_reveal_label(state, current.entity, 0),
+        i32(BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    end_scene_command_batch(state)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0.5)
+    testing.expect_value(t, state^.particle_system.formation.reveal_count,
+        particlemodel.MAX_FORMATION_REVEALS)
+    testing.expect(t, particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, current.entity, 2) < 0)
+}
+
+// Build a reveal-ready state with its test Julia interface owned by the state fixture.
+bridge_reveal_test_state_create :: proc() -> ^core.Euclid_General_State {
+    state := bridge_shape_test_state()
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    state^.julia_interface^.current_animation = &state^.julia_interface^.null_animation
+    return state
+}
+
+// Release both allocations made by bridge_reveal_test_state_create.
+bridge_reveal_test_state_destroy :: proc(state: ^core.Euclid_General_State) {
+    free(state^.julia_interface, context.allocator)
+    free(state)
+}
+
+// Capture a query snapshot for the current animation test fixture.
+bridge_reveal_test_snapshot :: proc(
+    state: ^core.Euclid_General_State) -> ^bridgemodel.Animation_Query_Snapshot {
+    snapshot := new(bridgemodel.Animation_Query_Snapshot, context.allocator)
+    capture_animation_query_snapshot(state, snapshot)
+    return snapshot
+}
+
+// Fill all native reveal records with live owners for capacity preflight tests.
+bridge_test_fill_reveal_slots :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State, generation: u64) {
+    particles.formation_reset_generation(&state^.particle_system, generation)
+    for index in 0..<particlemodel.MAX_FORMATION_REVEALS {
+        testing.expect(t, particles.formation_start_reveal(
+            &state^.particle_system, {
+                kind = .Label,
+                owner_entity = u64(index + 1),
+                animation_generation = generation,
+                progress = 0,
+                duration = 2,
+                seed = u64(index),
+            }))
+    }
+}
+
+// Verify hiding a reveal owner cancels its record and generation-linked fragments.
+@(test)
+bridge_hiding_label_retires_formation_assignments :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    label := shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    particles.formation_reset_generation(&state^.particle_system, 5)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 0))
+    testing.expect(t, particles.formation_start_reveal(
+        &state^.particle_system, {
+            kind = .Label,
+            owner_entity = label.entity,
+            animation_generation = 5,
+            progress = 0,
+            duration = 1,
+            seed = 7,
+        }))
+    reveal_slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, label.entity, 5)
+    reveal_generation :=
+        state^.particle_system.formation.reveals[reveal_slot].slot_generation
+    _, added := particles.formation_add_particle(&state^.particle_system, {
+        reveal_slot = i32(reveal_slot),
+        reveal_generation = reveal_generation,
+    })
+    testing.expect(t, added)
+
+    testing.expect_value(t, shape_set_visible(state, label.entity, 0),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, state^.particle_system.formation.reveal_count, 0)
+    testing.expect_value(t, state^.particle_system.formation.particle_count, 0)
+}
+
+// Verify missing glyph preparation is observable but never delays a label hide.
+@(test)
+bridge_label_hide_reports_missing_departure_material :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 16
+    state^.iso_scale = {scale = 800, half_scale = 400, quarter_scale = 200}
+    label := shape_create_label(state, cstring("A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    testing.expect_value(t, shape_set_visible(state, label.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+
+    testing.expect_value(t, shape_set_visible(state, label.entity, 0),
+        i32(BRIDGE_STATUS_OK))
+
+    testing.expect_value(t, state^.particle_system.departure_capture_failures, u64(1))
+    testing.expect_value(t, shape_get_view(state, label.entity).visible, u8(0))
+    for alive in state^.particle_system.low_particles.alive[:16] {
+        testing.expect(t, !alive)
+    }
+}
+
+// Verify bulk clear captures labels before retirement and reports missing ink.
+@(test)
+bridge_clear_departures_reports_unprepared_label :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 16
+    state^.iso_scale = {scale = 800, half_scale = 400, quarter_scale = 200}
+    label := shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    state^.shape_world.render_styles.values[0].visible = true
+
+    emitted := emit_shape_world_clear_departures(state)
+
+    testing.expect(t, !emitted)
+    testing.expect_value(t, state^.particle_system.departure_capture_failures, u64(1))
+    testing.expect_value(t, shape_get_view(state, label.entity).visible, u8(1))
+    for alive in state^.particle_system.low_particles.alive[:16] {
+        testing.expect(t, !alive)
+    }
 }
 
 // Verify stale packed arc identities cannot query a reused animation slot.
@@ -457,4 +778,68 @@ bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.
     batch.overflowed = true
     testing.expect(t, !commit_scene_command_batch(state, &batch))
     testing.expect(t, !state^.chalk_audio.drawing_active)
+}
+// Verify an unformed hide departs nothing and partial ink thins departure samples.
+@(test)
+bridge_interrupted_formation_hide_scales_departure :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 128
+    line := shape_create_line(state, {0, 0, 0}, {1, 0, 0},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t,
+        shape_set_visible(state, line.shape, 1), i32(BRIDGE_STATUS_OK))
+    particles.formation_reset_generation(&state^.particle_system, 5)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 0))
+    testing.expect(t, particles.formation_start_reveal(&state^.particle_system, {
+        kind = .Region, owner_entity = line.shape, animation_generation = 5,
+        progress = 0, duration = 1, seed = 3,
+    }))
+
+    testing.expect_value(t,
+        shape_set_visible(state, line.shape, 0), i32(BRIDGE_STATUS_OK))
+    testing.expect(t, !state^.particle_system.low_particles.alive[0])
+    testing.expect_value(t, state^.particle_system.departure_capture_failures, u64(0))
+
+    samples: [10]particles.Departure_Material_Sample
+    for index in 0..<len(samples) {
+        samples[index].coverage = u8(index)
+    }
+    testing.expect_value(t, bridge_thin_departure_samples(samples[:], 1), 10)
+    testing.expect_value(t, bridge_thin_departure_samples(samples[:], 0.25), 3)
+    testing.expect_value(t, samples[1].coverage, u8(3))
+    testing.expect_value(t, samples[2].coverage, u8(6))
+    testing.expect_value(t, bridge_thin_departure_samples(samples[:], 0), 0)
+}
+
+// Verify label formation adds no dust contact beyond its single show transition.
+@(test)
+bridge_label_formation_adds_no_dust_contact :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 16
+    state^.iso_scale.scale = 800
+    label := shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain),
+        bridge_shape_test_input({0.5, 0.5, 0}))
+    testing.expect_value(t, shape_set_visible(state, label.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    particles.formation_reset_generation(&state^.particle_system, 5)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 0))
+    testing.expect(t, particles.formation_start_reveal(&state^.particle_system, {
+        kind = .Label, owner_entity = label.entity, animation_generation = 5,
+        progress = 0, duration = 1, seed = 3,
+    }))
+    slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, label.entity, 5)
+    ink := [2]particlemodel.Formation_Label_Ink_Sample{
+        {offset = {0, -4}, coverage = 255}, {offset = {3, -4}, coverage = 255},
+    }
+    testing.expect(t, particles.formation_store_label_targets(
+        &state^.particle_system, slot, {font_size = 16, signature = 1}, ink[:]) > 0)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 1))
+    testing.expect_value(t, state^.particle_system.dust_tool_contact_count, 1)
 }

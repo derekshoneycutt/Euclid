@@ -151,6 +151,7 @@ const PenLiftDuration = 1.6f0
 const CompassLiftDuration = 1.8f0
 const CompassSweepDuration = 0.95f0
 const FinalHoldDuration = 0.35f0
+const LabelRevealDuration = 1.4f0
 
 """Complete immutable state for one Theorem 15 animation generation."""
 struct AnimationState
@@ -470,6 +471,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DescendDuration
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, BaseLineColor)
             phase = PhaseDrawBaseLine
             timer = 0f0
@@ -485,10 +488,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             line_joint2_id=base_line_joint2_id)
         if timer >= DrawEdgeDuration * BaseLineAMidShare
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            if timer - dt < DrawEdgeDuration * BaseLineAMidShare
+                EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                    duration=LabelRevealDuration)
+            end
         end
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcCToA
             timer = 0f0
         end
@@ -513,6 +522,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_id)
+            EuclidAnimations.reveal_label(state_ptr, label_d_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcDToBPrime
             timer = 0f0
         end
@@ -522,6 +533,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= ArcMoveDuration
             OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_prime_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, BaseLineColor)
             phase = PhaseDrawBaseLinePrime
             timer = 0f0
@@ -537,10 +550,16 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             line_joint2_id=base_line_prime_joint2_id)
         if timer >= DrawEdgeDuration * BaseLinePrimeAMidShare
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            if timer - dt < DrawEdgeDuration * BaseLinePrimeAMidShare
+                EuclidAnimations.reveal_label(state_ptr, label_a_prime_id;
+                    duration=LabelRevealDuration)
+            end
         end
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_c_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_prime_id;
+                duration=LabelRevealDuration)
             phase = PhaseArcCPrimeToAPrime
             timer = 0f0
         end
@@ -566,6 +585,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_d_prime_id;
+                duration=LabelRevealDuration)
             phase = PhasePenRiseBeforeGreenAngles
             timer = 0f0
         end
@@ -727,6 +748,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_double_id)
+            EuclidAnimations.reveal_label(state_ptr, label_d_double_id;
+                duration=LabelRevealDuration)
             phase = PhasePenRiseBeforeDoubleAngles
             timer = 0f0
         end
@@ -894,6 +917,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         timer += dt
         if timer >= DrawEdgeDuration
             OdinJuliaBridge.show_point(state_ptr, label_d_triple_id)
+            EuclidAnimations.reveal_label(state_ptr, label_d_triple_id;
+                duration=LabelRevealDuration)
             phase = PhasePenRiseBeforeTripleAngles
             timer = 0f0
         end

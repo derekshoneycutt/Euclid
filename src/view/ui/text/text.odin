@@ -43,6 +43,25 @@ Shaped_Text_Draw :: struct {
     font: Ui_Text_Font,
 }
 
+// Copy one coverage-weighted glyph ink point in logical screen coordinates.
+Ui_Text_Ink_Sample :: struct {
+    position: geometry.Vector2,
+    coverage: u8,
+}
+
+Ui_Text_Glyph_Ink_Placement :: struct {
+    destination: geometry.Rectangle,
+    scale: f32,
+    valid: bool,
+}
+
+Ui_Text_Ink_Sample_Status :: enum {
+    Ready,
+    Invalid,
+    Pending_Glyph,
+    Capacity,
+}
+
 //   Complete inputs for one page-aware unshaped text draw.
 Unshaped_Text_Draw :: struct {
     encoder: ^native.Draw_Encoder,
@@ -820,6 +839,108 @@ ui_text_shaped :: proc(
     request: Shaped_Text_Draw) -> bool {
 
     return ui_text_shaped_f32(request)
+}
+
+// Copy the resident shaped glyph coverage used by the crisp label draw path.
+ui_text_collect_shaped_ink_samples :: proc(
+    request: Shaped_Text_Draw,
+    output: []Ui_Text_Ink_Sample) -> (int, Ui_Text_Ink_Sample_Status) {
+    preflight := ui_text_shaped_geometry_preflight(request)
+    if !preflight.ready {
+        return 0, .Invalid
+    }
+    raster_request, valid := ui_text_raster_request(
+        request.resolver, request.key, request.font.font_size, request.encoder)
+    if !valid {
+        return 0, .Invalid
+    }
+    selection, selected := ui_text_shape_glyphs_are_resident(
+        request.resolver, request.key, preflight.glyphs, raster_request)
+    if !selected {
+        return 0, .Pending_Glyph
+    }
+    count := 0
+    for glyph in preflight.glyphs {
+        resolved, resident := ui_text_resolve_selected_glyph(
+            request.resolver, request.key, glyph.glyph_id,
+            raster_request, selection)
+        if !resident {
+            return 0, .Pending_Glyph
+        }
+        next_count, ready := ui_text_append_glyph_ink_samples(
+            request, glyph, resolved, output, count)
+        if !ready {
+            return 0, .Capacity
+        }
+        count = next_count
+    }
+    if count == 0 {
+        return 0, .Invalid
+    }
+    return count, .Ready
+}
+
+// Append one glyph's cached coverage centroids at their rendered placement.
+ui_text_append_glyph_ink_samples :: proc(
+    request: Shaped_Text_Draw,
+    glyph: view_font.Shaped_Glyph,
+    resolved: view_font.Resolved_Glyph,
+    output: []Ui_Text_Ink_Sample,
+    count: int) -> (int, bool) {
+    column_advance, advance_valid := ui_text_column_advance(
+        request.font.font, request.font.font_size)
+    if !advance_valid {
+        return count, false
+    }
+    placement := ui_text_glyph_ink_placement(
+        request, glyph, resolved, column_advance)
+    if !placement.valid {
+        return count, false
+    }
+    next_count := count
+    for sample in resolved.coverage_samples {
+        if next_count >= len(output) {
+            return next_count, false
+        }
+        output[next_count] = {
+            position = {
+                placement.destination.x + (f32(sample.x)+0.5)*placement.scale,
+                placement.destination.y + (f32(sample.y)+0.5)*placement.scale,
+            },
+            coverage = sample.coverage,
+        }
+        next_count += 1
+    }
+    return next_count, true
+}
+
+// Place copied ink at the same snapped baseline and shaped column as its glyph.
+ui_text_glyph_ink_placement :: proc(
+    request: Shaped_Text_Draw,
+    glyph: view_font.Shaped_Glyph,
+    resolved: view_font.Resolved_Glyph,
+    column_advance: f32) -> Ui_Text_Glyph_Ink_Placement {
+    column, valid := ui_text_cluster_column(request.text, glyph.cluster)
+    if !valid {
+        return {}
+    }
+    draw := Resolved_Glyph_Draw{
+        encoder = request.encoder,
+        resolved = resolved,
+        position = {
+            request.position.x + f32(column)*column_advance,
+            request.position.y,
+        },
+        font_size = request.font.font_size,
+        x_offset = glyph.x_offset,
+        y_offset = glyph.y_offset,
+    }
+    destination, positioned := ui_text_resolved_glyph_destination(draw)
+    scale, scaled := ui_text_resolved_raster_scale(draw)
+    if !positioned || !scaled {
+        return {}
+    }
+    return {destination, scale, true}
 }
 
 //   Draw one visible wrapped row through the configured font path.

@@ -162,6 +162,7 @@ const MarkerDrawDuration = 1.2f0
 const CompassLiftDuration = 1.8f0
 const CompassSweepDuration = 1.0f0
 const DragDuration = 1.5f0
+const LabelRevealDuration = 1.4f0
 const FinalHoldDuration = 0.9f0
 
 """Stable native handles for one line owned by the animation."""
@@ -457,6 +458,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawAB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
             OdinJuliaBridge.set_pen_active(state_ptr, 0, EdgeABColor)
         end
     elseif phase == PhaseDrawAB
@@ -474,6 +477,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToAForAC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToAForAC
         EuclidAnimations.animate_pen_arcmove(
@@ -501,6 +506,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToBForBC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToBForBC
         EuclidAnimations.animate_pen_arcmove(
@@ -576,6 +583,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseDrawAPrimeBPrime
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseDrawAPrimeBPrime
         EuclidAnimations.animate_draw_line(state_ptr,
@@ -592,6 +601,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToAPrimeForAC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToAPrimeForAC
         EuclidAnimations.animate_pen_arcmove(
@@ -619,6 +630,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhaseArcToBPrimeForBC
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_c_prime_id)
+            EuclidAnimations.reveal_label(state_ptr, label_c_prime_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhaseArcToBPrimeForBC
         EuclidAnimations.animate_pen_arcmove(

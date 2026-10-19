@@ -23,13 +23,12 @@ const PenTopZ = 1.4f0
 const TriangleColor = :steelblue
 const TriangleMaxBrush = 5f0
 const TriangleBaseColor = OdinJuliaBridge.bridge_color(TriangleColor)
-const FlickerColor = :white
-const FlickerSamplesPerFrame = 8
 
 const DescendDuration = 1.8f0
 const DrawDuration = 3.1f0
 const RiseDuration = 1.8f0
-const FlickerDuration = 1f0
+const RegionRevealDuration = 3.5f0
+const FinalHoldDuration = 1.7f0
 
 struct AnimationState
     line1_host::Int64
@@ -56,6 +55,7 @@ const PhaseDrawSide1 = 1f0
 const PhaseDrawSide2 = 2f0
 const PhaseDrawSide3 = 3f0
 const PhaseRise = 4f0
+const PhaseFinalHold = 5f0
 
 """Return state with updated cycle timing and unchanged native handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
@@ -67,24 +67,6 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.triangle_joint3, phase, timer)
 end
 
-
-"""Pick a random interior point of the triangle with vertices a, b, and c."""
-function random_triangle_point(
-    a::Vector{Float32}, b::Vector{Float32}, c::Vector{Float32})
-    u = rand(Float32)
-    v = rand(Float32)
-
-    if u + v > 1f0
-        u = 1f0 - u
-        v = 1f0 - v
-    end
-
-    [
-        a[1] + u * (b[1] - a[1]) + v * (c[1] - a[1]),
-        a[2] + u * (b[2] - a[2]) + v * (c[2] - a[2]),
-        0f0,
-    ]
-end
 
 """Set the triangle's fill alpha from a normalized [0, 1] opacity."""
 function set_triangle_alpha(state_ptr::Ptr{Cvoid}, triangle_host_id, alpha01)
@@ -115,7 +97,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [
         line1_host_id, line2_host_id, line3_host_id, triangle_host_id])
-    set_triangle_alpha(state_ptr, triangle_host_id, 0f0)
+    set_triangle_alpha(state_ptr, triangle_host_id, 1f0)
 
     OdinJuliaBridge.set_point_position(
         state_ptr, line1_joint2_id, VertexA[1], VertexA[2], VertexA[3])
@@ -239,24 +221,23 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         if timer >= DrawDuration
             phase = PhaseRise
             timer = 0f0
+            set_triangle_alpha(state_ptr, triangle_host_id, 1f0)
+            OdinJuliaBridge.show_point(state_ptr, triangle_host_id)
+            EuclidAnimations.reveal_region(
+                state_ptr, triangle_host_id; duration=RegionRevealDuration)
         end
     elseif phase == PhaseRise
-        set_triangle_alpha(state_ptr, triangle_host_id, timer / FlickerDuration)
-        OdinJuliaBridge.show_point(state_ptr, triangle_host_id)
-
-        if timer <= FlickerDuration
-            for _ in 1:FlickerSamplesPerFrame
-                sample_pos = random_triangle_point(VertexA, VertexB, VertexC)
-                OdinJuliaBridge.emit_flicker_particle(
-                    state_ptr, sample_pos, FlickerColor)
-            end
-        end
-
         EuclidAnimations.animate_pen_rise(
             state_ptr, timer, RiseDuration, PenTopZ, VertexA[1], VertexA[2])
 
         timer += dt
         if timer >= RiseDuration
+            phase = PhaseFinalHold
+            timer = 0f0
+        end
+    elseif phase == PhaseFinalHold
+        timer += dt
+        if timer >= FinalHoldDuration
             OdinJuliaBridge.hide_pen(state_ptr)
             reset_cycle_state(state_ptr, state)
             return

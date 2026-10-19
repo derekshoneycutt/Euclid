@@ -286,6 +286,27 @@ end
     @test isempty(violations)
 end
 
+@testset "authored labels and regions use formation reveals" begin
+    missing_labels = String[]
+    missing_regions = String[]
+    region = r"create_new_(?:triangle|square|pentagon|lens|lune)\b"
+    for (directory, _, files) in walkdir(ProductionContentRoot)
+        for file in filter(path -> endswith(path, ".jl"), files)
+            path = joinpath(directory, file)
+            source = read(path, String)
+            for included in eachmatch(r"include\(\"([^\"]+)\"\)", source)
+                source *= read(joinpath(directory, included.captures[1]), String)
+            end
+            occursin("create_new_label", source) &&
+                !occursin("reveal_label", source) && push!(missing_labels, path)
+            occursin(region, source) &&
+                !occursin("reveal_region", source) && push!(missing_regions, path)
+        end
+    end
+    @test isempty(missing_labels)
+    @test isempty(missing_regions)
+end
+
 @testset "animation loading contract" begin
     implementation = ensure_animation_loaded(
         dirname(@__DIR__), test_catalog(), CatalogChildId)

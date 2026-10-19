@@ -10,6 +10,7 @@ import "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
+import math "core:math"
 
 // Hold one resolved canonical Cycloid line.
 Command_Cycloid_Line :: struct {
@@ -51,7 +52,9 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Tool_Position = validate_command_shape_transform,
     .Set_Tool_Lock = validate_command_tool_lock,
     .Emit_Trailing_Particle = validate_command_noop,
-    .Emit_Flicker_Particle = validate_command_noop,
+    .Reveal_Label = validate_command_animation_reveal,
+    .Reveal_Region = validate_command_animation_reveal,
+    .Reveal_Sweep = validate_command_animation_reveal,
     .Notify_Animation_Cycle_Boundary = validate_command_noop,
 }
 
@@ -81,7 +84,9 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Tool_Position = apply_set_tool_position,
     .Set_Tool_Lock = apply_set_tool_lock,
     .Emit_Trailing_Particle = apply_emit_trailing_particle,
-    .Emit_Flicker_Particle = apply_emit_flicker_particle,
+    .Reveal_Label = nil,
+    .Reveal_Region = nil,
+    .Reveal_Sweep = nil,
     .Notify_Animation_Cycle_Boundary = apply_notify_animation_cycle_boundary,
 }
 
@@ -105,7 +110,9 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Tool_Position = .Point_Position_Committed,
     .Set_Tool_Lock = .Point_Position_Committed,
     .Emit_Trailing_Particle = .Particle_Emission_Committed,
-    .Emit_Flicker_Particle = .Particle_Emission_Committed,
+    .Reveal_Label = .Unknown,
+    .Reveal_Region = .Unknown,
+    .Reveal_Sweep = .Unknown,
     .Notify_Animation_Cycle_Boundary = .Unknown,
 }
 
@@ -221,6 +228,43 @@ validate_command_shape_entity :: proc(
     state: ^core.Euclid_General_State,
     command: ^Scene_Command) -> (shapemodel.Shape_Entity, bool) {
     return bridge_shape_resolve(state, command^.entity)
+}
+
+// Validate one authored reveal descriptor against its generation-qualified target.
+validate_command_animation_reveal :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    descriptor := command^.reveal
+    if descriptor.owner_entity != command^.entity ||
+        !shapemodel.shape_scalar_is_finite(descriptor.duration) ||
+        descriptor.duration < 0 {
+        return false
+    }
+    entity, found := validate_command_shape_entity(state, command)
+    if !found {
+        return false
+    }
+    switch descriptor.kind {
+    case .Label:
+        return command^.kind == .Reveal_Label &&
+            shapemodel.shape_component_contains(
+                &state^.shape_world.labels, &state^.shape_world.registry, entity)
+    case .Region:
+        if command^.kind != .Reveal_Region {
+            return false
+        }
+        geometry, has_geometry := shapemodel.shape_component_get(
+            &state^.shape_world.geometries, &state^.shape_world.registry, entity)
+        return has_geometry && (geometry.kind == .Filled_Arc ||
+            geometry.kind == .Circle_Region || geometry.kind == .Polygon)
+    case .Sweep:
+        if command^.kind != .Reveal_Sweep {
+            return false
+        }
+        geometry, has_geometry := shapemodel.shape_component_get(
+            &state^.shape_world.geometries, &state^.shape_world.registry, entity)
+        return has_geometry && geometry.kind == .Filled_Arc
+    }
+    return false
 }
 
 // Validate one packed command target that requires a transform component.
@@ -589,6 +633,10 @@ validate_scene_command_batch :: proc(
     if !scene_command_batch_wellformed(state, batch) {
         return false
     }
+    if !scene_command_batch_progress_valid(state, batch) ||
+        !scene_command_batch_reveals_fit(state, batch) {
+        return false
+    }
     if animation_model.animation_value_store_validate_pending(
         &state^.animation_values,
         state^.animation_values.generation,
@@ -609,16 +657,128 @@ validate_scene_command_batch :: proc(
         &state^.particle_system, contact_count)
 }
 
+// Validate the proposed accepted timeline against the owning animation service.
+scene_command_batch_progress_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    if math.is_nan(batch^.animation_progress) ||
+        math.is_inf(batch^.animation_progress) || batch^.animation_progress < 0 {
+        return false
+    }
+    if state^.julia_runtime_service == nil {
+        return batch^.animation_progress >=
+            state^.particle_system.formation.accepted_progress
+    }
+    service := state^.julia_runtime_service
+    return batch^.animation_generation == service^.animation_generation &&
+        batch^.tick_sequence > service^.animation_last_committed_sequence &&
+        batch^.animation_progress >= service^.animation_progress &&
+        batch^.animation_progress >=
+            state^.particle_system.formation.accepted_progress
+}
+
+// Preflight reveal-record capacity after endpoint completions and same-owner supersession.
+scene_command_batch_reveals_fit :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    formation := &state^.particle_system.formation
+    live_count := 0
+    for record in formation^.reveals {
+        if record.active && record.animation_generation == batch^.animation_generation &&
+            batch^.animation_progress < record.start_progress + f64(record.duration) {
+            live_count += 1
+        }
+    }
+    for command_index in 0..<batch^.command_count {
+        command := &batch^.commands[command_index]
+        if command^.kind != .Reveal_Label && command^.kind != .Reveal_Region &&
+            command^.kind != .Reveal_Sweep {
+            continue
+        }
+        descriptor := command^.reveal
+        if scene_reveal_superseded_later(batch, command_index) {
+            continue
+        }
+        existing := scene_find_live_reveal(
+            formation, descriptor, batch^.animation_generation,
+            batch^.animation_progress) >= 0
+        if descriptor.duration == 0 && existing {
+            live_count -= 1
+        } else if descriptor.duration > 0 && !existing {
+            live_count += 1
+        }
+    }
+    return live_count <= len(formation^.reveals)
+}
+
+// Find whether a later descriptor supersedes this reveal in callback order.
+scene_reveal_superseded_later :: proc(
+    batch: ^Scene_Command_Batch, command_index: int) -> bool {
+    descriptor := batch^.commands[command_index].reveal
+    for later_index in command_index+1..<batch^.command_count {
+        later := &batch^.commands[later_index]
+        if (later^.kind == .Reveal_Label || later^.kind == .Reveal_Region ||
+            later^.kind == .Reveal_Sweep) &&
+            later^.reveal.kind == descriptor.kind &&
+            later^.reveal.owner_entity == descriptor.owner_entity {
+            return true
+        }
+    }
+    return false
+}
+
+// Locate one record that survives through this batch's accepted endpoint.
+scene_find_live_reveal :: proc(
+    formation: ^particles.Formation_State,
+    descriptor: bridgemodel.Animation_Reveal_Descriptor,
+    generation: u64, progress: f64) -> int {
+    target_kind := formation_target_kind(descriptor.kind)
+    for index in 0..<len(formation^.reveals) {
+        record := &formation^.reveals[index]
+        if record^.active && record^.kind == target_kind &&
+            record^.owner_entity == descriptor.owner_entity &&
+            record^.animation_generation == generation &&
+            progress < record^.start_progress + f64(record^.duration) {
+            return index
+        }
+    }
+    return -1
+}
+
+// Map one bridge reveal kind to its native population kind.
+formation_target_kind :: proc(
+    kind: bridgemodel.Animation_Reveal_Kind) -> particles.Formation_Target_Kind {
+    switch kind {
+    case .Label: return .Label
+    case .Region: return .Region
+    case .Sweep: return .Sweep
+    }
+    return .Label
+}
+
 //   Apply one emit-trailing-particle command and record its emission.
 apply_emit_trailing_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_trailing_particle(state, command^.position, command^.color)
 }
 
-//   Apply one emit-flicker-particle command and record its emission.
-apply_emit_flicker_particle :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    emit_flicker_particle(state, command^.position, command^.color)
+// Start one validated reveal at the accepted animation endpoint.
+apply_animation_reveal :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command,
+    batch: ^Scene_Command_Batch) {
+    assert(state != nil && batch != nil)
+    seed := command^.reveal.owner_entity ~
+        (batch^.animation_generation * 0x9e3779b97f4a7c15) ~
+        batch^.tick_sequence
+    accepted := particles.formation_start_reveal(
+        &state^.particle_system,
+        {
+            kind = formation_target_kind(command^.reveal.kind),
+            owner_entity = command^.reveal.owner_entity,
+            animation_generation = batch^.animation_generation,
+            progress = batch^.animation_progress,
+            duration = command^.reveal.duration,
+            seed = seed,
+        })
+    assert(accepted)
 }
 
 //   Apply one animation-cycle-boundary notification command.
@@ -659,12 +819,28 @@ commit_scene_command_batch :: proc(
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
+    assert(particles.formation_advance_progress(
+        &state^.particle_system, batch^.animation_generation,
+        batch^.animation_progress))
 
+    apply_scene_command_batch(state, batch)
+    record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
+    return true
+}
+
+// Apply commands in callback order after complete batch preflight succeeds.
+apply_scene_command_batch :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
     appliers := SCENE_COMMAND_APPLIERS
     hide_burst_kicked := false
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
-        if command^.kind == .Set_Shape_Visible {
+        if command^.kind == .Reveal_Label || command^.kind == .Reveal_Region ||
+            command^.kind == .Reveal_Sweep {
+            if !scene_reveal_superseded_later(batch, command_index) {
+                apply_animation_reveal(state, command, batch)
+            }
+        } else if command^.kind == .Set_Shape_Visible {
             _, emitted := shape_set_visible_local(
                 state, command^.entity, u8(command^.flag), !hide_burst_kicked)
             hide_burst_kicked = hide_burst_kicked || emitted
@@ -676,10 +852,9 @@ commit_scene_command_batch :: proc(
         }
         record_scene_command_evidence(state, command)
     }
+    particles.formation_reclaim_unowned_particles(&state^.particle_system)
     audio.set_drawing_activity(&state^.chalk_audio,
         scene_command_batch_has_drawing_activity(batch))
-    record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
-    return true
 }
 
 //   Record one scene-batch outcome using the current animation tick identity.
@@ -710,8 +885,8 @@ scene_command_evidence :: proc(
     kind := evidence_kinds[command^.kind]
     payload: evidence_trace.Event_Payload
     #partial switch command^.kind {
-    case .Emit_Trailing_Particle, .Emit_Flicker_Particle:
-        payload.counts.first = command^.kind == .Emit_Trailing_Particle ? 1 : 10
+    case .Emit_Trailing_Particle:
+        payload.counts.first = 1
     case:
     }
     return kind, payload

@@ -22,9 +22,8 @@ const DrawDuration = 6f0
 const ArcMoveDuration = 2.5f0
 const RiseDuration = 1.5f0
 const RevealDuration = 1.5f0
+const LabelRevealDuration = 1.2f0
 const HoldDuration = 3f0
-const FlickerSamplesPerFrame = 8
-const FlickerSampleAttempts = 24
 
 const PhaseDescendFirst = UInt8(0)
 const PhaseDrawFirst = UInt8(1)
@@ -62,35 +61,11 @@ function place_compass(state_ptr::Ptr{Cvoid}, center, parameter, elevation)
     OdinJuliaBridge.lock_compass_joint2(state_ptr, pencil; sweep=false)
 end
 
-"""Set the filled region alpha from normalized reveal progress."""
-function set_region_alpha(state_ptr::Ptr{Cvoid}, region_id, alpha01)
-    alpha = UInt8(round(Int, Float32(RegionMaxAlpha) * clamp(alpha01, 0f0, 1f0)))
+"""Restore the region's intended translucent color before its authored reveal."""
+function set_region_final_color(state_ptr::Ptr{Cvoid}, region_id)
     color = OdinJuliaBridge.BridgeColor(RegionBaseColor.r,
-        RegionBaseColor.g, RegionBaseColor.b, alpha)
+        RegionBaseColor.g, RegionBaseColor.b, RegionMaxAlpha)
     OdinJuliaBridge.set_point_color(state_ptr, region_id, color)
-end
-
-"""Return whether one point belongs to this leaf's semantic region."""
-function point_belongs_to_region(x::Float32, y::Float32)
-    first_dx, first_dy = x - FirstCenter[1], y - FirstCenter[2]
-    second_dx, second_dy = x - SecondCenter[1], y - SecondCenter[2]
-    inside_first = first_dx * first_dx + first_dy * first_dy <= CircleRadius^2
-    inside_second = second_dx * second_dx + second_dy * second_dy <= CircleRadius^2
-    return RegionOperation == :intersection ?
-        inside_first && inside_second : inside_first && !inside_second
-end
-
-"""Emit one flicker from a bounded rejection sample inside the active region."""
-function emit_region_flicker(state_ptr::Ptr{Cvoid})
-    for _ in 1:FlickerSampleAttempts
-        x = FirstCenter[1] + CircleRadius * (2f0 * rand(Float32) - 1f0)
-        y = FirstCenter[2] + CircleRadius * (2f0 * rand(Float32) - 1f0)
-        if point_belongs_to_region(x, y)
-            OdinJuliaBridge.emit_flicker_particle(
-                state_ptr, Float32[x, y, 0f0], FlickerColor)
-            return
-        end
-    end
 end
 
 """Reset both circles, the region, labels, and compass for a fresh cycle."""
@@ -102,7 +77,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
         state_ptr, state.first_circle_id, CircleRadius, 0f0, 0f0)
     OdinJuliaBridge.set_arc_geometry(
         state_ptr, state.second_circle_id, CircleRadius, 0f0, 0f0)
-    set_region_alpha(state_ptr, state.region_id, 0f0)
+    set_region_final_color(state_ptr, state.region_id)
     OdinJuliaBridge.hide_compass(state_ptr)
     place_compass(state_ptr, FirstCenter, 0f0, TopZ)
     status = OdinJuliaBridge.set_animation_value!(
@@ -167,6 +142,8 @@ function advance_first_construction_and_transfer(
             OdinJuliaBridge.set_arc_geometry(
                 state_ptr, state.first_circle_id, CircleRadius, 0f0, FullSweep)
             OdinJuliaBridge.show_point(state_ptr, state.first_label_id)
+            EuclidAnimations.reveal_label(
+                state_ptr, state.first_label_id; duration=LabelRevealDuration)
             return PhaseArcMoveSecond, 0f0
         end
     elseif phase == PhaseArcMoveSecond
@@ -202,7 +179,12 @@ function advance_second_construction(
         if timer >= RiseDuration
             OdinJuliaBridge.hide_compass(state_ptr)
             OdinJuliaBridge.show_point(state_ptr, state.second_label_id)
+            EuclidAnimations.reveal_label(
+                state_ptr, state.second_label_id; duration=LabelRevealDuration)
+            set_region_final_color(state_ptr, state.region_id)
             OdinJuliaBridge.show_point(state_ptr, state.region_id)
+            EuclidAnimations.reveal_region(
+                state_ptr, state.region_id; duration=RevealDuration)
             return PhaseReveal, 0f0
         end
     end
@@ -212,15 +194,10 @@ end
 """Advance the synchronized region reveal and readable hold phases."""
 function advance_region_finish(
     state_ptr::Ptr{Cvoid}, state::AnimationState, phase::UInt8,
-    timer::Float32, dt::Float32)
+    timer::Float32,     dt::Float32)
     if phase == PhaseReveal
-        set_region_alpha(state_ptr, state.region_id, timer / RevealDuration)
-        for _ in 1:FlickerSamplesPerFrame
-            emit_region_flicker(state_ptr)
-        end
         timer += dt
         if timer >= RevealDuration
-            set_region_alpha(state_ptr, state.region_id, 1f0)
             OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
             return PhaseHold, 0f0
         end

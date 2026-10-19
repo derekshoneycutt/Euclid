@@ -135,6 +135,7 @@ world_make_draw_base :: proc(
     return {
         kind = kind,
         source_index = int(source.entity.slot) - 1,
+        source_generation = source.entity.generation,
         brush_size = source.style.brush_size,
         color = source.style.color,
         active_color = active_color,

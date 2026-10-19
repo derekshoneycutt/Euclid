@@ -164,6 +164,7 @@ Dust_Draw :: struct {
     texture: rawptr,
     scissor: Draw_Scissor,
     viewport_extent: [2]f32,
+    light: bool,
 }
 
 // Draw_State groups native batch compatibility without exposing SDL handles.
@@ -685,6 +686,28 @@ draw_encoder_dust_staging :: proc(encoder: ^Draw_Encoder) -> []Dust_Instance {
         return nil
     }
     return encoder^.dust_instances[encoder^.dust_instance_count:]
+}
+
+// draw_encoder_commit_light appends one staged prefix as leaper light instances.
+// Light needs the instanced pipeline, so it is dropped when instancing is disabled.
+draw_encoder_commit_light :: proc(encoder: ^Draw_Encoder, count: int) -> bool {
+    if encoder == nil || !encoder^.dust_instancing_enabled || count <= 0 ||
+        count > len(encoder^.dust_instances) - encoder^.dust_instance_count ||
+        encoder^.command_count >= len(encoder^.commands) ||
+        encoder^.dust_draw_count >= len(encoder^.dust_draws) {
+        return false
+    }
+    draw_index := encoder^.dust_draw_count
+    encoder^.dust_draws[draw_index] = {
+        first = u32(encoder^.dust_instance_count), count = u32(count),
+        scissor = draw_encoder_physical_scissor(encoder),
+        viewport_extent = {encoder^.logical_extent.x,
+            encoder^.logical_extent.y}, light = true}
+    encoder^.commands[encoder^.command_count] = {
+        kind = .Dust_Instanced, index = u32(draw_index)}
+    encoder^.dust_instance_count += count
+    encoder^.dust_draw_count += 1
+    return draw_encoder_finish_dust(encoder, count)
 }
 
 // draw_encoder_commit_dust atomically appends one prepared staging prefix.

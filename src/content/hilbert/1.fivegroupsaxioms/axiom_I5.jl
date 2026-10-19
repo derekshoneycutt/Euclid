@@ -41,6 +41,7 @@ const ExtremityTrailDuration = 2f0
 const EndMoveToPointBDuration = 2f0
 const EndMoveToPointCDuration = 2f0
 const EndLiftDuration = 1.8f0
+const LabelRevealDuration = 1.4f0
 
 const SurfaceSweepABStart = [0f0, 1f0, 0f0]
 const SurfaceSweepABEnd = [1f0, 0f0, 0f0]
@@ -173,6 +174,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointA
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            EuclidAnimations.reveal_label(state_ptr, label_a_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointA
         EuclidAnimations.animate_draw_point(
@@ -194,6 +197,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             phase = PhasePutPointB
             timer = 0f0
             OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            EuclidAnimations.reveal_label(state_ptr, label_b_id;
+                duration=LabelRevealDuration)
         end
     elseif phase == PhasePutPointB
         EuclidAnimations.animate_draw_point(
@@ -227,6 +232,10 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 
         if timer / DrawLineDuration >= 0.5
             OdinJuliaBridge.show_point(state_ptr, labellinea_id)
+            if (timer - dt) / DrawLineDuration < 0.5
+                EuclidAnimations.reveal_label(state_ptr, labellinea_id;
+                    duration=LabelRevealDuration)
+            end
         end
 
         timer += dt

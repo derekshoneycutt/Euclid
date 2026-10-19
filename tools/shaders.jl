@@ -271,6 +271,10 @@ function shader_specs(source_root::String)
             joinpath(shader_root, "dust_instanced.frag.hlsl"),
             "fragment", 0, 1,
             [0 => "float2", 1 => "float4", 2 => "float"], [0 => "float4"]),
+        ShaderSpec("leaper_light.frag",
+            joinpath(shader_root, "leaper_light.frag.hlsl"),
+            "fragment", 0, 0,
+            [0 => "float2", 1 => "float4", 2 => "float"], [0 => "float4"]),
     ])
 end
 
@@ -294,7 +298,9 @@ function shader_abis()
         "dust_instanced.vert" => ShaderAbi("DustVertexUniforms", 16, [0, 8], 0,
             [1], [0, 0, 1, 1, 1], [0, 8, 0, 12, 28], [16, 16, 32, 32, 32]),
         "dust_instanced.frag" => ShaderAbi("", 0, Int[], 0,
-            [2, 2], Int[], Int[], Int[]))
+            [2, 2], Int[], Int[], Int[]),
+        "leaper_light.frag" => ShaderAbi(
+            "", 0, Int[], 0, Int[], Int[], Int[], Int[]))
 end
 
 """Validate cross-stage interfaces and fixed vertex-record contracts."""
@@ -311,6 +317,9 @@ function validate_pipeline_contracts(specs::Vector{ShaderSpec}, abis=shader_abis
     by_name["dust_instanced.vert"].outputs ==
         by_name["dust_instanced.frag"].inputs ||
         error("Dust stage interface mismatch.")
+    by_name["dust_instanced.vert"].outputs ==
+        by_name["leaper_light.frag"].inputs ||
+        error("Leaper light stage interface mismatch.")
     dust = abis["dust_instanced.vert"]
     all(dust.vertex_strides[index] == (dust.vertex_bindings[index] == 1 ? 32 : 16)
         for index in eachindex(dust.vertex_bindings)) ||

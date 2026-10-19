@@ -173,6 +173,9 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     }
     service^.animation_generation += 1
     service^.animation_accumulated_dt = 0
+    service^.animation_progress = 0
+    particles.formation_reset_generation(
+        &state^.particle_system, service^.animation_generation)
     release_completed_animation_ticks(service)
     route_retained_display_view_content(service)
     return true
@@ -446,6 +449,9 @@ generate_animation_tick :: proc(
     context = state^.saved_context
     state^.animation_query_snapshot_target = &slot^.query_snapshot
     begin_scene_command_batch(state, &slot^.scene_batch)
+    slot^.scene_batch.animation_generation = request.animation_generation
+    slot^.scene_batch.tick_sequence = request.sequence
+    slot^.scene_batch.animation_progress = slot^.effective_progress
     defer end_scene_command_batch(state)
     defer state^.animation_query_snapshot_target = nil
     call_global_euclid_loop(state, slot^.dt)
@@ -643,8 +649,7 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
     }
     terminalview.terminal_destroy(&state^.terminal)
     particles.discard_dust_tool_contacts(&state^.particle_system)
-    if particles.emit_shape_world_clear_burst(
-        &state^.particle_system, &state^.shape_world) {
+    if emit_shape_world_clear_departures(state) {
         projection.screenshake_on_dust_kick(&state^.iso_scale)
     }
     if shapemodel.shape_world_rewind_animation(&state^.shape_world) != .Ok {

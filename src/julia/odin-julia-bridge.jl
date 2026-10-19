@@ -33,6 +33,7 @@ export BridgeColor, BridgePointView, BridgeSolveResult,
     BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG, BRIDGE_FEATURE_MIME_PRESENTATION,
     BRIDGE_FEATURE_TROCHOIDS, BRIDGE_FEATURE_CYCLOIDS,
     BRIDGE_FEATURE_CIRCLE_REGIONS,
+    BRIDGE_FEATURE_SETTLING_FORMATION,
     BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION,
     TROCHOID_EXTERNAL, TROCHOID_INTERNAL,
     bridge_color, set_null_animations, copy_animation_implementation_path,
@@ -46,7 +47,8 @@ export BridgeColor, BridgePointView, BridgeSolveResult,
     create_new_curtate_cycloid, create_new_prolate_cycloid,
     create_new_triangle, create_new_square, create_new_pentagon,
     get_point, get_arc_geometry, get_trochoid_geometry, get_cycloid_geometry, show_point,
-    hide_point, hide_point_batch, set_point_position, set_point_brush, set_point_color,
+    hide_point, hide_point_batch, reveal_label!, reveal_region!, reveal_sweep!,
+    set_point_position, set_point_brush, set_point_color,
     set_point_active_color, notify_animation_cycle_boundary,
     publish_view_content, publish_presented_text,
     get_bridge_version,
@@ -70,7 +72,7 @@ export BridgeColor, BridgePointView, BridgeSolveResult,
     lock_compass_joint1, unlock_compass_joint1, move_compass_joint1,
     get_compass_joint1_position, lock_compass_joint2, unlock_compass_joint2,
     move_compass_joint2, get_compass_joint2_position,
-    emit_trailing_particle, emit_flicker_particle
+    emit_trailing_particle
 
 include("bridge/common.jl")
 include("bridge/points.jl")
