@@ -235,17 +235,19 @@ tree_actions_layout :: proc(
     result.eligible = true
     item_index := tree_projection_find(ctx.projection, item^.key)
     result.toggle_id = tree_actions_control_id(item_index, 0)
-    result.toggle_rect = {ctx.panel.width - TREE_ACTION_TOGGLE_WIDTH,
-        content_y, TREE_ACTION_TOGGLE_WIDTH, theme.TREE_ROW_HEIGHT}
-    label_x := f32(depth) * theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X
+    scale := ctx.row_height / f32(theme.TREE_ROW_HEIGHT)
+    result.toggle_rect = {ctx.panel.width - TREE_ACTION_TOGGLE_WIDTH * scale,
+        content_y, TREE_ACTION_TOGGLE_WIDTH * scale, ctx.row_height}
+    label_x := (f32(depth) * theme.TREE_INDENT +
+        theme.TREE_ROW_LABEL_OFFSET_X) * scale
     result.label_clip = {label_x, content_y,
-        max(result.toggle_rect.x - label_x, 0), theme.TREE_ROW_HEIGHT}
+        max(result.toggle_rect.x - label_x, 0), ctx.row_height}
     if ctx.drawer.entry_id != item^.key || ctx.drawer.height <= 0 {
         return result
     }
     result.open = ctx.drawer.open
     result.height = ctx.drawer.height
-    result.drawer_rect = {0, content_y + theme.TREE_ROW_HEIGHT,
+    result.drawer_rect = {0, content_y + ctx.row_height,
         ctx.panel.width, ctx.drawer.height}
     tree_actions_layout_buttons(ctx.collections, ctx.projection, item, &result)
     return result
@@ -699,6 +701,7 @@ draw_tree_actions_button_label :: proc(
     _ = native.draw_encoder_push_scissor(encoder, clip)
     viewtext.draw_encoded_colored_label(&state^.font_cache, encoder, label,
         {rect.x + TREE_ACTION_DRAWER_PADDING,
-         rect.y + (rect.height - theme.TREE_FONT_SIZE) * 0.5}, text_color)
+         rect.y + (rect.height - theme.ui_font_size(
+            encoder^.ui_text_size_percent)) * 0.5}, text_color)
     _ = native.draw_encoder_pop_scissor(encoder)
 }

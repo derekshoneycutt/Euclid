@@ -189,6 +189,9 @@ Terminal_Draw_Layout :: struct {
     encoder: ^native.Draw_Encoder,
     padded_bounds: geometry.Rectangle,
     line_height: f32,
+    font_size: f32,
+    column_width: f32,
+    text_size_percent: int,
     line_count: int,
     prompt_visible: bool,
     content_height: f32,
@@ -196,6 +199,13 @@ Terminal_Draw_Layout :: struct {
     regular: font.Font_Face,
     theme: Terminal_Draw_Theme,
     terminal_focused: bool,
+}
+
+// Terminal_Draw_Content_State captures output and prompt extents for one layout.
+Terminal_Draw_Content_State :: struct {
+    line_count: int,
+    prompt_visible: bool,
+    content_height: f32,
 }
 
 // Frame-local semantic colors supplied by the terminal container owner.

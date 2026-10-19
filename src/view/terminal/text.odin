@@ -105,8 +105,7 @@ terminal_live_input_line_text :: proc(text: string, line: int) -> string {
 //     collapsing onto the prompt line's own position.
 //
 // Parameters:
-//   - term: The terminal state field owned by the caller.
-//   - font: The monospace font used for hit-testing.
+//   - column_width: The scaled width of one terminal cell.
 //   - bounds: The rectangle the terminal is drawn within, matching terminal_draw.
 //   - mouse: The screen-space mouse position to hit-test.
 //
@@ -114,10 +113,9 @@ terminal_live_input_line_text :: proc(text: string, line: int) -> string {
 //   - The hit position and true, or a zero value and false when the mouse sits
 //     outside the terminal's padded bounds.
 terminal_output_hit_position :: proc(
-    cells: []termgrid.Cell, font: font.Font_Face,
+    cells: []termgrid.Cell, column_width: f32,
     padded_bounds: geometry.Rectangle, mouse: geometry.Vector2,
     line: int) -> viewterminalmodel.Terminal_View_Position {
-    column_width := terminal_column_width(font)
     column := 0
     if column_width > 0 {
         column = int((mouse.x - padded_bounds.x) / column_width + 0.5)
@@ -140,7 +138,8 @@ terminal_hit_test :: proc(
         return viewterminalmodel.Terminal_View_Position{}, false
     }
 
-    line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
+    line_height := terminal_font_size(term.text_size_percent) +
+        terminal_line_spacing(term.text_size_percent)
     origin_y := padded_bounds.y - term.scroll_offset_y
 
     line := int((mouse.y - origin_y) / line_height)
@@ -153,10 +152,12 @@ terminal_hit_test :: proc(
             return viewterminalmodel.Terminal_View_Position{}, false
         }
         return terminal_output_hit_position(
-            cells, font, padded_bounds, mouse, line), true
+            cells, terminal_column_width(font, term.text_size_percent),
+            padded_bounds, mouse, line), true
     }
     line_text := terminal_line_text(term, line)
-    byte_offset := terminal_byte_offset_for_x(font, line_text, mouse.x - padded_bounds.x)
+    byte_offset := terminal_byte_offset_for_x(
+        font, line_text, mouse.x - padded_bounds.x, term.text_size_percent)
 
     return viewterminalmodel.Terminal_View_Position{
         line = line,
@@ -176,12 +177,13 @@ terminal_hit_test :: proc(
 //   - A real byte offset when relative_x falls within the line's text, or
 //     len(line_text) plus a virtual column count when it falls past it.
 terminal_byte_offset_for_x :: proc(
-    font: font.Font_Face, line_text: string, relative_x: f32) -> int {
+    font: font.Font_Face, line_text: string, relative_x: f32,
+    text_size_percent := 100) -> int {
     if relative_x <= 0 {
         return 0
     }
 
-    column_width := terminal_column_width(font)
+    column_width := terminal_column_width(font, text_size_percent)
     if column_width <= 0 {
         return 0
     }

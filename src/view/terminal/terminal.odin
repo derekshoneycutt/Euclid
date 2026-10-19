@@ -118,3 +118,22 @@ TERMINAL_SHAPING_CAPACITY ::
 TERMINAL_COMMAND_SEARCH_TEXT_BYTE_CAPACITY :: 4096
 TERMINAL_COMMAND_SEARCH_POSITION_CAPACITY ::
     TERMINAL_COMMAND_SEARCH_TEXT_BYTE_CAPACITY + 1
+
+// terminal_text_scale_factor normalizes persisted and default Terminal text sizes.
+terminal_text_scale_factor :: #force_inline proc(percent: int) -> f32 {
+    effective := percent
+    if effective == 0 {
+        effective = 100
+    }
+    return f32(clamp(effective, 100, 175)) / 100
+}
+
+// terminal_font_size resolves the logical monospace glyph height for one scale.
+terminal_font_size :: #force_inline proc(percent := 100) -> f32 {
+    return TERMINAL_FONT_SIZE * terminal_text_scale_factor(percent)
+}
+
+// terminal_line_spacing resolves matching baseline spacing for one text scale.
+terminal_line_spacing :: #force_inline proc(percent := 100) -> f32 {
+    return TERMINAL_LINE_SPACING * terminal_text_scale_factor(percent)
+}

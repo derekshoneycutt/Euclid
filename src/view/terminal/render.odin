@@ -174,8 +174,33 @@ terminal_draw_layout :: proc(
     bounds: geometry.Rectangle,
     theme: Terminal_Draw_Theme) -> Terminal_Draw_Layout {
     padded_bounds := terminal_accepted_padded_bounds(term, bounds)
-    line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
     regular := terminal_font_resolve(font_resolver, .Regular)
+    font_size := terminal_font_size(term.text_size_percent)
+    column_width := terminal_column_width(regular, term.text_size_percent)
+    line_height := font_size + terminal_line_spacing(term.text_size_percent)
+    content := terminal_draw_content_state(term, column_width, line_height)
+    selection_start, selection_end := terminal_selection_ordered(
+        term.view_selection_anchor, term.view_selection_head)
+    return {
+        padded_bounds = padded_bounds,
+        line_height = line_height,
+        font_size = font_size,
+        column_width = column_width,
+        text_size_percent = term.text_size_percent,
+        line_count = content.line_count,
+        prompt_visible = content.prompt_visible,
+        content_height = content.content_height,
+        selection = {selection_start, selection_end,
+            padded_bounds.x + padded_bounds.width},
+        regular = regular,
+        theme = theme,
+    }
+}
+
+// Compute the row count and clipped height required by terminal content and cursor state.
+terminal_draw_content_state :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    column_width, line_height: f32) -> Terminal_Draw_Content_State {
     line_count := terminal_line_count(term)
     prompt_visible := terminal_prompt_visible(term)
     prompt_line_count := 0
@@ -189,20 +214,8 @@ terminal_draw_layout :: proc(
     }
     content_height := f32(content_line_count) * line_height
     content_height = max(content_height, terminal_raster_content_height(
-        term, terminal_column_width(regular), line_height))
-    selection_start, selection_end := terminal_selection_ordered(
-        term.view_selection_anchor, term.view_selection_head)
-    return {
-        padded_bounds = padded_bounds,
-        line_height = line_height,
-        line_count = line_count,
-        prompt_visible = prompt_visible,
-        content_height = content_height,
-        selection = {selection_start, selection_end,
-            padded_bounds.x + padded_bounds.width},
-        regular = regular,
-        theme = theme,
-    }
+        term, column_width, line_height))
+    return {line_count, prompt_visible, content_height}
 }
 
 // Draw the grapheme inverted inside one filled output cursor.
@@ -225,7 +238,7 @@ terminal_draw_output_cursor_glyph :: proc(
         cells = cells[presentation.column:presentation.column + 1],
         start_column = 0,
         position = position,
-        column_width = terminal_column_width(regular),
+        column_width = terminal_column_width(regular, term.text_size_percent),
         key = key,
         color = theme.cursor_foreground,
     })
@@ -249,8 +262,7 @@ terminal_draw_output_cursor :: proc(
     if !presentation.visible {
         return
     }
-    regular := terminal_font_resolve(font_resolver, .Regular)
-    column_width := terminal_column_width(regular)
+    column_width := layout.column_width
     position := geometry.Vector2{
         origin.x + f32(presentation.column) * column_width,
         origin.y + f32(presentation.line) * layout.line_height,
@@ -264,13 +276,13 @@ terminal_draw_output_cursor :: proc(
     if presentation.style == .Outline {
         _ = native.draw_encoder_rectangle_outline(layout.encoder, {
             position.x, position.y,
-            f32(presentation.width) * column_width, TERMINAL_FONT_SIZE,
+            f32(presentation.width) * column_width, layout.font_size,
         }, 1, cursor_color)
         return
     }
     _ = native.draw_encoder_rectangle(layout.encoder, {
         position.x, position.y,
-        f32(presentation.width) * column_width, TERMINAL_FONT_SIZE},
+        f32(presentation.width) * column_width, layout.font_size},
         cursor_color)
     terminal_draw_output_cursor_glyph(
         term, font_resolver, presentation, position, layout.theme)
@@ -307,7 +319,7 @@ terminal_draw_output_rows :: proc(
                 cells = cells,
                 position = line_position,
                 palette = &term.output_interpreter.title_state.palette,
-                column_width = terminal_column_width(draw.layout.regular),
+                column_width = draw.layout.column_width,
                 theme = draw.layout.theme,
             }
             if !terminal_draw_syntax_history_row(term, index, row, shaping_allowed) {
@@ -346,7 +358,7 @@ terminal_draw_command_statuses :: proc(
         }
         _ = native.draw_encoder_rectangle(layout.encoder, {
             origin.x, origin.y + f32(position.line) * layout.line_height + 3,
-            2, TERMINAL_FONT_SIZE - 6,
+            2, layout.font_size - 6,
         }, terminal_command_status_color(block.status))
     }
 }
@@ -361,7 +373,9 @@ terminal_draw_command_search :: proc(
         return
     }
     query := string(shell.search_query[:shell.search_query_byte_count])
-    height := TERMINAL_FONT_SIZE + 6
+    font_size := terminal_font_size(encoder^.ui_text_size_percent)
+    height := font_size + 6 * terminal_text_scale_factor(
+        encoder^.ui_text_size_percent)
     position := geometry.Vector2{bounds.x + 4, bounds.y + bounds.height - height + 3}
     background := theme.cursor_foreground
     _ = native.draw_encoder_rectangle(encoder, {
@@ -580,7 +594,7 @@ terminal_draw_rasters :: proc(
     placements:
         [termattachment.DEFAULT_PLACEMENT_CAPACITY]termattachment.Placement_Metadata
     count := terminal_collect_raster_placements(term, placements[:])
-    column_width := terminal_column_width(layout.regular)
+    column_width := layout.column_width
     draw := Terminal_Raster_Draw_Context{
         layout, geometry.Vector2(origin), layer, column_width}
     for placement in placements[:count] {
@@ -1003,7 +1017,8 @@ terminal_draw_prompt_lines :: proc(
     theme: Terminal_Draw_Theme) {
     text := termhist.termhist_current_text(term.history)
     prompt_color := terminal_prompt_draw_color(term.input_mode, theme)
-    line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
+    line_height := terminal_font_size(term.text_size_percent) +
+        terminal_line_spacing(term.text_size_percent)
     cursor := termhist.termhist_cursor(term.history)
     line_start := 0
     for line := 0; line < terminal_live_input_line_count(term); line += 1 {
@@ -1057,7 +1072,7 @@ terminal_draw_multiline_prompt_cursor :: proc(
     }
     prompt_text := fmt.tprintf("%s%s", prefix, line_text)
     cursor_position := cursor - line_start + len(prefix)
-    line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
+    line_height := layout.line_height
     cursor_position_y := position
     cursor_position_y.y += f32(line) * line_height
     terminal_draw_cursor({
@@ -1098,17 +1113,19 @@ terminal_draw_completion_preview :: proc(
 
     start := math.clamp(term.completion_preview_start, 0, len(current_text))
     end := math.clamp(term.completion_preview_end, start, len(current_text))
-    prefix_width := terminal_text_column_width(draw.font, prompt_prefix)
+    text_percent := draw.encoder^.ui_text_size_percent
+    prefix_width := terminal_text_column_width(draw.font, prompt_prefix, text_percent)
     start_x := draw.position.x + prefix_width +
-        terminal_position_x(draw.font, current_text, start)
+        terminal_position_x(draw.font, current_text, start, text_percent)
     end_x := draw.position.x + prefix_width +
-        terminal_position_x(draw.font, current_text, end)
+        terminal_position_x(draw.font, current_text, end, text_percent)
     preview_position := geometry.Vector2{start_x, draw.position.y}
 
     if end > start {
         _ = native.draw_encoder_rectangle(draw.encoder, {
             preview_position.x, preview_position.y,
-            end_x - start_x, TERMINAL_FONT_SIZE}, draw.theme.cursor_foreground)
+            end_x - start_x, terminal_font_size(
+                draw.encoder^.ui_text_size_percent)}, draw.theme.cursor_foreground)
     }
     preview_color := draw.theme.completion_preview
     if preview_color.a == 0 {
@@ -1120,7 +1137,7 @@ terminal_draw_completion_preview :: proc(
     terminal_syntax_underline(draw.encoder, {
         underline = .Dotted, underline_color = preview_color},
         preview_position, terminal_text_column_width(draw.font,
-            term.completion_preview_insertion))
+            term.completion_preview_insertion, text_percent))
 }
 
 //   Draw the live input line's base text: a bold prompt (green for `julia>`,
@@ -1140,7 +1157,9 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
             .Bold, request.prompt_prefix, request.position, request.prompt_color})
     }
 
-    prompt_width := terminal_text_column_width(bold, request.prompt_prefix)
+    text_percent := request.encoder^.ui_text_size_percent
+    prompt_width := terminal_text_column_width(
+        bold, request.prompt_prefix, text_percent)
     terminal_draw_prompt_text({
         encoder = request.encoder,
         resolver = request.resolver,
@@ -1203,7 +1222,8 @@ terminal_draw_prompt_segment :: proc(
     segment := request.current_text[segment_start:segment_end]
     segment_position := geometry.Vector2{
         request.position.x + terminal_text_column_width(
-            request.regular, request.current_text[:segment_start]),
+            request.regular, request.current_text[:segment_start],
+            request.encoder^.ui_text_size_percent),
         request.position.y,
     }
     shaped := terminal_draw_shaped_prompt_span({request.encoder,
@@ -1216,7 +1236,8 @@ terminal_draw_prompt_segment :: proc(
             text = segment,
             position = segment_position,
             color = request.color,
-            font = {request.regular, TERMINAL_FONT_SIZE},
+            font = {request.regular,
+                terminal_font_size(request.encoder^.ui_text_size_percent)},
         })
     }
 }
@@ -1290,7 +1311,8 @@ terminal_draw_output_cell :: proc(
 
 // Draw explicit cell underlines independently of glyph shaping success.
 terminal_draw_output_underlines :: proc(draw: Terminal_Shaped_Output_Context) {
-    underline_y := draw.position.y + TERMINAL_FONT_SIZE - 1
+    underline_y := draw.position.y + terminal_font_size(
+        draw.encoder^.ui_text_size_percent) - 1
     for &cell, column in draw.cells {
         if cell.continuation || !cell.style.underline {
             continue
@@ -1402,7 +1424,8 @@ terminal_draw_link_hover :: proc(
     draw: Terminal_Shaped_Output_Context, hit: Terminal_Link_Hit) {
     column := clamp(hit.column_start, 0, len(draw.cells))
     limit := clamp(hit.column_end, column, len(draw.cells))
-    underline_y := draw.position.y + TERMINAL_FONT_SIZE - 1
+    underline_y := draw.position.y + terminal_font_size(
+        draw.encoder^.ui_text_size_percent) - 1
     for column < limit {
         if draw.cells[column].continuation {
             column += 1
@@ -1440,7 +1463,8 @@ terminal_draw_output_backgrounds :: proc(
         }
         _ = native.draw_encoder_rectangle(encoder, {
             cell_position.x, cell_position.y, width,
-            TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING},
+            terminal_font_size(encoder^.ui_text_size_percent) +
+            terminal_line_spacing(encoder^.ui_text_size_percent)},
             terminal_packed_color(background))
     }
 }
@@ -1619,12 +1643,13 @@ terminal_shaped_glyph_destination :: proc(
     glyph: font.Shaped_Glyph, cell_position: geometry.Vector2) -> (
     geometry.Rectangle, bool) {
 
-    scale := TERMINAL_FONT_SIZE/f32(resolved.raster_pixel_height)
-    offset_scale := TERMINAL_FONT_SIZE/f32(font.JULIA_MONO_FONT_SIZE)/64
+    font_size := terminal_font_size(encoder^.ui_text_size_percent)
+    scale := font_size/f32(resolved.raster_pixel_height)
+    offset_scale := font_size/f32(font.JULIA_MONO_FONT_SIZE)/64
     bitmap_top, valid_top := font.font_raster_bitmap_top_logical(
         {
             line_top = cell_position.y,
-            logical_size = TERMINAL_FONT_SIZE,
+            logical_size = font_size,
             canonical_pixel_height = resolved.canonical_pixel_height,
             canonical_ascent = resolved.canonical_raster_ascent,
             bitmap_offset_y = resolved.offset_y,
@@ -1791,8 +1816,24 @@ terminal_prepare_shaped_run :: proc(
         return false
     }
     terminal_map_shape_cell_columns(request.cells, workspace)
+    if !terminal_prepare_shaped_raster(request, workspace, glyph_count) {
+        return false
+    }
+    return true
+}
+
+// Prepare the scaled atlas request and verify every shaped glyph is resident.
+terminal_prepare_shaped_raster :: proc(
+    request: Terminal_Shaped_Run_Draw,
+    workspace: ^Terminal_Shaped_Run_Workspace,
+    glyph_count: int) -> bool {
+    text_size_percent := 100
+    if request.encoder != nil {
+        text_size_percent = request.encoder^.ui_text_size_percent
+    }
     raster_request, request_valid := viewtext.ui_text_raster_request(
-        request.resolver, request.key, TERMINAL_FONT_SIZE, request.encoder)
+        request.resolver, request.key, terminal_font_size(text_size_percent),
+        request.encoder)
     if !request_valid {
         return false
     }
@@ -1915,7 +1956,8 @@ terminal_draw_shaped_prompt_span :: proc(
         resolver = draw.resolver,
         cells = cells[:cell_count],
         position = draw.position,
-        column_width = terminal_column_width(regular),
+        column_width = terminal_column_width(
+            regular, draw.encoder^.ui_text_size_percent),
         key = draw.key,
         color = draw.color,
     })
@@ -1949,7 +1991,7 @@ terminal_draw_cell :: proc(
         text = text,
         position = position,
         color = color,
-        font = {font, TERMINAL_FONT_SIZE},
+        font = {font, terminal_font_size(draw.encoder^.ui_text_size_percent)},
     })
 }
 
@@ -2081,11 +2123,14 @@ terminal_draw_inverted_span :: proc(
     draw: Terminal_Text_Overlay_Draw, span: Terminal_Line_Selection,
     right_edge_x: f32) {
     span_position := geometry.Vector2{
-        draw.position.x + terminal_position_x(draw.font, draw.text, span.start),
+        draw.position.x + terminal_position_x(
+            draw.font, draw.text, span.start,
+            draw.encoder^.ui_text_size_percent),
         draw.position.y,
     }
     span_end_x := draw.position.x +
-        terminal_position_x(draw.font, draw.text, span.end)
+        terminal_position_x(draw.font, draw.text, span.end,
+            draw.encoder^.ui_text_size_percent)
 
     text_start := math.clamp(span.start, 0, len(draw.text))
     text_end := math.clamp(span.end, text_start, len(draw.text))
@@ -2096,9 +2141,9 @@ terminal_draw_inverted_span :: proc(
         rect_width = math.max(rect_width, right_edge_x - span_position.x)
     }
 
-    rect_height := TERMINAL_FONT_SIZE
+    rect_height := terminal_font_size(draw.encoder^.ui_text_size_percent)
     if span.covers_trailing_gap {
-        rect_height += TERMINAL_LINE_SPACING
+        rect_height += terminal_line_spacing(draw.encoder^.ui_text_size_percent)
     }
 
     _ = native.draw_encoder_rectangle(draw.encoder, {
@@ -2129,13 +2174,15 @@ terminal_draw_cursor :: proc(
     cursor_end := terminal_codepoint_end(draw.text, cursor_position)
 
     prefix_width := terminal_text_column_width(
-        draw.font, draw.text[:cursor_position])
+        draw.font, draw.text[:cursor_position],
+        draw.encoder^.ui_text_size_percent)
     cursor_screen_position := geometry.Vector2{
         draw.position.x + prefix_width, draw.position.y}
 
     glyph_text :=
         cursor_position < cursor_end ? draw.text[cursor_position:cursor_end] : " "
-    glyph_width := terminal_text_column_width(draw.font, glyph_text)
+    glyph_width := terminal_text_column_width(
+        draw.font, glyph_text, draw.encoder^.ui_text_size_percent)
 
     rect_color := draw.theme.selection_foreground if
         on_selection else draw.theme.default_foreground
@@ -2145,7 +2192,7 @@ terminal_draw_cursor :: proc(
     if !terminal_focused {
         _ = native.draw_encoder_rectangle_outline(draw.encoder, {
             cursor_screen_position.x, cursor_screen_position.y,
-            glyph_width, TERMINAL_FONT_SIZE,
+            glyph_width, terminal_font_size(draw.encoder^.ui_text_size_percent),
         }, 1, rect_color)
         if !on_selection {
             _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver,
@@ -2157,7 +2204,7 @@ terminal_draw_cursor :: proc(
 
     _ = native.draw_encoder_rectangle(draw.encoder, {
         cursor_screen_position.x, cursor_screen_position.y,
-        glyph_width, TERMINAL_FONT_SIZE}, rect_color)
+        glyph_width, terminal_font_size(draw.encoder^.ui_text_size_percent)}, rect_color)
     _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver, .Regular,
         glyph_text, cursor_screen_position, glyph_color})
 }
@@ -2186,9 +2233,12 @@ terminal_codepoint_end :: proc(text: string, offset: int) -> int {
 //
 // Returns:
 //   - The pixel width of one virtual blank column.
-terminal_column_width :: proc(font: font.Font_Face) -> f32 {
-    advance, _ := viewtext.ui_text_column_advance(font, TERMINAL_FONT_SIZE)
-    return advance + TERMINAL_TEXT_SPACING
+terminal_column_width :: proc(
+    font: font.Font_Face, text_size_percent := 100) -> f32 {
+    advance, _ := viewtext.ui_text_column_advance(
+        font, terminal_font_size(text_size_percent))
+    return advance + TERMINAL_TEXT_SPACING *
+        terminal_text_scale_factor(text_size_percent)
 }
 
 //   Resolve the pixel x-offset for a byte offset that may exceed a line's
@@ -2203,15 +2253,17 @@ terminal_column_width :: proc(font: font.Font_Face) -> f32 {
 // Returns:
 //   - The pixel x-offset from the line's left edge.
 terminal_position_x :: proc(
-    font: font.Font_Face, line_text: string, offset: int) -> f32 {
+    font: font.Font_Face, line_text: string, offset: int,
+    text_size_percent := 100) -> f32 {
     if offset <= len(line_text) {
         return terminal_text_column_width(
-            font, line_text[:math.max(offset, 0)])
+            font, line_text[:math.max(offset, 0)], text_size_percent)
     }
 
-    real_width := terminal_text_column_width(font, line_text)
+    real_width := terminal_text_column_width(font, line_text, text_size_percent)
     virtual_columns := offset - len(line_text)
-    return real_width + f32(virtual_columns) * terminal_column_width(font)
+    return real_width + f32(virtual_columns) *
+        terminal_column_width(font, text_size_percent)
 }
 
 // Count terminal columns in one UTF-8 span without retaining grapheme storage.
@@ -2234,6 +2286,8 @@ terminal_text_column_count :: proc(text: string) -> int {
 }
 
 // Measure one UTF-8 prefix using terminal Unicode column widths.
-terminal_text_column_width :: proc(font: font.Font_Face, text: string) -> f32 {
-    return f32(terminal_text_column_count(text))*terminal_column_width(font)
+terminal_text_column_width :: proc(
+    font: font.Font_Face, text: string, text_size_percent := 100) -> f32 {
+    return f32(terminal_text_column_count(text)) *
+        terminal_column_width(font, text_size_percent)
 }

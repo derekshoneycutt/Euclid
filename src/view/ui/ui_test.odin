@@ -346,6 +346,31 @@ gif_timing_segments_fit_compact_panel :: proc(t: ^testing.T) {
         panel.x + panel.width - theme.SETTINGS_PANEL_INSET)
 }
 
+// Verify GIF controls and the saved-path field fit each supported text size.
+@(test)
+gif_controls_fit_supported_text_sizes :: proc(t: ^testing.T) {
+    panel := geometry.Rectangle{10, 20, 240, 480}
+    stack := geometry.Rectangle{18, 28, 224, 472}
+    text_percents := [4]int{100, 125, 150, 175}
+    for text_percent in text_percents {
+        rows := uigif.gif_view_layout_rows(stack, text_percent)
+        animation, recorded := uigif.gif_timing_button_rects(
+            panel, rows.timing_y, text_percent)
+        timing_bottom := max(animation.y + animation.height,
+            recorded.y + recorded.height)
+        timing_row_bottom := rows.timing_y +
+            uigif.gif_timing_segment_size(stack.width, text_percent)
+        testing.expect(t, timing_bottom <= timing_row_bottom)
+        testing.expect(t, rows.save_button_y >= timing_bottom)
+        testing.expect(t, uigif.gif_save_button_height(text_percent) >=
+            theme.ui_font_size(text_percent))
+        field := uigif.gif_path_input_rect_for_panel(panel, text_percent)
+        testing.expect(t, field.height >= theme.ui_font_size(text_percent))
+        testing.expect(t, field.y >= rows.status_y +
+            uigif.gif_path_input_top_offset(text_percent))
+    }
+}
+
 // Verify optional settings labels expose unavailable controls without audio changes.
 @(test)
 settings_capability_labels_match_prepared_availability :: proc(t: ^testing.T) {

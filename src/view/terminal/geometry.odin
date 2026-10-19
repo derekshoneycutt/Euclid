@@ -224,7 +224,8 @@ terminal_prepare_resize_view_state :: proc(
         term.scroll_offset_y <= 0 {
         return
     }
-    pitch := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
+    pitch := terminal_font_size(term.text_size_percent) +
+        terminal_line_spacing(term.text_size_percent)
     anchor := viewterminalmodel.Terminal_View_Position{
         line = int(term.scroll_offset_y / pitch),
     }
@@ -330,8 +331,9 @@ terminal_resize_selection_position_valid :: proc(
     if terminal_prompt_visible(term) {
         real_lines += terminal_live_input_line_count(term)
     }
-    viewport_end := int(term.scroll_offset_y /
-        (TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING)) + int(dimensions.rows)
+    line_height := terminal_font_size(term.text_size_percent) +
+        terminal_line_spacing(term.text_size_percent)
+    viewport_end := int(term.scroll_offset_y / line_height) + int(dimensions.rows)
     if position.line < 0 || position.line >= max(real_lines, viewport_end) {
         return false
     }
@@ -515,8 +517,9 @@ terminal_update_geometry :: proc(
     term: ^viewterminalmodel.Terminal_State, font: font.Font_Face,
     bounds: geometry.Rectangle) -> Terminal_Geometry_Change {
     padded := terminal_padded_bounds(bounds)
-    column_width := terminal_column_width(font)
-    line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
+    column_width := terminal_column_width(font, term.text_size_percent)
+    line_height := terminal_font_size(term.text_size_percent) +
+        terminal_line_spacing(term.text_size_percent)
     candidate := terminal_dimensions_from_viewport(
         padded.width, padded.height, column_width, line_height,
         term.dimension_limits)

@@ -29,6 +29,7 @@ draw_encoded_colored_label :: proc(
         text = text,
         position = position,
         color = draw_color,
-        font = ui_text_font(face),
+        font = ui_text_font(face,
+            encoder^.ui_text_size_percent if encoder != nil else 100),
     })
 }

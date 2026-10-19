@@ -145,7 +145,8 @@ draw_encoded_panel_text :: proc(
             sections.items[index].label,
             header.x + theme.ACCORDION_HEADER_PADDING + theme.ACCORDION_DISCLOSURE_SIZE +
                 theme.ACCORDION_HEADER_PADDING,
-            header.y + (header.height - theme.TREE_FONT_SIZE) * 0.5)
+            header.y + (header.height - theme.ui_font_size(
+                state^.ui_runtime.preferences.values.interface.text_size_percent)) * 0.5)
         if sections.items[index].error_indicator {
             center, radius := uiaccordion.accordion_error_indicator_geometry(header)
             _ = native.draw_encoder_circle(encoder, center, radius, theme.UI_ERROR_COLOR)

@@ -44,18 +44,22 @@ prepare_presentation_visual :: proc(
     }
     text_panel := uiwidgets.text_content_panel(panel)
     text := julia.current_view_snapshot_text(state)
+    text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    text_padding := theme.ui_scaled_metric(theme.TEXT_PADDING, text_percent)
+    row_height := theme.ui_scaled_metric(theme.TEXT_ROW_HEIGHT, text_percent)
+    wrap_advance := theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent)
     content_height := dynlayout.presentation_content_height_or_fallback(
         &state^.dynview, text_panel, {
-            text_padding = theme.TEXT_PADDING, wrap_advance = theme.TEXT_WRAP_ADVANCE,
-            row_height = theme.TEXT_ROW_HEIGHT, text = text})
+            text_padding = text_padding, wrap_advance = wrap_advance,
+            row_height = row_height, text = text})
     step := dynlayout.presentation_scroll_step_or_fallback(
-        &state^.dynview, theme.TEXT_ROW_HEIGHT)
+        &state^.dynview, row_height)
     scroll := uiwidgets.scroll_container_visual(
         text_panel, content_height, state^.ui_runtime.presentation.text_scroll_y, step)
     return {active = true, text_panel = text_panel, view_text = text, scroll = scroll,
         selection_view = {panel = text_panel, scroll_y = scroll.scroll_y_out,
-            text_padding = theme.TEXT_PADDING, row_height = theme.TEXT_ROW_HEIGHT,
-            wrap_advance = theme.TEXT_WRAP_ADVANCE, fallback_text = text}}
+            text_padding = text_padding, row_height = row_height,
+            wrap_advance = wrap_advance, fallback_text = text}}
 }
 
 // presentation_semantic_id identifies one compiled document generation.
@@ -113,9 +117,10 @@ draw_encoded_presentation_geometry :: proc(
     if uiterminal.is_terminal_selected(state) {
         return
     }
+    text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
     ui_dynview.draw_encoded_geometry(&state^.dynview, encoder,
         text_panel, state^.ui_runtime.presentation.text_scroll_y,
-        theme.TEXT_PADDING)
+        theme.ui_scaled_metric(theme.TEXT_PADDING, text_percent))
 }
 
 // Draw clipped Dynview or fallback content, then its prepared scrollbar overlay.
@@ -129,6 +134,7 @@ draw_encoded_presentation_text :: proc(
         encoder, geometry.Rectangle(presentation.scroll.view_rect))
     fallback := ui_dynview.Fallback_Text_Content{
         presentation.view_text, theme.draw_color(encoder, .Text)}
+    text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
     params := ui_dynview.Presentation_Draw_Params{
         encoder = encoder,
         panel = geometry.Rectangle(presentation.text_panel),
@@ -136,10 +142,10 @@ draw_encoded_presentation_text :: proc(
         font = font.cache_borrow(&state^.font_cache, .Regular),
         font_cache = &state^.font_cache,
         metrics = {
-            padding = theme.TEXT_PADDING,
-            row_height = theme.TEXT_ROW_HEIGHT,
-            wrap_advance = theme.TEXT_WRAP_ADVANCE,
-            font_size = theme.TREE_FONT_SIZE,
+            padding = theme.ui_scaled_metric(theme.TEXT_PADDING, text_percent),
+            row_height = theme.ui_scaled_metric(theme.TEXT_ROW_HEIGHT, text_percent),
+            wrap_advance = theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent),
+            font_size = theme.ui_font_size(text_percent),
         },
     }
     ui_dynview.draw_presentation_styled_or_fallback(

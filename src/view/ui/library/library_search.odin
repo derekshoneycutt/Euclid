@@ -111,36 +111,46 @@ library_search_input_params :: proc(
     frame: input.Input_Frame,
     clip_rect: geometry.Rectangle) -> uiwidgets.Input_Box_Params {
     search := &state^.ui_runtime.library.search
-    focus := state^.ui_runtime.input.interaction_frame.effective_focus
-    target := state^.ui_runtime.input.interaction_frame.pointer_target
-    query := string(search^.query[:search^.query_length])
+    interaction := &state^.ui_runtime.input.interaction_frame
+    text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
     return {rect = layout.text_input,
         clip_rect = clip_rect,
         controls = tree_semantic_id(),
-        descriptor = {
-            id = uisemantics.semantic_control_id(
-                .Library_Control, LIBRARY_SEARCH_INPUT_ID),
-            text_run_id = uisemantics.semantic_control_id(
-                .Library_Control, LIBRARY_SEARCH_TEXT_RUN_ID),
-            region = .Accordion_Content,
-            label = viewmessages.shell_message(state, .Library_Search_Input),
-            placeholder = viewmessages.shell_message(state, .Library_Search_Input),
-            text = query, mode = .Editable,
-            cursor_byte = search^.input.cursor_byte,
-            anchor_byte = search^.input.anchor_byte,
-            content_revision = search^.query_revision,
-        },
+        descriptor = library_search_input_descriptor(state, search),
         semantic_focus = state^.ui_runtime.semantic_focus, state = &search^.input,
-        frame = frame, focused = focus.kind == .Input_Box &&
-            focus.id == LIBRARY_SEARCH_INPUT_ID,
-        pointer_routed = target.focus.kind == .Input_Box &&
-            target.id == LIBRARY_SEARCH_INPUT_ID,
-        column_advance = theme.TEXT_WRAP_ADVANCE,
+        frame = frame,
+        focused = interaction^.effective_focus.kind == .Input_Box &&
+            interaction^.effective_focus.id == LIBRARY_SEARCH_INPUT_ID,
+        pointer_routed = interaction^.pointer_target.focus.kind == .Input_Box &&
+            interaction^.pointer_target.id == LIBRARY_SEARCH_INPUT_ID,
+        column_advance = theme.ui_scaled_metric(
+            theme.TEXT_WRAP_ADVANCE, text_percent),
+        font_size = theme.ui_font_size(text_percent),
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         resolver = view_font.cache_terminal_resolver(&state^.font_cache),
         edit_target = {search^.query[:], &search^.query_length},
         edit_policy = {unicode_completion = true,
             end_suggestion = string(search^.suggestion[:search^.suggestion_length])}}
+}
+
+// Snapshot the current query as the editable semantic descriptor.
+library_search_input_descriptor :: proc(
+    state: ^core.Euclid_General_State,
+    search: ^viewmodel.Library_Search_State) -> viewmodel.Ui_Editable_Text_Descriptor {
+    return {
+        id = uisemantics.semantic_control_id(
+            .Library_Control, LIBRARY_SEARCH_INPUT_ID),
+        text_run_id = uisemantics.semantic_control_id(
+            .Library_Control, LIBRARY_SEARCH_TEXT_RUN_ID),
+        region = .Accordion_Content,
+        label = viewmessages.shell_message(state, .Library_Search_Input),
+        placeholder = viewmessages.shell_message(state, .Library_Search_Input),
+        text = string(search^.query[:search^.query_length]),
+        mode = .Editable,
+        cursor_byte = search^.input.cursor_byte,
+        anchor_byte = search^.input.anchor_byte,
+        content_revision = search^.query_revision,
+    }
 }
 
 // library_search_apply_input commits edit and immediate-submit intent.

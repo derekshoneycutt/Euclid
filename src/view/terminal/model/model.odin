@@ -46,6 +46,7 @@ Terminal_State :: struct {
     raster_renderer: termattachment.Raster_Renderer,
     output_producer: termmodel.Terminal_Producer,
     geometry: protocol.Terminal_Geometry,
+    text_size_percent: int,
     julia_geometry_generation: u64,
     dimension_limits: protocol.Terminal_Dimension_Limits,
     rejected_geometry_count: u64,

@@ -202,9 +202,9 @@ General features:
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support
   - [X] Reduced motion support
+  - [X] High contrast mode
+  - [X] Large text support
   - [ ] Additional accessibility support : Dynview
-  - [ ] High contrast mode
-  - [ ] Large text support
 - [ ] Terminal / REPL
   - [X] Basic setup and availability
   - [X] Basic help feature

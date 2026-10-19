@@ -47,6 +47,19 @@ Terminal_Content_Route :: struct {
     over_track: bool,
 }
 
+// terminal_apply_text_size keeps the pixel scroll anchor aligned when glyph pitch changes.
+terminal_apply_text_size :: proc(
+    term: ^viewterminalmodel.Terminal_State, percent: int) {
+    previous := term^.text_size_percent
+    if previous > 0 && previous != percent {
+        ratio := terminalview.terminal_text_scale_factor(percent) /
+            terminalview.terminal_text_scale_factor(previous)
+        term^.scroll_offset_y *= ratio
+        term^.scroll_content_height *= ratio
+    }
+    term^.text_size_percent = percent
+}
+
 // terminal_semantic_id identifies one replaceable Terminal animation session.
 terminal_semantic_id :: #force_inline proc(
     state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
@@ -86,7 +99,7 @@ terminal_editable_text_geometry :: proc(
     column := uiwidgets.input_box_byte_column(
         text[line_start:cursor], cursor - line_start)
     prefix_columns := uiwidgets.input_box_byte_column(prefix, len(prefix))
-    column_width := terminalview.terminal_column_width(layout.regular)
+    column_width := layout.column_width
     origin_y := scroll.view_rect.y - scroll.scroll_y_out
     caret := geometry.Rectangle{
         layout.padded_bounds.x + f32(prefix_columns + column) * column_width,
@@ -308,6 +321,8 @@ terminal_prepare_frame :: proc(
     font_face: font.Font_Face, bounds: geometry.Rectangle,
     child_pointer_capture: bool) -> Terminal_Prepared_Frame {
     term := &state^.terminal
+    terminal_apply_text_size(term,
+        state^.ui_runtime.preferences.values.interface.text_size_percent)
     geometry_change := terminalview.terminal_update_geometry(
         term, font_face, geometry.Rectangle(bounds))
     resolver := font.cache_terminal_resolver(&state^.font_cache)
@@ -370,6 +385,8 @@ terminal_prepare_visual :: proc(
     if !term.initialized {
         return {}
     }
+    terminal_apply_text_size(term,
+        state^.ui_runtime.preferences.values.interface.text_size_percent)
     resolver := font.cache_terminal_resolver(&state^.font_cache)
     layout := terminalview.terminal_draw_layout(
         term, resolver, bounds, terminal_draw_theme(theme.increased_contrast(

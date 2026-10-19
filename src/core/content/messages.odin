@@ -61,6 +61,10 @@ Content_Message_Id :: enum u16 {
     Settings_Stats_Interval = 1222,
     Settings_Increased_Contrast = 1223,
     Settings_System_Increased_Contrast = 1224,
+    Settings_Text_Size = 1225,
+    Settings_Section_Accessibility = 1226,
+    Settings_Section_Particles = 1227,
+    Settings_Section_Other = 1228,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -110,7 +114,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 92
+CONTENT_SHIPPED_MESSAGE_COUNT :: 96
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -163,6 +167,10 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1222, "ui.settings.stats.interval"},
     {1223, "ui.settings.increased_contrast"},
     {1224, "ui.settings.system_increased_contrast"},
+    {1225, "ui.settings.text_size"},
+    {1226, "ui.settings.section.accessibility"},
+    {1227, "ui.settings.section.particles"},
+    {1228, "ui.settings.section.other"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},

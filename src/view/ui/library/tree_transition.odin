@@ -19,6 +19,7 @@ Tree_Motion_Admission :: struct {
     search_active: bool,
     count: int,
     panel: geometry.Rectangle,
+    row_height: f32,
     reduce_motion: bool,
     programmatic_reveal: bool,
 }
@@ -34,6 +35,7 @@ Tree_Geometry_Context :: struct {
     search_active: bool,
     visibility: Tree_Visibility_Policy,
     panel: geometry.Rectangle,
+    row_height: f32,
     now_seconds: f64,
     reduce_motion: bool,
 }
@@ -67,7 +69,8 @@ tree_motion_needs_reset :: proc(
     motion: ^viewmodel.Ui_Tree_Motion,
     current: Tree_Motion_Admission) -> bool {
     return !motion^.initialized || motion^.generation != current.generation ||
-        motion^.panel != current.panel || motion^.count != current.count ||
+        motion^.panel != current.panel || motion^.row_height != current.row_height ||
+        motion^.count != current.count ||
         motion^.topology_revision != current.topology_revision ||
         motion^.query_revision != current.query_revision ||
         motion^.search_generation != current.search_generation ||
@@ -89,6 +92,7 @@ tree_motion_reset :: proc(
         search_generation = admission.search_generation,
         search_active = admission.search_active,
         panel = admission.panel,
+        row_height = admission.row_height,
         branches = branches,
     }
     projection := ctx.projection
@@ -151,7 +155,7 @@ tree_motion_measure_step :: proc(
     assert(motion_index >= 0, "tree identity absent from admitted motion registry")
     branch := &ctx.motion^.branches[motion_index]
     tree_motion_sample_branch(branch, frame^.children_height, ctx.now_seconds)
-    extent := theme.TREE_ROW_HEIGHT + tree_actions_sample(ctx, item) + branch^.height
+    extent := ctx.row_height + tree_actions_sample(ctx, item) + branch^.height
     if stack_count == 1 {
         return {extent = extent, complete = true, valid = true}
     }
@@ -209,7 +213,7 @@ tree_motion_measure_roots :: proc(ctx: Tree_Geometry_Context) -> (f32, bool) {
 tree_motion_item_extent :: proc(
     ctx: Tree_Geometry_Context, item: ^viewmodel.Ui_Tree_Item) -> f32 {
     index := tree_motion_index(ctx.motion, item^.key)
-    return theme.TREE_ROW_HEIGHT +
+    return ctx.row_height +
         tree_actions_current_height(ctx.drawer, item^.key) +
         ctx.motion^.branches[index].height
 }
@@ -240,7 +244,6 @@ tree_motion_admit :: proc(ctx: Tree_Geometry_Context) {
 tree_frame_context :: proc(params: Tree_List_Params) -> Tree_Frame_Context {
     runtime := params.ui_runtime
     projection := &runtime^.library.tree.projection
-    search := &runtime^.library.search
     reduce_motion := params.reduce_motion
     geometry_ctx := Tree_Geometry_Context{
         ji = params.ji,
@@ -253,24 +256,37 @@ tree_frame_context :: proc(params: Tree_List_Params) -> Tree_Frame_Context {
             params.visibility.search^.active,
         visibility = params.visibility,
         panel = geometry.Rectangle(params.list_panel),
+        row_height = theme.ui_tree_row_height(
+            runtime^.preferences.values.interface.text_size_percent),
         now_seconds = params.mouse_input.sample_time_seconds,
         reduce_motion = reduce_motion,
     }
     geometry_ctx.visibility.projection = projection
     return {
         geometry = geometry_ctx,
-        admission = {
-            generation = params.ji^.content_generation,
-            topology_revision = projection^.topology_revision,
-            query_revision = search^.query_revision,
-            search_generation = search^.committed_generation,
-            search_active = search^.active,
-            count = projection^.count,
-            panel = geometry.Rectangle(params.list_panel),
-            reduce_motion = reduce_motion,
-            programmatic_reveal = runtime^.library.tree.reveal_pending &&
-                runtime^.library.tree.reveal_reason == .Programmatic,
-        },
+        admission = tree_motion_admission(params, geometry_ctx),
+    }
+}
+
+// tree_motion_admission snapshots revisions and policy for one prepared tree frame.
+tree_motion_admission :: proc(
+    params: Tree_List_Params,
+    geometry_ctx: Tree_Geometry_Context) -> Tree_Motion_Admission {
+    runtime := params.ui_runtime
+    search := &runtime^.library.search
+    projection := geometry_ctx.projection
+    return {
+        generation = params.ji^.content_generation,
+        topology_revision = projection^.topology_revision,
+        query_revision = search^.query_revision,
+        search_generation = search^.committed_generation,
+        search_active = search^.active,
+        count = projection^.count,
+        panel = geometry.Rectangle(params.list_panel),
+        row_height = geometry_ctx.row_height,
+        reduce_motion = params.reduce_motion,
+        programmatic_reveal = runtime^.library.tree.reveal_pending &&
+            runtime^.library.tree.reveal_reason == .Programmatic,
     }
 }
 
@@ -319,6 +335,7 @@ tree_layout_enter_frame :: proc(
     ctx.layout^.rows[ctx.layout^.count] = {
         item = item, depth = frame^.depth,
         content_y = frame^.content_y, canonical_y = frame^.content_y,
+        row_height = ctx.geometry.row_height,
         reveal = frame^.reveal, logical = frame^.logical,
         expanded = branch^.expanded, actions = actions,
     }
@@ -327,7 +344,7 @@ tree_layout_enter_frame :: proc(
         return stack_count - 1, true
     }
     frame^.next_child = item^.first_child
-    frame^.child_y = frame^.content_y + theme.TREE_ROW_HEIGHT + actions.height
+    frame^.child_y = frame^.content_y + ctx.geometry.row_height + actions.height
     frame^.reveal = tree_reveal_intersection(
         {0, frame^.child_y, ctx.geometry.panel.width, branch^.height},
         frame^.reveal)
@@ -521,7 +538,8 @@ tree_row_screen_geometry :: proc(
     row: viewmodel.Ui_Tree_Prepared_Row, panel: geometry.Rectangle,
     scroll_y: f32) -> viewmodel.Ui_Control_Geometry {
     bounds := geometry.Rectangle{
-        panel.x, panel.y + row.content_y - scroll_y, panel.width, theme.TREE_ROW_HEIGHT}
+        panel.x, panel.y + row.content_y - scroll_y, panel.width,
+        tree_prepared_row_height(row)}
     clip := row.reveal
     clip.x += panel.x
     clip.y += panel.y - scroll_y

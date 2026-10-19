@@ -98,6 +98,7 @@ tree_transition_geometry_fixture :: proc(
         search_active = false,
         visibility = visibility,
         panel = panel,
+        row_height = theme.TREE_ROW_HEIGHT,
         now_seconds = 1,
     }
     return {
@@ -107,6 +108,7 @@ tree_transition_geometry_fixture :: proc(
             topology_revision = projection^.topology_revision,
             count = projection^.count,
             panel = panel,
+            row_height = geometry_context.row_height,
         },
     }
 }

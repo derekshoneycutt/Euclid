@@ -33,6 +33,7 @@ Settings_View_Labels :: struct {
     gpu_dust: string,
     reduce_motion: string,
     increased_contrast: string,
+    text_size: string,
 }
 
 // Shared component and input dependencies for one settings panel preparation.
@@ -55,15 +56,35 @@ Settings_View_Context :: struct {
 
 //   Row y-positions for the settings view's controls.
 Settings_View_Rows :: struct {
+    particles_header_y: f32,
     slider_label_y : f32,
     stats_y : f32,
+    other_header_y: f32,
+    animation_entries_y: f32,
     fps_y : f32,
     limit_y : f32,
     sound_y : f32,
     simd_y : f32,
     gpu_dust_y : f32,
+    accessibility_header_y: f32,
     reduce_motion_y: f32,
     increased_contrast_y: f32,
+    system_motion_y: f32,
+    system_contrast_y: f32,
+    text_size_y: f32,
+    save_status_y: f32,
+}
+
+// Settings_View_Layout_State carries the section cursor and scale metrics during layout.
+Settings_View_Layout_State :: struct {
+    stack_rect: geometry.Rectangle,
+    cursor: uilayout.Stack_Panel_Cursor,
+    rows: Settings_View_Rows,
+    row_gap: f32,
+    heading_height: f32,
+    slider_height: f32,
+    system_motion_notice: bool,
+    system_contrast_notice: bool,
 }
 
 //   Fixed prepared interaction results for all settings controls.
@@ -71,6 +92,7 @@ Settings_View_Preparation :: struct {
     rows: Settings_View_Rows,
     scroll: uiwidgets.Scroll_Container_Update_Result,
     max_particles: uiwidgets.Integer_Slider_Result,
+    text_size: uiwidgets.Integer_Slider_Result,
     fps: uiwidgets.Checkbox_Result,
     limit: uiwidgets.Checkbox_Result,
     sound: uiwidgets.Checkbox_Result,
@@ -99,15 +121,15 @@ Settings_Control_Update :: struct {
     gpu_available: bool,
 }
 
-// Settings_Particle_Stats_Context groups display facts for the settings statistics.
-Settings_Particle_Stats_Context :: struct {
+// Settings_Text_Context shares display and font facts across Settings labels.
+Settings_Text_Context :: struct {
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
     stats_y: f32,
     encoder: ^native.Draw_Encoder,
-    animation_entries_added: int,
+    text_size_percent: int,
 }
 
 // settings_cancel_geometry_capture releases transient panel drags after layout changes.
@@ -137,6 +159,7 @@ settings_view_context :: proc(
         reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion),
         increased_contrast = viewmessages.shell_message(
             state, .Settings_Increased_Contrast),
+        text_size = viewmessages.shell_message(state, .Settings_Text_Size),
     }
     return Settings_View_Context{
         panel = panel, mouse_input = mouse_input,
@@ -195,9 +218,9 @@ draw_encoded_slider_geometry :: proc(
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
     checks := [7]uiwidgets.Checkbox_Result{
-        prepared.fps, prepared.limit, prepared.sound,
-        prepared.simd, prepared.gpu_dust, prepared.reduce_motion,
-        prepared.increased_contrast,
+        prepared.reduce_motion, prepared.increased_contrast,
+        prepared.gpu_dust, prepared.fps, prepared.limit,
+        prepared.sound, prepared.simd,
     }
     for check in checks {
         draw_encoded_checkbox_geometry(
@@ -209,6 +232,7 @@ draw_encoded_settings_checkboxes :: proc(
 draw_encoded_settings_geometry :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
     draw_encoded_slider_geometry(encoder, prepared.max_particles)
+    draw_encoded_slider_geometry(encoder, prepared.text_size)
     draw_encoded_settings_checkboxes(encoder, prepared)
     uiwidgets.draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
 }
@@ -218,32 +242,31 @@ draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
     labels := [7]struct{label: string, y: f32}{
+        {viewmessages.shell_message(state, .Settings_Reduce_Motion),
+            rows.reduce_motion_y},
+        {viewmessages.shell_message(state, .Settings_Increased_Contrast),
+            rows.increased_contrast_y},
+        {settings_gpu_dust_label(state, prepared.gpu_available),
+            rows.gpu_dust_y},
         {viewmessages.shell_message(state, .Settings_Display_Fps), rows.fps_y},
         {viewmessages.shell_message(state, .Settings_Limit_Fps), rows.limit_y},
         {viewmessages.shell_message(state, .Settings_Drawing_Sound), rows.sound_y},
         {settings_simd_label(state, prepared.simd_available), rows.simd_y},
-        {settings_gpu_dust_label(state, prepared.gpu_available), rows.gpu_dust_y},
-        {viewmessages.shell_message(
-            state, .Settings_Reduce_Motion), rows.reduce_motion_y},
-        {viewmessages.shell_message(
-            state, .Settings_Increased_Contrast), rows.increased_contrast_y},
     }
     for item in labels {
         viewtext.draw_encoded_label(&state^.font_cache, encoder, item.label,
             x + theme.SETTINGS_CHECKBOX_SIZE + theme.SETTINGS_CHECKBOX_LABEL_GAP,
             item.y - theme.SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
     }
-    notice_y := rows.increased_contrast_y + theme.SETTINGS_TOGGLE_ROW_GAP
     if state^.ui_runtime.platform_reduce_motion {
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             viewmessages.shell_message(state, .Settings_System_Reduce_Motion),
-            x, notice_y)
-        notice_y += theme.SETTINGS_TOGGLE_ROW_GAP
+            x, rows.system_motion_y)
     }
     if state^.ui_runtime.platform_increased_contrast {
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             viewmessages.shell_message(state, .Settings_System_Increased_Contrast),
-            x, notice_y)
+            x, rows.system_contrast_y)
     }
 }
 
@@ -254,36 +277,97 @@ draw_encoded_settings_text :: proc(
     panel := prepared.scroll.view_rect
     rows := prepared.rows
     x := panel.x + theme.SETTINGS_PANEL_INSET
-    value := fmt.tprintf("%d", state^.particle_system.use_max_dust_particles)
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
+    text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    text_ctx := Settings_Text_Context{
+        state = state,
+        panel = panel,
+        font = face,
+        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        stats_y = rows.stats_y,
+        encoder = encoder,
+        text_size_percent = text_percent,
+    }
+    draw_encoded_settings_slider_labels(text_ctx, rows)
+    draw_encoded_settings_section_heading(state, encoder,
+        .Settings_Section_Accessibility, x, rows.accessibility_header_y)
+    draw_encoded_settings_section_heading(state, encoder,
+        .Settings_Section_Particles, x, rows.particles_header_y)
+    draw_encoded_settings_section_heading(state, encoder,
+        .Settings_Section_Other, x, rows.other_header_y)
+    viewtext.draw_encoded_label(&state^.font_cache, encoder,
+        viewmessages.shell_message(state, .Settings_Text_Size),
+        x, rows.text_size_y)
+    draw_encoded_settings_size_value(text_ctx, rows.text_size_y)
+    draw_settings_particle_stats(text_ctx)
+    draw_settings_animation_count(text_ctx, rows.animation_entries_y)
+    draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
+    draw_encoded_settings_save_status(state, encoder, x, rows.save_status_y)
+}
+
+// Draw the labels and right-aligned values associated with both Settings sliders.
+draw_encoded_settings_slider_labels :: proc(
+    ctx: Settings_Text_Context, rows: Settings_View_Rows) {
+    state := ctx.state
+    font_size := theme.ui_font_size(ctx.text_size_percent)
+    dust_value := fmt.tprintf("%d", state^.particle_system.use_max_dust_particles)
+    dust_width, dust_measured := viewtext.ui_text_measure_monospace(
+        dust_value, ctx.font, font_size, 0)
+    if !dust_measured {
+        dust_width = 40
+    }
+    viewtext.draw_encoded_label(&state^.font_cache, ctx.encoder,
+        viewmessages.shell_message(state, .Settings_Maximum_Dust),
+        ctx.panel.x + theme.SETTINGS_PANEL_INSET, rows.slider_label_y)
+    viewtext.draw_encoded_label(&state^.font_cache, ctx.encoder, dust_value,
+        settings_right_aligned_x(ctx.panel, dust_width), rows.slider_label_y)
+}
+
+// Draw the selected percentage beside the text-size slider label.
+draw_encoded_settings_size_value :: proc(
+    ctx: Settings_Text_Context, row_y: f32) {
+    value := fmt.tprintf("%d%%", ctx.text_size_percent)
     value_width, measured := viewtext.ui_text_measure_monospace(
-        value, face, theme.TREE_FONT_SIZE, 0)
+        value, ctx.font, theme.ui_font_size(ctx.text_size_percent), 0)
     if !measured {
         value_width = 40
     }
-    viewtext.draw_encoded_label(&state^.font_cache, encoder,
-        viewmessages.shell_message(state, .Settings_Maximum_Dust), x, rows.slider_label_y)
-    viewtext.draw_encoded_label(&state^.font_cache, encoder, value,
-        settings_right_aligned_x(panel, value_width), rows.slider_label_y)
-    animation_entries_added := 0
-    if state^.julia_interface != nil {
-        animation_entries_added = state^.julia_interface^.animation_count
+    viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder, value,
+        settings_right_aligned_x(ctx.panel, value_width), row_y)
+}
+
+// Draw the current Julia animation count as the first Other Settings row.
+draw_settings_animation_count :: proc(
+    ctx: Settings_Text_Context, row_y: f32) {
+    count := 0
+    if ctx.state^.julia_interface != nil {
+        count = ctx.state^.julia_interface^.animation_count
     }
-    draw_settings_particle_stats(Settings_Particle_Stats_Context{
-        state = state, panel = panel, font = face,
-        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-        stats_y = rows.stats_y, encoder = encoder,
-        animation_entries_added = animation_entries_added,
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    label := viewmessages.shell_format(ctx.state,
+        .Settings_Stats_Animation_Entries,
+        []contentdata.Content_Format_Argument{{"count", i64(count)}},
+        storage[:])
+    stats_context := ctx
+    stats_context.stats_y = row_y
+    draw_settings_stat_row(stats_context, label, 0)
+}
+
+// Draw one localized Settings section heading.
+draw_encoded_settings_section_heading :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    id: contentdata.Content_Message_Id, x, y: f32) {
+    face := view_font.cache_borrow(&state^.font_cache, .Bold)
+    _ = viewtext.ui_text_shaped({
+        encoder = encoder,
+        resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        key = .Bold,
+        text = viewmessages.shell_message(state, id),
+        position = {x, y},
+        color = theme.draw_color(encoder, .Text),
+        font = viewtext.ui_text_font(
+            face, encoder^.ui_text_size_percent),
     })
-    draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
-    status_y := rows.increased_contrast_y + theme.SETTINGS_TOGGLE_ROW_GAP
-    if state^.ui_runtime.platform_reduce_motion {
-        status_y += theme.SETTINGS_TOGGLE_ROW_GAP
-    }
-    if state^.ui_runtime.platform_increased_contrast {
-        status_y += theme.SETTINGS_TOGGLE_ROW_GAP
-    }
-    draw_encoded_settings_save_status(state, encoder, x, status_y)
 }
 
 // Resolve and draw the localized persistence state beneath the setting controls.
@@ -334,7 +418,10 @@ settings_checkbox_params :: proc(
         id = descriptor.id,
         rect = geometry.Rectangle{
             ctx.panel.x + theme.SETTINGS_PANEL_INSET, descriptor.row_y,
-            theme.SETTINGS_CHECKBOX_SIZE, theme.SETTINGS_CHECKBOX_SIZE,},
+            theme.SETTINGS_CHECKBOX_SIZE * theme.ui_text_scale_factor(
+                ctx.preferences.interface.text_size_percent),
+            theme.SETTINGS_CHECKBOX_SIZE * theme.ui_text_scale_factor(
+                ctx.preferences.interface.text_size_percent),},
         checked = descriptor.checked,
         enabled = descriptor.enabled,
         mouse = ctx.mouse_input,
@@ -343,9 +430,14 @@ settings_checkbox_params :: proc(
         label = descriptor.label,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
-        label_font_size = theme.TREE_FONT_SIZE,
-        label_offset_x = theme.SETTINGS_CHECKBOX_LABEL_GAP,
-        label_offset_y = -theme.SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
+        label_font_size = theme.ui_font_size(
+            ctx.preferences.interface.text_size_percent),
+        label_offset_x = theme.ui_scaled_metric(
+            theme.SETTINGS_CHECKBOX_LABEL_GAP,
+            ctx.preferences.interface.text_size_percent),
+        label_offset_y = -theme.ui_scaled_metric(
+            theme.SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
+            ctx.preferences.interface.text_size_percent),
         semantic_focus = ctx.semantic_focus,
         semantic_domain = .Settings_Control,
         semantic_order = descriptor.order,
@@ -368,33 +460,54 @@ settings_max_particles_params :: proc(
         value = ctx.particle_system^.use_max_dust_particles,
         min_value = 0,
         max_value = particlemodel.MAX_LOW_PARTICLES,
+        text_size_percent = ctx.preferences.interface.text_size_percent,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 0,
+        semantic_order = 4,
     }
 }
 
-// Draw completed particle interval peaks separately from the live animation-entry count.
-draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
+// Build the app-owned discrete text-size slider parameters.
+settings_text_size_params :: proc(
+    ctx: Settings_View_Context,
+    row_y: f32) -> uiwidgets.Integer_Slider_Params {
+    return {
+        panel = geometry.Rectangle(ctx.panel),
+        row_y = row_y,
+        mouse_input = ctx.mouse_input,
+        press_owner = ctx.press_owner,
+        semantic_focus = ctx.semantic_focus,
+        press_id = 6103,
+        label = ctx.labels.text_size,
+        value = ctx.preferences.interface.text_size_percent,
+        min_value = theme.TEXT_SIZE_MIN_PERCENT,
+        max_value = theme.TEXT_SIZE_MAX_PERCENT,
+        step = theme.TEXT_SIZE_STEP_PERCENT,
+        value_suffix = "%",
+        text_size_percent = ctx.preferences.interface.text_size_percent,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
+        semantic_domain = .Settings_Control,
+        semantic_order = 3,
+    }
+}
+
+// Draw particle counters and interval text within the Particles section.
+draw_settings_particle_stats :: proc(ctx: Settings_Text_Context) {
     state := ctx.state
     counts := state^.telemetry.particle_counts.published
-    statistics := [4]struct{id: contentdata.Content_Message_Id, count: int}{
+    statistics := [3]struct{id: contentdata.Content_Message_Id, count: int}{
         {.Settings_Stats_Dust, counts.dust},
         {.Settings_Stats_Trail, counts.trail},
         {.Settings_Stats_Ui_Dust, counts.ui_dust},
-        {.Settings_Stats_Animation_Entries, ctx.animation_entries_added},
     }
     storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     for statistic, row in statistics {
         label := viewmessages.shell_format(state, statistic.id,
             []contentdata.Content_Format_Argument{{"count", i64(statistic.count)}},
             storage[:])
-        display_row := row
-        if statistic.id == .Settings_Stats_Animation_Entries {
-            display_row += 1
-        }
-        draw_settings_stat_row(ctx, label, display_row)
+        draw_settings_stat_row(ctx, label, row)
     }
     draw_settings_stat_row(ctx,
         viewmessages.shell_message(state, .Settings_Stats_Interval), 3)
@@ -402,7 +515,7 @@ draw_settings_particle_stats :: proc(ctx: Settings_Particle_Stats_Context) {
 
 // Draw one statistic or explanation at its shared Settings row spacing.
 draw_settings_stat_row :: proc(
-    ctx: Settings_Particle_Stats_Context, label: string, row: int) {
+    ctx: Settings_Text_Context, label: string, row: int) {
     viewtext.ui_text_shaped({
         encoder = ctx.encoder,
         resolver = ctx.font_resolver,
@@ -410,11 +523,19 @@ draw_settings_stat_row :: proc(
         text = label,
         position = {
             ctx.panel.x + theme.SETTINGS_PANEL_INSET,
-            ctx.stats_y + f32(row)*theme.SETTINGS_STATS_ROW_GAP,
+            ctx.stats_y + f32(row)*settings_scaled_row_gap(
+                ctx.text_size_percent),
         },
         color = theme.draw_color(ctx.encoder, .Text),
-        font = viewtext.ui_text_font(ctx.font),
+        font = viewtext.ui_text_font(ctx.font, ctx.text_size_percent),
     })
+}
+
+// settings_scaled_row_gap keeps text rows separated at every supported size.
+settings_scaled_row_gap :: #force_inline proc(text_size_percent: int) -> f32 {
+    return max(max(theme.SETTINGS_TOGGLE_ROW_GAP,
+        theme.SETTINGS_STATS_ROW_GAP),
+        theme.ui_font_size(text_size_percent) + 6)
 }
 
 //   Place one fixed-size settings row and return it with the advanced cursor.
@@ -437,42 +558,94 @@ settings_stack_row :: #force_inline proc(
 
 //   Lay out the settings view rows and return their y-positions.
 settings_view_layout_rows :: proc(
-    stack_rect: geometry.Rectangle) -> Settings_View_Rows {
-    stack_cursor := uilayout.stack_panel_cursor_zero()
-    stack_cursor.offset =
-        theme.SETTINGS_SLIDER_LABEL_TOP_OFFSET - theme.SETTINGS_HEADER_TOP_OFFSET
-
-    slider_label_row := settings_stack_row(stack_rect,
-        theme.SETTINGS_TRACK_TOP_OFFSET + theme.SETTINGS_STATS_TOP_OFFSET, stack_cursor)
-    stats_row := settings_stack_row(stack_rect,
-        theme.SETTINGS_TOGGLE_TOP_OFFSET - theme.SETTINGS_STATS_TOP_OFFSET,
-        slider_label_row.cursor_out)
-    fps_row := settings_stack_row(stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP,
-        stats_row.cursor_out)
-    limit_row := settings_stack_row(stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP,
-        fps_row.cursor_out)
-    sound_row := settings_stack_row(stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP,
-        limit_row.cursor_out)
-    simd_row := settings_stack_row(stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP,
-        sound_row.cursor_out)
-    gpu_dust_row := settings_stack_row(stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP,
-        simd_row.cursor_out)
-    reduce_motion_row := settings_stack_row(
-        stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP, gpu_dust_row.cursor_out)
-    increased_contrast_row := settings_stack_row(
-        stack_rect, 0, reduce_motion_row.cursor_out)
-
-    return Settings_View_Rows{
-        slider_label_y = slider_label_row.segment_rect.y,
-        stats_y = stats_row.segment_rect.y,
-        fps_y = fps_row.segment_rect.y,
-        limit_y = limit_row.segment_rect.y,
-        sound_y = sound_row.segment_rect.y,
-        simd_y = simd_row.segment_rect.y,
-        gpu_dust_y = gpu_dust_row.segment_rect.y,
-        reduce_motion_y = reduce_motion_row.segment_rect.y,
-        increased_contrast_y = increased_contrast_row.segment_rect.y,
+    stack_rect: geometry.Rectangle,
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
+    system_motion_notice := false,
+    system_contrast_notice := false) -> Settings_View_Rows {
+    font_size := theme.ui_font_size(text_size_percent)
+    layout := Settings_View_Layout_State{
+        stack_rect = stack_rect,
+        cursor = uilayout.stack_panel_cursor_zero(),
+        row_gap = settings_scaled_row_gap(text_size_percent),
+        heading_height = font_size + 10,
+        slider_height = max(font_size + 6,
+            uiwidgets.slider_track_top_offset(text_size_percent) +
+            theme.SETTINGS_TRACK_HEIGHT +
+            theme.SETTINGS_TRACK_HIT_PAD_Y * 2) + 6,
+        system_motion_notice = system_motion_notice,
+        system_contrast_notice = system_contrast_notice,
     }
+    settings_layout_accessibility_section(&layout)
+    settings_layout_particles_section(&layout)
+    settings_layout_other_section(&layout)
+    return layout.rows
+}
+
+// Reserve the Accessibility heading, controls, notices, and text-size slider.
+settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_State) {
+    rect := layout^.stack_rect
+    rows := &layout^.rows
+    placement := settings_stack_row(
+        rect, layout^.heading_height, layout^.cursor)
+    rows^.accessibility_header_y = placement.segment_rect.y
+    layout^.cursor = placement.cursor_out
+    rows^.reduce_motion_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.increased_contrast_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.system_motion_y = -1
+    rows^.system_contrast_y = -1
+    if layout^.system_motion_notice {
+        rows^.system_motion_y = rect.y + layout^.cursor.offset
+        layout^.cursor.offset += layout^.row_gap
+    }
+    if layout^.system_contrast_notice {
+        rows^.system_contrast_y = rect.y + layout^.cursor.offset
+        layout^.cursor.offset += layout^.row_gap
+    }
+    rows^.text_size_y = rect.y + layout^.cursor.offset
+    placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
+    layout^.cursor = placement.cursor_out
+}
+
+// Reserve the Particles heading, limit controls, GPU toggle, and particle counters.
+settings_layout_particles_section :: proc(layout: ^Settings_View_Layout_State) {
+    rect := layout^.stack_rect
+    rows := &layout^.rows
+    placement := settings_stack_row(
+        rect, layout^.heading_height, layout^.cursor)
+    rows^.particles_header_y = placement.segment_rect.y
+    layout^.cursor = placement.cursor_out
+    placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
+    rows^.slider_label_y = placement.segment_rect.y
+    layout^.cursor = placement.cursor_out
+    rows^.gpu_dust_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    placement = settings_stack_row(
+        rect, layout^.row_gap * 4, layout^.cursor)
+    rows^.stats_y = placement.segment_rect.y
+    layout^.cursor = placement.cursor_out
+}
+
+// Reserve the Other Settings heading, Julia count, preference rows, and save status.
+settings_layout_other_section :: proc(layout: ^Settings_View_Layout_State) {
+    rect := layout^.stack_rect
+    rows := &layout^.rows
+    placement := settings_stack_row(
+        rect, layout^.heading_height, layout^.cursor)
+    rows^.other_header_y = placement.segment_rect.y
+    layout^.cursor = placement.cursor_out
+    rows^.animation_entries_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.fps_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.limit_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.sound_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.simd_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.save_status_y = rect.y + layout^.cursor.offset
 }
 
 //   Update every settings control and report optional feature availability.
@@ -482,17 +655,19 @@ update_settings_controls :: proc(
     result := Settings_View_Preparation{rows = rows}
     result.max_particles = uiwidgets.prepare_integer_slider(
         settings_max_particles_params(ctx, rows.slider_label_y), interactive)
+    result.text_size = uiwidgets.prepare_integer_slider(
+        settings_text_size_params(ctx, rows.text_size_y), interactive)
     result.fps = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, ctx.labels.display_fps,
-        ctx.preferences.interface.display_fps, true, 1}),
+        ctx.preferences.interface.display_fps, true, 6}),
         ctx.press_owner, interactive)
     result.limit = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, ctx.labels.limit_fps,
-        ctx.preferences.rendering.limit_fps, true, 2}),
+        ctx.preferences.rendering.limit_fps, true, 7}),
         ctx.press_owner, interactive)
     result.sound = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
         4004, ctx.labels.drawing_sound,
-        ctx.preferences.drawing.sound_enabled, true, 3}),
+        ctx.preferences.drawing.sound_enabled, true, 8}),
         ctx.press_owner, interactive)
     prepare_settings_optional_controls(ctx, rows, interactive, &result)
     return {result, result.simd_available, result.gpu_available}
@@ -506,7 +681,7 @@ prepare_settings_optional_controls :: proc(
     result.simd = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, ctx.labels.simd,
         ctx.preferences.rendering.simd,
-        simd_available, 4}), ctx.press_owner, interactive)
+        simd_available, 9}), ctx.press_owner, interactive)
     gpu_available := ctx.gpu_dust_available
     result.gpu_dust = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {rows.gpu_dust_y,
@@ -519,30 +694,24 @@ prepare_settings_optional_controls :: proc(
     result.reduce_motion = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {
         rows.reduce_motion_y, 4006,
         ctx.labels.reduce_motion,
-        ctx.preferences.interface.reduce_motion, true, 6}),
+        ctx.preferences.interface.reduce_motion, true, 1}),
         ctx.press_owner, interactive)
     result.increased_contrast = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
             rows.increased_contrast_y, 4007,
             ctx.labels.increased_contrast,
-            ctx.preferences.interface.increased_contrast, true, 7,
+            ctx.preferences.interface.increased_contrast, true, 2,
         }), ctx.press_owner, interactive)
 }
 
-// settings_scroll_content_height reserves controls, platform notices, and save status.
+// settings_scroll_content_height reserves every scaled Settings section and status.
 settings_scroll_content_height :: proc(
-    system_motion_notice: bool, system_contrast_notice := false) -> f32 {
-    height := f32(
-        theme.SETTINGS_SLIDER_LABEL_TOP_OFFSET + theme.SETTINGS_TRACK_TOP_OFFSET +
-        theme.SETTINGS_TOGGLE_TOP_OFFSET + 7 * theme.SETTINGS_TOGGLE_ROW_GAP +
-        theme.TREE_FONT_SIZE + theme.SETTINGS_PANEL_INSET)
-    if system_motion_notice {
-        height += theme.SETTINGS_TOGGLE_ROW_GAP
-    }
-    if system_contrast_notice {
-        height += theme.SETTINGS_TOGGLE_ROW_GAP
-    }
-    return height
+    system_motion_notice: bool, system_contrast_notice := false,
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT) -> f32 {
+    rows := settings_view_layout_rows({}, text_size_percent,
+        system_motion_notice, system_contrast_notice)
+    return theme.SETTINGS_HEADER_TOP_OFFSET + rows.save_status_y +
+        theme.ui_font_size(text_size_percent) + theme.SETTINGS_PANEL_INSET
 }
 
 // register_settings_scroll_semantics admits keyboard page navigation in short viewports.
@@ -557,7 +726,7 @@ register_settings_scroll_semantics :: proc(
         id = uisemantics.semantic_control_id(.Settings_Control, 6102), role = .Panel,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Scroll, .Set_Value}, region = .Accordion_Content,
-        traversal_order = 8, bounds = geometry.Rectangle(scroll.view_rect),
+        traversal_order = 10, bounds = geometry.Rectangle(scroll.view_rect),
         clip_bounds = geometry.Rectangle(scroll.view_rect),
         numeric_range = {0, f64(scroll.maximum), f64(scroll.scroll_y_out),
             f64(scroll.step), .Vertical, true},
@@ -571,14 +740,17 @@ prepare_settings_scroll :: proc(
     interactive: bool) -> uiwidgets.Scroll_Container_Update_Result {
     panel_state := ctx.settings_panel
     height := settings_scroll_content_height(
-        ctx.platform_reduce_motion, ctx.platform_increased_contrast)
+        ctx.platform_reduce_motion, ctx.platform_increased_contrast,
+        ctx.preferences.interface.text_size_percent)
+    row_gap := max(theme.SETTINGS_TOGGLE_ROW_GAP,
+        theme.ui_font_size(ctx.preferences.interface.text_size_percent) + 6)
     scroll := uiwidgets.scroll_container_visual(
-        ctx.panel, height, panel_state^.scroll_y, theme.SETTINGS_TOGGLE_ROW_GAP)
+        ctx.panel, height, panel_state^.scroll_y, row_gap)
     if interactive {
         scroll = uiwidgets.scroll_container_update({id = 6102, rect = ctx.panel,
             scroll_y_in = panel_state^.scroll_y, content_height = height,
             mouse_input = ctx.mouse_input, interaction_space_rect = ctx.panel,
-            wheel_step = theme.SETTINGS_TOGGLE_ROW_GAP * theme.WHEEL_SCROLL_MULTIPLIER,
+            wheel_step = row_gap * theme.WHEEL_SCROLL_MULTIPLIER,
             press_owner = ctx.press_owner,
             state_in = {panel_state^.scroll_dragging, panel_state^.scroll_drag_off},
             semantic_focus = ctx.semantic_focus,
@@ -609,7 +781,9 @@ prepare_settings_view :: proc(
         content_panel.y + theme.SETTINGS_HEADER_TOP_OFFSET - scroll.scroll_y_out,
         content_panel.width - theme.SETTINGS_PANEL_INSET * 2,
         content_panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
-    rows := settings_view_layout_rows(stack_rect)
+    rows := settings_view_layout_rows(stack_rect,
+        ctx.preferences.interface.text_size_percent,
+        ctx.platform_reduce_motion, ctx.platform_increased_contrast)
     ctx.panel = content_panel
     update := update_settings_controls(ctx, rows, interactive)
     update.prepared.scroll = scroll
@@ -637,6 +811,7 @@ apply_settings_preparation :: proc(
 // Commit dust, display, and drawing controls from the prepared frame.
 apply_settings_primary_preparation :: proc(
     state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
+    apply_settings_accessibility_preparation(state, prepared)
     if prepared.max_particles.changed {
         state.particle_system.use_max_dust_particles = prepared.max_particles.value
         settings_record_preference_edit(
@@ -660,6 +835,15 @@ apply_settings_primary_preparation :: proc(
         settings_record_preference_edit(
             state, .Drawing_Sound_Enabled,
             setting_model.boolean_value(prepared.sound.checked_out))
+    }
+}
+
+// Persist accessibility preferences changed by the prepared Settings frame.
+apply_settings_accessibility_preparation :: proc(
+    state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
+    if prepared.text_size.changed {
+        settings_record_preference_edit(state, .Interface_Text_Size,
+            setting_model.integer_value(prepared.text_size.value))
     }
     if prepared.reduce_motion.toggled {
         settings_record_preference_edit(state, .Interface_Reduce_Motion,
@@ -752,6 +936,26 @@ settings_control_edit_preparation :: proc(
     case .Drawing_Dust_Limit:
         prepared.max_particles.changed = true
         prepared.max_particles.value = value.integer
+    case .Interface_Text_Size:
+        prepared.text_size.changed = true
+        prepared.text_size.value = int(value.integer)
+    case .Interface_Display_Fps, .Interface_Reduce_Motion,
+        .Interface_Increased_Contrast, .Rendering_Limit_Fps,
+        .Drawing_Sound_Enabled, .Rendering_Simd,
+        .Rendering_Gpu_Dust_Instancing:
+        return settings_boolean_control_edit_preparation(id, value)
+    case:
+        return {}, false
+    }
+    return prepared, true
+}
+
+// Translate one boolean preference identity into its prepared checkbox result.
+settings_boolean_control_edit_preparation :: proc(
+    id: setting_model.Setting_Id, value: setting_model.Setting_Value) ->
+    (Settings_View_Preparation, bool) {
+    prepared: Settings_View_Preparation
+    #partial switch id {
     case .Interface_Display_Fps:
         prepared.fps = {toggled = true, checked_out = value.boolean}
     case .Interface_Reduce_Motion:

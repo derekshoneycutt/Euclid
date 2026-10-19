@@ -476,7 +476,8 @@ encode_sdl_geometry_frame :: proc(
         f32(ctx.platform^.metrics.logical_width),
         f32(ctx.platform^.metrics.logical_height),
     }, {ctx.platform^.scene_width, ctx.platform^.scene_height})
-    uitheme.prepare_draw_colors(&encoder, prepared^.increased_contrast)
+    uitheme.prepare_draw_colors(&encoder, prepared^.increased_contrast,
+        state^.ui_runtime.preferences.values.interface.text_size_percent)
     native.draw_encoder_enable_strokes(&encoder, ctx.draw_runtime^.stroke_ready)
     native.draw_encoder_enable_dust_instancing(
         &encoder, ctx.draw_runtime^.dust_ready)

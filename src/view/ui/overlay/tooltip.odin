@@ -178,8 +178,10 @@ draw_encoded_tooltip :: proc(
     }
     text := string(tooltip^.shown.text[:tooltip^.shown.text_length])
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
+    font_size := theme.ui_font_size(
+        state^.ui_runtime.preferences.values.interface.text_size_percent)
     width, measured := viewtext.ui_text_measure_monospace(
-        text, face, theme.TREE_FONT_SIZE, 0)
+        text, face, font_size, 0)
     if !measured {
         return
     }
@@ -191,7 +193,7 @@ draw_encoded_tooltip :: proc(
     draw_encoded_tooltip_panel(encoder, box)
     viewtext.draw_encoded_label(
         &state^.font_cache, encoder, text, box.x + TOOLTIP_PADDING_X,
-        box.y + (box.height - theme.TREE_FONT_SIZE) * 0.5)
+        box.y + (box.height - font_size) * 0.5)
 }
 
 // draw_encoded_tooltip_panel places high elevation beneath unchanged box chrome.

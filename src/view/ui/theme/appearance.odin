@@ -75,10 +75,12 @@ appearance_color :: proc(increased: bool, role: Color_Role) -> color.Color_RGBA8
 }
 
 // prepare_draw_colors borrows process-lifetime immutable colors for one consistent frame.
-prepare_draw_colors :: proc(encoder: ^native.Draw_Encoder, increased: bool) {
+prepare_draw_colors :: proc(
+    encoder: ^native.Draw_Encoder, increased: bool, text_size_percent := 100) {
     encoder^.semantic_colors =
         slice.enumerated_array(&increased_colors) if increased else
             slice.enumerated_array(&standard_colors)
+    encoder^.ui_text_size_percent = text_size_percent
 }
 
 // draw_color resolves explicit application paint without inspecting source RGB values.

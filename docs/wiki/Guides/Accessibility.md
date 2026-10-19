@@ -134,6 +134,19 @@ navigation plus a focusable scroll-panel tab stop with Page Up and Page Down act
 Scrolling can reveal the final preference and persistence status without changing the
 accordion's height or making clipped controls operable.
 
+### App-Owned Text Size
+
+Settings provides a persisted text-size preference with four stops: 100%, 125%, 150%,
+and 175%. It is an Euclid control rather than a query of operating-system text-size
+settings, which do not provide one consistent cross-platform preference for this
+application. The selected scale applies to interface chrome, Dynview text and
+mathematics, and Terminal text and layout. It reflows those surfaces without changing
+the authored size of labels on the animation canvas or the SDL display scale.
+
+This visual preference does not expand the native accessibility projection. Dynview
+document content and Terminal content remain excluded as described below; larger
+rendered text is not a substitute for screen-reader semantics.
+
 ### Explicitly Excluded: Dynview
 
 Dynview document roles are intentionally filtered from the current projection. A named,

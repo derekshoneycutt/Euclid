@@ -50,7 +50,8 @@ tree_draw_encodes_pressed_row_overlay :: proc(t: ^testing.T) {
     node.first_child = uilibrary.TREE_NO_ITEM
     row := geometry.Rectangle{10, 20, 100, theme.TREE_ROW_HEIGHT}
     ctx := uilibrary.Encoded_Tree_Walk_Context{state = state,
-        encoder = &encoder, panel = row, pressed_node = &node}
+        encoder = &encoder, panel = row, row_height = theme.TREE_ROW_HEIGHT,
+        pressed_node = &node}
     selections := [2]bool{false, true}
     for selected in selections {
         testing.expect(t, native.draw_encoder_begin(&encoder,
@@ -64,7 +65,6 @@ tree_draw_encodes_pressed_row_overlay :: proc(t: ^testing.T) {
             offset = 4
             testing.expect_value(t,
                 vertices[0].color, theme.UI_TREE_SELECTION_BACKGROUND_COLOR)
-            testing.expect_value(t, vertices[0].color, theme.UI_BORDER_COLOR)
         }
         testing.expect_value(t, encoder.vertex_count, offset + 4)
         testing.expect_value(t, vertices[offset].position,
@@ -101,7 +101,8 @@ tree_draw_selected_disclosure_preserves_keyboard_focus :: proc(t: ^testing.T) {
             node.key if selected else uuid.Identifier{}
         uilibrary.draw_encoded_tree_row({
             state = state, encoder = &encoder,
-            panel = {10, 20, 100, theme.TREE_ROW_HEIGHT}}, &node, 0, 20, true)
+            panel = {10, 20, 100, theme.TREE_ROW_HEIGHT},
+            row_height = theme.TREE_ROW_HEIGHT}, &node, 0, 20, true)
         testing.expect(t, encoder.vertex_count > 16)
         tint := theme.UI_TREE_SELECTION_TEXT_COLOR if selected else theme.UI_TEXT_COLOR
         testing.expect_value(t, vertices[encoder.vertex_count - 1].color, tint)

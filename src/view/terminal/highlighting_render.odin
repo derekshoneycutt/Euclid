@@ -113,9 +113,13 @@ terminal_syntax_background :: proc(
     encoder: ^native.Draw_Encoder, style: Terminal_Syntax_Style,
     position: geometry.Vector2, width: f32) {
     if style.background.a != 0 && width > 0 {
+        scale := terminal_text_scale_factor(encoder^.ui_text_size_percent)
         _ = native.draw_encoder_rectangle(encoder,
-            {position.x, position.y, width, TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING},
+            {position.x, position.y, width,
+             terminal_font_size(encoder^.ui_text_size_percent) +
+             terminal_line_spacing(encoder^.ui_text_size_percent)},
             style.background)
+        _ = scale
     }
 }
 
@@ -123,32 +127,36 @@ terminal_syntax_background :: proc(
 terminal_syntax_underline :: proc(
     encoder: ^native.Draw_Encoder, style: Terminal_Syntax_Style,
     position: geometry.Vector2, width: f32) {
-    y := position.y + TERMINAL_FONT_SIZE - 1
+    scale := terminal_text_scale_factor(encoder^.ui_text_size_percent)
+    y := position.y + terminal_font_size(encoder^.ui_text_size_percent) - scale
     if style.underline == .Straight || style.underline == .Double {
         _ = native.draw_encoder_line(encoder,
             {position.x, y}, {position.x + width, y}, 1, style.underline_color)
         if style.underline == .Double {
             _ = native.draw_encoder_line(encoder,
-                {position.x, y - 2}, {position.x + width, y - 2},
+                {position.x, y - 2 * scale}, {position.x + width, y - 2 * scale},
                 1, style.underline_color)
         }
         return
     }
-    step := f32(4) if style.underline == .Dotted else f32(8)
+    step := f32(4) * scale if style.underline == .Dotted else f32(8) * scale
     for x := f32(0); x < width; x += step {
         length := f32(1) if style.underline == .Dotted else f32(4)
         if style.underline == .Curly {
             _ = native.draw_encoder_line(encoder, {position.x + x, y},
-                {position.x + min(x + 2, width), y - 2}, 1, style.underline_color)
+                {position.x + min(x + 2 * scale, width), y - 2 * scale},
+                1, style.underline_color)
             _ = native.draw_encoder_line(encoder,
-                {position.x + min(x + 2, width), y - 2},
-                {position.x + min(x + 4, width), y}, 1, style.underline_color)
+                {position.x + min(x + 2 * scale, width), y - 2 * scale},
+                {position.x + min(x + 4 * scale, width), y},
+                1, style.underline_color)
         } else {
             _ = native.draw_encoder_line(encoder, {position.x + x, y},
-                {position.x + min(x + length, width), y}, 1, style.underline_color)
+                {position.x + min(x + length * scale, width), y},
+                1, style.underline_color)
         }
         if style.underline == .Curly {
-            step = 4
+            step = 4 * scale
         }
     }
 }
@@ -161,7 +169,7 @@ terminal_syntax_decorations :: proc(
         terminal_syntax_underline(encoder, style, position, width)
     }
     if style.strike {
-        y := position.y + TERMINAL_FONT_SIZE * 0.55
+        y := position.y + terminal_font_size(encoder^.ui_text_size_percent) * 0.55
         _ = native.draw_encoder_line(encoder,
             {position.x, y}, {position.x + width, y}, 1, style.foreground)
     }
@@ -176,8 +184,10 @@ terminal_draw_syntax_segment :: proc(
         request.palette, request.theme)
     position := geometry.Vector2{
         request.position.x + terminal_text_column_width(
-            request.regular, request.current_text[:start]), request.position.y}
-    width := terminal_text_column_width(request.regular, text)
+            request.regular, request.current_text[:start],
+            request.encoder^.ui_text_size_percent), request.position.y}
+    width := terminal_text_column_width(
+        request.regular, text, request.encoder^.ui_text_size_percent)
     terminal_syntax_background(request.encoder, style, position, width)
     shaped := terminal_draw_shaped_prompt_span({
         request.encoder, request.resolver, style.key, text, position, style.foreground})
@@ -187,7 +197,7 @@ terminal_draw_syntax_segment :: proc(
             text = text, position = position, color = style.foreground,
             font = {
                 terminal_font_resolve(request.resolver, style.key),
-                TERMINAL_FONT_SIZE,
+                terminal_font_size(request.encoder^.ui_text_size_percent),
             },
         })
     }

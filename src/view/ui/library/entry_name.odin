@@ -48,6 +48,8 @@ library_entry_name_input_params :: proc(
     focus := params.ui_runtime^.input.interaction_frame.effective_focus
     target := params.ui_runtime^.input.interaction_frame.pointer_target
     descriptor := library_entry_name_semantic_descriptor(params, entry_id, draft)
+    text_percent :=
+        params.general_state^.ui_runtime.preferences.values.interface.text_size_percent
     return {
         rect = rect,
         clip_rect = clip_rect,
@@ -61,7 +63,8 @@ library_entry_name_input_params :: proc(
         pointer_routed = target.focus.kind == .Input_Box &&
             target.id == TREE_ENTRY_NAME_INPUT_ID,
         padding = .Compact,
-        column_advance = theme.TEXT_WRAP_ADVANCE,
+        column_advance = theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent),
+        font_size = theme.ui_font_size(text_percent),
         font = params.font,
         resolver = params.font_resolver,
         edit_target = {draft^.value[:], &draft^.value_length},

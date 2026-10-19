@@ -18,6 +18,11 @@ TREE_INDENT :: 16
 
 TREE_FONT_SIZE :: 16
 
+TEXT_SIZE_DEFAULT_PERCENT :: 100
+TEXT_SIZE_MIN_PERCENT :: 100
+TEXT_SIZE_STEP_PERCENT :: 25
+TEXT_SIZE_MAX_PERCENT :: 175
+
 TEXT_ROW_HEIGHT :: 22
 
 TEXT_PADDING :: 8
@@ -124,3 +129,23 @@ SETTINGS_GIF_TIMING_BUTTON_GAP :: 4
 SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET :: 18
 
 SETTINGS_GIF_STATUS_PATH_ROW_OFFSET :: 36
+
+// ui_text_scale_factor converts a validated text-size preference to a safe multiplier.
+ui_text_scale_factor :: #force_inline proc(percent: int) -> f32 {
+    return f32(clamp(percent, TEXT_SIZE_MIN_PERCENT, TEXT_SIZE_MAX_PERCENT)) / 100
+}
+
+// ui_font_size resolves a logical UI font size under the active text-size preference.
+ui_font_size :: #force_inline proc(percent: int) -> f32 {
+    return TREE_FONT_SIZE * ui_text_scale_factor(percent)
+}
+
+// ui_scaled_metric scales layout distances that are coupled to interface text.
+ui_scaled_metric :: #force_inline proc(value: f32, percent: int) -> f32 {
+    return value * ui_text_scale_factor(percent)
+}
+
+// ui_tree_row_height keeps Library row hit targets matched to larger labels.
+ui_tree_row_height :: #force_inline proc(percent: int) -> f32 {
+    return ui_scaled_metric(f32(TREE_ROW_HEIGHT), percent)
+}

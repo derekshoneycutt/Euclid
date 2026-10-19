@@ -31,6 +31,8 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect(t, !setting_value(preferences, .Interface_Display_Fps).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Reduce_Motion).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
+    testing.expect_value(t,
+        setting_value(preferences, .Interface_Text_Size).integer, 100)
 }
 
 // Keep contrast optional by default and retain its stable boolean persistence identity.
@@ -53,6 +55,31 @@ increased_contrast_uses_typed_persisted_preference :: proc(t: ^testing.T) {
         .Interface_Increased_Contrast, boolean_value(false), .Override))
     testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
     testing.expect(t, .Interface_Increased_Contrast in preferences.overrides)
+}
+
+// Keep all supported text-size stops stable as typed persisted integer values.
+@(test)
+text_size_uses_four_supported_persisted_stops :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Interface_Text_Size)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "interface")
+    testing.expect_value(t, definition.key, "text_size_percent")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Integer)
+    for percent in ([4]int{100, 125, 150, 175}) {
+        preferences := default_preferences()
+        testing.expect(t, apply_setting_value(
+            &preferences, .Interface_Text_Size, integer_value(percent), .Saved))
+        testing.expect_value(t,
+            setting_value(preferences, .Interface_Text_Size).integer, percent)
+        testing.expect(t, .Interface_Text_Size in preferences.present)
+    }
+    preferences := default_preferences()
+    for percent in ([3]int{99, 124, 176}) {
+        testing.expect(t, !apply_setting_value(
+            &preferences, .Interface_Text_Size, integer_value(percent), .Override))
+    }
+    testing.expect(t, !apply_setting_value(
+        &preferences, .Interface_Text_Size, boolean_value(true), .Saved))
 }
 
 // Validate window dimensions, enum domains, and particle capacity bounds.

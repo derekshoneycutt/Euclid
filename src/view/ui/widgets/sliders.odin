@@ -22,6 +22,9 @@ Integer_Slider_Params :: struct {
     value : int,
     min_value : int,
     max_value : int,
+    step : int,
+    value_suffix: string,
+    text_size_percent: int,
     font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
     semantic_domain: viewmodel.Ui_Node_Domain,
@@ -47,6 +50,7 @@ Slider_Drag_Input :: struct {
     min_value : int,
     max_value : int,
     denom : int,
+    step: int,
     mouse_input : input.Input_Frame,
     track : geometry.Rectangle,
 }
@@ -56,6 +60,19 @@ Slider_Value_Result :: struct {
     value: int,
     owns_press: bool,
     changed: bool,
+}
+
+// slider_step returns the configured positive increment or the existing unit default.
+slider_step :: #force_inline proc(params: Integer_Slider_Params) -> int {
+    return max(1, params.step)
+}
+
+// slider_snap_value aligns a value to the nearest step from the minimum bound.
+slider_snap_value :: #force_inline proc(
+    value, minimum, maximum, step: int) -> int {
+    offset := clamp(value, minimum, maximum) - minimum
+    snapped := minimum + ((offset + step / 2) / step) * step
+    return min(maximum, snapped)
 }
 
 // Build knob geometry from track bounds and normalized ratio.
@@ -72,12 +89,20 @@ build_slider_knob :: proc(
     return knob_center_x, knob
 }
 
+// Resolve the vertical gap needed to keep a slider below its row label.
+slider_track_top_offset :: #force_inline proc(
+    text_size_percent: int) -> f32 {
+    return max(theme.SETTINGS_TRACK_TOP_OFFSET,
+        theme.ui_font_size(text_size_percent) + 6)
+}
+
 //   Build the slider track rectangle for one settings row.
 slider_track_rect :: #force_inline proc(
-    panel: geometry.Rectangle, row_y: f32) -> geometry.Rectangle {
+    panel: geometry.Rectangle, row_y: f32,
+    text_size_percent := 100) -> geometry.Rectangle {
     return geometry.Rectangle{
         panel.x + theme.SETTINGS_PANEL_INSET,
-        row_y + theme.SETTINGS_TRACK_TOP_OFFSET,
+        row_y + slider_track_top_offset(text_size_percent),
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
         theme.SETTINGS_TRACK_HEIGHT,
     }
@@ -96,26 +121,24 @@ slider_hit_rect :: #force_inline proc(
 
 //   Apply one wheel-step value change when the pointer is over the slider hit area.
 slider_apply_wheel_step :: proc(
-    clamped: ^int,
-    min_value, max_value: int,
-    mouse_input: input.Input_Frame,
-    hit: geometry.Rectangle) {
+    clamped: ^int, params: Integer_Slider_Params,
+    step: int, hit: geometry.Rectangle) {
 
     if !geometry.rectangle_contains(
-        hit, geometry.Vector2(input_frame_mouse_position(mouse_input))) {
+        hit, geometry.Vector2(input_frame_mouse_position(params.mouse_input))) {
         return
     }
 
-    wheel := mouse_input.mouse_wheel_delta
+    wheel := params.mouse_input.mouse_wheel_delta
     if wheel == 0 {
         return
     }
 
-    delta := 1
+    delta := step
     if wheel < 0 {
-        delta = -1
+        delta = -step
     }
-    clamped^ = clamp(clamped^ + delta, min_value, max_value)
+    clamped^ = clamp(clamped^ + delta, params.min_value, params.max_value)
 }
 
 //   Return whether this slider currently owns the shared global press state.
@@ -177,8 +200,9 @@ slider_apply_drag_value :: proc(
     t := clamp((input.mouse_input.mouse_position.x - input.track.x) /
         input.track.width,
         0, 1)
-    clamped^ = clamp(input.min_value + int(t * f32(input.denom) + 0.5),
-        input.min_value, input.max_value)
+    value := input.min_value + int(t * f32(input.denom) + 0.5)
+    clamped^ = slider_snap_value(
+        value, input.min_value, input.max_value, input.step)
 }
 
 //   Compute the clamped slider value after wheel/press/drag interaction.
@@ -191,14 +215,15 @@ slider_resolve_value :: proc(
     track: geometry.Rectangle,
     hit: geometry.Rectangle) -> Slider_Value_Result {
 
-    spec := range_integer_spec(params.min_value, params.max_value, 1,
-        max(1, (params.max_value - params.min_value) / 10))
-    clamped := range_integer_clamp(params.value, spec)
+    step := slider_step(params)
+    spec := range_integer_spec(params.min_value, params.max_value, step,
+        max(step, ((params.max_value - params.min_value) / 10 / step) * step))
+    clamped := slider_snap_value(
+        params.value, spec.minimum, spec.maximum, step)
     before_pointer := clamped
     denom := max(1, params.max_value - params.min_value)
 
-    slider_apply_wheel_step(&clamped, params.min_value, params.max_value,
-        params.mouse_input, hit)
+    slider_apply_wheel_step(&clamped, params, step, hit)
 
     hovered_hit := geometry.rectangle_contains(
         hit, geometry.Vector2(input_frame_mouse_position(params.mouse_input)))
@@ -207,7 +232,7 @@ slider_resolve_value :: proc(
         hovered_hit, &owns_press)
     slider_release_if_needed(params.press_owner, params.mouse_input, &owns_press)
     slider_apply_drag_value(&clamped,
-        Slider_Drag_Input{params.min_value, params.max_value, denom,
+        Slider_Drag_Input{params.min_value, params.max_value, denom, step,
             params.mouse_input, track},
         owns_press)
     return {clamped, owns_press, clamped != before_pointer}
@@ -220,11 +245,12 @@ slider_apply_semantic_commands :: proc(
     value: int) -> int {
     result := value
     focus := params.semantic_focus
+    step := slider_step(params)
     if uisemantics.semantic_command_requested(focus, id, .Increment) {
-        result += 1
+        result += step
     }
     if uisemantics.semantic_command_requested(focus, id, .Decrement) {
-        result -= 1
+        result -= step
     }
     if uisemantics.semantic_command_requested(focus, id, .Set_Minimum) {
         result = params.min_value
@@ -237,13 +263,14 @@ slider_apply_semantic_commands :: proc(
             result = int(command.numeric_value)
         }
     }
-    page_step := max(1, (params.max_value - params.min_value) / 10)
+    page_step := max(step,
+        ((params.max_value - params.min_value) / 10 / step) * step)
     for command in focus.commands[:focus.command_count] {
         if command.target == id && command.kind == .Page_Step {
             result += page_step * int(command.amount)
         }
     }
-    return clamp(result, params.min_value, params.max_value)
+    return slider_snap_value(result, params.min_value, params.max_value, step)
 }
 
 // Build authoritative slider hit, clip, track, and knob geometry.
@@ -251,8 +278,9 @@ slider_result :: proc(
     params: Integer_Slider_Params, track, hit: geometry.Rectangle,
     value: int, sources: viewmodel.Ui_Control_Action_Source) ->
     Integer_Slider_Result {
-    spec := range_integer_spec(params.min_value, params.max_value, 1,
-        max(1, (params.max_value - params.min_value) / 10))
+    step := slider_step(params)
+    spec := range_integer_spec(params.min_value, params.max_value, step,
+        max(step, ((params.max_value - params.min_value) / 10 / step) * step))
     ratio := range_integer_normalized(value, spec)
     _, knob := build_slider_knob(track, ratio)
     return {
@@ -275,7 +303,8 @@ slider_result :: proc(
 //   Resolve one integer slider update without issuing drawing commands.
 update_settings_integer_slider :: proc(
     params: Integer_Slider_Params) -> Integer_Slider_Result {
-    track := slider_track_rect(params.panel, params.row_y)
+    track := slider_track_rect(
+        params.panel, params.row_y, params.text_size_percent)
     hit := slider_hit_rect(track)
 
     pointer := slider_resolve_value(params, track, hit)
@@ -298,7 +327,7 @@ update_settings_integer_slider :: proc(
             numeric_range = {f64(result.minimum), f64(result.maximum),
                 f64(result.value), f64(result.step), result.orientation, true},
             label = params.label,
-            value = fmt.tprintf("%d", clamped),
+            value = fmt.tprintf("%d%s", clamped, params.value_suffix),
         })
         if pointer.owns_press {
             _ = uisemantics.semantic_request_pointer_focus(
@@ -315,7 +344,9 @@ prepare_integer_slider :: proc(
     if interactive {
         return update_settings_integer_slider(params)
     }
-    track := slider_track_rect(params.panel, params.row_y)
+    track := slider_track_rect(
+        params.panel, params.row_y, params.text_size_percent)
     return slider_result(params, track, slider_hit_rect(track),
-        clamp(params.value, params.min_value, params.max_value), {})
+        slider_snap_value(params.value, params.min_value, params.max_value,
+            slider_step(params)), {})
 }

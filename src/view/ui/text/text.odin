@@ -174,9 +174,12 @@ ui_text_raster_request :: proc(
         resolver.user_data, key, font_size, scene_scale)
 }
 
-//   Wrap a font with the default UI text size.
-ui_text_font :: #force_inline proc(font: view_font.Font_Face) -> Ui_Text_Font {
-    return Ui_Text_Font{font = font, font_size = theme.TREE_FONT_SIZE}
+// Wrap a font with the active or explicitly supplied UI text size.
+ui_text_font :: #force_inline proc(
+    font: view_font.Font_Face, text_size_percent := 100) -> Ui_Text_Font {
+    return Ui_Text_Font{
+        font = font, font_size = theme.ui_font_size(text_size_percent),
+    }
 }
 
 //   Record one shaped-text fallback without retaining source content.

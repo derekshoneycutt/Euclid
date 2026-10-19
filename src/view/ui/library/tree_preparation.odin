@@ -41,7 +41,14 @@ tree_layout_find_item :: proc(
 // tree_row_is_revealed excludes rows beyond the inherited descendant reveal.
 tree_row_is_revealed :: proc(row: viewmodel.Ui_Tree_Prepared_Row) -> bool {
     return row.logical && geometry.rectangles_intersect(
-        {0, row.content_y, row.reveal.width, theme.TREE_ROW_HEIGHT}, row.reveal)
+        {0, row.content_y, row.reveal.width, tree_prepared_row_height(row)},
+        row.reveal)
+}
+
+// Resolve a retained row height while preserving legacy base-sized test fixtures.
+tree_prepared_row_height :: #force_inline proc(
+    row: viewmodel.Ui_Tree_Prepared_Row) -> f32 {
+    return theme.TREE_ROW_HEIGHT if row.row_height <= 0 else row.row_height
 }
 
 // draw_encoded_prepared_tree shares full-size row positions and clips across both passes.
@@ -55,6 +62,8 @@ draw_encoded_prepared_tree :: proc(
     }
     ctx := Encoded_Tree_Walk_Context{
         state = state, ji = state^.julia_interface, encoder = encoder, panel = panel,
+        row_height = theme.ui_tree_row_height(
+            state^.ui_runtime.preferences.values.interface.text_size_percent),
         pressed_node = prepared^.pressed_node,
         entry_name_input = &prepared^.entry_name_input,
         entry_name_params = &prepared^.entry_name_params,
@@ -159,12 +168,17 @@ draw_encoded_prepared_tree_label :: proc(
         selected := ctx.state^.ui_runtime.library.tree.selected_item_id == row.item^.key
         tint := theme.draw_color(ctx.encoder, .Tree_Text) if
             selected else theme.draw_color(ctx.encoder, .Text)
+        text_percent :=
+            ctx.state^.ui_runtime.preferences.values.interface.text_size_percent
         viewtext.draw_encoded_colored_label(&ctx.state^.font_cache, ctx.encoder,
             tree_item_label(ctx.ji, row.item,
                 &ctx.state^.preferences_runtime.collections_state),
             {bounds.x + f32(row.depth) *
-                theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X,
-             bounds.y + theme.TREE_ROW_LABEL_OFFSET_Y}, tint)
+                theme.ui_scaled_metric(theme.TREE_INDENT, text_percent) +
+                theme.ui_scaled_metric(theme.TREE_ROW_LABEL_OFFSET_X,
+                    text_percent),
+             bounds.y + theme.ui_scaled_metric(
+                theme.TREE_ROW_LABEL_OFFSET_Y, text_percent)}, tint)
     }
     _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }
@@ -177,7 +191,9 @@ tree_update_scroll :: proc(
         rect = params.list_panel, scroll_y_in = params.scroll_y^,
         content_height = content_height, mouse_input = params.mouse_input,
         interaction_space_rect = params.list_panel,
-        wheel_step = theme.TREE_ROW_HEIGHT * theme.WHEEL_SCROLL_MULTIPLIER,
+        wheel_step = theme.ui_tree_row_height(
+            params.ui_runtime^.preferences.values.interface.text_size_percent) *
+            theme.WHEEL_SCROLL_MULTIPLIER,
         press_owner = &params.ui_runtime^.input.press_owner,
         state_in = {params.ui_runtime^.library.tree.scroll_dragging,
             params.ui_runtime^.library.tree.scroll_drag_off},
@@ -190,7 +206,9 @@ tree_refresh_preparation :: proc(
     params: Tree_List_Params, prepared: ^Tree_List_Preparation) {
     visual := uiwidgets.scroll_container_visual(params.list_panel,
         prepared^.layout.content_height, params.scroll_y^,
-        theme.TREE_ROW_HEIGHT * theme.WHEEL_SCROLL_MULTIPLIER)
+        theme.ui_tree_row_height(
+            params.ui_runtime^.preferences.values.interface.text_size_percent) *
+        theme.WHEEL_SCROLL_MULTIPLIER)
     params.scroll_y^ = visual.scroll_y_out
     prepared^.scroll.maximum = visual.maximum
     prepared^.scroll.scroll_y_out = visual.scroll_y_out
@@ -207,7 +225,10 @@ tree_update_prepared_rows :: proc(
         ji = params.ji,
         tree = &params.ui_runtime^.library.tree,
         interaction = &params.ui_runtime^.input,
-        panel = prepared^.scroll.view_rect, scroll_y = prepared^.scroll.scroll_y_out,
+        panel = prepared^.scroll.view_rect,
+        row_height = theme.ui_tree_row_height(
+            params.ui_runtime^.preferences.values.interface.text_size_percent),
+        scroll_y = prepared^.scroll.scroll_y_out,
         allow_clicks = !prepared^.scroll.pointer_reserved,
         mouse_input = params.mouse_input, font = params.font,
         font_resolver = params.font_resolver,
@@ -452,8 +473,10 @@ tree_apply_visual_reveal :: proc(
     scroll := clamp(params.scroll_y^, 0, maximum)
     if row^.content_y < scroll {
         scroll = row^.content_y
-    } else if row^.content_y + theme.TREE_ROW_HEIGHT > scroll + params.list_panel.height {
-        scroll = row^.content_y + theme.TREE_ROW_HEIGHT - params.list_panel.height
+    } else if row^.content_y + tree_prepared_row_height(row^) >
+        scroll + params.list_panel.height {
+        scroll = row^.content_y + tree_prepared_row_height(row^) -
+            params.list_panel.height
     }
     params.scroll_y^ = clamp(scroll, 0, maximum)
     runtime^.library.tree.reveal_pending = false
@@ -536,5 +559,7 @@ prepare_tree_visual :: proc(
     prepared^.content_height = prepared^.layout.content_height
     prepared^.scroll = uiwidgets.scroll_container_visual(params.list_panel,
         prepared^.layout.content_height, params.scroll_y^,
-        theme.TREE_ROW_HEIGHT * theme.WHEEL_SCROLL_MULTIPLIER)
+        theme.ui_tree_row_height(
+            params.ui_runtime^.preferences.values.interface.text_size_percent) *
+        theme.WHEEL_SCROLL_MULTIPLIER)
 }

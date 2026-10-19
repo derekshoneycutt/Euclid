@@ -175,6 +175,30 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "System requests increased contrast"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1225),
+            "ui.settings.text_size",
+            "Interface text-size slider label; applies to interface, Dynview, and Terminal text.",
+            LocalizedContent.MessageArgument[]),
+        "Text size"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1226),
+            "ui.settings.section.accessibility",
+            "Settings section heading for accessibility preferences.",
+            LocalizedContent.MessageArgument[]),
+        "Accessibility"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1227),
+            "ui.settings.section.particles",
+            "Settings section heading for particle preferences and statistics.",
+            LocalizedContent.MessageArgument[]),
+        "Particles"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1228),
+            "ui.settings.section.other",
+            "Settings section heading for the Julia animation count and other settings.",
+            LocalizedContent.MessageArgument[]),
+        "Other Settings"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1201), "ui.settings.display_fps",
             "Display FPS checkbox label.", LocalizedContent.MessageArgument[]),
         "Display FPS"),

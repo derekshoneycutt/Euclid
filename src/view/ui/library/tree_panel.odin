@@ -53,6 +53,7 @@ Tree_Semantic_Context :: struct {
     policy: Tree_Visibility_Policy,
     tree_id: viewmodel.Ui_Node_Id,
     panel: geometry.Rectangle,
+    row_height: f32,
     scroll_y: f32,
     row: ^int,
     layout: ^viewmodel.Ui_Tree_Prepared_Layout,
@@ -125,6 +126,7 @@ Tree_Walk_Context :: struct {
     tree: ^viewmodel.Ui_Library_Tree_State,
     interaction: ^viewmodel.Ui_Shared_Interaction_State,
     panel: geometry.Rectangle,
+    row_height: f32,
     scroll_y: f32,
     allow_clicks: bool,
     mouse_input: input.Input_Frame,
@@ -143,6 +145,7 @@ Encoded_Tree_Walk_Context :: struct {
     ji: ^bridgemodel.Euclid_Julia_Interface,
     encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle,
+    row_height: f32,
     scroll_y: f32,
     content_y: ^f32,
     visibility: Tree_Visibility_Policy,
@@ -1096,7 +1099,7 @@ draw_encoded_tree_row :: proc(
     item: ^viewmodel.Ui_Tree_Item,
     depth: int, row_y: f32, expanded: bool = false) {
     row := geometry.Rectangle{
-        ctx.panel.x, row_y, ctx.panel.width, theme.TREE_ROW_HEIGHT}
+        ctx.panel.x, row_y, ctx.panel.width, ctx.row_height}
     selected := ctx.state^.ui_runtime.library.tree.selected_item_id == item^.key
     if row.y + row.height >= ctx.panel.y &&
         row.y <= ctx.panel.y + ctx.panel.height {
@@ -1114,9 +1117,11 @@ draw_encoded_tree_row :: proc(
             uiwidgets.draw_encoded_focus_ring(ctx.encoder, row)
         }
         if item^.first_child != TREE_NO_ITEM {
-            icon := geometry.Rectangle{row.x + f32(depth) * theme.TREE_INDENT +
-                theme.TREE_ROW_ICON_OFFSET_X, row.y + theme.TREE_ROW_ICON_OFFSET_Y,
-                theme.TREE_ROW_ICON_SIZE, theme.TREE_ROW_ICON_SIZE}
+            scale := ctx.row_height / f32(theme.TREE_ROW_HEIGHT)
+            icon := geometry.Rectangle{row.x + f32(depth) * theme.TREE_INDENT * scale +
+                theme.TREE_ROW_ICON_OFFSET_X * scale,
+                row.y + theme.TREE_ROW_ICON_OFFSET_Y * scale,
+                theme.TREE_ROW_ICON_SIZE * scale, theme.TREE_ROW_ICON_SIZE * scale}
             tint := theme.draw_color(ctx.encoder, .Tree_Text) if
                 selected else theme.draw_color(ctx.encoder, .Text)
             uiwidgets.draw_encoded_disclosure(ctx.encoder, icon, expanded, tint)
@@ -2005,12 +2010,13 @@ update_tree_node_row :: proc(
         return
     }
 
-    indent_x := row_rect.x + f32(depth) * theme.TREE_INDENT
+    scale := row_rect.height / f32(theme.TREE_ROW_HEIGHT)
+    indent_x := row_rect.x + f32(depth) * theme.TREE_INDENT * scale
     icon_rect := geometry.Rectangle{
-        indent_x + theme.TREE_ROW_ICON_OFFSET_X,
-        row_rect.y + theme.TREE_ROW_ICON_OFFSET_Y,
-        theme.TREE_ROW_ICON_SIZE,
-        theme.TREE_ROW_ICON_SIZE,
+        indent_x + theme.TREE_ROW_ICON_OFFSET_X * scale,
+        row_rect.y + theme.TREE_ROW_ICON_OFFSET_Y * scale,
+        theme.TREE_ROW_ICON_SIZE * scale,
+        theme.TREE_ROW_ICON_SIZE * scale,
     }
     list_item_result := uiwidgets.update_list_item(uiwidgets.List_Item_Params{
         id = tree_placement_press_id(node),

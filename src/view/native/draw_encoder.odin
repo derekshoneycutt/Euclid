@@ -320,6 +320,7 @@ Draw_Encoder :: struct {
     ink_sink: Draw_Ink_Sink,
     // Borrowed caller-defined colors; native encoding never interprets or remaps them.
     semantic_colors: []color.Color_RGBA8,
+    ui_text_size_percent: int,
     scissors: [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
     scissor_count: int,
     statistics: Draw_Encoder_Statistics,

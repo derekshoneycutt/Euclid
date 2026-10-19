@@ -28,6 +28,7 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "UI Dust particles: {count}",
     "Peaks per 5-second interval.",
     "Increased contrast", "System requests increased contrast",
+    "Text size", "Accessibility", "Particles", "Other Settings",
     "Output scale", "Capture every", "Playback timing", "Animation",
     "Recorded", "Use animation timing", "Use recorded timing", "Downsample", "Path",
     "Saved GIF path", "100%", "50%", "33%", "25%", "frame", "{count} frames",

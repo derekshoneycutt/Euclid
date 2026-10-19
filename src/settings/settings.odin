@@ -26,9 +26,10 @@ Setting_Id :: enum u8 {
     Interface_Display_Fps,
     Interface_Reduce_Motion,
     Interface_Increased_Contrast,
+    Interface_Text_Size,
 }
 
-SETTING_COUNT :: 14
+SETTING_COUNT :: 15
 Setting_Set :: bit_set[Setting_Id; u16]
 ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Window_Width,
@@ -45,6 +46,7 @@ ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Interface_Display_Fps,
     .Interface_Reduce_Motion,
     .Interface_Increased_Contrast,
+    .Interface_Text_Size,
 }
 
 Window_Mode :: enum u8 {
@@ -100,6 +102,7 @@ SETTING_DEFINITIONS :: [SETTING_COUNT]Setting_Definition{
     {.Interface_Display_Fps, "interface", "display_fps", .Boolean},
     {.Interface_Reduce_Motion, "interface", "reduce_motion", .Boolean},
     {.Interface_Increased_Contrast, "interface", "increased_contrast", .Boolean},
+    {.Interface_Text_Size, "interface", "text_size_percent", .Integer},
 }
 
 Setting_Value :: struct {
@@ -132,6 +135,7 @@ Interface_Preferences :: struct {
     display_fps: bool,
     reduce_motion: bool,
     increased_contrast: bool,
+    text_size_percent: int,
 }
 
 Preferences :: struct {
@@ -181,6 +185,7 @@ default_preferences :: proc() -> Preferences {
         },
         interface = {
             display_fps = false, reduce_motion = false, increased_contrast = false,
+            text_size_percent = 100,
         },
     }
 }
@@ -215,6 +220,11 @@ valid_dust_limit :: proc(limit: i64) -> bool {
     return limit >= 0 && limit <= i64(DUST_LIMIT_MAX)
 }
 
+// Check that a text-size preference is one of the supported discrete percentages.
+valid_text_size_percent :: proc(percent: i64) -> bool {
+    return percent == 100 || percent == 125 || percent == 150 || percent == 175
+}
+
 // Check that an identifier names one of the bounded initial preferences.
 valid_setting_id :: proc(id: Setting_Id) -> bool {
     switch id {
@@ -222,7 +232,8 @@ valid_setting_id :: proc(id: Setting_Id) -> bool {
          .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Dust_Limit, .Drawing_Sound_Enabled, .Interface_Display_Fps,
-         .Interface_Reduce_Motion, .Interface_Increased_Contrast:
+         .Interface_Reduce_Motion, .Interface_Increased_Contrast,
+         .Interface_Text_Size:
         return true
     }
     return false
@@ -256,6 +267,9 @@ valid_setting_value :: proc(id: Setting_Id, value: Setting_Value) -> bool {
         return value.kind == .Boolean
     case .Drawing_Dust_Limit:
         return value.kind == .Integer && valid_dust_limit(i64(value.integer))
+    case .Interface_Text_Size:
+        return value.kind == .Integer &&
+            valid_text_size_percent(i64(value.integer))
     }
     return false
 }
@@ -295,6 +309,8 @@ apply_integer_preference :: proc(
         preferences^.window.height = value
     case .Drawing_Dust_Limit:
         preferences^.drawing.dust_limit = value
+    case .Interface_Text_Size:
+        preferences^.interface.text_size_percent = value
     }
 }
 
@@ -356,6 +372,8 @@ read_integer_preference :: proc(
         return integer_value(preferences.window.height)
     case .Drawing_Dust_Limit:
         return integer_value(preferences.drawing.dust_limit)
+    case .Interface_Text_Size:
+        return integer_value(preferences.interface.text_size_percent)
     }
     return {}
 }
@@ -389,7 +407,7 @@ read_boolean_preference :: proc(
 // Read one typed scalar from the fixed preference record.
 setting_value :: proc(preferences: Preferences, id: Setting_Id) -> Setting_Value {
     switch id {
-    case .Window_Width, .Window_Height, .Drawing_Dust_Limit:
+    case .Window_Width, .Window_Height, .Drawing_Dust_Limit, .Interface_Text_Size:
         return read_integer_preference(preferences, id)
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,

@@ -42,6 +42,7 @@ Input_Box_Params :: struct {
     defer_semantics: bool,
     padding: Input_Box_Padding,
     column_advance: f32,
+    font_size: f32,
     font: view_font.Font_Face,
     resolver: view_font.Font_Resolver,
     edit_target: Input_Box_Edit_Target,
@@ -655,12 +656,13 @@ input_box_text_geometry :: proc(
     anchor := input_box_byte_column(descriptor.text, descriptor.anchor_byte)
     start_x := f32(min(cursor, anchor)) * params.column_advance
     width := f32(abs(cursor - anchor)) * params.column_advance
-    text_y := params.rect.y + (params.rect.height - theme.TREE_FONT_SIZE) * 0.5
+    font_size := theme.TREE_FONT_SIZE if params.font_size <= 0 else params.font_size
+    text_y := params.rect.y + (params.rect.height - font_size) * 0.5
     return {control = {params.rect, params.clip_rect},
         caret = {inner.x + f32(cursor) * params.column_advance - params.state^.scroll_x,
-            text_y, 1, theme.TREE_FONT_SIZE},
+            text_y, 1, font_size},
         selection = {inner.x + start_x - params.state^.scroll_x,
-            text_y, width, theme.TREE_FONT_SIZE},
+            text_y, width, font_size},
         cursor_column = cursor, anchor_column = anchor}
 }
 
@@ -747,7 +749,8 @@ draw_encoded_input_box_text :: proc(
         encoder = encoder, resolver = params.resolver, key = .Regular,
         text = params.descriptor.text, position = {prepared.text_x, prepared.caret.y},
         color = theme.draw_color(encoder, .Text),
-        font = viewtext.ui_text_font(params.font),
+        font = viewtext.ui_text_font(params.font,
+            encoder^.ui_text_size_percent if encoder != nil else 100),
     }
     if prepared.selection.width <= 0 {
         _ = viewtext.ui_text_shaped(request)
@@ -803,7 +806,8 @@ draw_encoded_input_box_completion :: proc(
         key = .Regular, text = string(bytes[:count]),
         position = {prepared.unicode_hint.x, prepared.unicode_hint.y},
         color = theme.draw_color(encoder, .Text),
-        font = viewtext.ui_text_font(params.font),
+        font = viewtext.ui_text_font(params.font,
+            encoder^.ui_text_size_percent if encoder != nil else 100),
     })
     _ = native.draw_encoder_pop_scissor(encoder)
 }

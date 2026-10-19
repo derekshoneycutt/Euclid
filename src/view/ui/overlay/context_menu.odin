@@ -179,7 +179,9 @@ context_menu_size :: proc(state: ^core.Euclid_General_State) -> geometry.Vector2
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     for &item in menu^.items[:menu^.count] {
         measured_width, measured := viewtext.ui_text_measure_monospace(
-            string(item.label[:item.label_length]), face, theme.TREE_FONT_SIZE, 0)
+            string(item.label[:item.label_length]), face,
+            theme.ui_font_size(
+                state^.ui_runtime.preferences.values.interface.text_size_percent), 0)
         if measured {
             width = max(width, measured_width + 2*CONTEXT_MENU_PADDING)
         }
@@ -595,7 +597,9 @@ context_menu_draw_label :: proc(
         encoder = encoder,
         resolver = view_font.cache_terminal_resolver(&state^.font_cache),
         key = .Regular, text = label,
-        position = {row.x, row.y + (row.height-theme.TREE_FONT_SIZE)*0.5},
-        color = tint, font = viewtext.ui_text_font(face),
+        position = {row.x, row.y + (row.height-theme.ui_font_size(
+            state^.ui_runtime.preferences.values.interface.text_size_percent))*0.5},
+        color = tint, font = viewtext.ui_text_font(
+            face, encoder^.ui_text_size_percent),
     })
 }

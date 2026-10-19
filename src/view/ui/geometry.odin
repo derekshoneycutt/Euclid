@@ -157,7 +157,9 @@ track_ui_dynview_geometry :: proc(
     regions: viewmodel.Ui_Regions) {
     text_panel := uiwidgets.text_content_panel(regions.text_rect)
     dynview.track_panel(&state^.dynview, geometry.Rectangle(text_panel))
-    dynview.track_font(&state^.dynview, theme.TREE_FONT_SIZE,
-        theme.TEXT_WRAP_ADVANCE, theme.TEXT_ROW_HEIGHT)
+    text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    dynview.track_font(&state^.dynview, theme.ui_font_size(text_percent),
+        theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent),
+        theme.ui_scaled_metric(theme.TEXT_ROW_HEIGHT, text_percent))
     dynview.track_style(&state^.dynview, dyncore.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
 }
