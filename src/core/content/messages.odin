@@ -111,6 +111,12 @@ Content_Message_Id :: enum u16 {
     Animation_Add_Favorite = 1404,
     Animation_Remove_Favorite = 1405,
     Animation_Add_Collections = 1406,
+    Animation_Hide_Controls = 1407,
+    Animation_Show_Controls = 1408,
+    Animation_Speed_Normal = 1409,
+    Animation_Speed_Double = 1410,
+    Animation_Speed_Quadruple = 1411,
+    Animation_Speed_Capture = 1412,
 }
 
 // One native ID/key identity shared by admission and runtime lookup.
@@ -119,7 +125,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 101
+CONTENT_SHIPPED_MESSAGE_COUNT :: 107
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -222,6 +228,12 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1404, "ui.animation.add_favorite"},
     {1405, "ui.animation.remove_favorite"},
     {1406, "ui.animation.add_collections"},
+    {1407, "ui.animation.hide_controls"},
+    {1408, "ui.animation.show_controls"},
+    {1409, "ui.animation.speed_normal"},
+    {1410, "ui.animation.speed_double"},
+    {1411, "ui.animation.speed_quadruple"},
+    {1412, "ui.animation.speed_capture"},
 }
 
 // Explicit formatting failure; no error is a successful English fallback.

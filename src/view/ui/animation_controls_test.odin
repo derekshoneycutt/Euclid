@@ -154,7 +154,7 @@ animation_controls_favorite_semantics_and_keyboard_activation :: proc(t: ^testin
     index := uisemantics.semantic_node_index(snapshot, id)
     node := snapshot^.nodes[index]
     testing.expect(t, .Checked in node.states && .Tab_Stop in node.states)
-    testing.expect_value(t, node.traversal_order, u32(2))
+    testing.expect_value(t, node.traversal_order, u32(3))
     testing.expect(t, .Activate in node.actions)
     testing.expect(t, uisemantics.semantic_append_command(focus, {
         target = id, kind = .Activate,
@@ -184,8 +184,8 @@ animation_controls_exclude_ineligible_favorite_targets :: proc(t: ^testing.T) {
         geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), false)
     id, hit := uianimation.animation_control_hit_test(
         geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect),
-        state^.gif_capture_status.gif_capture_phase, false,
-        {slots.favorite.x + 1, slots.favorite.y + 1})
+        state^.gif_capture_status.gif_capture_phase,
+        {slots.favorite.x + 1, slots.favorite.y + 1}, {})
     testing.expect(t, !hit)
     testing.expect_value(t, id, 0)
     ji.selected_animation = nil
@@ -242,8 +242,9 @@ animation_controls_separate_panels_follow_world_bounds :: proc(t: ^testing.T) {
         testing.expect_value(t, slots.favorite_panel.height, slots.panel.height)
         testing.expect_value(t, slots.favorite.x - slots.favorite_panel.x,
             slots.refresh.x - slots.panel.x)
-        id, hit := uianimation.animation_control_hit_test(world, .Idle, true,
-            {slots.panel.x + slots.panel.width + 10, slots.favorite.y + 1})
+        id, hit := uianimation.animation_control_hit_test(world, .Idle,
+            {slots.panel.x + slots.panel.width + 10, slots.favorite.y + 1},
+            {favorite = true})
         testing.expect(t, !hit)
         testing.expect_value(t, id, 0)
     }
@@ -369,9 +370,9 @@ animation_controls_hover_geometry_preserves_hit_bounds :: proc(t: ^testing.T) {
             testing.expect(t, point.y <= rectangle.y + rectangle.height)
         }
         id, hit := uianimation.animation_control_hit_test(
-            {0, 0, 640, 480}, .Idle, true,
+            {0, 0, 640, 480}, .Idle,
             {rectangle.x + rectangle.width * 0.5,
-                rectangle.y + rectangle.height * 0.5})
+                rectangle.y + rectangle.height * 0.5}, {favorite = true})
         testing.expect(t, hit)
         expected_id := uianimation.ANIMATION_REFRESH_BUTTON_ID
         if index == 1 {

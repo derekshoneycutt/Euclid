@@ -570,4 +570,40 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             "Animation control tooltip and title of the custom-collection checkbox popup.",
             LocalizedContent.MessageArgument[]),
         "Add to collections"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1407),
+            "ui.animation.hide_controls",
+            "Action label for the view's borderless eye control.",
+            LocalizedContent.MessageArgument[]),
+        "Hide animation controls"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1408),
+            "ui.animation.show_controls",
+            "Action label for the view's crossed-out eye control.",
+            LocalizedContent.MessageArgument[]),
+        "Show animation controls"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1409),
+            "ui.animation.speed_normal",
+            "Current playback rate and the speed button's next action.",
+            LocalizedContent.MessageArgument[]),
+        "Playback speed: 1x. Change to 2x"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1410),
+            "ui.animation.speed_double",
+            "Current playback rate and the speed button's next action.",
+            LocalizedContent.MessageArgument[]),
+        "Playback speed: 2x. Change to 4x"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1411),
+            "ui.animation.speed_quadruple",
+            "Current playback rate and the speed button's next action.",
+            LocalizedContent.MessageArgument[]),
+        "Playback speed: 4x. Change to 1x"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1412),
+            "ui.animation.speed_capture",
+            "Disabled playback speed during GIF arming, recording, and finalization.",
+            LocalizedContent.MessageArgument[]),
+        "Playback speed: 1x. Locked during GIF capture"),
 ]

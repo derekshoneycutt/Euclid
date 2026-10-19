@@ -42,6 +42,9 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Error: failed to submit GIF frame.", "Window resized; GIF capture cancelled.",
     "Restart animation", "Pause animation", "Resume animation",
     "Add to Favorites", "Remove from Favorites", "Add to collections",
+    "Hide animation controls", "Show animation controls",
+    "Playback speed: 1x. Change to 2x", "Playback speed: 2x. Change to 4x",
+    "Playback speed: 4x. Change to 1x", "Playback speed: 1x. Locked during GIF capture",
 }
 
 // Build a complete message fixture with a stable arena owner for consumer tests.

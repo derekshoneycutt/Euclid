@@ -6,6 +6,8 @@ import dynviewmodel "../dynview/model"
 import presentation_model "presentation"
 
 import storage "../core/storage"
+import animationmodel "../core/animation"
+import capturemodel "../view/capture/model"
 
 import "base:runtime"
 import audio "../audio"
@@ -282,9 +284,15 @@ julia_service_asset_config :: proc(
 //   Preserve bounded elapsed time while one replaceable tick is in flight.
 // The cap prevents a delayed worker from replaying an unbounded simulation interval when
 // it next accepts a tick.
-coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
+coalesce_animation_tick :: proc(
+    service: ^Julia_Runtime_Service, dt, authored_dt: f32, accelerated: bool) {
     service^.animation_accumulated_dt = min(
         service^.animation_accumulated_dt + dt, MAX_ACCUMULATED_ANIMATION_DT)
+    service.animation_accumulated_authored_dt = min(
+        service.animation_accumulated_authored_dt + authored_dt,
+        MAX_ACCUMULATED_ANIMATION_DT)
+    service.animation_accumulated_accelerated =
+        service.animation_accumulated_accelerated || accelerated
     service^.animation_ticks_coalesced += 1
 }
 
@@ -322,8 +330,13 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
         return false
     }
     service := state^.julia_runtime_service
+    rate := capturemodel.gif_capture_playback_rate(
+        state.ui_runtime.playback.rate,
+        state.gif_capture_status.gif_capture_phase,
+        state.gif_capture_status.save_gif_requested)
+    authored_dt := dt * animationmodel.playback_rate_multiplier(rate)
     if service^.animation_tick_pending {
-        coalesce_animation_tick(service, dt)
+        coalesce_animation_tick(service, dt, authored_dt, rate != .Normal)
         return false
     }
     slot_index := reserve_animation_tick_slot(service)
@@ -333,19 +346,25 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
     }
 
     total_dt := min(dt + service^.animation_accumulated_dt, MAX_ACCUMULATED_ANIMATION_DT)
+    total_authored_dt := min(authored_dt + service.animation_accumulated_authored_dt,
+        MAX_ACCUMULATED_ANIMATION_DT)
+    accelerated := rate != .Normal || service.animation_accumulated_accelerated
     service^.animation_accumulated_dt = 0
+    service.animation_accumulated_authored_dt = 0
+    service.animation_accumulated_accelerated = false
     service^.animation_tick_sequence += 1
     fill_animation_tick_slot(
-        service, &service^.animation_tick_slots[slot_index], state, total_dt)
+        state, &service^.animation_tick_slots[slot_index],
+        total_dt, total_authored_dt, accelerated)
     slot := &service^.animation_tick_slots[slot_index]
     return submit_animation_tick_slot(service, slot, slot_index, total_dt)
 }
 
 //   Populate one animation tick slot and snapshot its query state for the request.
 fill_animation_tick_slot :: proc(
-    service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
-    state: ^core.Euclid_General_State, total_dt: f32) {
-
+    state: ^core.Euclid_General_State, slot: ^Animation_Tick_Slot,
+    total_dt, authored_dt: f32, accelerated: bool) {
+    service := state.julia_runtime_service
     reservation_generation := slot^.reservation_generation
     slot^ = Animation_Tick_Slot{
         state = .Pending,
@@ -355,8 +374,10 @@ fill_animation_tick_slot :: proc(
         sequence = service^.animation_tick_sequence,
         host_state = state,
         animation = state^.julia_interface^.current_animation,
-        dt = total_dt,
-        effective_progress = service^.animation_progress + f64(total_dt),
+        dt = authored_dt,
+        maintenance_dt = total_dt,
+        accelerated = accelerated,
+        effective_progress = service^.animation_progress + f64(authored_dt),
         submitted_at = time.tick_now(),
     }
     capture_animation_query_snapshot(state, &slot^.query_snapshot)
@@ -368,6 +389,8 @@ rollback_animation_tick_slot :: proc(
 
     slot^.state = .Free
     service^.animation_accumulated_dt = total_dt
+    service.animation_accumulated_authored_dt = slot.dt
+    service.animation_accumulated_accelerated = slot.accelerated
     service^.animation_ticks_dropped += 1
 }
 
@@ -397,6 +420,7 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     } else {
         committed = true
         service^.animation_progress = slot^.effective_progress
+        service.animation_last_commit_accelerated = slot.accelerated
     }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
     release_completed_animation_ticks(service)

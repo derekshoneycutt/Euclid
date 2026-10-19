@@ -338,13 +338,37 @@ All world controls share the prepared icon-button path and viewport-relative sty
 
 | Position | Controls | Availability |
 | --- | --- | --- |
-| Bottom left | Restart and pause/resume | Ordinary animation controls |
+| Top right | Borderless eye / crossed-out eye | Available even with the overlay hidden |
+| Bottom left | Restart, pause/resume, and fast-forward rate | Expanded animation overlay |
 | Bottom right | Favorites star | Eligible selected animation |
 | Beside the star | Collection ellipsis | Eligible selection with custom collections |
 
 The star reads accepted placement state and submits edits through the serialized
 user-data save flow. Re-adding a favorite creates a fresh placement without resetting
 playback. Both control boxes share insets, padding, background, and border.
+
+The eye has no permanent backing frame or border; keyboard focus still has its
+ordinary visible outline. It hides both bottom frames and closes the membership
+popup. Hidden controls do not draw, intercept input, offer tooltips, participate
+in traversal, or appear in native accessibility. Focus owned by those controls or
+the popup moves to the eye. Hiding does not pause playback or change the selected
+animation. Visibility starts expanded and survives selection/reload for the session.
+Recording suppresses even the eye, without overwriting the session choice.
+
+Fast-forward cycles **1x, 2x, 4x** in one ordinary icon-sized button. At 1x its
+fast-forward glyph is crossed out; at 2x and 4x a small circular badge containing
+**2** or **4** overlays the glyph's bottom-right. There is no separate rate text.
+Its accessible label describes the current rate and next action. Changing rate
+while paused does not resume; restart and selection retain the rate. Only selected
+animation authored time accelerates: native simulation, global Julia maintenance,
+UI effects, reset cooldown, and Terminal attachment playback do not.
+
+GIF capture overrides effective playback to **1x** while Armed, Recording, or
+Finalizing, and also while a save request is waiting for its fixed step. The
+visible rate control is disabled during that override. The session choice is
+retained, so completion, cancellation, and errors restore it without a separate
+save/restore mutation. Recording waits for accelerated outstanding work to retire
+before admitting a clean cycle boundary.
 
 ### Collection Membership Popup
 

@@ -227,13 +227,23 @@ artifact_colored_draw_state_json :: proc(state: observe.Display) -> string {
         state.curve_retention_ratio, state.colored_primitive_overflow_count)
 }
 
+// Serialize session playback choices and effective capture timing at the snapshot root.
+artifact_playback_state_json :: proc(state: observe.Display) -> string {
+    return fmt.tprintf(
+        "\"simulation_paused\":%v,\"animation_policy_paused\":%v," +
+        "\"animation_controls_hidden\":%v,\"animation_playback_rate\":%d," +
+        "\"animation_effective_rate\":%d",
+        state.simulation_paused, state.animation_policy_paused,
+        state.animation_controls_hidden, state.animation_playback_rate,
+        state.animation_effective_rate)
+}
+
 //   Serialize the synchronized display, host, and simulation observation snapshot.
 artifact_state_json :: proc(
     state: observe.Display, julia_host: observe.Julia_Host,
     simulation: observe.Simulation) -> string {
     return fmt.tprintf(
-        "{{\"fixed_step\":%d,\"simulation_time\":%g," +
-        "\"simulation_paused\":%v,\"animation_policy_paused\":%v," +
+        "{{\"fixed_step\":%d,\"simulation_time\":%g,%s," +
         "\"runtime_lifecycle\":%d," +
         "\"runtime_generation\":%d,\"active_runtime_request_id\":%d," +
         "\"failed_runtime_request_count\":%d,\"animation_generation\":%d," +
@@ -246,8 +256,8 @@ artifact_state_json :: proc(
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
         "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s,%s,%s}}\n",
-        state.fixed_step, state.simulation_time, state.simulation_paused,
-        state.animation_policy_paused, state.runtime_lifecycle, state.runtime_generation,
+        state.fixed_step, state.simulation_time, artifact_playback_state_json(state),
+        state.runtime_lifecycle, state.runtime_generation,
         state.active_runtime_request_id, state.failed_runtime_request_count,
         state.animation_generation, state.animation_tick_sequence,
         state.animation_last_committed_sequence, state.point_count,

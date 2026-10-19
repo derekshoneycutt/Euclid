@@ -116,7 +116,11 @@ ui_world_hover_target :: proc(
     animation_membership_eligible := false) -> viewmodel.Ui_Interaction_Target {
     control_id, over_control := uianimation.animation_control_hit_test(
         geometry.Rectangle(runtime^.layout.ui_regions.world_rect),
-        phase, animation_favorite_eligible, mouse, animation_membership_eligible)
+        phase, mouse, {
+            favorite = animation_favorite_eligible,
+            membership = animation_membership_eligible,
+            hidden = runtime.playback.controls_hidden,
+        })
     if over_control {
         return viewmodel.ui_interaction_target(.Control, id = control_id)
     }

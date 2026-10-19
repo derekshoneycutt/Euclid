@@ -8,6 +8,7 @@ import storage "../../../core/storage"
 import uuid "core:encoding/uuid"
 import preferencesmodel "../../preferences/model"
 import worldmodel "../../world/model"
+import animationmodel "../../../core/animation"
 
 WINDOW_HEIGHT :: 720
 WINDOW_WIDTH :: 1280
@@ -895,6 +896,8 @@ Ui_Rendering_Control_State :: struct {
 Ui_Playback_Control_State :: struct {
     simulation_paused: bool,
     animation_policy_paused: bool,
+    controls_hidden: bool,
+    rate: animationmodel.Playback_Rate,
 }
 
 // Euclid_Ui_Runtime_State composes persistent display-owned UI state.

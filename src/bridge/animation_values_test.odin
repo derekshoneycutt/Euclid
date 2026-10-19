@@ -356,14 +356,14 @@ animation_tick_effective_progress_includes_accumulated_dt :: proc(t: ^testing.T)
     interface.current_animation = &interface.null_animation
     service.animation_generation = 4
     service.animation_progress = 1.25
-    coalesce_animation_tick(service, 0.1)
-    coalesce_animation_tick(service, 0.1)
+    coalesce_animation_tick(service, 0.1, 0.1, false)
+    coalesce_animation_tick(service, 0.1, 0.1, false)
     total_dt := min(0.05 + service.animation_accumulated_dt,
         MAX_ACCUMULATED_ANIMATION_DT)
     slot := new(bridgemodel.Animation_Tick_Slot, context.allocator)
     defer free(slot, context.allocator)
 
-    fill_animation_tick_slot(service, slot, state, total_dt)
+    fill_animation_tick_slot(state, slot, total_dt, total_dt, false)
 
     testing.expect_value(t, slot^.dt, 0.25)
     testing.expect_value(t, slot^.effective_progress, 1.5)

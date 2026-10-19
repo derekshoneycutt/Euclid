@@ -21,11 +21,14 @@ import crypto "core:crypto"
 import viewpreferences "../../preferences"
 import log "core:log"
 import contentdata "../../../core/content"
+import animationmodel "../../../core/animation"
 
 ANIMATION_REFRESH_BUTTON_ID :: 2101
 ANIMATION_PAUSE_BUTTON_ID :: 2102
 ANIMATION_FAVORITE_BUTTON_ID :: 2103
 ANIMATION_MEMBERSHIP_BUTTON_ID :: uioverlay.MEMBERSHIP_CONTROL_ID
+ANIMATION_VISIBILITY_BUTTON_ID :: 2105
+ANIMATION_SPEED_BUTTON_ID :: 2106
 
 // Fixed board-relative geometry for the animation controls.
 Animation_Control_Slots :: struct {
@@ -35,11 +38,17 @@ Animation_Control_Slots :: struct {
     pause: geometry.Rectangle,
     favorite: geometry.Rectangle,
     membership: geometry.Rectangle,
+    eye: geometry.Rectangle,
+    speed: geometry.Rectangle,
 }
 
 // Prepared interaction state for the world animation controls.
 Animation_Control_Preparation :: struct {
     visible: bool,
+    overlay_visible: bool,
+    eye: uiwidgets.Icon_Button_Result,
+    speed: uiwidgets.Icon_Button_Result,
+    speed_locked: bool,
     slots: Animation_Control_Slots,
     refresh: uiwidgets.Icon_Button_Result,
     pause: uiwidgets.Icon_Button_Result,
@@ -54,6 +63,14 @@ Animation_Control_Preparation :: struct {
 Animation_Control_Hit :: struct {
     refresh_requested: bool,
     toggle_pause_requested: bool,
+    cycle_speed_requested: bool,
+}
+
+// Overlay eligibility and session visibility shared by pointer routing.
+Animation_Control_Visibility :: struct {
+    favorite: bool,
+    membership: bool,
+    hidden: bool,
 }
 
 ANIMATION_CONTROL_CORNER_SEGMENTS :: native.DRAW_CIRCLE_SEGMENTS / 4
@@ -108,7 +125,7 @@ animation_control_layout_slots :: proc(
     world_rect: geometry.Rectangle,
     favorite_visible: bool, membership_visible := false) -> Animation_Control_Slots {
     panel_width := theme.ANIMATION_CONTROL_PADDING * 2 +
-        theme.ANIMATION_CONTROL_BUTTON_SIZE * 2 + theme.ANIMATION_CONTROL_BUTTON_GAP
+        theme.ANIMATION_CONTROL_BUTTON_SIZE * 3 + theme.ANIMATION_CONTROL_BUTTON_GAP * 2
     panel_height :=
         theme.ANIMATION_CONTROL_PADDING * 2 + theme.ANIMATION_CONTROL_BUTTON_SIZE
     panel := geometry.Rectangle{
@@ -124,6 +141,15 @@ animation_control_layout_slots :: proc(
     pause := refresh
     pause.x += theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
     result := Animation_Control_Slots{panel = panel, refresh = refresh, pause = pause}
+    result.speed = pause
+    result.speed.x +=
+        theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
+    result.eye = {
+        world_rect.x + world_rect.width - theme.ANIMATION_CONTROL_EDGE_INSET -
+            theme.ANIMATION_CONTROL_BUTTON_SIZE,
+        world_rect.y + theme.ANIMATION_CONTROL_EDGE_INSET,
+        theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE,
+    }
     if favorite_visible {
         animation_collection_layout_slots(world_rect, membership_visible, &result)
     }
@@ -157,14 +183,23 @@ animation_collection_layout_slots :: proc(
 animation_control_hit_test :: proc(
     world_rect: geometry.Rectangle,
     phase: capturemodel.Gif_Capture_Phase,
-    favorite_visible: bool,
-    point: geometry.Vector2, membership_visible := false) -> (int, bool) {
+    point: geometry.Vector2,
+    visibility: Animation_Control_Visibility) -> (int, bool) {
     if !animation_controls_visible(phase) {
         return 0, false
     }
     slots := animation_control_layout_slots(
-        world_rect, favorite_visible, membership_visible)
-    if membership_visible && geometry.rectangle_contains(slots.membership, point) {
+        world_rect, visibility.favorite, visibility.membership)
+    if geometry.rectangle_contains(slots.eye, point) {
+        return ANIMATION_VISIBILITY_BUTTON_ID, true
+    }
+    if visibility.hidden {
+        return 0, false
+    }
+    if geometry.rectangle_contains(slots.speed, point) {
+        return ANIMATION_SPEED_BUTTON_ID, true
+    }
+    if visibility.membership && geometry.rectangle_contains(slots.membership, point) {
         return ANIMATION_MEMBERSHIP_BUTTON_ID, true
     }
     if geometry.rectangle_contains(
@@ -175,7 +210,7 @@ animation_control_hit_test :: proc(
         geometry.Rectangle(slots.pause), point) {
         return ANIMATION_PAUSE_BUTTON_ID, true
     }
-    if favorite_visible && geometry.rectangle_contains(
+    if visibility.favorite && geometry.rectangle_contains(
         geometry.Rectangle(slots.favorite), point) {
         return ANIMATION_FAVORITE_BUTTON_ID, true
     }
@@ -213,7 +248,8 @@ animation_control_hover_geometry :: proc(
 // Report whether one widget identity belongs to the animation overlay.
 animation_control_id :: #force_inline proc(id: int) -> bool {
     return id == ANIMATION_REFRESH_BUTTON_ID || id == ANIMATION_PAUSE_BUTTON_ID ||
-        id == ANIMATION_FAVORITE_BUTTON_ID || id == ANIMATION_MEMBERSHIP_BUTTON_ID
+        id == ANIMATION_FAVORITE_BUTTON_ID || id == ANIMATION_MEMBERSHIP_BUTTON_ID ||
+        id == ANIMATION_VISIBILITY_BUTTON_ID || id == ANIMATION_SPEED_BUTTON_ID
 }
 
 // Build shared icon-button parameters for one animation control.
@@ -221,10 +257,13 @@ animation_control_button_params :: #force_inline proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     descriptor: Animation_Control_Descriptor,
     mouse_input: input.Input_Frame,
-    clip: geometry.Rectangle) -> uiwidgets.Icon_Button_Params {
+    clip: geometry.Rectangle, enabled := true) -> uiwidgets.Icon_Button_Params {
     states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable, .Tab_Stop}
     if descriptor.toggle {
         states += {.Checked}
+    }
+    if !enabled {
+        states -= {.Enabled}
     }
     return {
         id = descriptor.id,
@@ -233,7 +272,7 @@ animation_control_button_params :: #force_inline proc(
         toggle = descriptor.toggle,
         mouse = mouse_input,
         interaction_space_rect = descriptor.rect,
-        interaction_enabled = true,
+        interaction_enabled = enabled,
         inset_scale = theme.ANIMATION_CONTROL_ICON_SCALE,
         semantics = {
             publish = true,
@@ -256,12 +295,12 @@ prepare_animation_control_button :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     descriptor: Animation_Control_Descriptor,
     mouse_input: input.Input_Frame,
-    clip: geometry.Rectangle) -> uiwidgets.Icon_Button_Result {
+    clip: geometry.Rectangle, enabled := true) -> uiwidgets.Icon_Button_Result {
     result := uiwidgets.update_icon_button(
-        animation_control_button_params(runtime, descriptor, mouse_input, clip),
+        animation_control_button_params(runtime, descriptor, mouse_input, clip, enabled),
         &runtime^.input.press_owner)
     owner := uisemantics.semantic_control_id(.Animation_Control, descriptor.id)
-    if result.pressed || result.clicked {
+    if result.pressed || result.action.activated {
         uioverlay.tooltip_dismiss(&runtime^.tooltip, owner)
     }
     uioverlay.tooltip_offer(&runtime^.tooltip, {
@@ -330,12 +369,12 @@ prepare_animation_favorite_control :: proc(
     }
     result := prepare_animation_control_button(&state^.ui_runtime,
         {ANIMATION_FAVORITE_BUTTON_ID, slots.favorite, .Star, true,
-            viewmessages.shell_message(state, label_id), 2},
+            viewmessages.shell_message(state, label_id), 3},
         mouse_input, slots.favorite_panel)
     return result, active
 }
 
-// Prepare the always-visible refresh and pause animation controls.
+// Prepare refresh and pause while the animation overlay is expanded.
 prepare_animation_transport_controls :: proc(
     state: ^core.Euclid_General_State,
     slots: Animation_Control_Slots,
@@ -435,15 +474,35 @@ prepare_animation_controls :: proc(
     slots := animation_control_layout_slots(
         geometry.Rectangle(ui_runtime^.layout.ui_regions.world_rect),
         favorite_visible, membership_visible)
+    eye := prepare_animation_visibility_control(state, slots, mouse_input)
+    if ui_runtime^.playback.controls_hidden {
+        return {visible = true, slots = slots, eye = eye}
+    }
+    prepared := Animation_Control_Preparation{
+        visible = true, overlay_visible = true, slots = slots, eye = eye,
+        favorite_visible = favorite_visible, membership_visible = membership_visible,
+    }
+    prepare_animation_overlay(state, mouse_input, favorite_target, &prepared)
+    return prepared
+}
+
+// Prepare expanded controls and commit their transport and collection actions.
+prepare_animation_overlay :: proc(
+    state: ^core.Euclid_General_State, mouse_input: input.Input_Frame,
+    favorite_target: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    prepared: ^Animation_Control_Preparation) {
+    slots := prepared.slots
     refresh, pause := prepare_animation_transport_controls(
         state, slots, mouse_input)
+    speed, speed_locked := prepare_animation_speed_control(state, slots, mouse_input)
     favorite, favorite_active := prepare_animation_favorite_control(
         state, favorite_target, slots, mouse_input)
     membership := prepare_animation_membership_control(
-        state, slots, mouse_input, membership_visible)
+        state, slots, mouse_input, prepared.membership_visible)
     hit := Animation_Control_Hit{
         refresh.action.activated,
         pause.action.activated,
+        speed.action.activated,
     }
     apply_animation_control_hit(state, hit)
     if favorite.action.activated {
@@ -452,11 +511,56 @@ prepare_animation_controls :: proc(
             favorite_active = updated
         }
     }
-    return {
-        visible = true, slots = slots, refresh = refresh, pause = pause,
-        favorite_visible = favorite_visible, favorite_active = favorite_active,
-        favorite = favorite,
-        membership_visible = membership_visible, membership = membership,
+    prepared.refresh = refresh
+    prepared.pause = pause
+    prepared.speed = speed
+    prepared.speed_locked = speed_locked
+    prepared.favorite_active = favorite_active
+    prepared.favorite = favorite
+    prepared.membership = membership
+}
+
+// Toggle overlay visibility without changing playback or collection membership.
+prepare_animation_visibility_control :: proc(
+    state: ^core.Euclid_General_State, slots: Animation_Control_Slots,
+    mouse_input: input.Input_Frame) -> uiwidgets.Icon_Button_Result {
+    label := contentdata.Content_Message_Id.Animation_Hide_Controls
+    if state.ui_runtime.playback.controls_hidden {
+        label = .Animation_Show_Controls
+    }
+    result := prepare_animation_control_button(&state.ui_runtime, {
+        ANIMATION_VISIBILITY_BUTTON_ID, slots.eye, .None, false,
+        viewmessages.shell_message(state, label), 5,
+    }, mouse_input, slots.eye)
+    if result.action.activated {
+        state.ui_runtime.playback.controls_hidden =
+            !state.ui_runtime.playback.controls_hidden
+        if state.ui_runtime.playback.controls_hidden {
+            animation_controls_retire_overlay(state)
+        }
+    }
+    return result
+}
+
+// Retire hidden popup, press and tooltip owners before their controls are prepared.
+animation_controls_retire_overlay :: proc(state: ^core.Euclid_General_State) {
+    runtime := &state.ui_runtime
+    focus := runtime.semantic_focus
+    transfer := focus != nil &&
+        (focus.logical_focus.domain == .Animation_Control ||
+            focus.logical_focus.domain == .Collection_Membership)
+    uioverlay.membership_close(state, false)
+    owner := &runtime.input.press_owner
+    if owner.active && animation_control_id(owner.id) {
+        owner^ = {}
+    }
+    if runtime.tooltip.shown.owner.domain == .Animation_Control {
+        runtime.tooltip.visible = false
+        uioverlay.tooltip_dismiss(&runtime.tooltip, runtime.tooltip.shown.owner)
+    }
+    if transfer {
+        focus.logical_focus = uisemantics.semantic_control_id(
+            .Animation_Control, ANIMATION_VISIBILITY_BUTTON_ID)
     }
 }
 
@@ -470,13 +574,37 @@ prepare_animation_membership_control :: proc(
     }
     result := prepare_animation_control_button(&state.ui_runtime, {
             ANIMATION_MEMBERSHIP_BUTTON_ID, slots.membership, .None, false,
-            viewmessages.shell_message(state, .Animation_Add_Collections), 3,
+            viewmessages.shell_message(state, .Animation_Add_Collections), 4,
         },
         mouse_input, slots.favorite_panel)
     if result.action.activated {
         _ = uioverlay.membership_open(state, slots.membership)
     }
     return result
+}
+
+// Publish current rate and disable all speed activation routes during GIF capture.
+prepare_animation_speed_control :: proc(
+    state: ^core.Euclid_General_State, slots: Animation_Control_Slots,
+    mouse_input: input.Input_Frame) -> (uiwidgets.Icon_Button_Result, bool) {
+    locked := capturemodel.gif_capture_locks_playback_rate(
+        state.gif_capture_status.gif_capture_phase,
+        state.gif_capture_status.save_gif_requested)
+    label := contentdata.Content_Message_Id.Animation_Speed_Normal
+    if locked {
+        label = .Animation_Speed_Capture
+    } else {
+        switch state.ui_runtime.playback.rate {
+        case .Normal:
+        case .Double: label = .Animation_Speed_Double
+        case .Quadruple: label = .Animation_Speed_Quadruple
+        }
+    }
+    result := prepare_animation_control_button(&state.ui_runtime, {
+        ANIMATION_SPEED_BUTTON_ID, slots.speed, .None, false,
+        viewmessages.shell_message(state, label), 2,
+    }, mouse_input, slots.panel, !locked)
+    return result, locked
 }
 
 // Apply reset and pause requests to their display-owned animation state.
@@ -491,6 +619,16 @@ apply_animation_control_hit :: proc(
     }
     if hit.toggle_pause_requested {
         ui_runtime^.playback.simulation_paused = !ui_runtime^.playback.simulation_paused
+    }
+    if hit.cycle_speed_requested {
+        if capturemodel.gif_capture_locks_playback_rate(
+            state.gif_capture_status.gif_capture_phase,
+            state.gif_capture_status.save_gif_requested) {
+            log.warn("animation_speed_change_rejected_during_capture")
+        } else {
+            ui_runtime.playback.rate =
+                animationmodel.playback_rate_next(ui_runtime.playback.rate)
+        }
     }
 }
 
@@ -663,13 +801,37 @@ draw_encoded_animation_control_panel :: proc(
     _ = native.draw_encoder_rectangle_outline(encoder, panel, 1, theme.UI_BORDER_COLOR)
 }
 
-// draw_encoded_animation_controls encodes the prepared font-independent overlay.
+// Encode the prepared overlay with font-independent transport and visibility glyphs.
 draw_encoded_animation_controls :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Animation_Control_Preparation) {
     if !prepared.visible {
         return
     }
+    draw_encoded_animation_eye(encoder, prepared.eye,
+        state.ui_runtime.playback.controls_hidden)
+    if !prepared.overlay_visible {
+        return
+    }
+    draw_encoded_animation_transport(state, encoder, prepared)
+    if prepared.favorite_visible {
+        draw_encoded_animation_control_panel(encoder, prepared.slots.favorite_panel)
+        _ = draw_encoded_animation_control_backing(
+            encoder, prepared.slots.favorite, prepared.favorite.hovered,
+            prepared.favorite.pressed, false)
+        draw_encoded_control_glyph(
+            encoder, .Star, prepared.favorite.icon_drawn_rect,
+            theme.draw_color(encoder, .Text), prepared.favorite_active)
+    }
+    if prepared.membership_visible {
+        draw_encoded_membership_control(encoder, prepared)
+    }
+}
+
+// Encode the transport panel and its restart, pause and speed controls.
+draw_encoded_animation_transport :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Animation_Control_Preparation) {
     draw_encoded_animation_control_panel(encoder, prepared.slots.panel)
     results := [2]uiwidgets.Icon_Button_Result{prepared.refresh, prepared.pause}
     icons := [2]uiwidgets.Icon_Button_Id{.Refresh,
@@ -683,17 +845,96 @@ draw_encoded_animation_controls :: proc(
         draw_encoded_control_glyph(
             encoder, icons[index], results[index].icon_drawn_rect, draw_color)
     }
-    if prepared.favorite_visible {
-        draw_encoded_animation_control_panel(encoder, prepared.slots.favorite_panel)
-        _ = draw_encoded_animation_control_backing(
-            encoder, prepared.slots.favorite, prepared.favorite.hovered,
-            prepared.favorite.pressed, false)
-        draw_encoded_control_glyph(
-            encoder, .Star, prepared.favorite.icon_drawn_rect,
-            theme.draw_color(encoder, .Text), prepared.favorite_active)
+    draw_encoded_animation_speed(state, encoder, prepared)
+}
+
+// Draw one compact speed button using the same slot size as restart and pause.
+draw_encoded_animation_speed :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Animation_Control_Preparation) {
+    rect := prepared.slots.speed
+    tint := draw_encoded_animation_control_backing(encoder, rect,
+        prepared.speed.hovered, prepared.speed.pressed, false)
+    if prepared.speed_locked {
+        tint = theme.draw_color(encoder, .Disabled_Text)
     }
-    if prepared.membership_visible {
-        draw_encoded_membership_control(encoder, prepared)
+    rate := capturemodel.gif_capture_playback_rate(state.ui_runtime.playback.rate,
+        state.gif_capture_status.gif_capture_phase,
+        state.gif_capture_status.save_gif_requested)
+    draw_encoded_speed_glyph(encoder, prepared.speed.icon_drawn_rect, tint, rate)
+}
+
+// Encode crossed-out fast-forward at normal speed, otherwise an inset circular rate badge.
+draw_encoded_speed_glyph :: proc(
+    encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
+    tint: color.Color_RGBA8, rate: animationmodel.Playback_Rate) {
+    for index in 0..<2 {
+        x := rect.x + rect.width*(0.12 + f32(index)*0.36)
+        _ = native.draw_encoder_triangle(encoder,
+            {x, rect.y + rect.height*0.20},
+            {x, rect.y + rect.height*0.72},
+            {x + rect.width*0.34, rect.y + rect.height*0.46}, tint)
+    }
+    if rate == .Normal {
+        _ = native.draw_encoder_line(encoder,
+            {rect.x + rect.width*0.18, rect.y + rect.height*0.12},
+            {rect.x + rect.width*0.86, rect.y + rect.height*0.84}, 1.8, tint)
+    } else {
+        draw_encoded_playback_badge(encoder, rect, tint, rate)
+    }
+}
+
+// Draw a contrasting 2 or 4 inside the glyph's bottom-right circle without font residency.
+draw_encoded_playback_badge :: proc(
+    encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
+    tint: color.Color_RGBA8, rate: animationmodel.Playback_Rate) {
+    radius := min(rect.width, rect.height)*0.25
+    center := geometry.Vector2{rect.x + rect.width*0.75, rect.y + rect.height*0.75}
+    ink := theme.UI_COMPONENT_BACKGROUND_COLOR
+    _ = native.draw_encoder_circle(encoder, center, radius + 1, ink)
+    _ = native.draw_encoder_circle(encoder, center, radius, tint)
+    points := [6]geometry.Vector2{
+        {-0.32, -0.48}, {0.32, -0.48}, {0.32, 0},
+        {-0.32, 0}, {-0.32, 0.48}, {0.32, 0.48},
+    }
+    if rate == .Quadruple {
+        points = {{-0.32, -0.48}, {-0.32, 0}, {0.32, 0},
+            {0.32, -0.48}, {0.32, 0.48}, {0.32, 0.48}}
+    }
+    for index in 0..<len(points)-1 {
+        if points[index] != points[index + 1] {
+            _ = native.draw_encoder_line(encoder, center + points[index]*radius,
+                center + points[index + 1]*radius, max(f32(1), radius*0.18), ink)
+        }
+    }
+}
+
+// Encode a borderless eye with a diagonal slash only while controls are hidden.
+draw_encoded_animation_eye :: proc(
+    encoder: ^native.Draw_Encoder,
+    result: uiwidgets.Icon_Button_Result, hidden: bool) {
+    tint := draw_encoded_animation_control_backing(encoder,
+        result.control_geometry.bounds, result.hovered, result.pressed, false)
+    rect := result.icon_drawn_rect
+    center := geometry.Vector2{rect.x + rect.width*0.5, rect.y + rect.height*0.5}
+    for side in 0..<2 {
+        previous := geometry.Vector2{rect.x + rect.width*0.12, center.y}
+        for step in 1..=16 {
+            t := f32(step)/16
+            sign := f32(-1) if side == 0 else f32(1)
+            current := geometry.Vector2{
+                rect.x + rect.width*(0.12 + 0.76*t),
+                center.y + sign*rect.height*0.25*f32(math.sin(f64(t)*math.PI)),
+            }
+            _ = native.draw_encoder_line(encoder, previous, current, 1.6, tint)
+            previous = current
+        }
+    }
+    _ = native.draw_encoder_circle(encoder, center, rect.width*0.10, tint)
+    if hidden {
+        _ = native.draw_encoder_line(encoder,
+            {rect.x + rect.width*0.16, rect.y + rect.height*0.16},
+            {rect.x + rect.width*0.84, rect.y + rect.height*0.84}, 2, tint)
     }
 }
 

@@ -1,6 +1,7 @@
 package capturemodel
 
 import time "core:time"
+import animationmodel "../../../core/animation"
 
 GIF_PATH_CAPACITY :: 4096
 
@@ -59,6 +60,23 @@ Gif_Capture_Session :: struct {
     materialized_frames: u64,
     recording_presentations: u64,
     paused_presentations: u64,
+}
+
+// gif_capture_locks_playback_rate includes arming intent before its next fixed step.
+gif_capture_locks_playback_rate :: proc(
+    phase: Gif_Capture_Phase, save_requested := false) -> bool {
+    return save_requested || phase == .Armed || phase == .Recording ||
+        phase == .Finalizing
+}
+
+// gif_capture_playback_rate overrides effective time without overwriting session intent.
+gif_capture_playback_rate :: proc(
+    selected: animationmodel.Playback_Rate, phase: Gif_Capture_Phase,
+    save_requested := false) -> animationmodel.Playback_Rate {
+    if gif_capture_locks_playback_rate(phase, save_requested) {
+        return .Normal
+    }
+    return selected
 }
 
 // Bind a complete display-owned streaming encoder capability to one portable session.

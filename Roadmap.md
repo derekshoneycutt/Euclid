@@ -5,6 +5,26 @@ mind and some concept of when I want to look at doing them. Some things need to 
 for later and not done immediately, but to really do what I want to do with this project,
 there are some things that do need to start early.
 
+## Current Backlog
+
+- Terminal REPL history explorer and persistence
+- Input/IME enhancements
+- Optional checkboxes in tree
+- Animation slider
+- Search history / Autocomplete features
+- Use history / Most viewed / Most recent
+- Export / Import by file
+- Accessibility completion work
+- Ip-2-ip sharing protocol
+- UI animation polish
+- Comprehensive terminal animation commands
+
+- Logic animations
+- Tarski animations
+- v1 Algebra animations
+- Euclid book 1 animations
+- Proclus animations
+
 ## v1
 
 Core Content (>260 animations; 119 complete):
@@ -173,7 +193,7 @@ General features:
 - [X] SDL3 Migration
 - [X] Drawing Sounds
 - [X] Comprehensive mouse/keyboard focus system
-- [ ] Fast-forward option
+- [X] Fast-forward option
 - [ ] Animation Slider
   - [ ] Initial slider support
   - [ ] Existing animation slider support
@@ -199,12 +219,6 @@ General features:
     - [ ] Sharing custom collections
       - [ ] Export/import files
       - [ ] In-network (ip-2-ip) custom collection sharing
-- [ ] Accessibility Support
-  - [X] Basic initial accesibility support
-  - [X] Reduced motion support
-  - [X] High contrast mode
-  - [X] Large text support
-  - [ ] Additional accessibility support : Dynview
 - [ ] Terminal / REPL
   - [X] Basic setup and availability
   - [X] Basic help feature
@@ -215,9 +229,16 @@ General features:
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
   - [X] Julia syntax highlighting
   - [ ] History explorer Julia-REPL style
-  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
   - [ ] Improved input after full input system migration (IME, etc.)
-  - [ ] Accessibility support
+  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+- [ ] Accessibility Support
+  - [X] Basic initial accesibility support
+  - [X] Reduced motion support
+  - [X] High contrast mode
+  - [X] Large text support
+  - [ ] Improved accessibility system
+  - [ ] Additional accessibility support : Dynview
+  - [ ] Additional accessibility support : Terminal
 
 Final tasks:
 
@@ -236,9 +257,6 @@ Final tasks:
   - [X] Major view text animations
   - [ ] Extended overall look/feel animations
   - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)
-- [ ] Accessibility polish
-  - [ ] Up to AccessKit support at polish-time
-  - [ ] Additional, advanced support (nice-to-do)
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity

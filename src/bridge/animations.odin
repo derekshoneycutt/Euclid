@@ -173,6 +173,9 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     }
     service^.animation_generation += 1
     service^.animation_accumulated_dt = 0
+    service.animation_accumulated_authored_dt = 0
+    service.animation_accumulated_accelerated = false
+    service.animation_last_commit_accelerated = false
     service^.animation_progress = 0
     particles.formation_reset_generation(
         &state^.particle_system, service^.animation_generation)
@@ -454,7 +457,7 @@ generate_animation_tick :: proc(
     slot^.scene_batch.animation_progress = slot^.effective_progress
     defer end_scene_command_batch(state)
     defer state^.animation_query_snapshot_target = nil
-    call_global_euclid_loop(state, slot^.dt)
+    call_global_euclid_loop(state, slot.maintenance_dt)
     animation := slot^.animation
     callback_succeeded := animation == nil ||
         invoke_actor_animation_tick(service, host, request, slot, animation)

@@ -1353,15 +1353,43 @@ terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
 //   Evaluate runtime and animation scalar-state predicates.
 runtime_state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
-    case "runtime_ready": return display.runtime_lifecycle == .Ready
-    case "runtime_idle": return display.active_runtime_request_id == 0
+    case "runtime_ready":
+        return display.runtime_lifecycle == .Ready
+    case "runtime_idle":
+        return display.active_runtime_request_id == 0
     // Presentation parsing is independently scheduled and does not extend animation work.
     case "animation_idle":
         return !display.animation_tick_pending ||
             display.animation_tick_sequence == display.animation_last_committed_sequence
-    case "simulation_paused": return display.simulation_paused
-    case "simulation_running": return !display.simulation_paused
-    case "animation_paused": return display.animation_policy_paused
+    case "simulation_paused":
+        return display.simulation_paused
+    case "simulation_running":
+        return !display.simulation_paused
+    case "animation_paused":
+        return display.animation_policy_paused
+    }
+    return playback_state_matches(name, display)
+}
+
+// Evaluate retained overlay visibility and selected versus effective playback rates.
+playback_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "animation_controls_hidden":
+        return display.animation_controls_hidden
+    case "animation_controls_visible":
+        return !display.animation_controls_hidden
+    case "animation_speed_1x":
+        return display.animation_playback_rate == .Normal
+    case "animation_speed_2x":
+        return display.animation_playback_rate == .Double
+    case "animation_speed_4x":
+        return display.animation_playback_rate == .Quadruple
+    case "animation_effective_speed_1x":
+        return display.animation_effective_rate == .Normal
+    case "animation_effective_speed_2x":
+        return display.animation_effective_rate == .Double
+    case "animation_effective_speed_4x":
+        return display.animation_effective_rate == .Quadruple
     }
     return false
 }

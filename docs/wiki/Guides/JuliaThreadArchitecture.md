@@ -390,6 +390,26 @@ completion. Odin validates the completed slot and commits its whole batch at a
 fixed-step boundary. Stale, malformed, or overflowing results are not partially
 applied.
 
+Playback speed is display-owned session intent, not a worker read of mutable UI
+state. Each checked slot freezes selected-animation authored delta separately from
+unscaled global-maintenance delta. Coalescing and submission rollback retain both
+intervals; a later rate change never rescales an earlier backlog. Both deltas retain
+the bounded 0.25-second admission cap. Under saturation this cap may reduce achieved
+speed rather than permitting unbounded catch-up.
+
+The existing actor payload receives the frozen authored delta; its ABI does not
+change. Only an accepted scene batch advances canonical animation progress by that
+authored interval, keeping animation-owned formation timing coherent while native
+particle physics retains its ordinary fixed step. Global Julia maintenance and reset
+cooldown remain unscaled.
+
+GIF arming overrides new admissions to 1x without replacing the retained rate.
+An accelerated-work marker follows coalesced time, reserved slots, and the most recent
+accepted publication. Capture consumes but does not start on a boundary while that
+work remains; a clean, normal-speed cycle is required before Recording. The override
+also covers pending save intent and Finalizing, and ends on every inactive capture
+outcome without a save/restore transaction.
+
 ### Invocation Content Query
 
 Animation code can query the content specification selected for its current callback,

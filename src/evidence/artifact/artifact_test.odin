@@ -11,6 +11,30 @@ import "core:os"
 import "core:strings"
 import "core:testing"
 
+// Playback fields remain top-level scalars, including distinct selected and effective rates.
+@(test)
+artifact_playback_preserves_top_level_json_contract :: proc(t: ^testing.T) {
+    state := observe.Display{
+        simulation_paused = true, animation_policy_paused = true,
+        animation_controls_hidden = true, animation_playback_rate = .Quadruple,
+        animation_effective_rate = .Normal,
+    }
+    text := artifact_state_json(state, {}, {})
+    decoded: struct {
+        simulation_paused, animation_policy_paused, animation_controls_hidden: bool,
+        animation_playback_rate, animation_effective_rate: int,
+    }
+    testing.expect(t,
+        json.unmarshal_string(text, &decoded, allocator = context.allocator) == nil)
+    testing.expect(t, decoded.simulation_paused)
+    testing.expect(t, decoded.animation_policy_paused)
+    testing.expect(t, decoded.animation_controls_hidden)
+    testing.expect_value(t, decoded.animation_playback_rate,
+        int(state.animation_playback_rate))
+    testing.expect_value(t, decoded.animation_effective_rate,
+        int(state.animation_effective_rate))
+}
+
 // Reclamation evidence preserves scalar counts, policy, and logical completion time.
 @(test)
 artifact_reclamation_preserves_json_contract :: proc(t: ^testing.T) {

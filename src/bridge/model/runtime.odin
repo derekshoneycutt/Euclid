@@ -59,6 +59,8 @@ Animation_Tick_Slot :: struct {
     host_state: rawptr,
     animation: ^Euclid_Julia_Animation_Interface,
     dt: f32,
+    maintenance_dt: f32,
+    accelerated: bool,
     effective_progress: f64,
     submitted_at: time.Tick,
     query_snapshot: Animation_Query_Snapshot,
@@ -329,6 +331,9 @@ Julia_Runtime_Service :: struct {
     animation_last_committed_sequence: u64,
     animation_tick_pending: bool,
     animation_accumulated_dt: f32,
+    animation_accumulated_authored_dt: f32,
+    animation_accumulated_accelerated: bool,
+    animation_last_commit_accelerated: bool,
     animation_progress: f64,
     animation_ticks_submitted: u64,
     animation_ticks_committed: u64,
@@ -338,4 +343,21 @@ Julia_Runtime_Service :: struct {
     animation_queue_high_water: u64,
     animation_last_latency_ms: f64,
     animation_max_latency_ms: f64,
+}
+
+// animation_capture_rate_ready excludes accelerated work from a new recording cycle.
+animation_capture_rate_ready :: proc(service: ^Julia_Runtime_Service) -> bool {
+    if service == nil {
+        return true
+    }
+    if service.animation_last_commit_accelerated ||
+        service.animation_accumulated_accelerated {
+        return false
+    }
+    for &slot in service.animation_tick_slots {
+        if slot.state != .Free && slot.accelerated {
+            return false
+        }
+    }
+    return true
 }

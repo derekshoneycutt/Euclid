@@ -545,7 +545,9 @@ animation_tick_coalescing_caps_backlog_without_queue_growth :: proc(t: ^testing.
     defer free(service)
 
     for _ in 0..<100 {
-        app_bridge.coalesce_animation_tick(service, f32(1.0 / 60.0))
+        app_bridge.coalesce_animation_tick(
+            service, f32(1.0 / 60.0),
+            f32(1.0 / 60.0), false)
     }
 
     testing.expect_value(t, service^.animation_accumulated_dt,

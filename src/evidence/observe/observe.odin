@@ -14,6 +14,7 @@ import settings "../../settings"
 import preferencesmodel "../../view/preferences/model"
 import viewmodel "../../view/ui/model"
 import capturemodel "../../view/capture/model"
+import animationmodel "../../core/animation"
 
 // Package observe copies bounded Euclid facts at explicit ownership boundaries.
 //
@@ -99,6 +100,9 @@ Display :: struct {
     simulation_time : f32,
     simulation_paused : bool,
     animation_policy_paused : bool,
+    animation_controls_hidden : bool,
+    animation_playback_rate : animationmodel.Playback_Rate,
+    animation_effective_rate : animationmodel.Playback_Rate,
 
     // Julia runtime lifecycle, active request, and submission pressure.
     runtime_lifecycle : bridgemodel.Julia_Lifecycle_State,
@@ -352,6 +356,14 @@ observe_display_ui :: proc(
         result.simulation_paused = source.ui_playback.simulation_paused
         result.animation_policy_paused =
             source.ui_playback.animation_policy_paused
+        result.animation_controls_hidden = source.ui_playback.controls_hidden
+        result.animation_playback_rate = source.ui_playback.rate
+        result.animation_effective_rate = source.ui_playback.rate
+        if source.gif_capture_status != nil {
+            result.animation_effective_rate = capturemodel.gif_capture_playback_rate(
+                source.ui_playback.rate, source.gif_capture_status.gif_capture_phase,
+                source.gif_capture_status.save_gif_requested)
+        }
     }
     if source.ui_presentation != nil {
         result.view_text_scroll_y = source.ui_presentation.text_scroll_y

@@ -7,6 +7,7 @@ import time "core:time"
 import capturemodel "model"
 import simulationmodel "../simulation/model"
 import viewmessages "../messages"
+import bridgemodel "../../bridge/model"
 
 // GIFs are captured only from the view area, excluding the UI. The current session for the
 // GIF is always stored on the general state for the application. We need to wait until a
@@ -307,7 +308,9 @@ gif_capture_update_fixed_step :: proc(
     switch gif_capture_status.gif_capture_phase {
     case .Idle, .Finalizing, .Saved, .Error:
     case .Armed:
-        gif_capture_advance_armed(state, gif_capture_status, extents)
+        if bridgemodel.animation_capture_rate_ready(state.julia_runtime_service) {
+            gif_capture_advance_armed(state, gif_capture_status, extents)
+        }
     case .Recording:
         gif_capture_advance_recording(state, gif_capture_status)
     }

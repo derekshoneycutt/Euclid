@@ -9,6 +9,36 @@ import settings "../../settings"
 
 import "core:testing"
 
+// Playback predicates distinguish session choices from capture's effective rate.
+@(test)
+scenario_test_playback_state_predicates :: proc(t: ^testing.T) {
+    display := observe.Display{
+        animation_controls_hidden = true, animation_playback_rate = .Quadruple,
+        animation_effective_rate = .Normal,
+    }
+    names := [?]string{
+        "animation_controls_hidden", "animation_controls_visible",
+        "animation_speed_1x", "animation_speed_2x", "animation_speed_4x",
+        "animation_effective_speed_1x", "animation_effective_speed_2x",
+        "animation_effective_speed_4x", "animation_speed_8x",
+    }
+    expected := [?]bool{true, false, false, false, true, true, false, false, false}
+    for name, index in names {
+        testing.expect_value(t, state_matches(name, display), expected[index])
+    }
+    display.animation_playback_rate = .Double
+    display.animation_effective_rate = .Double
+    display.animation_controls_hidden = false
+    testing.expect(t, state_matches("animation_speed_2x", display))
+    testing.expect(t, state_matches("animation_effective_speed_2x", display))
+    testing.expect(t, state_matches("animation_controls_visible", display))
+    testing.expect(t, !state_matches("animation_controls_hidden", display))
+    display.animation_playback_rate = .Normal
+    display.animation_effective_rate = .Quadruple
+    testing.expect(t, state_matches("animation_speed_1x", display))
+    testing.expect(t, state_matches("animation_effective_speed_4x", display))
+}
+
 // Verify the checked-in selection fixture stays accepted by the shipped scenario parser.
 @(test)
 scenario_test_dynview_selection_fixture :: proc(t: ^testing.T) {
