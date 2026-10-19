@@ -422,6 +422,7 @@ tree_prepare_layout :: proc(
         tree_reorder_admission(params),
         params.mouse_input.sample_time_seconds,
         layout)
+    tree_collection_delete_apply_motion(params, layout)
     return true
 }
 
@@ -439,6 +440,7 @@ tree_prepare_layout_scratch :: proc(
         tree_reorder_admission(params),
         params.mouse_input.sample_time_seconds,
         layout)
+    tree_collection_delete_apply_motion(params, layout)
     return true
 }
 
@@ -538,7 +540,7 @@ tree_row_screen_geometry :: proc(
     row: viewmodel.Ui_Tree_Prepared_Row, panel: geometry.Rectangle,
     scroll_y: f32) -> viewmodel.Ui_Control_Geometry {
     bounds := geometry.Rectangle{
-        panel.x, panel.y + row.content_y - scroll_y, panel.width,
+        panel.x + row.offset_x, panel.y + row.content_y - scroll_y, panel.width,
         tree_prepared_row_height(row)}
     clip := row.reveal
     clip.x += panel.x

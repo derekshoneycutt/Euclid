@@ -1,0 +1,13 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"library_placement":"focus_library"}
+{"key":"enter"}
+{"wait_state":"accordion_settled","timeout_ms":10000}
+{"library_placement":"expand:collections"}
+{"assert_favorites":"absent:first_collection"}
+{"assert_favorites":"absent:last_collection"}
+{"assert_favorites":"empty"}
+{"library_placement":"select:collections"}
+{"library_placement":"create_focus:collections"}
+{"assert_focus":"library_create_collection"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

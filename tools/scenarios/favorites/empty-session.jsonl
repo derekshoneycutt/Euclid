@@ -13,7 +13,7 @@
 {"key":"space"}
 {"wait_state":"settings_saved","timeout_ms":10000}
 {"assert_favorites":"empty"}
-{"assert_favorites":"absent:collections"}
+{"assert_favorites":"expanded:collections"}
 {"favorite_control":"focus"}
 {"key":"space"}
 {"wait_state":"settings_saved","timeout_ms":10000}

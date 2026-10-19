@@ -25,6 +25,7 @@ import contentdata "../../../core/content"
 ANIMATION_REFRESH_BUTTON_ID :: 2101
 ANIMATION_PAUSE_BUTTON_ID :: 2102
 ANIMATION_FAVORITE_BUTTON_ID :: 2103
+ANIMATION_MEMBERSHIP_BUTTON_ID :: uioverlay.MEMBERSHIP_CONTROL_ID
 
 // Fixed board-relative geometry for the animation controls.
 Animation_Control_Slots :: struct {
@@ -33,6 +34,7 @@ Animation_Control_Slots :: struct {
     refresh: geometry.Rectangle,
     pause: geometry.Rectangle,
     favorite: geometry.Rectangle,
+    membership: geometry.Rectangle,
 }
 
 // Prepared interaction state for the world animation controls.
@@ -44,6 +46,8 @@ Animation_Control_Preparation :: struct {
     favorite_visible: bool,
     favorite_active: bool,
     favorite: uiwidgets.Icon_Button_Result,
+    membership_visible: bool,
+    membership: uiwidgets.Icon_Button_Result,
 }
 
 // Actions emitted by one prepared animation-control frame.
@@ -102,7 +106,7 @@ animation_favorite_eligible :: #force_inline proc(
 // Anchor transport controls bottom-left and eligible Favorites bottom-right.
 animation_control_layout_slots :: proc(
     world_rect: geometry.Rectangle,
-    favorite_visible: bool) -> Animation_Control_Slots {
+    favorite_visible: bool, membership_visible := false) -> Animation_Control_Slots {
     panel_width := theme.ANIMATION_CONTROL_PADDING * 2 +
         theme.ANIMATION_CONTROL_BUTTON_SIZE * 2 + theme.ANIMATION_CONTROL_BUTTON_GAP
     panel_height :=
@@ -119,18 +123,34 @@ animation_control_layout_slots :: proc(
         theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE}
     pause := refresh
     pause.x += theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
-    favorite_panel := geometry.Rectangle{}
-    favorite := geometry.Rectangle{}
+    result := Animation_Control_Slots{panel = panel, refresh = refresh, pause = pause}
     if favorite_visible {
-        favorite_panel = {world_rect.x + world_rect.width -
-            theme.ANIMATION_CONTROL_EDGE_INSET - panel_height,
-            panel.y, panel_height, panel_height}
-        favorite = {favorite_panel.x + theme.ANIMATION_CONTROL_PADDING,
-            button_y, theme.ANIMATION_CONTROL_BUTTON_SIZE,
-            theme.ANIMATION_CONTROL_BUTTON_SIZE}
+        animation_collection_layout_slots(world_rect, membership_visible, &result)
     }
-    return {panel = panel, favorite_panel = favorite_panel,
-        refresh = refresh, pause = pause, favorite = favorite}
+    return result
+}
+
+// Reserve one or two bottom-right slots without changing legacy star-only geometry.
+animation_collection_layout_slots :: proc(
+    world: geometry.Rectangle, membership: bool, slots: ^Animation_Control_Slots) {
+    height := slots.panel.height
+    width := height
+    extra := theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
+    if membership {
+        width += extra
+    }
+    slots.favorite_panel = {
+        world.x + world.width - theme.ANIMATION_CONTROL_EDGE_INSET - width,
+        slots.panel.y,
+        width, height,
+    }
+    slots.favorite = {slots.favorite_panel.x + theme.ANIMATION_CONTROL_PADDING,
+        slots.panel.y + theme.ANIMATION_CONTROL_PADDING,
+        theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE}
+    if membership {
+        slots.membership = slots.favorite
+        slots.membership.x += extra
+    }
 }
 
 // Return the animation-control identity under one screen-space point.
@@ -138,11 +158,15 @@ animation_control_hit_test :: proc(
     world_rect: geometry.Rectangle,
     phase: capturemodel.Gif_Capture_Phase,
     favorite_visible: bool,
-    point: geometry.Vector2) -> (int, bool) {
+    point: geometry.Vector2, membership_visible := false) -> (int, bool) {
     if !animation_controls_visible(phase) {
         return 0, false
     }
-    slots := animation_control_layout_slots(world_rect, favorite_visible)
+    slots := animation_control_layout_slots(
+        world_rect, favorite_visible, membership_visible)
+    if membership_visible && geometry.rectangle_contains(slots.membership, point) {
+        return ANIMATION_MEMBERSHIP_BUTTON_ID, true
+    }
     if geometry.rectangle_contains(
         geometry.Rectangle(slots.refresh), point) {
         return ANIMATION_REFRESH_BUTTON_ID, true
@@ -189,7 +213,7 @@ animation_control_hover_geometry :: proc(
 // Report whether one widget identity belongs to the animation overlay.
 animation_control_id :: #force_inline proc(id: int) -> bool {
     return id == ANIMATION_REFRESH_BUTTON_ID || id == ANIMATION_PAUSE_BUTTON_ID ||
-        id == ANIMATION_FAVORITE_BUTTON_ID
+        id == ANIMATION_FAVORITE_BUTTON_ID || id == ANIMATION_MEMBERSHIP_BUTTON_ID
 }
 
 // Build shared icon-button parameters for one animation control.
@@ -407,12 +431,16 @@ prepare_animation_controls :: proc(
     }
     favorite_target := animation_favorite_target(state^.julia_interface)
     favorite_visible := favorite_target != nil
+    membership_visible := favorite_visible && uioverlay.membership_available(state)
     slots := animation_control_layout_slots(
-        geometry.Rectangle(ui_runtime^.layout.ui_regions.world_rect), favorite_visible)
+        geometry.Rectangle(ui_runtime^.layout.ui_regions.world_rect),
+        favorite_visible, membership_visible)
     refresh, pause := prepare_animation_transport_controls(
         state, slots, mouse_input)
     favorite, favorite_active := prepare_animation_favorite_control(
         state, favorite_target, slots, mouse_input)
+    membership := prepare_animation_membership_control(
+        state, slots, mouse_input, membership_visible)
     hit := Animation_Control_Hit{
         refresh.action.activated,
         pause.action.activated,
@@ -428,7 +456,27 @@ prepare_animation_controls :: proc(
         visible = true, slots = slots, refresh = refresh, pause = pause,
         favorite_visible = favorite_visible, favorite_active = favorite_active,
         favorite = favorite,
+        membership_visible = membership_visible, membership = membership,
     }
+}
+
+// Open a selection-bound destination popup from the star-adjacent ellipsis.
+prepare_animation_membership_control :: proc(
+    state: ^core.Euclid_General_State, slots: Animation_Control_Slots,
+    mouse_input: input.Input_Frame,
+    visible: bool) -> uiwidgets.Icon_Button_Result {
+    if !visible {
+        return {}
+    }
+    result := prepare_animation_control_button(&state.ui_runtime, {
+            ANIMATION_MEMBERSHIP_BUTTON_ID, slots.membership, .None, false,
+            viewmessages.shell_message(state, .Animation_Add_Collections), 3,
+        },
+        mouse_input, slots.favorite_panel)
+    if result.action.activated {
+        _ = uioverlay.membership_open(state, slots.membership)
+    }
+    return result
 }
 
 // Apply reset and pause requests to their display-owned animation state.
@@ -643,5 +691,23 @@ draw_encoded_animation_controls :: proc(
         draw_encoded_control_glyph(
             encoder, .Star, prepared.favorite.icon_drawn_rect,
             theme.draw_color(encoder, .Text), prepared.favorite_active)
+    }
+    if prepared.membership_visible {
+        draw_encoded_membership_control(encoder, prepared)
+    }
+}
+
+// Draw a vertical ellipsis, preserving the same backing, hit geometry and focus as other controls.
+draw_encoded_membership_control :: proc(
+    encoder: ^native.Draw_Encoder, prepared: Animation_Control_Preparation) {
+    tint := draw_encoded_animation_control_backing(encoder, prepared.slots.membership,
+        prepared.membership.hovered, prepared.membership.pressed, false)
+    rect := prepared.membership.icon_drawn_rect
+    for index in 0..<3 {
+        _ = native.draw_encoder_rectangle(encoder, {
+            rect.x + rect.width*0.5 - 1.5,
+            rect.y + rect.height*(0.25 + f32(index)*0.25) - 1.5,
+            3, 3,
+        }, tint)
     }
 }

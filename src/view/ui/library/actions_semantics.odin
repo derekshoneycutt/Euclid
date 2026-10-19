@@ -10,7 +10,6 @@ import viewmessages "../../messages"
 import viewmodel "../model"
 import uiwidgets "../widgets"
 import uisemantics "../semantics"
-import theme "../theme"
 
 TREE_ACTION_TOGGLE :: u64(1)
 TREE_ACTION_UP :: u64(2)
@@ -18,6 +17,7 @@ TREE_ACTION_DOWN :: u64(3)
 TREE_ACTION_DRAWER :: u64(8)
 TREE_ENTRY_NAME_INPUT :: u64(5)
 TREE_ENTRY_NAME_TEXT_RUN :: u64(6)
+TREE_COLLECTION_CREATE :: u64(9)
 
 // tree_actions_semantic_id qualifies controls by placement and content lifetime.
 tree_actions_semantic_id :: proc(
@@ -76,9 +76,7 @@ tree_actions_repair_move_focus :: proc(
 tree_actions_command_item :: proc(
     params: Tree_List_Params,
     target: viewmodel.Ui_Node_Id) -> ^viewmodel.Ui_Tree_Item {
-    if target.domain != .Library_Action || target.local_id < TREE_ACTION_TOGGLE ||
-        target.local_id > TREE_ACTION_DOWN &&
-            target.local_id != TREE_ENTRY_NAME_INPUT ||
+    if target.domain != .Library_Action || !tree_actions_known_action(target.local_id) ||
         target.generation != params.ji^.content_generation ||
         params.general_state != nil &&
             params.ui_runtime^.layout.active_accordion_section != .Library {
@@ -90,8 +88,14 @@ tree_actions_command_item :: proc(
         return nil
     }
     item := params.ui_runtime^.library.tree.projection.items[index]
+    if item^.kind == .Collections && target.local_id != TREE_COLLECTION_CREATE ||
+        item^.kind != .Collections && target.local_id == TREE_COLLECTION_CREATE ||
+        target.local_id == TREE_COLLECTION_DELETE && item^.kind != .Collection {
+        return nil
+    }
     if !tree_actions_eligible(
         &params.ui_runtime^.library.tree.projection,
+        params.collections,
         params.ui_runtime^.library.tree.selected_item_id,
         params.visibility.search != nil && params.visibility.search^.active,
         item) {
@@ -103,6 +107,16 @@ tree_actions_command_item :: proc(
         return nil
     }
     return item
+}
+
+// Keep the public Library action vocabulary explicit, including destructive controls.
+tree_actions_known_action :: proc(action: u64) -> bool {
+    switch action {
+    case TREE_ACTION_TOGGLE, TREE_ACTION_UP, TREE_ACTION_DOWN,
+        TREE_ENTRY_NAME_INPUT, TREE_COLLECTION_DELETE, TREE_COLLECTION_CREATE:
+        return true
+    }
+    return false
 }
 
 // tree_actions_apply_command converges keyboard and native intents with owned mutations.
@@ -118,12 +132,22 @@ tree_actions_apply_command :: proc(
         log.warn("library_tree_actions_hidden_command")
         return
     }
+    tree_actions_dispatch_command(params, item, command)
+}
+
+// Dispatch a validated visible intent to the collection or drawer owner.
+tree_actions_dispatch_command :: proc(
+    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item,
+    command: viewmodel.Ui_Focus_Command) {
     action := command.target.local_id
     motion := &params.ui_runtime^.library.actions.drawer
     if command.kind == .Dismiss {
         if motion^.entry_id == item^.key && motion^.open {
             tree_actions_toggle(params, item^.key)
         }
+        return
+    }
+    if tree_actions_dispatch_head_command(params, item.key, action, command.kind) {
         return
     }
     if action == TREE_ACTION_TOGGLE && (command.kind == .Activate ||
@@ -140,6 +164,25 @@ tree_actions_apply_command :: proc(
     }
 }
 
+// Create/delete own their admission paths while sharing focus-reveal policy.
+tree_actions_dispatch_head_command :: proc(
+    params: Tree_List_Params, id: uuid.Identifier, action: u64,
+    kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
+    if action != TREE_COLLECTION_CREATE && action != TREE_COLLECTION_DELETE {
+        return false
+    }
+    if kind == .Activate {
+        if action == TREE_COLLECTION_CREATE {
+            _ = tree_collection_create(params)
+        } else {
+            _ = tree_collection_delete(params, id)
+        }
+    } else if kind == .Focus {
+        params.ui_runtime.library.actions.reveal_pending = true
+    }
+    return true
+}
+
 // tree_actions_command_visible rechecks current clipping and drawer admission.
 tree_actions_command_visible :: proc(
     params: Tree_List_Params,
@@ -153,26 +196,35 @@ tree_actions_command_visible :: proc(
     if row == nil || !row^.logical || !row^.actions.eligible {
         return false
     }
-    if action == TREE_ACTION_TOGGLE {
-        bounds := tree_actions_screen_rect(
-            row^.actions.toggle_rect, params.list_panel, params.scroll_y^)
-        clip := tree_row_screen_geometry(row^, params.list_panel, params.scroll_y^)
-        return geometry.rectangles_intersect(bounds, clip.clip_bounds)
-    }
-    if action == TREE_ENTRY_NAME_INPUT {
-        if !row^.actions.open {
-            return false
-        }
-        row_geometry := tree_row_screen_geometry(
-            row^, params.list_panel, params.scroll_y^)
-        bounds := tree_actions_label_clip(
-            row^.actions, row_geometry.bounds, row_geometry.clip_bounds)
-        return geometry.rectangles_intersect(bounds, row_geometry.clip_bounds)
-    }
-    if !row^.actions.open {
+    disclosure := action == TREE_ACTION_TOGGLE || action == TREE_COLLECTION_CREATE
+    if !disclosure && !row.actions.open {
         return false
     }
-    return tree_actions_move_command_visible(params, row, action)
+    if action == TREE_ACTION_UP || action == TREE_ACTION_DOWN {
+        return tree_actions_move_command_visible(params, row, action)
+    }
+    bounds := tree_actions_screen_rect(
+        tree_actions_content_bounds(row^, action), params.list_panel, params.scroll_y^)
+    row_geometry := tree_row_screen_geometry(row^, params.list_panel, params.scroll_y^)
+    clip := row_geometry.clip_bounds
+    if action == TREE_COLLECTION_DELETE {
+        clip = tree_actions_screen_clip(row^, params.list_panel, params.scroll_y^)
+    }
+    return geometry.rectangles_intersect(bounds, clip)
+}
+
+// Share action geometry between command admission, reveal and focus rendering.
+tree_actions_content_bounds :: proc(
+    row: viewmodel.Ui_Tree_Prepared_Row, action: u64) -> geometry.Rectangle {
+    switch action {
+    case TREE_ENTRY_NAME_INPUT:
+        return {row.actions.label_clip.x + row.offset_x, row.content_y,
+            row.actions.label_clip.width, tree_prepared_row_height(row)}
+    case TREE_ACTION_UP: return row.actions.move_up_rect
+    case TREE_ACTION_DOWN: return row.actions.move_down_rect
+    case TREE_COLLECTION_DELETE: return row.actions.delete_rect
+    }
+    return row.actions.toggle_rect
 }
 
 // tree_actions_move_command_visible admits only an enabled, clipped move button.
@@ -237,7 +289,8 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
         runtime^.library.actions.reveal_pending = true
         runtime^.library.actions.last_focus = target
     }
-    if target.local_id != TREE_ACTION_TOGGLE {
+    if target.local_id != TREE_ACTION_TOGGLE &&
+       target.local_id != TREE_COLLECTION_CREATE {
         if target.local_id == TREE_ENTRY_NAME_INPUT {
             motion := &runtime^.library.actions.drawer
             if !motion^.open || motion^.entry_id != target.stable_id {
@@ -245,7 +298,11 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
             }
             return
         }
-        tree_actions_prepare_move_focus(params, target)
+        if target.local_id == TREE_COLLECTION_DELETE {
+            tree_collection_delete_prepare_focus(params, target)
+        } else {
+            tree_actions_prepare_move_focus(params, target)
+        }
     }
 }
 
@@ -266,6 +323,9 @@ tree_actions_prepare_move_focus :: proc(
             params.list_panel.width, tree_item_depth(
                 &runtime^.library.tree.projection,
                 runtime^.library.tree.projection.items[index]))
+        if runtime^.library.tree.projection.items[index].kind == .Collection {
+            motion^.height += TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP
+        }
         motion^.running = false
     }
 }
@@ -282,15 +342,7 @@ tree_actions_reveal_focus :: proc(
         if row.item^.key != target.stable_id || !row.actions.eligible {
             continue
         }
-        bounds := row.actions.toggle_rect
-        if target.local_id == TREE_ENTRY_NAME_INPUT {
-            bounds = {row.actions.label_clip.x, row.content_y,
-                row.actions.label_clip.width, theme.TREE_ROW_HEIGHT}
-        } else if target.local_id == TREE_ACTION_UP {
-            bounds = row.actions.move_up_rect
-        } else if target.local_id == TREE_ACTION_DOWN {
-            bounds = row.actions.move_down_rect
-        }
+        bounds := tree_actions_content_bounds(row, target.local_id)
         if runtime^.library.actions.reorder.active {
             bounds.y += row.canonical_y - row.content_y
         }
@@ -347,6 +399,10 @@ tree_actions_publish_row :: proc(
     toggle := tree_actions_screen_rect(row.actions.toggle_rect, panel, scroll_y)
     clip := tree_row_screen_geometry(row, panel, scroll_y).clip_bounds
     states := tree_actions_control_states(toggle, clip, true)
+    if row.item^.kind == .Collections {
+        tree_actions_publish_create(params, row.item, {toggle, clip})
+        return
+    }
     if params.ui_runtime^.library.actions.drawer.open {
         states += {.Expanded}
     }
@@ -374,6 +430,24 @@ tree_actions_publish_row :: proc(
     tree_actions_publish_moves(params, row, panel, scroll_y)
 }
 
+// Publish creation independently of the disclosure and drawer semantic subtree.
+tree_actions_publish_create :: proc(
+    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item,
+    geometry: viewmodel.Ui_Control_Geometry) {
+    _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
+        id = tree_actions_semantic_id(params, item^.key, TREE_COLLECTION_CREATE),
+        parent = tree_placement_semantic_id(item),
+        role = .Button,
+        states = tree_actions_control_states(
+            geometry.bounds, geometry.clip_bounds, true),
+        actions = {.Focus, .Activate}, region = .Accordion_Content,
+        traversal_order = 4, bounds = geometry.bounds,
+        clip_bounds = geometry.clip_bounds,
+        label = viewmessages.shell_message(
+            params.general_state, .Library_Create_Collection),
+    })
+}
+
 // tree_actions_publish_moves keeps closed buttons absent and endpoints non-actionable.
 tree_actions_publish_moves :: proc(
     params: Tree_List_Params, row: viewmodel.Ui_Tree_Prepared_Row,
@@ -392,6 +466,7 @@ tree_actions_publish_moves :: proc(
         {tree_actions_screen_rect(row.actions.move_down_rect, panel, scroll_y), clip},
         row.actions.move_down_enabled,
         viewmessages.shell_message(params.general_state, .Library_Move_Down))
+    tree_collection_delete_publish(params, row, panel, scroll_y)
 }
 
 // tree_actions_publish registers controls once, after final topology and geometry settle.
@@ -425,10 +500,14 @@ tree_actions_pointer_focus :: proc(
         return
     }
     action := TREE_ACTION_TOGGLE
-    if owner.id == row.actions.move_up_id {
+    if row.item^.kind == .Collections {
+        action = TREE_COLLECTION_CREATE
+    } else if owner.id == row.actions.move_up_id {
         action = TREE_ACTION_UP
     } else if owner.id == row.actions.move_down_id {
         action = TREE_ACTION_DOWN
+    } else if owner.id == row.actions.delete_id {
+        action = TREE_COLLECTION_DELETE
     }
     _ = uisemantics.semantic_request_pointer_focus(params.ui_runtime^.semantic_focus,
         tree_actions_semantic_id(params, row.item^.key, action))
@@ -448,12 +527,15 @@ tree_actions_draw_focus :: proc(
     action := semantic^.logical_focus.local_id
     bounds := row.actions.toggle_rect
     clip := tree_row_screen_geometry(row, panel, scroll_y).clip_bounds
-    if action != TREE_ACTION_TOGGLE {
+    if action != TREE_ACTION_TOGGLE && action != TREE_COLLECTION_CREATE {
         if !row.actions.open {
             return
         }
         bounds = row.actions.move_up_rect if action == TREE_ACTION_UP else
             row.actions.move_down_rect
+        if action == TREE_COLLECTION_DELETE {
+            bounds = row.actions.delete_rect
+        }
         clip = tree_actions_screen_clip(row, panel, scroll_y)
     }
     bounds = tree_actions_screen_rect(bounds, panel, scroll_y)

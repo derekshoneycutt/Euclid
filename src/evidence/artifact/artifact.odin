@@ -295,8 +295,10 @@ artifact_reclamation_state_json :: proc(effects: observe.Presentation_Effects) -
 // Serialize current tree motion count and fractional visual scroll geometry.
 artifact_tree_state_json :: proc(state: observe.Display) -> string {
     return fmt.tprintf("\"tree\":{{\"transition_count\":%d," +
-        "\"visual_height\":%g,\"scroll_y\":%g}}",
-        state.tree_transition_count, state.tree_visual_height, state.tree_scroll_y)
+        "\"visual_height\":%g,\"scroll_y\":%g," +
+        "\"collection_delete_armed\":%v,\"collection_delete_ready\":%v}}",
+        state.tree_transition_count, state.tree_visual_height, state.tree_scroll_y,
+        state.collection_delete_armed, state.collection_delete_ready)
 }
 
 // Serialize synchronized host lifecycle and trace health without changing top-level keys.

@@ -60,7 +60,7 @@ settings_save_note_edit :: proc(state: ^core.Euclid_General_State) {
     state^.ui_runtime.preferences.save_status = .Pending
 }
 
-// Accept one in-memory Favorites edit and retain it for ordered durable replay.
+// Accept one locally prepared collection edit and retain its immutable durable replay.
 settings_save_collection_mutation :: proc(
     state: ^core.Euclid_General_State,
     mutation: collections.Mutation,
@@ -130,7 +130,7 @@ settings_save_collection_mutation_has_capacity :: proc(
 // Restore failed operations ahead of edits accepted during the worker transaction.
 settings_save_requeue_mutations :: proc(state: ^core.Euclid_General_State) {
     runtime := &state^.preferences_runtime
-    failed := runtime^.settings_save_payload
+    failed := &runtime^.settings_save_payload
     pending_count := runtime^.collection_mutation_count
     for index := pending_count; index > 0; index -= 1 {
         runtime^.collection_mutations[index + failed.mutation_count - 1] =

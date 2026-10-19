@@ -1996,19 +1996,20 @@ tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     ji := bridgemodel.Euclid_Julia_Interface{}
     nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
     tree_semantic_hierarchy_fixture(&ji, &nodes)
+    runtime.library.tree.selected_item_id = nodes[0].stable_id
     scroll_y: f32
 
     testing.expect(t, uisemantics.semantic_begin(semantic))
     prepared: uilibrary.Tree_List_Preparation
     uilibrary.prepare_tree_list_panel({ji = &ji, ui_runtime = &runtime,
         list_panel = {0, 0, 200, 100}, scroll_y = &scroll_y}, &prepared)
-    testing.expect_value(t, runtime.library.tree.projection.items[0].first_child, 1)
-    testing.expect(t, runtime.library.tree.projection.items[0].expanded)
-    testing.expect_value(t, prepared.layout.count, 2)
+    testing.expect_value(t, runtime.library.tree.projection.items[1].first_child, 2)
+    testing.expect(t, runtime.library.tree.projection.items[1].expanded)
+    testing.expect_value(t, prepared.layout.count, 3)
     testing.expect_value(t,
         uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
     snapshot := uisemantics.semantic_snapshot(semantic)
-    testing.expect_value(t, snapshot^.node_count, 3)
+    testing.expect_value(t, snapshot^.node_count, 4)
     tree_index := uisemantics.semantic_node_index(snapshot, uilibrary.tree_semantic_id())
     testing.expect(t, tree_index >= 0)
     tree := snapshot^.nodes[tree_index]
@@ -2074,7 +2075,7 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
     testing.expect(t, uisemantics.semantic_begin(semantic))
     uilibrary.prepare_tree_list_panel(params, &prepared)
     testing.expect_value(t, semantic^.active_tree_item, nodes[2].stable_id)
-    testing.expect_value(t, scroll_y, theme.TREE_ROW_HEIGHT * 2)
+    testing.expect_value(t, scroll_y, theme.TREE_ROW_HEIGHT * 3)
     testing.expect_value(t,
         uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
 
@@ -2117,8 +2118,8 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
 
     active := uilibrary.tree_apply_semantic_commands(params)
 
-    testing.expect(t, !runtime.library.tree.projection.items[1].expanded)
-    testing.expect_value(t, active, runtime.library.tree.projection.items[1])
+    testing.expect(t, !runtime.library.tree.projection.items[2].expanded)
+    testing.expect_value(t, active, runtime.library.tree.projection.items[2])
     testing.expect_value(t, semantic^.active_tree_item, nodes[1].stable_id)
 }
 

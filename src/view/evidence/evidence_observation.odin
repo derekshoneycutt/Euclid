@@ -3,6 +3,8 @@ package viewevidence
 import observe "../../evidence/observe"
 import viewgraphics "../terminal/graphics"
 import core "../../core"
+import uilibrary "../ui/library"
+import native "../native"
 
 // Copy display-owned composition into the evidence model at an owner boundary.
 // Presentation effects are copied by their session-owned runtime beforehand.
@@ -37,9 +39,20 @@ observe_display_state :: proc(
         evidence_ring = &state.evidence_ring,
     }
     result := observe.display(&source)
+    observe_collection_delete_state(state, &result)
     viewgraphics.service_observe(
         cast(^viewgraphics.Service)state.terminal_graphics_user_data, &result)
     return result
+}
+
+// Copy the display-owned destructive-intent guard using the same SDL clock as input.
+observe_collection_delete_state :: proc(
+    state: ^core.Euclid_General_State, result: ^observe.Display) {
+    confirmation := state.ui_runtime.library.actions.delete_confirmation
+    result.collection_delete_armed = confirmation.armed
+    result.collection_delete_ready = confirmation.armed &&
+        uilibrary.tree_collection_delete_quiet(
+            confirmation.last_activation_seconds, native.sdl_time_seconds())
 }
 
 // Copy joined simulation producer rings into the evidence model.

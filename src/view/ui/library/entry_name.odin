@@ -19,8 +19,10 @@ LIBRARY_ENTRY_NAME_DEBOUNCE_EPSILON_SECONDS :: 0.000001
 LIBRARY_ENTRY_NAME_INPUT_TRAVERSAL_ORDER :: u32(5)
 
 Library_Entry_Name_Prefill :: struct {
+    target_kind: viewmodel.Ui_Library_Name_Target_Kind,
     identity: collections.Placement_Identity,
-    placement: collections.Placement_View,
+    accepted_name: []u8,
+    accepted_name_length: int,
     valid: bool,
 }
 
@@ -94,7 +96,7 @@ library_entry_name_semantic_descriptor :: proc(
     }
 }
 
-// Begin editing one Favorites placement without resetting an existing owner draft.
+// Begin editing a custom head or writable Library placement without resetting its draft.
 library_entry_name_begin :: proc(
     state: ^core.Euclid_General_State,
     entry_id: uuid.Identifier,
@@ -107,7 +109,9 @@ library_entry_name_begin :: proc(
         return false
     }
     draft := &state^.ui_runtime.library.entry_name
-    if draft^.active && draft^.placement == prefill_result.identity {
+    if draft^.active && draft^.entry_id == entry_id &&
+        draft^.target_kind == prefill_result.target_kind &&
+        draft^.placement == prefill_result.identity {
         return true
     }
     if draft^.active && !library_entry_name_flush(state) {
@@ -118,7 +122,7 @@ library_entry_name_begin :: proc(
     return true
 }
 
-// Initialize one editor draft from an owner-resolved placement view.
+// Initialize the single editor from an owner-resolved typed name target.
 library_entry_name_initialize_draft :: proc(
     draft: ^viewmodel.Ui_Library_Entry_Name_Draft,
     entry_id: uuid.Identifier,
@@ -126,17 +130,17 @@ library_entry_name_initialize_draft :: proc(
     prefill: string) {
     revision := draft^.revision + 1
     draft^ = {
+        target_kind = prefill_result.target_kind,
         entry_id = entry_id,
         placement = prefill_result.identity,
-        accepted_name_length = prefill_result.placement.custom_name_length,
+        accepted_name_length = prefill_result.accepted_name_length,
         revision = revision,
         active = true,
     }
-    if prefill_result.placement.custom_name_length > 0 {
+    if prefill_result.accepted_name_length > 0 {
         copy(
-            draft^.accepted_name[:prefill_result.placement.custom_name_length],
-            prefill_result.placement.custom_name[
-                :prefill_result.placement.custom_name_length])
+            draft^.accepted_name[:prefill_result.accepted_name_length],
+            prefill_result.accepted_name[:prefill_result.accepted_name_length])
     }
     if len(prefill) > 0 {
         copy(draft^.value[:len(prefill)], transmute([]u8)prefill)
@@ -146,7 +150,7 @@ library_entry_name_initialize_draft :: proc(
     draft^.input.content_revision = 1
 }
 
-// Validate a prefill and resolve its current Favorites placement view.
+// Validate the prefill and resolve mandatory collection or optional placement text.
 library_entry_name_resolve_prefill :: proc(
     state: ^core.Euclid_General_State,
     entry_id: uuid.Identifier,
@@ -159,11 +163,33 @@ library_entry_name_resolve_prefill :: proc(
         return {}
     }
     set := &state^.preferences_runtime.collections_state
+    collection_index := collections.find_collection(set, entry_id)
+    if collection_index >= 0 {
+        return library_collection_name_prefill(set, entry_id)
+    }
+    return library_placement_name_prefill(set, entry_id)
+}
+
+// Resolve accepted placement text only for an editable qualified owner.
+library_placement_name_prefill :: proc(
+    set: ^collections.Set,
+    entry_id: uuid.Identifier) -> Library_Entry_Name_Prefill {
     identity, identity_error :=
         collections.placement_identity_for_entry(set, entry_id)
-    if identity_error != .None ||
-        identity.collection_id != collections.FAVORITES_COLLECTION_ID {
-        log.error("library_entry_name_begin_rejected_missing_favorite")
+    if identity_error != .None {
+        log.error("library_entry_name_begin_rejected_missing_placement")
+        return {}
+    }
+    if identity.collection_id != collections.FAVORITES_COLLECTION_ID {
+        _, edit_error := collections.collection_edit_index(set, identity.collection_id)
+        if edit_error != .None {
+            log.errorf("library_entry_name_begin_rejected policy=%v", edit_error)
+            return {}
+        }
+    }
+    if identity.collection_id == collections.FAVORITES_COLLECTION_ID &&
+        identity.parent_entry_id != (uuid.Identifier{}) {
+        log.error("library_entry_name_begin_rejected_invalid_favorite_parent")
         return {}
     }
     placement, placement_error := collections.placement_resolve(set, identity)
@@ -171,7 +197,8 @@ library_entry_name_resolve_prefill :: proc(
         log.errorf("library_entry_name_begin_rejected policy=%v", placement_error)
         return {}
     }
-    return {identity = identity, placement = placement, valid = true}
+    return {identity = identity, accepted_name = placement.custom_name,
+        accepted_name_length = placement.custom_name_length, valid = true}
 }
 
 // Replace the owned text immediately and restart its idle-admission deadline.
@@ -223,7 +250,7 @@ library_entry_name_flush :: proc(
         return true
     }
     set := &state^.preferences_runtime.collections_state
-    _, placement_error := collections.placement_resolve(set, draft^.placement)
+    placement_error := library_entry_name_target_error(set, draft)
     if placement_error != .None {
         if placement_error != .Missing_Entry {
             log.warnf("library_entry_name_draft_discarded policy=%v", placement_error)
@@ -246,8 +273,7 @@ library_entry_name_commit :: proc(
         library_entry_name_accept_local(draft, normalized)
         return true
     }
-    mutation, mutation_error := collections.make_placement_name_mutation(
-        draft^.placement, normalized)
+    mutation, mutation_error := library_entry_name_mutation(state, draft, normalized)
     if mutation_error == .None {
         mutation_error = viewpreferences.settings_save_collection_mutation(
             state, mutation)

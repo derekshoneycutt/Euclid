@@ -135,6 +135,103 @@ function run_favorites_acceptance(binary::String)
     return records
 end
 
+"""Verify ordinary empty-head creation and independent-process durable restoration."""
+function run_empty_collections_acceptance(binary::String)
+    root = fresh_artifact_path("empty-collections")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    first = favorites_launch(binary, root, database, "create",
+        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))
+    query = "SELECT hex(collection_id) AS id,display_name,collection_order " *
+        "FROM user_collection WHERE system_role IS NULL ORDER BY collection_order"
+    rows = favorites_fixture_sql(database, query)
+    length(rows) == 2 || error("Empty collections did not persist both heads")
+    rows[1]["id"] != rows[2]["id"] || error("Empty heads reused a collection UUID")
+    all(row -> row["display_name"] == "New Collection", rows) ||
+        error("Empty collection labels changed")
+    rows[1]["collection_order"] < rows[2]["collection_order"] ||
+        error("Custom collection order changed")
+    restore = favorites_launch(binary, root, database, "restore",
+        joinpath("tools", "scenarios", "collections", "empty-restore.jsonl"))
+    favorites_fixture_sql(database, query) == rows ||
+        error("Restore changed empty collection identity, order or labels")
+    return [first, restore]
+end
+
+"""Verify head edits through ordinary inputs, exact durable UUIDs and a separate restart."""
+function run_collection_heads_acceptance(binary::String)
+    root = fresh_artifact_path("collection-heads")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    sources = joinpath("tools", "scenarios", "collections")
+    records = [favorites_launch(binary, root, database, "create",
+        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+    query = "SELECT hex(collection_id) AS id,display_name,collection_order " *
+        "FROM user_collection WHERE system_role IS NULL ORDER BY collection_order"
+    baseline = favorites_fixture_sql(database, query)
+    push!(records, favorites_launch(binary, root, database, "edit",
+        joinpath("tools", "scenarios", "collection-heads-acceptance.jsonl")))
+    edited = favorites_fixture_sql(database, query)
+    length(edited) == length(baseline) == 2 || error("Head edit changed collection count")
+    edited[1]["id"] == baseline[2]["id"] &&
+        edited[2]["id"] == baseline[1]["id"] || error("Head move replaced UUIDs")
+    edited[1]["display_name"] == "Teaching examples" || error("Head rename was not saved")
+    push!(records, favorites_launch(binary, root, database, "restore",
+        joinpath(sources, "head-restore.jsonl");
+        arguments=["--layout=portrait", "--window-size=640x900"]))
+    favorites_fixture_sql(database, query) == edited || error("Restart changed head rows")
+    return records
+end
+
+"""Require guarded ordinary deletion and independently reopened absence of all custom heads."""
+function run_collection_delete_acceptance(binary::String)
+    root = fresh_artifact_path("collection-delete")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    records = [favorites_launch(binary, root, database, "create",
+        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+    push!(records, favorites_launch(binary, root, database, "delete",
+        joinpath("tools", "scenarios", "collection-delete-acceptance.jsonl")))
+    query = "SELECT count(*) AS count FROM user_collection WHERE system_role IS NULL"
+    favorites_fixture_sql(database, query)[1]["count"] == 0 ||
+        error("Guarded deletion retained custom collection rows")
+    favorites_fixture_sql(database,
+        "SELECT count(*) AS count FROM user_collection_entry")[1]["count"] == 0 ||
+        error("Guarded deletion retained placement rows")
+    push!(records, favorites_launch(binary, root, database, "restore",
+        joinpath("tools", "scenarios", "collections", "delete-restore.jsonl");
+        arguments=["--layout=portrait", "--window-size=640x900"]))
+    favorites_fixture_sql(database, query)[1]["count"] == 0 ||
+        error("Restart resurrected deleted heads")
+    return records
+end
+
+"""Verify independent membership and fresh root re-addition survive process restart."""
+function run_collection_membership_acceptance(binary::String)
+    root = fresh_artifact_path("collection-membership")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    records = [favorites_launch(binary, root, database, "create",
+        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+    push!(records, favorites_launch(binary, root, database, "membership",
+        joinpath("tools", "scenarios", "collection-membership-acceptance.jsonl")))
+    query = "SELECT hex(entry_id) AS id,hex(collection_id) AS owner," *
+        "hex(animation_id) AS animation,sibling_order,custom_name " *
+        "FROM user_collection_entry ORDER BY owner,sibling_order"
+    rows = favorites_fixture_sql(database, query)
+    length(rows) == 4 || error("Membership did not persist four independent placements")
+    length(unique(row["id"] for row in rows)) == 4 ||
+        error("Membership reused placement UUIDs")
+    all(row -> row["custom_name"] === nothing, rows) ||
+        error("Re-added membership retained an obsolete alias")
+    push!(records, favorites_launch(binary, root, database, "restore",
+        joinpath("tools", "scenarios", "collections", "membership-restore.jsonl");
+        arguments=["--layout=portrait", "--window-size=640x900"]))
+    favorites_fixture_sql(database, query) == rows ||
+        error("Membership restart changed durable placement identities or order")
+    return records
+end
+
 """Require a precise durable permutation without recreating any animation placement."""
 function require_favorites_reorder(rows, baseline, permutation)
     length(rows) == length(baseline) == length(permutation) ||

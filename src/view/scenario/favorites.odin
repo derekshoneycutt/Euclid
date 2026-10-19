@@ -8,6 +8,7 @@ import viewmodel "../ui/model"
 import uianimation "../ui/animation"
 import uilibrary "../ui/library"
 import uisemantics "../ui/semantics"
+import uioverlay "../ui/overlay"
 import ui "../ui"
 import uiaccordion "../ui/layout/accordion"
 import uuid "core:encoding/uuid"
@@ -42,6 +43,11 @@ scenario_favorites_name_matches :: proc(
         return false
     }
     set := &runtime^.state^.preferences_runtime.collections_state
+    collection_index := collections.find_collection(set, item^.key)
+    if collection_index >= 0 {
+        head := set^.collections[collection_index]
+        return string(head.name[:head.name_length]) == expected
+    }
     entry_index := collections.find_entry(set, item^.key)
     if entry_index < 0 {
         return false
@@ -139,7 +145,8 @@ scenario_favorite_control :: proc(
             .Focus)
     }
     slots := uianimation.animation_control_layout_slots(
-        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), true)
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), true,
+        uioverlay.membership_available(state))
     return scenario_favorites_pointer(runtime, slots.favorite, operation)
 }
 
@@ -152,28 +159,62 @@ scenario_favorites_item :: proc(
         key = viewmodel.TREE_COLLECTIONS_ROOT_ID
     } else if address == "favorites" {
         key = collections.FAVORITES_COLLECTION_ID
+    } else if address == "selected_collection" ||
+        address == "first_collection" || address == "last_collection" {
+        return scenario_custom_collection(runtime, address)
     } else {
         domain, name := scenario_favorites_split(address)
-        animation := scenario_find_animation(state^.julia_interface, name)
-        if animation == nil {
+        resolved, found := scenario_animation_placement_key(runtime, domain, name)
+        if !found {
             return nil
         }
-        if domain == "catalogue" {
-            key = animation^.stable_id
-        } else if domain == "favorite" {
-            entry, found := uianimation.animation_favorite_entry(
-                &state^.preferences_runtime.collections_state, animation^.stable_id)
-            if !found {
-                return nil
-            }
-            key = entry
-        } else {
-            return nil
-        }
+        key = resolved
     }
     projection := &state^.ui_runtime.library.tree.projection
     index := uilibrary.tree_projection_find(projection, key)
     return projection^.items[index] if index >= 0 else nil
+}
+
+// Resolve canonical targets independently from occurrence identity and duplicate display labels.
+scenario_animation_placement_key :: proc(
+    runtime: ^Scenario_Runtime, domain, name: string) -> (uuid.Identifier, bool) {
+    state := runtime.state
+    animation := scenario_find_animation(state.julia_interface, name)
+    if animation == nil {
+        return {}, false
+    }
+    if domain == "catalogue" {
+        return animation.stable_id, true
+    }
+    set := &state.preferences_runtime.collections_state
+    if domain == "favorite" {
+        return uianimation.animation_favorite_entry(set, animation.stable_id)
+    }
+    if domain == "first_collection" || domain == "last_collection" {
+        owner := scenario_collection_endpoint(set, domain == "first_collection")
+        identity, failure := collections.collection_animation_identity(
+            set, owner, animation.stable_id)
+        return identity.entry_id, failure == .None
+    }
+    return {}, false
+}
+
+// Resolve only a live custom collection head from the current Library selection.
+scenario_custom_collection :: proc(
+    runtime: ^Scenario_Runtime, address: string) -> ^viewmodel.Ui_Tree_Item {
+    state := runtime^.state
+    key := state^.ui_runtime.library.tree.selected_item_id
+    set := &state^.preferences_runtime.collections_state
+    if address != "selected_collection" {
+        key = scenario_collection_endpoint(set, address == "first_collection")
+    }
+    index := collections.find_collection(set, key)
+    if index < 0 || set^.collections[index].role != .User {
+        return nil
+    }
+    projection := &state^.ui_runtime.library.tree.projection
+    node := uilibrary.tree_projection_find(projection, key)
+    return projection^.items[node] if node >= 0 else nil
 }
 
 // Address a published tree occurrence; hidden or disabled rows reject actions.
@@ -194,6 +235,10 @@ scenario_library_placement :: proc(
             .Focus)
     }
     operation, address := scenario_favorites_split(text)
+    if handled, accepted := scenario_membership_control(runtime, operation, address);
+       handled {
+        return accepted
+    }
     if operation == "swap_sample" {
         return scenario_reorder_sample(runtime, address)
     }
@@ -201,6 +246,17 @@ scenario_library_placement :: proc(
     if item == nil {
         return false
     }
+    if handled, accepted := scenario_collection_control(
+        runtime, item, operation); handled {
+        return accepted
+    }
+    return scenario_library_item_action(runtime, item, operation)
+}
+
+// Resolve placement editor and sibling-order actions through their published controls.
+scenario_library_item_action :: proc(
+    runtime: ^Scenario_Runtime,
+    item: ^viewmodel.Ui_Tree_Item, operation: string) -> bool {
     if operation == "name_press" || operation == "name_release" {
         return scenario_library_name_pointer(runtime, item, operation)
     }
@@ -363,6 +419,8 @@ scenario_library_apply :: proc(
             focus, uilibrary.tree_semantic_id(), .Focus)
     }
     params := uilibrary.Tree_List_Params{
+        general_state = runtime^.state,
+        collections = &runtime^.state^.preferences_runtime.collections_state,
         ji = runtime^.state^.julia_interface,
         ui_runtime = &runtime^.state^.ui_runtime,
         scroll_y = &runtime^.state^.ui_runtime.library.tree.scroll_y,
@@ -428,7 +486,8 @@ scenario_favorites_capacity :: proc(runtime: ^Scenario_Runtime) -> bool {
     set := &state^.preferences_runtime.collections_state
     snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
     if !projection^.valid ||
-        projection^.count != ji^.animation_count + set^.entry_count + 2 ||
+        projection^.count !=
+            ji^.animation_count + set^.entry_count + set^.collection_count + 1 ||
         projection^.count != state^.ui_runtime.library.motion.count ||
         snapshot == nil {
         return false
@@ -521,8 +580,9 @@ scenario_favorites_placement_assertion :: proc(
     runtime: ^Scenario_Runtime, operation, argument: string) -> bool {
     state := runtime^.state
     switch operation {
-    case "absent":
-        return scenario_favorites_item(runtime, argument) == nil
+    case "absent", "present":
+        return (scenario_favorites_item(runtime, argument) != nil) ==
+            (operation == "present")
     case "remember", "replaced", "same_placement":
         return scenario_favorites_remember_placement(runtime, operation, argument)
     case "actions_open", "actions_closed":
@@ -605,6 +665,9 @@ scenario_assert_favorites :: proc(
         return scenario_favorites_order(runtime, argument)
     case "empty":
         return runtime^.state^.preferences_runtime.collections_state.entry_count == 0
+    case "one_custom_empty", "two_custom_empty", "delete_armed", "delete_disarmed",
+        "membership_open", "membership_closed":
+        return scenario_collection_assertion(runtime, operation, argument)
     case "remember_playback", "playing":
         return scenario_favorites_playback(runtime, operation, argument)
     case "failure_retained", "recovered":

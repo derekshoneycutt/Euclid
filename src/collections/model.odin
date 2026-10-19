@@ -102,6 +102,7 @@ Validation_Error :: enum u8 {
     Duplicate_Order,
     Cycle,
     Duplicate_Favorite_Animation,
+    Duplicate_Collection_Animation,
 }
 
 Policy_Error :: enum u8 {
@@ -123,6 +124,8 @@ Policy_Error :: enum u8 {
     Invalid_Direction,
     Invalid_Name,
     Allocation_Failed,
+    Already_In_Collection,
+    Not_In_Collection,
 }
 
 Mutation_Kind :: enum u8 {
@@ -130,6 +133,12 @@ Mutation_Kind :: enum u8 {
     Remove_Favorite,
     Reorder_Siblings,
     Set_Entry_Name,
+    Create_Collection,
+    Set_Collection_Name,
+    Reorder_Collections,
+    Delete_Collection,
+    Add_Collection_Animation,
+    Remove_Collection_Animation,
 }
 
 // One immutable collection operation retaining placement identity across retry.
@@ -142,6 +151,10 @@ Mutation :: struct {
     direction: Move_Direction,
     custom_name: [ENTRY_NAME_MAX_BYTES]u8,
     custom_name_length: int,
+    collection_id: uuid.Identifier,
+    collection_name: [COLLECTION_NAME_MAX_BYTES]u8,
+    collection_name_length: int,
+    sibling_collection_id: uuid.Identifier,
 }
 
 Mutation_Error :: enum u8 {
@@ -160,7 +173,7 @@ Sibling_Move_Resolution :: struct {
     failure: Policy_Error,
 }
 
-// Validate identifiers, hierarchy, sibling order, and Favorites-specific invariants.
+// Validate identifiers, hierarchy, sibling order, and collection-wide membership.
 validate :: proc(set: ^Set) -> Validation_Error {
     if set == nil || !set.initialized || set.collection_count < 0 ||
         set.collection_count > len(set.collections) ||
@@ -204,6 +217,9 @@ validate_collection :: proc(set: ^Set, index: int) -> Validation_Error {
             collection.role == .Favorites {
             return .Duplicate_Favorites
         }
+        if set.collections[other].order == collection.order {
+            return .Duplicate_Order
+        }
     }
     return .None
 }
@@ -212,19 +228,15 @@ validate_collection :: proc(set: ^Set, index: int) -> Validation_Error {
 validate_collection_fields :: proc(collection: ^Collection) -> Validation_Error {
     if collection^.role == .Favorites {
         if collection^.id != FAVORITES_COLLECTION_ID ||
-            collection^.is_read_only || collection^.name_length != 0 {
+            collection^.is_read_only || collection^.name_length != 0 ||
+            collection^.order != 0 {
             return .Invalid_Collection
         }
     } else if collection^.role == .User {
-        if collection^.name_length < 1 ||
-            collection^.name_length > COLLECTION_NAME_MAX_BYTES ||
-            collection^.name_length > len(collection^.name) {
+        if collection^.id == FAVORITES_COLLECTION_ID || collection^.order <= 0 ||
+            !collection_name_bytes_are_valid(
+                collection^.name, collection^.name_length) {
             return .Invalid_Collection
-        }
-        for character in collection^.name[:collection^.name_length] {
-            if character == 0 {
-                return .Invalid_Collection
-            }
         }
     } else {
         return .Invalid_Collection
@@ -259,6 +271,11 @@ validate_entry :: proc(set: ^Set, index: int) -> Validation_Error {
     }
     if set.collections[collection_index].role == .Favorites {
         return validate_favorite_entry(set, index)
+    }
+    if entry.kind == .Animation &&
+        collection_animation_exists(
+            set, entry.collection_id, entry.animation_id, index) {
+        return .Duplicate_Collection_Animation
     }
     return .None
 }
@@ -327,15 +344,7 @@ favorites_add :: proc(
 
 // Find the highest extant Favorites root position for append semantics.
 maximum_favorites_order :: proc(set: ^Set) -> i64 {
-    maximum_order: i64 = -1
-    for entry in set.entries[:set.entry_count] {
-        if entry.collection_id == FAVORITES_COLLECTION_ID &&
-            entry.parent_entry_id == (uuid.Identifier{}) &&
-            entry.sibling_order > maximum_order {
-            maximum_order = entry.sibling_order
-        }
-    }
-    return maximum_order
+    return maximum_collection_root_order(set, FAVORITES_COLLECTION_ID)
 }
 
 // Remove one Favorites placement by entry identity without changing playback identity.
@@ -353,21 +362,7 @@ favorites_remove :: proc(set: ^Set, entry_id: uuid.Identifier) -> Policy_Error {
     for index in 0..<set.entry_count {
         if set.entries[index].id == entry_id &&
             set.entries[index].collection_id == FAVORITES_COLLECTION_ID {
-            delete(
-                set.entries[index].custom_name,
-                storage.tlsf_owner_allocator(&set.allocator))
-            delete(
-                set.entries[index].canonical_name,
-                storage.tlsf_owner_allocator(&set.allocator))
-            for move in index..<(set.entry_count - 1) {
-                set.entries[move] = set.entries[move + 1]
-            }
-            set.entry_count -= 1
-            set.entries[set.entry_count] = {}
-            if !entry_index_rebuild(set) {
-                return .Invalid_Set
-            }
-            return .None
+            return placement_remove_at(set, index)
         }
     }
     return .Not_Favorited
@@ -511,6 +506,55 @@ make_placement_name_mutation :: proc(
     return mutation, .None
 }
 
+// Capture a creation with owned bounded text; names are labels, never identity keys.
+make_collection_create_mutation :: proc(
+    set: ^Set, id: uuid.Identifier, name: string) -> (Mutation, Policy_Error) {
+    if validate(set) != .None {
+        return {}, .Invalid_Set
+    }
+    if id == (uuid.Identifier{}) || id == FAVORITES_COLLECTION_ID ||
+        find_collection(set, id) >= 0 {
+        return {}, .Invalid_Identity
+    }
+    name_bytes := transmute([]u8)name
+    if !collection_name_bytes_are_valid(name_bytes, len(name)) {
+        return {}, .Invalid_Name
+    }
+    if maximum_collection_order(set) == max(i64) {
+        return {}, .Order_Overflow
+    }
+    mutation := Mutation{
+        kind = .Create_Collection,
+        collection_id = id,
+        collection_name_length = len(name),
+    }
+    copy(mutation.collection_name[:], name_bytes)
+    return mutation, .None
+}
+
+// Find the append position without compacting accepted custom collection orders.
+maximum_collection_order :: proc(set: ^Set) -> i64 {
+    maximum: i64
+    for collection in set^.collections[:set^.collection_count] {
+        maximum = max(maximum, collection.order)
+    }
+    return maximum
+}
+
+// Require a nonempty UTF-8 label with no embedded NUL and the collection byte bound.
+collection_name_bytes_are_valid :: proc(name: []u8, name_length: int) -> bool {
+    if name_length < 1 || name_length > COLLECTION_NAME_MAX_BYTES ||
+        name_length > len(name) || !utf8.valid_string(string(name[:name_length])) {
+        return false
+    }
+    for character in name[:name_length] {
+        if character == 0 {
+            return false
+        }
+    }
+    return true
+}
+
 // Enumerate ordered backing-array indexes into caller-owned storage.
 ordered_siblings :: proc(
     set: ^Set,
@@ -574,8 +618,60 @@ apply_mutation :: proc(set: ^Set, mutation: Mutation) -> Mutation_Error {
         return apply_reorder_mutation(set, mutation)
     case .Set_Entry_Name:
         return apply_entry_name_mutation(set, mutation)
+    case .Create_Collection, .Set_Collection_Name,
+        .Reorder_Collections, .Delete_Collection:
+        return apply_collection_head_mutation(set, mutation)
+    case .Add_Collection_Animation:
+        return apply_collection_animation_add_mutation(set, mutation)
+    case .Remove_Collection_Animation:
+        return apply_collection_animation_remove_mutation(set, mutation)
     }
     return .Invalid_Kind
+}
+
+// Route custom head lifecycle edits independently of placement membership and naming.
+apply_collection_head_mutation :: proc(
+    set: ^Set, mutation: Mutation) -> Mutation_Error {
+    #partial switch mutation.kind {
+    case .Create_Collection:
+        return apply_collection_create_mutation(set, mutation)
+    case .Set_Collection_Name:
+        return apply_collection_name_mutation(set, mutation)
+    case .Reorder_Collections:
+        return apply_collection_move_mutation(set, mutation)
+    case .Delete_Collection:
+        return apply_collection_delete_mutation(set, mutation)
+    }
+    return .Invalid_Kind
+}
+
+// Revalidate replay against current ownership and append only after storage admission.
+apply_collection_create_mutation :: proc(
+    set: ^Set, mutation: Mutation) -> Mutation_Error {
+    name_bytes := mutation.collection_name
+    if !collection_name_bytes_are_valid(
+        name_bytes[:], mutation.collection_name_length) {
+        return .Invalid_Name
+    }
+    name := string(name_bytes[:mutation.collection_name_length])
+    _, policy := make_collection_create_mutation(set, mutation.collection_id, name)
+    if policy != .None {
+        return .Policy
+    }
+    failure := append_collection(set, {
+        id = mutation.collection_id,
+        role = .User,
+        name = name_bytes[:mutation.collection_name_length],
+        name_length = mutation.collection_name_length,
+        order = maximum_collection_order(set) + 1,
+    })
+    if failure == .Allocation_Failed || failure == .Capacity {
+        return .Allocation_Failed
+    }
+    if failure != .None {
+        return .Policy
+    }
+    return .None
 }
 
 // Apply one validated Favorites addition mutation.
@@ -818,6 +914,13 @@ append_collection :: proc(set: ^Set, value: Collection) -> Policy_Error {
 append_entry :: proc(set: ^Set, value: Entry) -> Policy_Error {
     if set == nil || !set^.initialized {
         return .Invalid_Name
+    }
+    if value.kind == .Animation &&
+        collection_animation_exists(set, value.collection_id, value.animation_id, -1) {
+        if value.collection_id == FAVORITES_COLLECTION_ID {
+            return .Already_Favorited
+        }
+        return .Already_In_Collection
     }
     if !entries_ensure_capacity(set, set^.entry_count + 1) ||
         !entry_index_ensure_capacity(set, set^.entry_count + 1) {
@@ -1422,9 +1525,18 @@ has_parent_cycle :: proc(set: ^Set, index: int) -> bool {
 // Check Favorites uniqueness by animation identity, not placement identity.
 favorites_animation_exists :: proc(
     set: ^Set, animation_id: uuid.Identifier, except_index: int) -> bool {
+    return collection_animation_exists(
+        set, FAVORITES_COLLECTION_ID, animation_id, except_index)
+}
+
+// Check whole-collection animation membership independently of placement parentage.
+collection_animation_exists :: proc(
+    set: ^Set, collection_id, animation_id: uuid.Identifier,
+    except_index: int) -> bool {
     for index in 0..<set.entry_count {
         entry := set.entries[index]
-        if index != except_index && entry.collection_id == FAVORITES_COLLECTION_ID &&
+        if index != except_index && entry.collection_id == collection_id &&
+            entry.kind == .Animation &&
             entry.animation_id == animation_id {
             return true
         }

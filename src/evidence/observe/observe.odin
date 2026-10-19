@@ -89,6 +89,8 @@ Display :: struct {
     tree_transition_count: int,
     tree_visual_height: f32,
     tree_scroll_y: f32,
+    collection_delete_armed: bool,
+    collection_delete_ready: bool,
     interface_reduce_motion: bool,
     presentation_visible: bool,
     presentation_effects: Presentation_Effects,

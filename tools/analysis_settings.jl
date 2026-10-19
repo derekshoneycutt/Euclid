@@ -91,6 +91,9 @@ const AnimationLoopReason =
 
 # Columns: id, path, procedure, operation, target, minimum, maximum, reason.
 const CustomTestAllocationReviews = [
+    ("test-collection-name-pool-exhaustion", "src/collections/storage_failure_test.odin",
+        "collections_test_exhaust_name_storage", "make", "[]u8", 1, 1,
+        "The caller frees all ballast before restoring backing growth and destroying the Set."),
     ("test-core-arena-owner-growth-buffer", "src/core/storage/arena_owner_test.odin",
         "storage_test_arena_owner_reset_releases_growth_blocks", "make", "[]u8", 1, 1,
         "Arena-backed test payload is invalidated by reset and released by destroy."),
@@ -2366,6 +2369,14 @@ AnalysisSettings(
                 minimum_matches=3, maximum_matches=3),
             # Tree projection records, indexes, and staging use its owned TLSF pool.
             ReviewedAllocationPolicy(
+                "ui-membership-order-workspace",
+                "src/view/ui/model/membership.odin",
+                "ui_membership_reserve", :custom,
+                "Destination indexes grow atomically in the display popup's TLSF domain; prior backing is released on replacement, reused across openings and destroyed with the display owner.";
+                operation="make", target="[]int", allocator_source="allocator",
+                certainty=:definite, response=Ignore,
+                minimum_matches=1, maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "ui-tree-projection-prepared-rows",
                 "src/view/ui/model/tree_projection_storage.odin",
                 "ui_tree_projection_reserve_prepared_rows",
@@ -2490,6 +2501,45 @@ AnalysisSettings(
                 "A node's copied canonical label shares the projection's TLSF owner and is freed with its stable node.";
                 operation="make",
                 target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "collection-head-name-replacement",
+                "src/collections/heads.odin",
+                "apply_collection_name_mutation",
+                :custom,
+                "Mandatory name bytes use the Set TLSF owner; replacement allocates before retiring the old name, and Set destruction frees the accepted name.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-custom-head-staging",
+                "src/view/ui/library/collections.odin",
+                "tree_projection_stage_custom_heads",
+                :custom,
+                "Detached head staging uses the projection TLSF owner; the table is freed after commit or rollback and nodes transfer only on commit.";
+                operation="make",
+                target="[]^viewmodel.Ui_Tree_Item",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "ui-tree-custom-entry-reconcile-staging",
+                "src/view/ui/library/custom_entries.odin",
+                "tree_projection_reconcile_add_custom",
+                :custom,
+                "Detached custom-entry staging uses the projection TLSF owner; the table is freed after commit or rollback and nodes transfer only on commit.";
+                operation="make",
+                target="[]^viewmodel.Ui_Tree_Item",
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,

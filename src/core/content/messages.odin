@@ -37,6 +37,10 @@ Content_Message_Id :: enum u16 {
     Library_Move_Down = 1114,
     Library_Unicode_Completion = 1115,
     Library_Entry_Name = 1116,
+    Library_Create_Collection = 1117,
+    Library_New_Collection = 1118,
+    Library_Delete_Collection = 1119,
+    Library_Confirm_Delete = 1120,
     Settings_Display_Fps = 1201,
     Settings_Limit_Fps = 1202,
     Settings_Drawing_Sound = 1203,
@@ -106,6 +110,7 @@ Content_Message_Id :: enum u16 {
     Animation_Resume = 1403,
     Animation_Add_Favorite = 1404,
     Animation_Remove_Favorite = 1405,
+    Animation_Add_Collections = 1406,
 }
 
 // One native ID/key identity shared by admission and runtime lookup.
@@ -114,7 +119,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 96
+CONTENT_SHIPPED_MESSAGE_COUNT :: 101
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -143,6 +148,10 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1114, "ui.library.move_down"},
     {1115, "ui.library.unicode_completion"},
     {1116, "ui.library.entry_name"},
+    {1117, "ui.library.create_collection"},
+    {1118, "ui.library.new_collection"},
+    {1119, "ui.library.delete_collection"},
+    {1120, "ui.library.confirm_delete"},
     {1201, "ui.settings.display_fps"},
     {1202, "ui.settings.limit_fps"},
     {1203, "ui.settings.drawing_sound"},
@@ -212,6 +221,7 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1403, "ui.animation.resume"},
     {1404, "ui.animation.add_favorite"},
     {1405, "ui.animation.remove_favorite"},
+    {1406, "ui.animation.add_collections"},
 }
 
 // Explicit formatting failure; no error is a successful English fallback.

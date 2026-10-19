@@ -380,8 +380,8 @@ tree_transition_keyboard_reveal_finishes_required_path :: proc(t: ^testing.T) {
     uilibrary.prepare_tree_list_panel(params, &prepared)
     uilibrary.tree_set_active_node(&runtime, &nodes[2], true)
     uilibrary.prepare_tree_list_panel(params, &prepared)
-    testing.expect(t, !runtime.library.motion.branches[0].running)
-    testing.expect(t, runtime.library.motion.branches[4].running)
+    testing.expect(t, !runtime.library.motion.branches[1].running)
+    testing.expect(t, runtime.library.motion.branches[5].running)
     testing.expect(t,
         uilibrary.tree_row_is_revealed(
             uilibrary.tree_layout_find(&prepared.layout, &nodes[2])^))
@@ -408,7 +408,7 @@ tree_transition_invalidations_snap :: proc(t: ^testing.T) {
             &runtime, &nodes[0],
             !runtime.library.tree.projection.items[item_index].expanded)
         uilibrary.tree_prepare_layout(params, &layout)
-        testing.expect(t, runtime.library.motion.branches[0].running)
+        testing.expect(t, runtime.library.motion.branches[1].running)
         switch trigger {
         case 0: runtime.library.search.query_revision += 1
         case 1: runtime.library.search.committed_generation += 1
@@ -423,7 +423,7 @@ tree_transition_invalidations_snap :: proc(t: ^testing.T) {
         params.reduce_motion = runtime.preferences.values.interface.reduce_motion ||
             runtime.platform_reduce_motion
         uilibrary.tree_prepare_layout(params, &layout)
-        testing.expect(t, !runtime.library.motion.branches[0].running)
+        testing.expect(t, !runtime.library.motion.branches[1].running)
     }
 }
 
@@ -455,7 +455,7 @@ tree_transition_scroll_anchor_respects_input_and_clamp :: proc(t: ^testing.T) {
     uilibrary.tree_prepare_layout(params, &prepared.layout)
     uilibrary.tree_refresh_preparation(params, &prepared)
     testing.expect(t, runtime.library.tree.scroll_y <= prepared.scroll.maximum)
-    testing.expect_value(t, prepared.scroll.maximum, theme.TREE_ROW_HEIGHT)
+    testing.expect_value(t, prepared.scroll.maximum, theme.TREE_ROW_HEIGHT * 2)
 }
 
 // Hidden Library preparation admits its workspace even before the first visible frame.
@@ -469,9 +469,9 @@ tree_transition_first_hidden_preparation_admits_motion_storage :: proc(t: ^testi
     testing.expect_value(t, len(runtime.library.motion.branches), 0)
     prepared: uilibrary.Tree_List_Preparation
     uilibrary.prepare_tree_visual(params, &prepared)
-    testing.expect_value(t, prepared.layout.count, 6)
-    testing.expect_value(t, runtime.library.motion.count, 6)
-    testing.expect(t, !runtime.library.motion.branches[0].running)
+    testing.expect_value(t, prepared.layout.count, 7)
+    testing.expect_value(t, runtime.library.motion.count, 7)
+    testing.expect(t, !runtime.library.motion.branches[1].running)
 }
 
 // Verify hidden Library preparation preserves user scroll and leaves no running branches.
@@ -491,8 +491,8 @@ tree_transition_outgoing_preparation_is_noninteractive :: proc(t: ^testing.T) {
     prepared: uilibrary.Tree_List_Preparation
     uilibrary.prepare_tree_visual(params, &prepared)
     testing.expect_value(t, runtime.library.tree.scroll_y, f32(400))
-    testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 3)
-    testing.expect(t, !runtime.library.motion.branches[0].running)
+    testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 4)
+    testing.expect(t, !runtime.library.motion.branches[1].running)
     testing.expect_value(t, prepared.hovered_node, nil)
     testing.expect(t, nodes[1].is_expanded)
 }
@@ -525,15 +525,15 @@ tree_transition_covers_full_catalogue_capacity :: proc(t: ^testing.T) {
     }
     layout: viewmodel.Ui_Tree_Prepared_Layout
     uilibrary.tree_prepare_layout(params, &layout)
-    testing.expect_value(t, layout.count, len(nodes))
-    testing.expect_value(t, runtime.library.motion.count, len(nodes))
+    testing.expect_value(t, layout.count, len(nodes) + 1)
+    testing.expect_value(t, runtime.library.motion.count, len(nodes) + 1)
     testing.expect_value(t,
-        layout.content_height, f32(len(nodes)) * theme.TREE_ROW_HEIGHT)
+        layout.content_height, f32(len(nodes) + 1) * theme.TREE_ROW_HEIGHT)
     tree_transition_set_expanded(&runtime, &nodes[0], false)
     uilibrary.tree_prepare_layout(params, &layout)
-    testing.expect_value(t, layout.count, len(nodes))
-    testing.expect(t, !layout.rows[len(nodes) - 1].logical)
-    testing.expect_value(t, layout.rows[len(nodes) - 1].depth, len(nodes) - 1)
+    testing.expect_value(t, layout.count, len(nodes) + 1)
+    testing.expect(t, !layout.rows[len(nodes)].logical)
+    testing.expect_value(t, layout.rows[len(nodes)].depth, len(nodes) - 1)
 }
 
 // Verify real pointer press/release toggles admit motion through the ordinary row owner.
@@ -548,7 +548,7 @@ tree_transition_pointer_toggle_uses_prepared_row :: proc(t: ^testing.T) {
     uilibrary.prepare_tree_list_panel(params, &prepared)
     params.mouse_input.mouse_position = {
         params.list_panel.x + theme.TREE_ROW_ICON_OFFSET_X + 2,
-        params.list_panel.y + theme.TREE_ROW_ICON_OFFSET_Y + 2}
+        params.list_panel.y + theme.TREE_ROW_HEIGHT + theme.TREE_ROW_ICON_OFFSET_Y + 2}
     params.mouse_input.mouse_pressed = {.Left}
     params.mouse_input.mouse_down = {.Left}
     uilibrary.prepare_tree_list_panel(params, &prepared)
@@ -560,9 +560,9 @@ tree_transition_pointer_toggle_uses_prepared_row :: proc(t: ^testing.T) {
     item_index := uilibrary.tree_projection_find(
         &runtime.library.tree.projection, nodes[0].stable_id)
     testing.expect(t, runtime.library.tree.projection.items[item_index].expanded)
-    testing.expect(t, runtime.library.motion.branches[0].running)
+    testing.expect(t, runtime.library.motion.branches[1].running)
     testing.expect(t, !runtime.input.press_owner.active)
-    testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 3)
+    testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 4)
     testing.expect_value(t, ji.selected_animation, &nodes[0])
 }
 
@@ -583,10 +583,10 @@ tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
         target = uilibrary.tree_item_semantic_id(&nodes[0]), kind = .Expand}
     semantic^.command_count = 1
     uilibrary.prepare_tree_list_panel(params, &prepared)
-    testing.expect(t, runtime.library.motion.branches[0].running)
+    testing.expect(t, runtime.library.motion.branches[1].running)
     params.mouse_input.sample_time_seconds = 1.05
     uilibrary.prepare_tree_list_panel(params, &prepared)
-    testing.expect_value(t, runtime.library.motion.branches[0].start_seconds, f64(1))
+    testing.expect_value(t, runtime.library.motion.branches[1].start_seconds, f64(1))
     search := &runtime.library.search
     defer viewmodel.library_search_destroy(search)
     testing.expect(t, viewmodel.library_search_reserve_ids(search, false, 2))
@@ -602,7 +602,7 @@ tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
     testing.expect(t, !runtime.library.tree.projection.items[item_index].expanded)
     testing.expect(t,
         uilibrary.tree_node_is_effectively_expanded(params.visibility, &nodes[0]))
-    testing.expect(t, !runtime.library.motion.branches[0].running)
+    testing.expect(t, !runtime.library.motion.branches[1].running)
 }
 
 // Verify reduced-motion collapse releases a held descendant even when no tail row remains.

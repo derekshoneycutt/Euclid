@@ -148,9 +148,29 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
         "Unicode completion: {symbol}. Press Right Arrow to insert; Escape to dismiss."),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1116), "ui.library.entry_name",
-            "Accessible label for the inline Favorite custom-name field.",
+            "Accessible label for the single collection or placement name editor.",
             LocalizedContent.MessageArgument[]),
-        "Favorite name"),
+        "Library name"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1117), "ui.library.create_collection",
+            "Accessible name of the selected Collections root's plus button.",
+            LocalizedContent.MessageArgument[]),
+        "Create collection"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1118), "ui.library.new_collection",
+            "Initial durable name of a custom collection; duplicate names are permitted.",
+            LocalizedContent.MessageArgument[]),
+        "New Collection"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1119), "ui.library.delete_collection",
+            "First activation warns; collection deletion requires deliberate confirmation.",
+            LocalizedContent.MessageArgument[]),
+        "Delete collection"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1120), "ui.library.confirm_delete",
+            "Armed collection deletion warning; rapid repeated activation cannot confirm.",
+            LocalizedContent.MessageArgument[]),
+        "Confirm delete"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1219), "ui.settings.reduce_motion",
             "Interface-only reduced motion checkbox; system requests also apply.",
@@ -544,4 +564,10 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             "Animation control tooltip for removing the selected animation from Favorites.",
             LocalizedContent.MessageArgument[]),
         "Remove from Favorites"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1406),
+            "ui.animation.add_collections",
+            "Animation control tooltip and title of the custom-collection checkbox popup.",
+            LocalizedContent.MessageArgument[]),
+        "Add to collections"),
 ]

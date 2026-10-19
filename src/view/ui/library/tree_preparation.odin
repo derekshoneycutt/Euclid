@@ -71,6 +71,7 @@ draw_encoded_prepared_tree :: proc(
         actions_toggle = prepared^.actions_toggle,
         actions_up = prepared^.actions_up,
         actions_down = prepared^.actions_down,
+        actions_delete = prepared^.actions_delete,
         scroll_y = prepared^.scroll.scroll_y_out,
         visibility = visibility}
     foreground := tree_reorder_foreground(
@@ -140,6 +141,7 @@ draw_encoded_prepared_tree_row :: proc(
             ctx.state, ctx.encoder, row, ctx.panel, ctx.scroll_y)
     } else {
         current := ctx
+        current.panel.x += row.offset_x
         current.render_only = !row.logical
         draw_encoded_tree_row(current, row.item, row.depth, bounds.y, row.expanded)
         draw_encoded_tree_actions_geometry(ctx, row)
@@ -541,9 +543,7 @@ prepare_tree_visual :: proc(
     if !tree_actions_close_context(params.ui_runtime, params.general_state) {
         return
     }
-    if params.ji == nil ||
-        params.ji^.animation_count == 0 &&
-            (params.collections == nil || params.collections^.entry_count == 0) {
+    if params.ji == nil {
         params.ui_runtime^.library.motion = {}
         return
     }

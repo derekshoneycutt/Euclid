@@ -716,7 +716,9 @@ collections_validate_favorites_role_and_unique_animation :: proc(t: ^testing.T) 
     duplicate := set^.entries[0]
     duplicate.custom_name = nil
     duplicate.custom_name_length = 0
-    _ = append_entry(set, duplicate)
+    testing.expect_value(t, append_entry(set, duplicate), Policy_Error.Already_Favorited)
+    set^.entries[1] = duplicate
+    set^.entry_count = 2
     set^.entries[1].id = collections_test_id(33)
     set^.entries[1].sibling_order = 1
     testing.expect_value(t, validate(set),

@@ -32,8 +32,10 @@ SCENARIO_FOCUS_NAMES :: [?]Scenario_Focus_Name{
     {"library_search", .Library_Control, uilibrary.LIBRARY_SEARCH_INPUT_ID},
     {"library_tree", .Animation_Tree, uilibrary.TREE_SEMANTIC_LOCAL_ID},
     {"library_actions", .Library_Action, uilibrary.TREE_ACTION_TOGGLE},
+    {"library_create_collection", .Library_Action, uilibrary.TREE_COLLECTION_CREATE},
     {"library_move_up", .Library_Action, uilibrary.TREE_ACTION_UP},
     {"library_move_down", .Library_Action, uilibrary.TREE_ACTION_DOWN},
+    {"library_delete_collection", .Library_Action, uilibrary.TREE_COLLECTION_DELETE},
     {"settings_max_dust", .Settings_Control,
         uisettings.SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID},
 }

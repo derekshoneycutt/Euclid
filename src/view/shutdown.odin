@@ -103,6 +103,7 @@ free_animations_state :: proc(state : ^core.Euclid_General_State) {
     viewmodel.ui_tree_projection_destroy(
         &state^.ui_runtime.library.tree.projection)
     viewmodel.library_search_destroy(&state^.ui_runtime.library.search)
+    viewmodel.ui_membership_destroy(&state.ui_runtime.membership)
     viewmodel.ui_semantic_focus_destroy(&state^.semantic_focus)
     collections.destroy(&state^.preferences_runtime.collections_state)
     julia.animation_storage_destroy(

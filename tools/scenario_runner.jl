@@ -339,6 +339,14 @@ function run_selected(binary::String, options::ScenarioOptions; io::IO=stdout)
             append!(records, run_settings_acceptance(binary))
         elseif name == "collections-favorites-acceptance"
             append!(records, run_favorites_acceptance(binary))
+        elseif name == "empty-collections-acceptance"
+            append!(records, run_empty_collections_acceptance(binary))
+        elseif name == "collection-heads-acceptance"
+            append!(records, run_collection_heads_acceptance(binary))
+        elseif name == "collection-delete-acceptance"
+            append!(records, run_collection_delete_acceptance(binary))
+        elseif name == "collection-membership-acceptance"
+            append!(records, run_collection_membership_acceptance(binary))
         else
             push!(records, run_scenario(binary, name))
         end

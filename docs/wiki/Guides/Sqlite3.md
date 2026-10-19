@@ -269,24 +269,61 @@ sequenceDiagram
     App->>Store: Close after view teardown
 ```
 
-Defaults are the starting point; saved values are loaded before explicit launch
-overrides are applied. Invalid known rows are ignored and reported, while a failed read
-or explicitly requested store is not silently presented as a successful load. During
-the session, changes are coalesced into typed batches. A batch is validated and
-committed in one transaction; failure leaves the batch uncommitted and the save path
-retains it for its retry or reporting policy. Shutdown drains accepted writes before
-the coordinator closes the store.
+### Loading And Saving
 
-The current user-data store contains window, rendering, drawing, and interface
-preferences plus ordered collection placements. Settings edits and Favorites mutations
-share one serialized worker-only transaction queue; the Settings save line reports
-their aggregate durability. Pending indicates accepted edits not yet committed,
-Saving indicates an active transaction, and Saved requires no queued edits or
-unresolved failure. A failed batch remains unresolved through retries until a
-committed batch covers its revision.
+The store contains window, rendering, drawing, and interface preferences plus ordered
+collections and placements. They share one serialized worker-only transaction queue.
 
-Replay uses a separate Store-owned TLSF `Set`. Allocation failures retain their
-structured error through rollback; save work joins before replay sampling or close.
+- **Load order:** defaults, saved values, then explicit launch overrides.
+- **Invalid data:** invalid known rows are ignored and reported. Failed reads or
+  explicitly requested stores are not silently presented as successful loads.
+- **Commit:** coalesced typed batches are validated and committed atomically. Failed
+  batches remain uncommitted and retained for retry or reporting.
+- **Shutdown:** accepted writes drain before the coordinator closes the store.
+
+The Settings save line reports aggregate durability:
+
+| Status | Meaning |
+| --- | --- |
+| Pending | Accepted edits have not yet committed. |
+| Saving | A transaction is active. |
+| Saved | No queued edits or unresolved failure remain. |
+
+A failed batch stays unresolved until a committed batch covers its revision.
+
+### Collection Mutations
+
+Favorites and custom collection edits use immutable replay followed by transactional
+replacement of the validated final snapshot—not cascading deletes or delta writes.
+
+| Operation | Durable contract |
+| --- | --- |
+| Create | Carries a UUID and copied bounded name; appends a unique positive custom order. Empty heads need no placeholder entries. Favorites retains order zero. |
+| Rename | Copies bounded nonempty text. Equal display names are valid. |
+| Move | Captures both adjacent head UUIDs and swaps existing positive orders without arithmetic. Replay rejects a neighbor that is no longer adjacent. |
+| Delete | Captures the custom UUID and retires all owned groups, placements, and aliases without allocation or changing canonical animation identities. Favorites and read-only heads reject deletion. |
+
+Editor flushes precede deletion in immutable operation order. A stale delete rejects
+the entire transaction; it cannot resurrect an owner or partially save an earlier rename.
+
+### Animation Membership
+
+One animation placement represents membership; there is no separate join table.
+Model validation and a unique partial SQL index enforce one occurrence per destination,
+including placements inside stored groups.
+
+- **Add:** appends a root placement.
+- **Remove:** captures collection, parent, placement, and target identity.
+- **Re-add:** creates a fresh UUID, canonical label, and end position.
+
+Membership uses the same replay and complete-snapshot transaction path as other edits.
+Schema v2 is updated in place for disposable development databases; there is no
+migration or reset fallback.
+
+### Replay Ownership
+
+Replay uses a separate Store-owned TLSF `Set`. Allocation failures preserve structured
+errors through rollback. Save work joins before replay sampling or store close.
 
 ## Shared SQLite Mechanics
 

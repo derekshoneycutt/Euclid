@@ -82,6 +82,12 @@ Sdl_Frame_Update :: struct {
     ui_geometry: ui.Ui_Geometry_Preparation,
 }
 
+// Caller-owned overlay buffers outlive every consumer of the returned input frame.
+Sdl_Ui_Input_Storage :: struct {
+    membership_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event,
+    context_menu_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event,
+}
+
 //   - Owns state/window setup and teardown via deferred cleanup calls.
 //   - Resets temp allocator each frame after drawing.
 //
@@ -272,11 +278,11 @@ frame_gif_capture_extents :: proc(
     }
 }
 
-// Arbitrate topmost popup input before preparing ordinary geometry and pointer focus.
+// Arbitrate popup input using storage retained through ordinary frame-owner preparation.
 prepare_sdl_ui_input :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
     device_frame: input.Input_Frame, frame_dt: f32,
-    menu_event_storage: []input.Input_Event) -> (
+    event_storage: ^Sdl_Ui_Input_Storage) -> (
     input.Input_Frame, ui.Ui_Geometry_Preparation) {
     scenario_frame := device_frame
     when core.SCENARIOS_ENABLED {
@@ -285,7 +291,10 @@ prepare_sdl_ui_input :: proc(
                 ctx.scenario_runtime, device_frame)
         }
     }
-    input_frame := uioverlay.context_menu_route(state, scenario_frame, menu_event_storage,
+    popup_frame := uioverlay.membership_route(
+        state, scenario_frame, event_storage.membership_events[:])
+    input_frame := uioverlay.context_menu_route(
+        state, popup_frame, event_storage.context_menu_events[:],
         ctx.input_runtime != nil && card(ctx.input_runtime^.mouse_captured) > 0)
     geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
     ui.prepare_ui_static_interaction(state, input_frame, geometry.pointer_capture)
@@ -307,9 +316,9 @@ prepare_sdl_frame :: proc(
     prepared^ = {}
     frame_dt := native.sdl_frame_clock_step(clock)
     service_sdl_frame_runtime(state, ctx, frame_dt, device_frame.sample_time_seconds)
-    menu_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
+    popup_event_storage: Sdl_Ui_Input_Storage
     input_frame, ui_geometry := prepare_sdl_ui_input(
-        state, ctx, device_frame, frame_dt, menu_event_storage[:])
+        state, ctx, device_frame, frame_dt, &popup_event_storage)
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     prepare_sdl_frame_owners(state, ctx, Sdl_Frame_Update{
@@ -464,6 +473,7 @@ encode_sdl_ui_geometry :: proc(
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
     uioverlay.draw_encoded_tooltip(state, encoder)
     uioverlay.draw_encoded_context_menu(state, encoder)
+    uioverlay.draw_encoded_membership(state, encoder)
 }
 
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.

@@ -1,0 +1,35 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"assert_favorites":"remember_playback:Point"}
+{"library_placement":"expand:collections"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"select:last_collection"}
+{"library_placement":"actions_open:selected_collection"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"actions_focus:selected_collection"}
+{"key":"tab"}
+{"assert_favorites":"name_editor_input_focus"}
+{"key":{"name":"a","ctrl":true}}
+{"type_library_name":"Teaching"}
+{"key":"enter"}
+{"assert_favorites":"name:selected_collection|Teaching"}
+{"library_placement":"move_up:selected_collection"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"name:first_collection|Teaching"}
+{"library_placement":"move_down:selected_collection"}
+{"library_placement":"move_up:selected_collection"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"name:first_collection|Teaching"}
+{"library_placement":"name_press:selected_collection"}
+{"library_placement":"name_release:selected_collection"}
+{"key":{"name":"a","ctrl":true}}
+{"type_library_name":"  Teaching examples  "}
+{"library_placement":"select:collections"}
+{"assert_favorites":"name:first_collection|Teaching examples"}
+{"assert_favorites":"playing:Point"}
+{"wait_state":"settings_saved","timeout_ms":10000}
+{"screenshot":".build/collection-heads-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

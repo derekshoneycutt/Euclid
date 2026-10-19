@@ -179,21 +179,7 @@ settings_view_context :: proc(
 // draw_encoded_checkbox_geometry encodes one checkbox without its deferred label.
 draw_encoded_checkbox_geometry :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
-    _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(rectangle), 1,
-        theme.draw_color(encoder, .Control_Border))
-    if !checked {
-        return
-    }
-    first := geometry.Vector2{rectangle.x + 3,
-        rectangle.y + rectangle.height * 0.55}
-    second := geometry.Vector2{rectangle.x + 6,
-        rectangle.y + rectangle.height - 3}
-    third := geometry.Vector2{rectangle.x + rectangle.width - 3, rectangle.y + 3}
-    _ = native.draw_encoder_line(
-        encoder, first, second, 1.6, theme.draw_color(encoder, .Text))
-    _ = native.draw_encoder_line(
-        encoder, second, third, 1.6, theme.draw_color(encoder, .Text))
+    uiwidgets.draw_encoded_checkbox_geometry(encoder, rectangle, checked)
 }
 
 // draw_encoded_slider_geometry encodes one slider track, fill, and knob.

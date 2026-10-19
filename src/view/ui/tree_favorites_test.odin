@@ -800,7 +800,7 @@ tree_favorites_expansion_survives_empty_session :: proc(t: ^testing.T) {
         collections, entry.id), collectionmodel.Policy_Error.None)
     params.collections_revision += 1
     testing.expect(t, uilibrary.tree_projection_prepare(params))
-    testing.expect_value(t, runtime.library.tree.projection.count, len(nodes))
+    testing.expect_value(t, runtime.library.tree.projection.count, len(nodes) + 1)
     testing.expect_value(t, collectionmodel.favorites_add(
         collections, entry.id, entry.animation_id), collectionmodel.Policy_Error.None)
     params.collections_revision += 1

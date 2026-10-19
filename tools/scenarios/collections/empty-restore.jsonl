@@ -1,0 +1,8 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_favorites":"two_custom_empty"}
+{"assert_favorites":"collapsed:collections"}
+{"library_placement":"expand:collections"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"two_custom_empty"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

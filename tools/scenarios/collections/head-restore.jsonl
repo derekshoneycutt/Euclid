@@ -1,0 +1,16 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"library_placement":"focus_library"}
+{"key":"enter"}
+{"wait_state":"accordion_settled","timeout_ms":10000}
+{"library_placement":"expand:collections"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"name:first_collection|Teaching examples"}
+{"assert_favorites":"name:last_collection|New Collection"}
+{"library_placement":"select:first_collection"}
+{"library_placement":"actions_open:selected_collection"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"draft:Teaching examples"}
+{"screenshot":".build/collection-heads-portrait.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

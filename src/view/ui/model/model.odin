@@ -156,6 +156,7 @@ Ui_Node_Domain :: enum u8 {
     Terminal,
     Context_Menu,
     Library_Action,
+    Collection_Membership,
 }
 
 // Ui_Node_Id identifies one semantic node across stable and generated content.
@@ -580,6 +581,7 @@ Ui_Tree_Item_Kind :: enum u8 {
     Collections,
     Collection,
     Placement,
+    Group,
 }
 
 // Ui_Tree_Item is a display-owned placement that resolves canonical targets by UUID.
@@ -669,11 +671,14 @@ Ui_Tree_Actions_Layout :: struct {
     drawer_rect: geometry.Rectangle,
     move_up_rect: geometry.Rectangle,
     move_down_rect: geometry.Rectangle,
+    delete_rect: geometry.Rectangle,
+    delete_enabled: bool,
     move_up_enabled: bool,
     move_down_enabled: bool,
     toggle_id: int,
     move_up_id: int,
     move_down_id: int,
+    delete_id: int,
 }
 
 // Ui_Tree_Prepared_Row is a compact frame borrow of one logical or closing row.
@@ -683,6 +688,7 @@ Ui_Tree_Prepared_Row :: struct {
     content_y: f32,
     canonical_y: f32,
     row_height: f32,
+    offset_x: f32,
     reveal: geometry.Rectangle,
     logical: bool,
     expanded: bool,
@@ -781,6 +787,8 @@ Ui_Library_Tree_State :: struct {
 
 // Ui_Library_Actions_State retains transient drawer and reorder interactions.
 Ui_Library_Actions_State :: struct {
+    delete_confirmation: Ui_Collection_Delete_Confirmation,
+    delete_pointer_clicks: u8,
     drawer: Ui_Tree_Actions_Motion,
     reorder: Ui_Tree_Reorder_Motion,
     press_entry: uuid.Identifier,
@@ -788,8 +796,23 @@ Ui_Library_Actions_State :: struct {
     reveal_pending: bool,
 }
 
-// Ui_Library_Entry_Name_Draft owns one bounded placement-name edit between frames.
+// Session-only destructive intent is qualified by UUID and content generation.
+Ui_Collection_Delete_Confirmation :: struct {
+    collection_id: uuid.Identifier,
+    generation: u64,
+    last_activation_seconds: f64,
+    shake_started_seconds: f64,
+    armed: bool,
+}
+
+Ui_Library_Name_Target_Kind :: enum u8 {
+    Placement,
+    Collection,
+}
+
+// Ui_Library_Entry_Name_Draft owns the single typed head-or-placement editor.
 Ui_Library_Entry_Name_Draft :: struct {
+    target_kind: Ui_Library_Name_Target_Kind,
     entry_id: uuid.Identifier,
     placement: collections.Placement_Identity,
     rect: geometry.Rectangle,
@@ -890,6 +913,7 @@ Euclid_Ui_Runtime_State :: struct {
     gif_path_input: Ui_Input_Box_State,
     tooltip: Ui_Tooltip_State,
     context_menu: Ui_Context_Menu_State,
+    membership: Ui_Collection_Membership_State,
     semantic_focus: ^Ui_Semantic_Focus_State,
 }
 

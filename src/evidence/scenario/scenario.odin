@@ -1455,6 +1455,7 @@ interface_state_matches :: proc(name: string, display: observe.Display) -> bool 
     case "accordion_settled": return !display.accordion_transition_running
     case "tree_transitioning": return display.tree_transition_count > 0
     case "tree_settled": return display.tree_transition_count == 0
+    case "collection_delete_ready": return display.collection_delete_ready
     case "interface_reduced_motion": return display.interface_reduce_motion
     case "presentation_visible": return display.presentation_visible
     case "presentation_hidden": return !display.presentation_visible

@@ -546,19 +546,18 @@ tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
     commands: [8]native.Draw_Command
     encoder: native.Draw_Encoder
     rect := geometry.Rectangle{10, 20, 22, theme.TREE_ROW_HEIGHT}
-    flags_to_loop := [4][2]bool{
-        {false, false}, {true, false}, {false, true}, {true, true},
+    styles := [4]uilibrary.Tree_Action_Toggle_Style{
+        {}, {open = true}, {selected = true}, {open = true, selected = true},
     }
-    for flags in flags_to_loop {
-        open, selected := flags[0], flags[1]
+    for style in styles {
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
             {800, 800}, {800, 800}))
-        uilibrary.draw_tree_actions_toggle(&encoder, rect, {}, open, selected)
-        dot_start := 4 if open else 0
+        uilibrary.draw_tree_actions_toggle(&encoder, rect, {}, style)
+        dot_start := 4 if style.open else 0
         dot_color := theme.UI_TREE_SELECTION_TEXT_COLOR if
-            selected else theme.UI_TEXT_COLOR
-        if open {
+            style.selected else theme.UI_TEXT_COLOR
+        if style.open {
             dot_color = theme.UI_TREE_SELECTION_TEXT_COLOR
             for vertex in vertices[:4] {
                 testing.expect_value(t,
@@ -573,6 +572,6 @@ tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {800, 800}, {800, 800}))
-    uilibrary.draw_tree_actions_toggle(&encoder, rect, {hovered = true}, false)
+    uilibrary.draw_tree_actions_toggle(&encoder, rect, {hovered = true}, {})
     testing.expect_value(t, vertices[0].color, theme.UI_HOVER_COLOR)
 }

@@ -20,7 +20,7 @@ Tree_Reorder_Admission :: struct {
     reduce_motion: bool,
 }
 
-// tree_reorder_capture samples current Favorites positions before an attempted mutation.
+// tree_reorder_capture samples placement positions before an attempted mutation.
 tree_reorder_capture :: proc(
     params: Tree_List_Params,
     result: ^viewmodel.Ui_Tree_Reorder_Motion) {
@@ -44,10 +44,11 @@ tree_reorder_capture :: proc(
     result^.panel = params.list_panel
     result^.start_seconds = params.mouse_input.sample_time_seconds
     result^.drawer_height = params.ui_runtime^.library.actions.drawer.height
+    owner := tree_projection_find(projection, result^.owner)
+    custom := owner != TREE_NO_ITEM &&
+        tree_reorder_owner_is_custom(projection, owner)
     for row in layout.rows[:layout.count] {
-        parent := row.item^.parent
-        if !row.logical || row.item^.kind != .Placement || parent == TREE_NO_ITEM ||
-            projection^.items[parent].key != collections.FAVORITES_COLLECTION_ID {
+        if !row.logical || !tree_reorder_row_in_scope(projection, row.item, custom) {
             continue
         }
         result^.rows[result^.count] = {id = row.item^.key, from_y = row.content_y}
@@ -55,6 +56,42 @@ tree_reorder_capture :: proc(
     }
     result^.active = result^.count > 1
     result^.retarget_pending = result^.active
+}
+
+// Find the owning custom head for either a head or a nested placement selection.
+tree_reorder_owner_is_custom :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection, index: int) -> bool {
+    for current, steps := index, 0;
+        current != TREE_NO_ITEM && steps < projection^.count;
+        current, steps = projection^.items[current].parent, steps + 1 {
+        item := projection^.items[current]
+        if item.kind == .Collection {
+            return item.key != collections.FAVORITES_COLLECTION_ID
+        }
+    }
+    return false
+}
+
+// Capture all rows in custom branches so expanded descendants follow their moving head.
+tree_reorder_row_in_scope :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection, item: ^viewmodel.Ui_Tree_Item,
+    custom: bool) -> bool {
+    parent := item^.parent
+    if !custom {
+        return item^.kind == .Placement && parent != TREE_NO_ITEM &&
+            projection^.items[parent].key == collections.FAVORITES_COLLECTION_ID
+    }
+    current := item
+    for _ in 0..<projection^.count {
+        if current^.kind == .Collection {
+            return current^.key != collections.FAVORITES_COLLECTION_ID
+        }
+        if current^.parent == TREE_NO_ITEM {
+            return false
+        }
+        current = projection^.items[current^.parent]
+    }
+    return false
 }
 
 // tree_reorder_admission resolves discontinuity facts at the panel boundary.
@@ -138,6 +175,7 @@ tree_reorder_translate_row :: proc(
     row^.actions.drawer_rect.y += offset
     row^.actions.move_up_rect.y += offset
     row^.actions.move_down_rect.y += offset
+    row^.actions.delete_rect.y += offset
 }
 
 // tree_reorder_foreground finds the selected visual block during a running exchange.

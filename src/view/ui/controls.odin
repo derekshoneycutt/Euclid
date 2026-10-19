@@ -46,6 +46,9 @@ prepare_ui_static_interaction :: proc(
         terminal_present = uiterminal.is_terminal_selected(state),
         animation_favorite_eligible =
             uianimation.animation_favorite_eligible(state^.julia_interface),
+        animation_membership_eligible =
+            uianimation.animation_favorite_eligible(state.julia_interface) &&
+            uioverlay.membership_available(state),
         capture = capture,
         capture_view = capturemodel.gif_capture_view(&state^.gif_capture_status),
     })
@@ -155,6 +158,8 @@ prepare_ui_controls :: proc(
     frame: input.Input_Frame,
     splitters: uisplitter.Splitter_Preparation,
     result: ^Ui_Control_Preparation) {
+    uioverlay.membership_commands(state)
+    uioverlay.membership_commit(state)
     _ = uisemantics.semantic_begin(state^.ui_runtime.semantic_focus)
     uioverlay.tooltip_frame_begin(&state^.ui_runtime.tooltip)
     uisplitter.register_splitter_semantics(state^.ui_runtime.semantic_focus, splitters)
@@ -172,6 +177,12 @@ prepare_ui_controls :: proc(
     prepare_active_accordion_controls(state, resolved_frame, child_frame,
         geometry.Rectangle(result^.accordion.layout.content), result)
     prepare_outgoing_accordion_controls(state, result)
+    finish_ui_control_preparation(state, resolved_frame)
+}
+
+// Reconcile dependent portrait regions and suppress tooltips under either active popup.
+finish_ui_control_preparation :: proc(
+    state: ^core.Euclid_General_State, frame: input.Input_Frame) {
     if state^.ui_runtime.layout.current_layout_mode == .Portrait {
         state^.ui_runtime.layout.ui_regions.text_rect = geometry.Rectangle(
             uiaccordion.accordion_content_rect(
@@ -180,11 +191,11 @@ prepare_ui_controls :: proc(
             uiregions.layout_terminal_rect(state^.ui_runtime.layout.ui_regions.text_rect)
     }
     uioverlay.tooltip_frame_resolve(&state^.ui_runtime.tooltip, {
-        now_seconds = resolved_frame.sample_time_seconds,
-        window_focused = resolved_frame.window_focused,
+        now_seconds = frame.sample_time_seconds,
+        window_focused = frame.window_focused,
         suppressed = state^.gif_capture_status.gif_capture_phase == .Recording ||
-            state^.ui_runtime.context_menu.active,
-        dismiss = uioverlay.tooltip_escape_pressed(resolved_frame),
+            state^.ui_runtime.context_menu.active || state.ui_runtime.membership.active,
+        dismiss = uioverlay.tooltip_escape_pressed(frame),
     })
 }
 
@@ -354,6 +365,7 @@ prepare_and_finish_ui_layout :: proc(
     terminal: uiterminal.Terminal_Prepared_Frame) -> Ui_Layout_Interaction_Preparation {
     result := prepare_ui_layout_interaction(state, frame, terminal)
     uioverlay.context_menu_prepare(state)
+    uioverlay.membership_prepare(state)
     finish_ui_semantics(state)
     return result
 }

@@ -26,6 +26,7 @@ destroy_shell_test_state :: proc(state: ^app_core.Euclid_General_State) {
     viewmodel.ui_semantic_focus_destroy(&state^.semantic_focus)
     viewmodel.ui_tree_projection_destroy(&state^.ui_runtime.library.tree.projection)
     viewmodel.library_search_destroy(&state^.ui_runtime.library.search)
+    viewmodel.ui_membership_destroy(&state.ui_runtime.membership)
     contentdata.content_message_test_destroy(state.content_service.active_generation)
     free(state.content_service, context.allocator)
     collections.destroy(&state^.preferences_runtime.collections_state)

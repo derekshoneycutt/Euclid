@@ -28,6 +28,7 @@ Tree_Hit :: struct {
     actions_toggle_id: uuid.Identifier,
     actions_move_id: uuid.Identifier,
     actions_move_direction: collectionmodel.Move_Direction,
+    actions_delete_id: uuid.Identifier,
 }
 
 // Tree_Visibility_Policy supplies one coherent ordinary or search-filtered topology.
@@ -100,6 +101,7 @@ Tree_List_Preparation :: struct {
     actions_toggle: uiwidgets.Icon_Button_Result,
     actions_up: uiwidgets.Text_Button_Result,
     actions_down: uiwidgets.Text_Button_Result,
+    actions_delete: uiwidgets.Text_Button_Result,
     layout: viewmodel.Ui_Tree_Prepared_Layout,
 }
 
@@ -156,6 +158,7 @@ Encoded_Tree_Walk_Context :: struct {
     actions_toggle: uiwidgets.Icon_Button_Result,
     actions_up: uiwidgets.Text_Button_Result,
     actions_down: uiwidgets.Text_Button_Result,
+    actions_delete: uiwidgets.Text_Button_Result,
     reorder_foreground_index: int,
     reorder_occlusion: geometry.Rectangle,
     render_only: bool,
@@ -241,28 +244,40 @@ tree_projection_add :: proc(
     return index
 }
 
-// Add the visible Favorites collection hierarchy when it has durable entries.
+// Keep Collections reachable even before the first durable destination exists.
 tree_projection_add_favorites :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     previous: ^viewmodel.Ui_Tree_Projection,
     ji: ^bridgemodel.Euclid_Julia_Interface,
     snapshot: ^collectionmodel.Set) -> bool {
-    if snapshot == nil || snapshot^.entry_count == 0 {
-        return true
-    }
     collections_index := tree_projection_add(projection, previous, {
         key = viewmodel.TREE_COLLECTIONS_ROOT_ID,
         kind = .Collections, parent = TREE_NO_ITEM, selectable = true,
         expanded = previous^.collections_expanded,
     })
+    if collections_index == TREE_NO_ITEM {
+        return false
+    }
+    if snapshot == nil {
+        return true
+    }
+    if !tree_projection_add_custom_heads(
+        projection, previous, snapshot, collections_index) ||
+        !tree_projection_add_custom_entries(projection, previous, ji, snapshot) {
+        return false
+    }
+    if !tree_collection_has_entries(snapshot, collectionmodel.FAVORITES_COLLECTION_ID) {
+        return true
+    }
     favorites_index := tree_projection_add(projection, previous, {
         key = collectionmodel.FAVORITES_COLLECTION_ID,
         kind = .Collection, parent = collections_index, selectable = true,
         expanded = previous^.favorites_expanded,
     })
-    if collections_index == TREE_NO_ITEM || favorites_index == TREE_NO_ITEM {
+    if favorites_index == TREE_NO_ITEM {
         return false
     }
+    tree_projection_place_favorites_first(projection, collections_index, favorites_index)
     return tree_projection_add_favorite_entries(
         projection, previous, ji, snapshot, favorites_index)
 }
@@ -403,7 +418,7 @@ tree_projection_reconcile_apply :: proc(
     root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
     favorites := tree_projection_find(
         projection, collectionmodel.FAVORITES_COLLECTION_ID)
-    if (root == TREE_NO_ITEM) != (favorites == TREE_NO_ITEM) {
+    if root == TREE_NO_ITEM {
         return false
     }
     original_count := projection^.count
@@ -428,33 +443,40 @@ tree_projection_reconcile_finish :: proc(
     ordered_count: int,
     changed: bool) -> bool {
     snapshot := params.collections
-    topology_changed := changed
+    reordered, order_ok := tree_projection_reconcile_favorites(
+        projection, snapshot, ordered_count)
+    if !order_ok {
+        return false
+    }
+    if changed || reordered {
+        projection^.topology_revision += 1
+    }
+    if !tree_projection_reconcile_custom_heads(projection, snapshot) {
+        return false
+    }
+    if !tree_projection_reconcile_custom_entries(params, projection) {
+        return false
+    }
+    projection^.collections_revision = params.collections_revision
+    return true
+}
+
+// Restore Favorites sibling order or retire its empty optional shell.
+tree_projection_reconcile_favorites :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    snapshot: ^collectionmodel.Set,
+    ordered_count: int) -> (bool, bool) {
     if ordered_count > 0 {
         root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
         favorites := tree_projection_find(
             projection, collectionmodel.FAVORITES_COLLECTION_ID)
         if root == TREE_NO_ITEM || favorites == TREE_NO_ITEM {
-            return false
+            return false, false
         }
-        reordered, reorder_ok := tree_projection_reconcile_favorite_order(
+        return tree_projection_reconcile_favorite_order(
             projection, snapshot, favorites, ordered_count)
-        if !reorder_ok {
-            return false
-        }
-        topology_changed = reordered || topology_changed
-    } else {
-        shell_removed, remove_ok :=
-            tree_projection_reconcile_remove_shell(projection)
-        if !remove_ok {
-            return false
-        }
-        topology_changed = shell_removed || topology_changed
     }
-    if topology_changed {
-        projection^.topology_revision += 1
-    }
-    projection^.collections_revision = params.collections_revision
-    return true
+    return tree_projection_reconcile_remove_shell(projection)
 }
 
 // Preserve disclosure state while removing an empty Favorites shell.
@@ -473,11 +495,6 @@ tree_projection_reconcile_remove_shell :: proc(
     if !viewmodel.ui_tree_projection_remove(projection, favorites) {
         return false, false
     }
-    root = tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
-    if root != TREE_NO_ITEM &&
-        !viewmodel.ui_tree_projection_remove(projection, root) {
-        return false, false
-    }
     return true, true
 }
 
@@ -487,8 +504,8 @@ tree_projection_reconcile_add_missing :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     root, favorites, ordered_count: int) -> bool {
     missing := 0
-    if ordered_count > 0 && root == TREE_NO_ITEM {
-        missing += 2
+    if ordered_count > 0 && favorites == TREE_NO_ITEM {
+        missing += 1
     }
     for order_index in 0..<ordered_count {
         entry := params.collections^.entries[
@@ -513,34 +530,29 @@ tree_projection_reconcile_publish_missing :: proc(
     params: Tree_List_Params,
     projection: ^viewmodel.Ui_Tree_Projection,
     ordered_count, missing: int) -> bool {
-    root := tree_projection_find(projection, viewmodel.TREE_COLLECTIONS_ROOT_ID)
+    favorites := tree_projection_find(
+        projection, collectionmodel.FAVORITES_COLLECTION_ID)
     allocator := storage.tlsf_owner_allocator(&projection^.allocator)
     nodes := make([]^viewmodel.Ui_Tree_Item, missing, allocator)
     if len(nodes) != missing {
         return false
     }
     node_count := 0
-    if ordered_count > 0 && root == TREE_NO_ITEM {
+    if ordered_count > 0 && favorites == TREE_NO_ITEM {
         if !tree_projection_reconcile_make_shells(projection, nodes, &node_count) {
             tree_projection_reconcile_free_nodes(projection, nodes, node_count)
             return false
         }
     }
     if !tree_projection_reconcile_make_placements(
-        params, projection, nodes, &node_count, ordered_count) {
-        tree_projection_reconcile_free_nodes(projection, nodes, node_count)
-        return false
-    }
-    if !tree_projection_reconcile_nodes_are_unique(projection, nodes, node_count) {
-        tree_projection_reconcile_free_nodes(projection, nodes, node_count)
-        return false
-    }
-    if !tree_projection_reconcile_commit_nodes(projection, nodes, node_count) {
+        params, projection, nodes, &node_count, ordered_count) ||
+        !tree_projection_reconcile_nodes_are_unique(projection, nodes, node_count) ||
+        !tree_projection_reconcile_commit_nodes(projection, nodes, node_count) {
         tree_projection_reconcile_free_nodes(projection, nodes, node_count)
         return false
     }
     delete(nodes, allocator)
-    if ordered_count > 0 && root == TREE_NO_ITEM &&
+    if ordered_count > 0 && favorites == TREE_NO_ITEM &&
         !tree_projection_reconcile_attach_shells(projection) {
         return false
     }
@@ -573,10 +585,7 @@ tree_projection_reconcile_attach_shells :: proc(
     if root == TREE_NO_ITEM || favorites == TREE_NO_ITEM {
         return false
     }
-    viewmodel.ui_tree_projection_insert_collections_root(projection, root)
-    projection^.items[root].first_child = favorites
-    projection^.items[root].last_child = favorites
-    projection^.items[favorites].parent = root
+    tree_projection_place_favorites_first(projection, root, favorites)
     projection^.collections_expanded = projection^.items[root].expanded
     projection^.favorites_expanded = projection^.items[favorites].expanded
     return true
@@ -602,26 +611,12 @@ tree_projection_reconcile_nodes_are_unique :: proc(
     return node_count <= projection^.capacity - projection^.count
 }
 
-// Prepare the stable Collections and Favorites shell nodes.
+// Prepare the optional Favorites head while retaining the permanent root.
 tree_projection_reconcile_make_shells :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     nodes: []^viewmodel.Ui_Tree_Item,
     node_count: ^int) -> bool {
     allocator := storage.tlsf_owner_allocator(&projection^.allocator)
-    root, root_ok := viewmodel.ui_tree_projection_make_node({
-        key = viewmodel.TREE_COLLECTIONS_ROOT_ID,
-        kind = .Collections,
-        parent = TREE_NO_ITEM,
-        first_child = TREE_NO_ITEM,
-        last_child = TREE_NO_ITEM,
-        next_sibling = TREE_NO_ITEM,
-        expanded = projection^.collections_expanded,
-    }, "", allocator)
-    if !root_ok {
-        return false
-    }
-    nodes[node_count^] = root
-    node_count^ += 1
     favorites, favorites_ok := viewmodel.ui_tree_projection_make_node({
         key = collectionmodel.FAVORITES_COLLECTION_ID,
         kind = .Collection,
@@ -1019,16 +1014,40 @@ tree_item_label :: proc(
         return ""
     }
     switch item^.kind {
-    case .Collections: return "Collections"
-    case .Collection: return "Favorites"
+    case .Collections:
+        return "Collections"
+    case .Collection:
+        return tree_collection_label(collections, item^.key)
     case .Placement:
         if custom_name := tree_placement_custom_label(collections, item^.key);
             custom_name != "" {
             return custom_name
         }
         return tree_item_animation_label(ji, item, "Unavailable animation")
+    case .Group:
+        if custom_name := tree_placement_custom_label(collections, item^.key);
+            custom_name != "" {
+            return custom_name
+        }
+        return tree_item_animation_label(ji, item, "Group")
     case .Animation:
         return tree_item_animation_label(ji, item, "")
+    }
+    return ""
+}
+
+// Borrow the durable collection name while retaining the fixed Favorites label.
+tree_collection_label :: proc(
+    set: ^collectionmodel.Set, key: uuid.Identifier) -> string {
+    if key == collectionmodel.FAVORITES_COLLECTION_ID {
+        return "Favorites"
+    }
+    if set != nil {
+        index := collectionmodel.find_collection(set, key)
+        if index >= 0 {
+            value := set^.collections[index]
+            return string(value.name[:value.name_length])
+        }
     }
     return ""
 }
@@ -2062,7 +2081,7 @@ release_tree_list_capture :: proc(params: Tree_List_Params) {
 finish_tree_interaction :: proc(
     params: Tree_List_Params,
     hit: Tree_Hit,
-    prepared: ^Tree_List_Preparation) {
+    prepared: ^Tree_List_Preparation) -> Tree_Hit {
     gated_hit := hit
     tree_entry_name_gate_hit(params, &gated_hit)
     if gated_hit.toggled_node != nil {
@@ -2070,15 +2089,7 @@ finish_tree_interaction :: proc(
     }
 
     apply_tree_hit(params.ji, params.ui_runtime, gated_hit)
-    if gated_hit.actions_toggle_id != (uuid.Identifier{}) {
-        tree_actions_toggle(params, gated_hit.actions_toggle_id)
-    }
-    if gated_hit.actions_move_id != (uuid.Identifier{}) {
-        _ = tree_actions_move(params, gated_hit.actions_move_id,
-            gated_hit.actions_move_direction)
-        tree_actions_refresh_projection(params)
-    }
-    tree_actions_reconcile(params)
+    gated_hit = tree_actions_apply_hit(params, gated_hit, prepared)
     tree_refresh_hit_preparation(params, gated_hit, prepared)
     active := tree_resolve_active_node(params)
     register_tree_semantics(params, prepared^.scroll, active, &prepared^.layout)
@@ -2092,6 +2103,7 @@ finish_tree_interaction :: proc(
             params.ui_runtime^.semantic_focus, tree_semantic_id())
     }
     release_tree_list_capture(params)
+    return gated_hit
 }
 
 // tree_entry_name_gate_hit preserves a dirty draft before selection or branch retirement.
@@ -2126,7 +2138,8 @@ tree_refresh_hit_preparation :: proc(
         prepared^.cancel_geometry_capture = true
     }
     if hit.actions_toggle_id != (uuid.Identifier{}) ||
-       hit.actions_move_id != (uuid.Identifier{}) {
+       hit.actions_move_id != (uuid.Identifier{}) ||
+       hit.actions_delete_id != (uuid.Identifier{}) {
         tree_actions_prepare_focus(params)
         if !tree_prepare_layout(params, &prepared^.layout) {
             return
@@ -2154,9 +2167,7 @@ prepare_tree_list_panel :: proc(
     params: Tree_List_Params,
     prepared: ^Tree_List_Preparation) {
     prepared^ = {}
-    if params.ji == nil ||
-        params.ji^.animation_count == 0 &&
-            (params.collections == nil || params.collections^.entry_count == 0) {
+    if params.ji == nil {
         params.ui_runtime^.library.motion = {}
         _ = tree_actions_close_context(params.ui_runtime, params.general_state)
         return
@@ -2190,7 +2201,7 @@ tree_finalize_list_panel :: proc(
     commit_tree_scroll(params, prepared^.scroll)
     tree_motion_release_anchor(params, prepared^.scroll)
     hit := tree_update_prepared_rows(params, prepared)
-    finish_tree_interaction(params, hit, prepared)
+    hit = finish_tree_interaction(params, hit, prepared)
     prepared^.content_height = prepared^.layout.content_height
     prepared^.hovered_node = hit.hovered_node
     prepared^.hovered_expander_node = hit.hovered_expander_node

@@ -1,10 +1,11 @@
 CREATE TABLE user_collection (
     collection_id BLOB PRIMARY KEY NOT NULL
-        CHECK (length(collection_id) = 16),
+        CHECK (length(collection_id) = 16
+            AND collection_id <> X'00000000000000000000000000000000'),
     system_role TEXT UNIQUE
         CHECK (system_role IS NULL OR system_role = 'favorites'),
     display_name TEXT,
-    collection_order INTEGER NOT NULL CHECK (collection_order >= 0),
+    collection_order INTEGER NOT NULL UNIQUE CHECK (collection_order >= 0),
     is_read_only INTEGER NOT NULL DEFAULT 0
         CHECK (is_read_only IN (0, 1)),
     CHECK (
@@ -14,7 +15,14 @@ CREATE TABLE user_collection (
         OR (system_role IS NOT NULL AND system_role = 'favorites'
             AND display_name IS NULL)
     ),
-    CHECK (system_role IS NOT 'favorites' OR is_read_only = 0)
+    CHECK (
+        (system_role IS NOT NULL AND system_role = 'favorites'
+            AND collection_id = X'4555434C494400008000000000000001'
+            AND collection_order = 0 AND is_read_only = 0)
+        OR (system_role IS NULL
+            AND collection_id <> X'4555434C494400008000000000000001'
+            AND collection_order > 0)
+    )
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE user_collection_entry (
@@ -53,9 +61,9 @@ CREATE UNIQUE INDEX user_collection_child_order
     ON user_collection_entry(collection_id, parent_entry_id, sibling_order)
     WHERE parent_entry_id IS NOT NULL;
 
-CREATE INDEX user_collection_membership
+CREATE UNIQUE INDEX user_collection_membership
     ON user_collection_entry(collection_id, animation_id)
-    WHERE animation_id IS NOT NULL;
+    WHERE entry_kind = 'animation';
 
 INSERT INTO user_collection (
     collection_id, system_role, display_name, collection_order, is_read_only

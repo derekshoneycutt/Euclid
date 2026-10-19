@@ -15,11 +15,18 @@ import uisplitter "layout/splitter"
 import uigif "gif"
 import uilibrary "library"
 
+// Eligible world-overlay controls share one geometry admission fact.
+Ui_Animation_Control_Eligibility :: struct {
+    favorite: bool,
+    membership: bool,
+}
+
 // Inputs needed to resolve one immutable device frame against current UI geometry.
 Ui_Interaction_Route_Input :: struct {
     frame: input.Input_Frame,
     terminal_present: bool,
     animation_favorite_eligible: bool,
+    animation_membership_eligible: bool,
     capture: viewmodel.Ui_Press_Owner_State,
     capture_view: capturemodel.Gif_Capture_View,
 }
@@ -105,10 +112,11 @@ ui_world_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse: geometry.Vector2,
     phase: capturemodel.Gif_Capture_Phase,
-    animation_favorite_eligible: bool) -> viewmodel.Ui_Interaction_Target {
+    animation_favorite_eligible: bool,
+    animation_membership_eligible := false) -> viewmodel.Ui_Interaction_Target {
     control_id, over_control := uianimation.animation_control_hit_test(
         geometry.Rectangle(runtime^.layout.ui_regions.world_rect),
-        phase, animation_favorite_eligible, mouse)
+        phase, animation_favorite_eligible, mouse, animation_membership_eligible)
     if over_control {
         return viewmodel.ui_interaction_target(.Control, id = control_id)
     }
@@ -147,7 +155,7 @@ ui_hover_target :: proc(
     frame: input.Input_Frame,
     terminal_present: bool,
     capture_view: capturemodel.Gif_Capture_View = {},
-    animation_favorite_eligible := false) -> viewmodel.Ui_Interaction_Target {
+    controls: Ui_Animation_Control_Eligibility = {}) -> viewmodel.Ui_Interaction_Target {
     mouse := uiwidgets.input_frame_mouse_position(frame)
     splitter := ui_splitter_hover_target(runtime, mouse, capture_view.phase)
     if splitter.kind != .None {
@@ -169,7 +177,7 @@ ui_hover_target :: proc(
         return accordion
     }
     return ui_world_hover_target(runtime, geometry.Vector2(mouse),
-        capture_view.phase, animation_favorite_eligible)
+        capture_view.phase, controls.favorite, controls.membership)
 }
 
 // Resolve revealed accordion inputs before the surrounding panel background.
@@ -273,8 +281,9 @@ ui_interaction_wheel_target :: #force_inline proc(
 ui_route_interaction_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     input: Ui_Interaction_Route_Input) -> viewmodel.Ui_Interaction_Frame {
-    hover := ui_hover_target(runtime, input.frame, input.terminal_present,
-        input.capture_view, input.animation_favorite_eligible)
+    hover := ui_hover_target(
+        runtime, input.frame, input.terminal_present, input.capture_view,
+        {input.animation_favorite_eligible, input.animation_membership_eligible})
     capture_owner := ui_valid_capture_owner(runtime, input.capture, input.capture_view)
     capture := ui_capture_target(capture_owner)
     pointer_target := hover
@@ -289,6 +298,7 @@ ui_route_interaction_frame :: proc(
         input.frame.mouse_wheel_delta, capture, hover)
     result := viewmodel.Ui_Interaction_Frame{
         logical_focus = logical_focus,
+        effective_focus = logical_focus if input.frame.window_focused else {},
         hover = hover,
         pointer_capture = capture,
         pointer_target = pointer_target,
@@ -296,9 +306,6 @@ ui_route_interaction_frame :: proc(
         terminal_focus_changed = terminal_focused !=
             runtime^.input.interaction.terminal_effectively_focused,
         terminal_focused = terminal_focused,
-    }
-    if input.frame.window_focused {
-        result.effective_focus = logical_focus
     }
     viewmodel.ui_refresh_surface_interaction(&result)
     runtime^.input.interaction.logical_focus = logical_focus

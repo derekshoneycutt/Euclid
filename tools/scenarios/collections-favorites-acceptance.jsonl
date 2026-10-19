@@ -1,7 +1,7 @@
 {"wait_state":"runtime_ready","timeout_ms":10000}
 {"assert_favorites":"empty"}
 {"set_setting":{"key":"drawing.dust_limit","value":1400}}
-{"assert_favorites":"absent:collections"}
+{"assert_favorites":"collapsed:collections"}
 {"assert_favorites":"absent:favorites"}
 {"select_animation":"Point","as":"a"}
 {"wait_event":"animation_selected","correlation":"a","timeout_ms":10000}

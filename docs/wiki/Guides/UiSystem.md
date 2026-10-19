@@ -332,45 +332,145 @@ target; surface-specific filters then preserve only the input facts that surface
 consume. Existing capture takes precedence over current hover so a drag or release
 does not jump to whichever control happens to be under the pointer now.
 
-The world animation overlay uses the same prepared icon-button path for restart,
-pause/resume, and the selected animation's Favorites toggle. The star is only hit
-testable for an eligible selected animation; its checked state is a collection
-placement fact and its activation enters the existing serialized user-data save flow.
-Restart and pause/resume share a bottom-left control box. Favorites occupies its own
-matching bottom-right box, visible only for an eligible selection. Both boxes use the
-same edge inset, padding, background, and border and follow the animation viewport
-when splitters or window dimensions change.
+### World Animation Controls
 
-Collections and Favorites begin collapsed on each launch. Their session expansion
-choices survive search filtering and temporary emptiness, even though both synthetic
-roots are omitted while Favorites is empty. Readding an animation creates a fresh
-placement identity without resetting its current playback.
+All world controls share the prepared icon-button path and viewport-relative styling.
 
-Settings shows independent peak counts for rendered world Dust and Trail
-particles and total live UI Dust. Display-owned telemetry collects continuously,
-including while Settings is closed or simulation is paused, and publishes all three
-counts together at fixed five-second boundaries. Values remain zero until the first
-interval completes, then hold the previous completed interval's maxima until the next
-boundary. The interval note applies only to particle counts; Julia animation entries
-remain a separate live count. UI Dust has no separate control: reduced motion remains
-its user-facing policy.
+| Position | Controls | Availability |
+| --- | --- | --- |
+| Bottom left | Restart and pause/resume | Ordinary animation controls |
+| Bottom right | Favorites star | Eligible selected animation |
+| Beside the star | Collection ellipsis | Eligible selection with custom collections |
 
-The existing save line in Settings reports the shared user-data transaction state for
-both preference edits and Favorites changes. Pending means accepted changes await a
-commit, Saving means a worker transaction is active, and Saved means no queued edits or
-unresolved failure remain. Transient failures remain recorded while retrying; a
-committed batch clears one only when it covers the failed revision. Failed and
-Unavailable distinguish exhausted or unrecoverable writes from missing or unwritable
-storage. The Settings accordion header keeps a small error dot while a failure remains
-unresolved or storage is unavailable; its accessible value exposes the localized save
-error without replacing the header label. Opening Settings does not clear the error;
-successful recovery removes the dot, while unavailable storage keeps it and updates its
-accessible description.
+The star reads accepted placement state and submits edits through the serialized
+user-data save flow. Re-adding a favorite creates a fresh placement without resetting
+playback. Both control boxes share insets, padding, background, and border.
+
+### Collection Membership Popup
+
+**Add to collections** lists custom destinations—including empty ones—in Library
+order. Checkboxes read accepted membership; rejected edits never change their checks.
+
+| Interaction | Behavior |
+| --- | --- |
+| Toggle | Keeps the popup open for further edits |
+| Wheel, scrollbar, keyboard traversal | Scrolls or reveals destination rows |
+| Escape | Dismisses and restores ellipsis focus |
+| Outside click | Dismisses without stealing the new target |
+| Window focus loss | Dismisses |
+| Selection, generation, window/anchor, or recording change | Invalidates the opening context rather than retargeting |
+
+Checking appends a fresh root placement. Unchecking resolves the exact qualified
+placement, including inside stored groups. Re-adding restores canonical naming and
+appends with a new UUID.
+
+Ownership and ordering safeguards:
+
+- Display-owned TLSF ordering capacity is reused across frames and openings.
+- Names and checks are borrowed from accepted data, not a second membership model.
+- Native toggles commit before Library preparation borrows projection rows; immediate
+  dismissal cannot discard an admitted toggle.
+- Held activation captures only its keyboard transaction and correlated text.
+  Unrelated editor text remains available after dismissal.
+- Caller-owned popup routing buffers live through all frame input consumption.
+
+Custom placements share Favorites' naming, ordering, playback, unavailable-target,
+keyboard, and drawer behavior. Stored group hierarchy is retained; group authoring
+remains outside this UI.
+
+### Collection Heads And Editing
+
+Collections and Favorites start collapsed. Session expansion survives search filtering
+and temporary emptiness; branch expansion is independent of drawer disclosure.
+Search remains catalogue-only.
+
+| Head | Visibility and editing |
+| --- | --- |
+| Collections root | Always visible; selection exposes the localized create (`+`) control |
+| Favorites | Hidden when empty; otherwise precedes custom heads; excluded from head naming and ordering |
+| Custom collection | Visible when empty; supports naming, adjacent moves, and guarded deletion |
+
+Pointer, keyboard, and native creation share
+[`collections.odin`](../../../src/view/ui/library/collections.odin). Creation appends
+a durable empty `New Collection`, expands Collections, selects its UUID, and opens its
+drawer without changing playback. Duplicate names are valid.
+
+The single typed editor in
+[`entry_name.odin`](../../../src/view/ui/library/entry_name.odin) serves heads and
+placements. Head names are mandatory; invalid or rejected edits retain a dirty draft
+without clearing the accepted label. Adjacent head moves reuse Favorites' responsive
+layout and motion.
+
+### Guarded Collection Deletion
+
+The second-row **Delete collection** control uses one pointer/keyboard/native guard:
+
+1. First activation arms a UUID- and generation-scoped **Confirm delete** warning:
+   red outline plus a short row/drawer shake.
+2. Every activation restarts a 0.5-second quiet interval. Confirmation must occur
+   strictly after its boundary; SDL multi-click presses cannot confirm, even if their
+   release arrives later.
+3. Confirmation flushes naming, removes the owned subtree, retires its editor/controls,
+   and repairs tree focus without changing playback.
+
+Reduced motion preserves warning text and outline but suppresses translation.
+Closing the drawer, changing selection/context, reload, or retirement disarms the warning.
+
+### Collection Acceptance And Scenario Addresses
+
+Scenario targets resolve UUIDs, never display names—even when names are duplicated.
+`selected_collection` resolves the selected custom UUID; `first_collection` and
+`last_collection` resolve custom order endpoints.
+
+| Scenario | Coverage |
+| --- | --- |
+| [Empty collections](../../../tools/scenarios/empty-collections-acceptance.jsonl) | Keyboard/pointer creation, empty disclosure, save, reload, and independent restart |
+| [Head editing](../../../tools/scenarios/collection-heads-acceptance.jsonl) | Submit/blur naming, repeated/reversed moves, playback preservation, portrait restart, and durable UUID/order comparison |
+| [Guarded deletion](../../../tools/scenarios/collection-delete-acceptance.jsonl) | Pointer arming, rapid native rejection, disarm/reopen, keyboard/reduced-motion confirmation, final-head focus repair, and SQL absence after restart |
+| [Membership](../../../tools/scenarios/collection-membership-acceptance.jsonl) | Independent checks/aliases, moves, remove/re-add, Favorites independence, reload, SQL readback, and portrait restoration |
+
+Creation uses `create_focus`, `create_press`, and `create_release` on `collections`;
+its semantic focus name is `library_create_collection`.
+
+Deletion uses `delete_focus`, `delete_activate`, `delete_press`, and `delete_release`
+on a published custom head. Its semantic focus name is `library_delete_collection`;
+`collection_delete_ready` observes the guard's quiet boundary.
+
+### Settings Telemetry And Save Feedback
+
+Display-owned telemetry continuously samples rendered world Dust/Trail peaks and total
+live UI Dust, even with Settings closed or simulation paused.
+
+- All three counts publish together every five seconds.
+- Counts stay zero until the first interval completes, then retain the previous
+  interval's maxima.
+- The interval note applies only to particles; Julia animation entries are a live count.
+- UI Dust has no separate control; reduced motion remains its user-facing policy.
+
+The shared preference/collection save line reports:
+
+| State | Meaning |
+| --- | --- |
+| Pending | Accepted edits await commit |
+| Saving | A worker transaction is active |
+| Saved | No queued edits or unresolved failure remain |
+| Failed | Writes are exhausted or unrecoverable |
+| Unavailable | Storage is missing or unwritable |
+
+Retries retain failure feedback until a committed batch covers the failed revision.
+The Settings header keeps an error dot while failure or unavailable storage persists;
+its accessible value exposes the localized error without replacing the label.
+Opening Settings does not clear it. Recovery removes the dot; unavailable storage
+retains it and updates its accessible description.
+
+### Hover Feedback
 
 The world controls use a subtle, low-alpha rounded hover highlight matching the existing
 row feedback. A non-overlapping triangle fan keeps its translucent fill uniform.
 It is visual-only: button hit rectangles, press state, focus behavior, and
 the Favorites gold checked fill remain unchanged.
+
+### Focus, Capture, And Event Debugging
 
 Three concepts are easy to conflate:
 
