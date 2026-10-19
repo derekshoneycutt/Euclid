@@ -112,30 +112,32 @@ draw_encoded_gif_geometry :: proc(
     animation := prepared.animation_timing.control_geometry.bounds
     recorded := prepared.recorded_timing.control_geometry.bounds
     if prepared.timing_mode == .Animation {
-        _ = native.draw_encoder_rectangle(encoder, animation, theme.UI_BORDER_COLOR)
+        _ = native.draw_encoder_rectangle(
+            encoder, animation, theme.draw_color(encoder, .Selection_Background))
     } else {
-        _ = native.draw_encoder_rectangle(encoder, recorded, theme.UI_BORDER_COLOR)
+        _ = native.draw_encoder_rectangle(
+            encoder, recorded, theme.draw_color(encoder, .Selection_Background))
     }
     _ = native.draw_encoder_rectangle_outline(
-        encoder, animation, 1, theme.UI_BORDER_COLOR)
+        encoder, animation, 1, theme.draw_color(encoder, .Control_Border))
     _ = native.draw_encoder_rectangle_outline(
-        encoder, recorded, 1, theme.UI_BORDER_COLOR)
+        encoder, recorded, 1, theme.draw_color(encoder, .Control_Border))
     button := prepared.save_button.control_geometry.bounds
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(button), theme.UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(button), 1, theme.UI_BORDER_COLOR)
+        encoder, geometry.Rectangle(button), 1,
+        theme.draw_color(encoder, .Control_Border))
 }
 
 // draw_encoded_gif_text emits capture controls while readback remains deferred.
 draw_encoded_gif_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle, prepared: Gif_View_Preparation) {
-    stack := geometry.Rectangle{panel.x + theme.SETTINGS_PANEL_INSET,
-        panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
+    rows := gif_view_layout_rows({
+        panel.x + theme.SETTINGS_PANEL_INSET, panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
-        panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
-    rows := gif_view_layout_rows(stack)
+        panel.height - theme.SETTINGS_HEADER_TOP_OFFSET})
     x := panel.x + theme.SETTINGS_PANEL_INSET
     storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     viewtext.draw_encoded_label(
@@ -156,9 +158,11 @@ draw_encoded_gif_text :: proc(
         viewmessages.shell_message(state, .Gif_Playback_Timing), x, rows.timing_y)
     animation, recorded := gif_timing_button_rects(panel, rows.timing_y)
     draw_encoded_gif_button_text(state, encoder,
-        viewmessages.shell_message(state, .Gif_Timing_Animation), animation)
+        viewmessages.shell_message(state, .Gif_Timing_Animation), animation,
+        prepared.timing_mode == .Animation)
     draw_encoded_gif_button_text(state, encoder,
-        viewmessages.shell_message(state, .Gif_Timing_Recorded), recorded)
+        viewmessages.shell_message(state, .Gif_Timing_Recorded), recorded,
+        prepared.timing_mode == .Recorded)
     viewtext.draw_encoded_label(
         &state^.font_cache, encoder, gif_capture_button_label(state, prepared.phase),
         x + theme.SETTINGS_PANEL_INSET, rows.save_button_y + theme.SETTINGS_PANEL_INSET)
@@ -279,16 +283,18 @@ gif_timing_button_rects :: proc(
 // draw_encoded_gif_button_text centers one timing choice in its segment.
 draw_encoded_gif_button_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    text: string, rectangle: geometry.Rectangle) {
+    text: string, rectangle: geometry.Rectangle, selected: bool) {
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     width, measured := viewtext.ui_text_measure_monospace(
         text, face, theme.TREE_FONT_SIZE, 0)
     if !measured {
         width = 0
     }
-    viewtext.draw_encoded_label(&state^.font_cache, encoder, text,
-        rectangle.x + max(f32(0), (rectangle.width - width) * 0.5),
-        rectangle.y + (rectangle.height - theme.TREE_FONT_SIZE) * 0.5)
+    tint := theme.draw_color(encoder, .Selection_Text) if
+        selected else theme.draw_color(encoder, .Text)
+    viewtext.draw_encoded_colored_label(&state^.font_cache, encoder, text,
+        {rectangle.x + max(f32(0), (rectangle.width - width) * 0.5),
+         rectangle.y + (rectangle.height - theme.TREE_FONT_SIZE) * 0.5}, tint)
 }
 
 //   Build one GIF slider parameter record shared by update and draw.

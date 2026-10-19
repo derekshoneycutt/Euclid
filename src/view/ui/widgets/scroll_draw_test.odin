@@ -35,7 +35,7 @@ scrollbar_draw_matches_prepared_geometry :: proc(t: ^testing.T) {
                 geometry.Vector2{rect.x + rect.width, rect.y + rect.height})
         }
         testing.expect_value(t, vertices[0].color, worldmodel.BACKGROUND_COLOR)
-        testing.expect_value(t, vertices[4].color, theme.UI_BORDER_COLOR)
+        testing.expect_value(t, vertices[4].color, theme.UI_CONTROL_BORDER_COLOR)
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
             {200, 200}, {200, 200}))

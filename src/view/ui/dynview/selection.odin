@@ -38,13 +38,15 @@ Dynview_Selection_Update :: struct {
     frame: input.Input_Frame,
 }
 
-// Group one selection underlay request with its owner-controlled draw state.
+// Group selection geometry with either its fill color or a synchronous fragment renderer.
 Dynview_Selection_Draw :: struct {
     encoder: ^native.Draw_Encoder,
     runtime: ^dynviewmodel.Dynview_System,
     selection: dynviewmodel.Dynview_Selection_State,
     view: Dynview_Selection_View,
     color: color.Color_RGBA8,
+    user_data: rawptr,
+    draw_fragment: proc(user_data: rawptr, rect: geometry.Rectangle),
 }
 
 // Append authored separation between two selected semantic document targets.
@@ -422,7 +424,11 @@ dynview_selection_text :: proc(
 dynview_draw_selection_rect :: proc(
     draw: Dynview_Selection_Draw, rect: geometry.Rectangle) {
     if rect.width > 0 && rect.height > 0 {
-        _ = native.draw_encoder_rectangle(draw.encoder, rect, draw.color)
+        if draw.draw_fragment != nil {
+            draw.draw_fragment(draw.user_data, rect)
+        } else {
+            _ = native.draw_encoder_rectangle(draw.encoder, rect, draw.color)
+        }
     }
 }
 
@@ -509,7 +515,7 @@ dynview_draw_wrapped_selection :: proc(draw: Dynview_Selection_Draw) {
     }
 }
 
-// Draw the active selection beneath presentation glyphs and semantic content.
+// Emit active selection fragments for a fill or clipped presentation repaint.
 dynview_draw_selection :: proc(draw: Dynview_Selection_Draw) {
     if draw.encoder == nil || !draw.selection.active {
         return

@@ -531,14 +531,13 @@ tree_actions_button_surface_is_borderless_feedback :: proc(t: ^testing.T) {
     }
     uilibrary.draw_tree_actions_button_surface(&encoder, rect, {hovered = true}, true)
     testing.expect_value(t, encoder.vertex_count, 16)
-    highlight := theme.UI_TEXT_COLOR
-    highlight.a = 24
+    highlight := theme.UI_HOVER_COLOR
     for vertex in vertices[12:16] {
         testing.expect_value(t, vertex.color, highlight)
     }
 }
 
-// Verify open ellipsis inversion leaves the collapsed dots and hover treatment unchanged.
+// Verify ellipsis contrast follows both selected rows and logically open drawers.
 @(test)
 tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
     vertices: [512]native.Draw_Vertex
@@ -547,18 +546,23 @@ tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
     commands: [8]native.Draw_Command
     encoder: native.Draw_Encoder
     rect := geometry.Rectangle{10, 20, 22, theme.TREE_ROW_HEIGHT}
-    for open in ([2]bool{false, true}) {
+    flags_to_loop := [4][2]bool{
+        {false, false}, {true, false}, {false, true}, {true, true},
+    }
+    for flags in flags_to_loop {
+        open, selected := flags[0], flags[1]
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
             {800, 800}, {800, 800}))
-        uilibrary.draw_tree_actions_toggle(&encoder, rect, {}, open)
-        dot_start := 0
-        dot_color := theme.UI_TEXT_COLOR
+        uilibrary.draw_tree_actions_toggle(&encoder, rect, {}, open, selected)
+        dot_start := 4 if open else 0
+        dot_color := theme.UI_TREE_SELECTION_TEXT_COLOR if
+            selected else theme.UI_TEXT_COLOR
         if open {
-            dot_start = 4
-            dot_color = theme.UI_BORDER_COLOR
+            dot_color = theme.UI_TREE_SELECTION_TEXT_COLOR
             for vertex in vertices[:4] {
-                testing.expect_value(t, vertex.color, theme.UI_TEXT_COLOR)
+                testing.expect_value(t,
+                    vertex.color, theme.UI_TREE_SELECTION_BACKGROUND_COLOR)
             }
         }
         testing.expect(t, encoder.vertex_count > dot_start)
@@ -570,7 +574,5 @@ tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {800, 800}, {800, 800}))
     uilibrary.draw_tree_actions_toggle(&encoder, rect, {hovered = true}, false)
-    highlight := theme.UI_TEXT_COLOR
-    highlight.a = 24
-    testing.expect_value(t, vertices[0].color, highlight)
+    testing.expect_value(t, vertices[0].color, theme.UI_HOVER_COLOR)
 }

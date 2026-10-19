@@ -459,8 +459,7 @@ tree_actions_draw_focus :: proc(
     bounds = tree_actions_screen_rect(bounds, panel, scroll_y)
     if geometry.rectangles_intersect(bounds, clip) {
         _ = native.draw_encoder_push_scissor(encoder, clip)
-        _ = native.draw_encoder_rectangle_outline(
-            encoder, bounds, 2, theme.UI_TEXT_COLOR)
+        uiwidgets.draw_encoded_focus_ring(encoder, bounds)
         _ = native.draw_encoder_pop_scissor(encoder)
     }
 }

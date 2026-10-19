@@ -318,6 +318,8 @@ Draw_Encoder :: struct {
     logical_extent: geometry.Vector2,
     physical_extent: [2]u32,
     ink_sink: Draw_Ink_Sink,
+    // Borrowed caller-defined colors; native encoding never interprets or remaps them.
+    semantic_colors: []color.Color_RGBA8,
     scissors: [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
     scissor_count: int,
     statistics: Draw_Encoder_Statistics,

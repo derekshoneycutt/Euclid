@@ -352,16 +352,16 @@ draw_encoded_search_action :: proc(
     radius := min(rectangle.width, rectangle.height) * 0.18
     if clear {
         _ = native.draw_encoder_line(encoder, center - {radius, radius},
-            center + {radius, radius}, 1.6, theme.UI_TEXT_COLOR)
+            center + {radius, radius}, 1.6, theme.draw_color(encoder, .Text))
         _ = native.draw_encoder_line(encoder, center + {-radius, radius},
-            center + {radius, -radius}, 1.6, theme.UI_TEXT_COLOR)
+            center + {radius, -radius}, 1.6, theme.draw_color(encoder, .Text))
         return
     }
     lens := center + geometry.Vector2{-radius * 0.25, -radius * 0.25}
     _ = native.draw_encoder_ring(
-        encoder, lens, radius * 0.72, radius, theme.UI_TEXT_COLOR)
+        encoder, lens, radius * 0.72, radius, theme.draw_color(encoder, .Text))
     _ = native.draw_encoder_line(encoder, lens + {radius * 0.65, radius * 0.65},
-        center + {radius, radius}, 1.6, theme.UI_TEXT_COLOR)
+        center + {radius, radius}, 1.6, theme.draw_color(encoder, .Text))
 }
 
 // draw_encoded_library_search_geometry renders the fixed search-control chrome.

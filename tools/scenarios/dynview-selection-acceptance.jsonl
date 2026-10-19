@@ -1,0 +1,30 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"set_arrival_style":"immediate"}
+{"set_view_content":{"mime":"text/latex","source":"Default prose and $x_i^2 + \\frac{a}{b} + \\sqrt{x} + \\overline{y}$.\n\n\\textcolor{lightgreen}{Authored green stays green.}\n\nSecond paragraph of default prose."},"as":"document"}
+{"wait_event":"presentation_semantic_published","correlation":"document","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"key":"tab"}
+{"key":{"name":"tab","shift":true}}
+{"assert_focus":"presentation"}
+{"screenshot":".build/dynview-selection-normal.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"screenshot":".build/dynview-selection-document.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"home"}
+{"key":{"name":"right","shift":true}}
+{"key":{"name":"right","shift":true}}
+{"screenshot":".build/dynview-selection-partial.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_content":{"mime":"text/plain","source":"Fallback text selection uses the same blue-gray fill and white text.\nSecond fallback line."},"as":"fallback"}
+{"wait_event":"dynview_published","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"screenshot":".build/dynview-selection-fallback.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

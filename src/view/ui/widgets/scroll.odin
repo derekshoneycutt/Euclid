@@ -105,7 +105,7 @@ draw_encoded_scrollbar :: proc(
     _ = native.draw_encoder_rectangle(
         encoder, scrollbar.track_rect, worldmodel.BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle(
-        encoder, scrollbar.thumb_rect, theme.UI_BORDER_COLOR)
+        encoder, scrollbar.thumb_rect, theme.draw_color(encoder, .Control_Border))
 }
 
 // scroll_container_apply_semantic resolves page commands for its composite owner.

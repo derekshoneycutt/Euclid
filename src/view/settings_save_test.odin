@@ -317,6 +317,8 @@ settings_save_test_start_blocked_collection_save :: proc(
         .Interface_Display_Fps, setting_model.boolean_value(true))
     _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Interface_Reduce_Motion, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
+        .Interface_Increased_Contrast, setting_model.boolean_value(true))
     first := settings_save_test_add_favorite(
         settings_save_test_id(11), settings_save_test_id(12))
     testing.expect_value(t,
@@ -421,6 +423,8 @@ settings_save_commits_ordered_collection_mutations :: proc(t: ^testing.T) {
         .Interface_Display_Fps, setting_model.boolean_value(true))
     _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Interface_Reduce_Motion, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
+        .Interface_Increased_Contrast, setting_model.boolean_value(true))
     first_id, third_id := settings_save_test_enqueue_ordered_mutations(t, state)
     snapshot := settings_save_test_finish_collection_save(
         t, state, &pool, &store, 2)
@@ -466,7 +470,7 @@ settings_save_retains_newer_collection_edits_until_acknowledged :: proc(t: ^test
         user_data.Store_Error_Kind.None)
 }
 
-// Verify the saved batch retains rendering and both interface preferences.
+// Verify the joined saved batch retains rendering and all interface preferences.
 settings_save_expect_committed_preferences :: proc(
     t: ^testing.T, store: ^user_data.Store) {
     preferences := setting_model.default_preferences()
@@ -476,6 +480,8 @@ settings_save_expect_committed_preferences :: proc(
     testing.expect(t, !preferences.rendering.vsync)
     testing.expect(t, preferences.interface.display_fps)
     testing.expect(t, preferences.interface.reduce_motion)
+    testing.expect(t, preferences.interface.increased_contrast)
+    testing.expect(t, .Interface_Increased_Contrast in preferences.present)
 }
 
 // Verify edits coalesce by setting and commit one batch on a worker.
@@ -501,6 +507,8 @@ settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
         .Interface_Display_Fps, setting_model.boolean_value(true))
     _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Interface_Reduce_Motion, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
+        .Interface_Increased_Contrast, setting_model.boolean_value(true))
 
     viewpreferences.settings_save_service(state, &pool)
     testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)

@@ -139,6 +139,42 @@ terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
     testing.expect_value(t,
         terminal_resolve_foreground(&palette, direct, themed_default),
         Color{0xAA, 0xBB, 0xCC, 0xFF})
+    testing.expect(t, termpalette.terminal_palette_apply_operation(&palette,
+        {target = .Foreground, rgba = palette.default_foreground}))
+    testing.expect_value(t, terminal_resolve_foreground(&palette, {}, themed_default),
+        terminal_packed_color(palette.default_foreground))
+    testing.expect(t, termpalette.terminal_palette_apply_operation(&palette,
+        {target = .Foreground, reset = true}))
+    testing.expect_value(t, terminal_resolve_foreground(&palette, {}, themed_default),
+        themed_default)
+}
+
+// Verify retained app prefixes switch independently of identical explicit output colors.
+@(test)
+terminal_test_theme_preserves_prompt_provenance :: proc(t: ^testing.T) {
+    palette: termpalette.Terminal_Palette_State
+    termpalette.terminal_palette_init(&palette)
+    draw := Terminal_Shaped_Output_Context{
+        palette = &palette,
+        theme = {default_foreground = {208, 185, 189, 255},
+            prompt_colors = {.None = {}, .Julia = {126, 192, 112, 255},
+                .Help = {}, .Package = {}, .Shell = {242, 162, 155, 255}}},
+    }
+    style := termgrid.Cell_Style{
+        foreground = termpalette.terminal_color_direct(0x389826FF)}
+    testing.expect_value(t,
+        terminal_cell_foreground(draw, style), TERMINAL_PROMPT_COLOR)
+    style.application_prompt = .Julia
+    testing.expect_value(t,
+        terminal_cell_foreground(draw, style), draw.theme.prompt_colors[.Julia])
+    style.application_prompt = .Shell
+    testing.expect_value(t,
+        terminal_cell_foreground(draw, style), draw.theme.prompt_colors[.Shell])
+    style.application_prompt = .None
+    palette.colors[1] = 0x112233FF
+    style.foreground = termpalette.terminal_color_indexed(1)
+    testing.expect_value(t,
+        terminal_cell_foreground(draw, style), Color{17, 34, 51, 255})
 }
 
 // Verify initialization never discards an already published terminal owner.

@@ -190,12 +190,22 @@ terminal_line_text :: proc(
 }
 
 // Return the fixed semantic colors used by Terminal presentation.
-terminal_draw_theme :: proc() -> terminalview.Terminal_Draw_Theme {
+terminal_draw_theme :: proc(increased: bool = false) -> terminalview.Terminal_Draw_Theme {
     return {
-        default_foreground = terminalview.Color(theme.UI_TEXT_COLOR),
+        default_foreground = theme.appearance_color(increased, .Text),
         cursor_foreground = terminalview.Color(terminalview.TERMINAL_CURSOR_TEXT_COLOR),
-        selection_foreground = terminalview.Color{255, 255, 255, 255},
-        selection_background = terminalview.Color{82, 96, 112, 255},
+        selection_foreground = terminalview.Color(
+            theme.appearance_color(increased, .Text_Selection_Foreground)),
+        selection_background = terminalview.Color(
+            theme.appearance_color(increased, .Text_Selection_Background)),
+        prompt_colors = {
+            .None = {},
+            .Julia = theme.appearance_color(increased, .Terminal_Prompt),
+            .Help = theme.appearance_color(increased, .Terminal_Help),
+            .Package = theme.appearance_color(increased, .Terminal_Package),
+            .Shell = theme.appearance_color(increased, .Terminal_Shell),
+        },
+        completion_preview = theme.appearance_color(increased, .Terminal_Preview),
     }
 }
 
@@ -302,7 +312,9 @@ terminal_prepare_frame :: proc(
         term, font_face, geometry.Rectangle(bounds))
     resolver := font.cache_terminal_resolver(&state^.font_cache)
     layout := terminalview.terminal_draw_layout(
-        term, resolver, bounds, terminal_draw_theme())
+        term, resolver, bounds, terminal_draw_theme(theme.increased_contrast(
+            state^.ui_runtime.preferences.values.interface.increased_contrast,
+            state^.ui_runtime.platform_increased_contrast)))
     layout.terminal_focused = state^.ui_runtime.input.interaction_frame.terminal_focused
     resolved := terminalview.terminal_resolve_mouse_frame(
         term, frame, bounds)
@@ -360,7 +372,9 @@ terminal_prepare_visual :: proc(
     }
     resolver := font.cache_terminal_resolver(&state^.font_cache)
     layout := terminalview.terminal_draw_layout(
-        term, resolver, bounds, terminal_draw_theme())
+        term, resolver, bounds, terminal_draw_theme(theme.increased_contrast(
+            state^.ui_runtime.preferences.values.interface.increased_contrast,
+            state^.ui_runtime.platform_increased_contrast)))
     layout.terminal_focused = false
     initial_scroll := terminalview.terminal_initial_scroll_offset(
         term, layout.padded_bounds, layout.content_height)

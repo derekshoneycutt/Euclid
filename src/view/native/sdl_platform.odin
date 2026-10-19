@@ -137,6 +137,7 @@ Sdl_Platform :: struct {
     unavailable_frames: u64,
     input_diagnostics: Sdl_Input_Diagnostics,
     motion: Sdl_Motion_Preference,
+    contrast: Sdl_Contrast_Preference,
     accessibility_process_state: native_accessibility.Adapter_Process_State,
     accessibility: native_accessibility.Adapter,
 }
@@ -629,6 +630,7 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     if platform == nil {
         return
     }
+    sdl_contrast_native_destroy(&platform^.contrast)
     diagnostics := platform^.input_diagnostics
     log.infof(
         "sdl_input_summary keys=%d unmapped=%d text=%d invalid_text=%d " +

@@ -30,6 +30,29 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect(t, !setting_value(preferences, .Drawing_Sound_Enabled).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Display_Fps).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Reduce_Motion).boolean)
+    testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
+}
+
+// Keep contrast optional by default and retain its stable boolean persistence identity.
+@(test)
+increased_contrast_uses_typed_persisted_preference :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Interface_Increased_Contrast)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "interface")
+    testing.expect_value(t, definition.key, "increased_contrast")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Boolean)
+    preferences := default_preferences()
+    testing.expect(t, !apply_setting_value(&preferences,
+        .Interface_Increased_Contrast, integer_value(1), .Saved))
+    testing.expect(t, apply_setting_value(&preferences,
+        .Interface_Increased_Contrast, boolean_value(true), .Saved))
+    testing.expect(t, preferences.interface.increased_contrast)
+    testing.expect(t, .Interface_Increased_Contrast in preferences.present)
+    testing.expect(t, .Interface_Increased_Contrast not_in preferences.overrides)
+    testing.expect(t, apply_setting_value(&preferences,
+        .Interface_Increased_Contrast, boolean_value(false), .Override))
+    testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
+    testing.expect(t, .Interface_Increased_Contrast in preferences.overrides)
 }
 
 // Validate window dimensions, enum domains, and particle capacity bounds.

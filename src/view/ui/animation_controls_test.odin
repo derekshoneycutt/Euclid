@@ -397,8 +397,7 @@ animation_controls_hover_draws_rounded_light_highlight :: proc(t: ^testing.T) {
     rectangle := geometry.Rectangle{10, 20, 30, 30}
     draw_color := uianimation.draw_encoded_animation_control_backing(
         &encoder, rectangle, true, false, false)
-    highlight := theme.UI_TEXT_COLOR
-    highlight.a = 24
+    highlight := theme.UI_HOVER_COLOR
     testing.expect_value(t, encoder.vertex_count, len(vertices))
     testing.expect_value(t, encoder.index_count, len(indices))
     testing.expect_value(t, encoder.batch_count, 1)
@@ -410,6 +409,31 @@ animation_controls_hover_draws_rounded_light_highlight :: proc(t: ^testing.T) {
     }
     animation_controls_expect_uniform_coverage(t, vertices[:], indices[:], rectangle)
     testing.expect_value(t, draw_color, theme.UI_TEXT_COLOR)
+}
+
+// Verify pressed and toggled glyphs invert together with their backing, independently of hover.
+@(test)
+animation_controls_active_backing_uses_contrasting_pair :: proc(t: ^testing.T) {
+    vertices: [128]native.Draw_Vertex
+    indices: [256]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    loop_flags := ([3][3]bool{
+        {false, true, false}, {false, false, true}, {true, true, true},
+    })
+    for flags in loop_flags {
+        testing.expect(t, native.draw_encoder_begin(&encoder,
+            {vertices[:], indices[:], batches[:], commands[:], nil},
+            {100, 100}, {100, 100}))
+        tint := uianimation.draw_encoded_animation_control_backing(
+            &encoder, {10, 20, 30, 30}, flags[0], flags[1], flags[2])
+        testing.expect_value(t, tint, theme.UI_SELECTION_TEXT_COLOR)
+        testing.expect(t, encoder.vertex_count >= 4)
+        testing.expect_value(t,
+            vertices[encoder.vertex_count - 1].color,
+            theme.UI_SELECTION_BACKGROUND_COLOR)
+    }
 }
 
 // Return the oriented edge area used to test encoded triangle coverage.

@@ -21,6 +21,7 @@ Ambiguous_Width_Mode :: enum u8 {
 
 // Complete rendition copied into a cell when its leading grapheme is written.
 Cell_Style :: struct {
+    application_prompt: termmodel.Application_Prompt,
     foreground: termmodel.Terminal_Color_Reference,
     background: termmodel.Terminal_Color_Reference,
     font_weight: termmodel.Font_Weight,

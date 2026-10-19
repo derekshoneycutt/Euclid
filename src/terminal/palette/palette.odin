@@ -57,6 +57,8 @@ Terminal_Palette_State :: struct {
     default_foreground: u32,
     default_background: u32,
     default_cursor: u32,
+    foreground_overridden: bool,
+    cursor_overridden: bool,
     generation: u64,
 
     // Bounded transaction candidate shared by supported dynamic-color OSC families.
@@ -457,10 +459,16 @@ terminal_palette_store_operation :: proc(
     palette: ^Terminal_Palette_State,
     operation: Terminal_Palette_Operation, value: u32) {
     switch operation.target {
-    case .Indexed: palette.colors[operation.index] = value
-    case .Foreground: palette.foreground = value
-    case .Background: palette.background = value
-    case .Cursor: palette.cursor = value
+    case .Indexed:
+        palette.colors[operation.index] = value
+    case .Foreground:
+        palette.foreground = value
+        palette.foreground_overridden = !operation.reset
+    case .Background:
+        palette.background = value
+    case .Cursor:
+        palette.cursor = value
+        palette.cursor_overridden = !operation.reset
     }
 }
 

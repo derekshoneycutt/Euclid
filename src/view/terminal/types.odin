@@ -204,6 +204,8 @@ Terminal_Draw_Theme :: struct {
     cursor_foreground: color.Color_RGBA8,
     selection_foreground: color.Color_RGBA8,
     selection_background: color.Color_RGBA8,
+    prompt_colors: [termmodel.Application_Prompt]color.Color_RGBA8,
+    completion_preview: color.Color_RGBA8,
 }
 
 // Complete frame-local request for terminal input and geometry update.

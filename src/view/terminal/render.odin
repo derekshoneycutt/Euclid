@@ -258,6 +258,9 @@ terminal_draw_output_cursor :: proc(
     cursor_color := terminal_packed_color(
         termpalette.terminal_palette_cursor_rgba(
             &term.output_interpreter.title_state.palette))
+    if !term.output_interpreter.title_state.palette.cursor_overridden {
+        cursor_color = layout.theme.default_foreground
+    }
     if presentation.style == .Outline {
         _ = native.draw_encoder_rectangle_outline(layout.encoder, {
             position.x, position.y,
@@ -865,9 +868,9 @@ terminal_draw_single_line_prompt :: proc(
     terminal_draw_prompt_base({
         encoder = request.layout.encoder, resolver = request.resolver,
         current_text = request.current_text,
-        prompt_prefix = request.prompt_prefix,
-        prompt_color = terminal_prompt_draw_color(request.term.input_mode),
-        position = request.position,
+        prompt_prefix = request.prompt_prefix, position = request.position,
+        prompt_color = terminal_prompt_draw_color(
+            request.term.input_mode, request.layout.theme),
         exclusions = terminal_prompt_shape_exclusions(
             request.current_text, request.prompt_prefix, cursor, selection),
         theme = request.layout.theme,
@@ -999,7 +1002,7 @@ terminal_draw_prompt_lines :: proc(
     encoder: ^native.Draw_Encoder, position: geometry.Vector2,
     theme: Terminal_Draw_Theme) {
     text := termhist.termhist_current_text(term.history)
-    prompt_color := terminal_prompt_draw_color(term.input_mode)
+    prompt_color := terminal_prompt_draw_color(term.input_mode, theme)
     line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
     cursor := termhist.termhist_cursor(term.history)
     line_start := 0
@@ -1107,9 +1110,17 @@ terminal_draw_completion_preview :: proc(
             preview_position.x, preview_position.y,
             end_x - start_x, TERMINAL_FONT_SIZE}, draw.theme.cursor_foreground)
     }
+    preview_color := draw.theme.completion_preview
+    if preview_color.a == 0 {
+        preview_color = TERMINAL_COMPLETION_PREVIEW_COLOR
+    }
     _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver, .Regular,
         term.completion_preview_insertion, preview_position,
-        TERMINAL_COMPLETION_PREVIEW_COLOR})
+        preview_color})
+    terminal_syntax_underline(draw.encoder, {
+        underline = .Dotted, underline_color = preview_color},
+        preview_position, terminal_text_column_width(draw.font,
+            term.completion_preview_insertion))
 }
 
 //   Draw the live input line's base text: a bold prompt (green for `julia>`,
@@ -1270,9 +1281,7 @@ terminal_draw_output_cell :: proc(
         position = glyph_position,
         column_width = draw.column_width,
         key = key,
-        color = terminal_resolve_foreground(
-            draw.palette, cell.style.foreground,
-            draw.theme.default_foreground),
+        color = terminal_cell_foreground(draw, cell.style),
     })
     if !shaped && cell.grapheme_len == 1 && cell.grapheme[0] < 0x80 {
         terminal_draw_cell(draw, resolved_font, cell, glyph_position)
@@ -1286,9 +1295,7 @@ terminal_draw_output_underlines :: proc(draw: Terminal_Shaped_Output_Context) {
         if cell.continuation || !cell.style.underline {
             continue
         }
-        color := terminal_resolve_foreground(
-            draw.palette, cell.style.foreground,
-            draw.theme.default_foreground)
+        color := terminal_cell_foreground(draw, cell.style)
         start_x := draw.position.x + f32(column)*draw.column_width
         end_x := start_x + f32(max(int(cell.width), 1))*draw.column_width
         _ = native.draw_encoder_line(draw.encoder,
@@ -1305,9 +1312,7 @@ terminal_draw_output_shaped_chunk :: proc(
     run_end := terminal_shape_run_end(ctx.cells, column)
     chunk_end := terminal_shape_chunk_end(column, run_end)
     key := terminal_font_key_for_cell(cell.style)
-    color := terminal_resolve_foreground(
-        ctx.palette, cell.style.foreground,
-        ctx.theme.default_foreground)
+    color := terminal_cell_foreground(ctx, cell.style)
     if chunk_end - column <= 1 {
         return column, false
     }
@@ -1371,8 +1376,7 @@ terminal_draw_link_hover_run :: proc(
     draw: Terminal_Shaped_Output_Context, run_start, limit: int,
     underline_y: f32) -> int {
     cell := &draw.cells[run_start]
-    color := terminal_resolve_foreground(
-        draw.palette, cell.style.foreground, draw.theme.default_foreground)
+    color := terminal_cell_foreground(draw, cell.style)
     column := run_start + max(int(cell.width), 1)
     for column < limit {
         next := &draw.cells[column]
@@ -1380,8 +1384,7 @@ terminal_draw_link_hover_run :: proc(
             column += 1
             continue
         }
-        next_color := terminal_resolve_foreground(
-            draw.palette, next.style.foreground, draw.theme.default_foreground)
+        next_color := terminal_cell_foreground(draw, next.style)
         if next_color != color {
             break
         }
@@ -1938,9 +1941,7 @@ terminal_draw_cell :: proc(
         return
     }
     text := string(cell.grapheme[:cell.grapheme_len])
-    color := terminal_resolve_foreground(
-        draw.palette, cell.style.foreground,
-        draw.theme.default_foreground)
+    color := terminal_cell_foreground(draw, cell.style)
     _ = viewtext.ui_text_unshaped_paged({
         encoder = draw.encoder,
         resolver = draw.resolver,
@@ -2011,11 +2012,26 @@ terminal_resolve_foreground :: proc(
     palette: ^termpalette.Terminal_Palette_State,
     color: termmodel.Terminal_Color_Reference,
     default_foreground: Color) -> Color {
-    if termpalette.terminal_color_kind(color) == .Default {
+    if termpalette.terminal_color_kind(color) == .Default &&
+        (palette == nil || !palette.foreground_overridden) {
         return default_foreground
     }
+
     return terminal_packed_color(
         termpalette.terminal_color_resolve_foreground(palette, color))
+}
+
+// terminal_cell_foreground themes only marked application prefixes, never arbitrary output.
+terminal_cell_foreground :: proc(
+    draw: Terminal_Shaped_Output_Context, style: termgrid.Cell_Style) -> Color {
+    if style.application_prompt != .None {
+        tint := draw.theme.prompt_colors[style.application_prompt]
+        if tint.a > 0 {
+            return tint
+        }
+    }
+    return terminal_resolve_foreground(
+        draw.palette, style.foreground, draw.theme.default_foreground)
 }
 
 //   Draw the live input line's selection highlight and block cursor, over

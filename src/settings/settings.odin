@@ -25,9 +25,10 @@ Setting_Id :: enum u8 {
     Drawing_Sound_Enabled,
     Interface_Display_Fps,
     Interface_Reduce_Motion,
+    Interface_Increased_Contrast,
 }
 
-SETTING_COUNT :: 13
+SETTING_COUNT :: 14
 Setting_Set :: bit_set[Setting_Id; u16]
 ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Window_Width,
@@ -43,6 +44,7 @@ ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Drawing_Sound_Enabled,
     .Interface_Display_Fps,
     .Interface_Reduce_Motion,
+    .Interface_Increased_Contrast,
 }
 
 Window_Mode :: enum u8 {
@@ -97,6 +99,7 @@ SETTING_DEFINITIONS :: [SETTING_COUNT]Setting_Definition{
     {.Drawing_Sound_Enabled, "drawing", "sound_enabled", .Boolean},
     {.Interface_Display_Fps, "interface", "display_fps", .Boolean},
     {.Interface_Reduce_Motion, "interface", "reduce_motion", .Boolean},
+    {.Interface_Increased_Contrast, "interface", "increased_contrast", .Boolean},
 }
 
 Setting_Value :: struct {
@@ -128,6 +131,7 @@ Drawing_Preferences :: struct {
 Interface_Preferences :: struct {
     display_fps: bool,
     reduce_motion: bool,
+    increased_contrast: bool,
 }
 
 Preferences :: struct {
@@ -175,7 +179,9 @@ default_preferences :: proc() -> Preferences {
             dust_limit = particlemodel.MAX_LOW_PARTICLES,
             sound_enabled = false,
         },
-        interface = {display_fps = false},
+        interface = {
+            display_fps = false, reduce_motion = false, increased_contrast = false,
+        },
     }
 }
 
@@ -216,7 +222,7 @@ valid_setting_id :: proc(id: Setting_Id) -> bool {
          .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Dust_Limit, .Drawing_Sound_Enabled, .Interface_Display_Fps,
-         .Interface_Reduce_Motion:
+         .Interface_Reduce_Motion, .Interface_Increased_Contrast:
         return true
     }
     return false
@@ -245,7 +251,8 @@ valid_setting_value :: proc(id: Setting_Id, value: Setting_Value) -> bool {
             valid_layout_preference(value.layout)
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
-         .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion:
+         .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
+         .Interface_Increased_Contrast:
         return value.kind == .Boolean
     case .Drawing_Dust_Limit:
         return value.kind == .Integer && valid_dust_limit(i64(value.integer))
@@ -273,6 +280,8 @@ apply_boolean_preference :: proc(
         preferences^.interface.display_fps = value
     case .Interface_Reduce_Motion:
         preferences^.interface.reduce_motion = value
+    case .Interface_Increased_Contrast:
+        preferences^.interface.increased_contrast = value
     }
 }
 
@@ -371,6 +380,8 @@ read_boolean_preference :: proc(
         return boolean_value(preferences.interface.display_fps)
     case .Interface_Reduce_Motion:
         return boolean_value(preferences.interface.reduce_motion)
+    case .Interface_Increased_Contrast:
+        return boolean_value(preferences.interface.increased_contrast)
     }
     return {}
 }
@@ -382,7 +393,8 @@ setting_value :: proc(preferences: Preferences, id: Setting_Id) -> Setting_Value
         return read_integer_preference(preferences, id)
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
-         .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion:
+         .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
+         .Interface_Increased_Contrast:
         return read_boolean_preference(preferences, id)
     case .Window_Mode:
         return window_mode_value(preferences.window.mode)

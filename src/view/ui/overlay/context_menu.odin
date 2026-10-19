@@ -573,8 +573,7 @@ draw_encoded_context_menu :: proc(
     for &item, index in menu^.items[:menu^.count] {
         row := context_menu_item_rect(menu, index)
         if menu^.focused == index {
-            _ = native.draw_encoder_rectangle_outline(
-                encoder, row, 1, theme.UI_TEXT_COLOR)
+            uiwidgets.draw_encoded_focus_ring(encoder, row)
         }
         label := string(item.label[:item.label_length])
         context_menu_draw_label(state, encoder, label, row, item.enabled)
@@ -588,9 +587,9 @@ context_menu_draw_label :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     label: string, row: geometry.Rectangle, enabled: bool) {
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
-    tint := theme.UI_TEXT_COLOR
+    tint := theme.draw_color(encoder, .Text)
     if !enabled {
-        tint = theme.UI_BORDER_COLOR
+        tint = theme.draw_color(encoder, .Disabled_Text)
     }
     _ = viewtext.ui_text_shaped({
         encoder = encoder,

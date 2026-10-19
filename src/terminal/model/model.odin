@@ -25,6 +25,9 @@ Terminal_Color_Kind :: enum u8 {
 // Packed color identity resolved against display-owned palette state at draw time.
 Terminal_Color_Reference :: distinct u32
 
+// Application_Prompt identifies native-owned prefixes independently of output RGB.
+Application_Prompt :: enum u8 {None, Julia, Help, Package, Shell}
+
 // Output-stream categories that may negotiate terminal replies.
 Terminal_Producer_Kind :: enum u8 {
     None,

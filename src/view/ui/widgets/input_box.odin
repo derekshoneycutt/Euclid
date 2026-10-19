@@ -721,26 +721,70 @@ draw_encoded_input_box :: proc(
     params: Input_Box_Params, prepared: Input_Box_Result) {
     _ = native.draw_encoder_rectangle(
         encoder, prepared.control_geometry.bounds, theme.UI_COMPONENT_BACKGROUND_COLOR)
-    border := theme.UI_BORDER_COLOR
+    border := theme.draw_color(encoder, .Control_Border)
     if prepared.focused {
-        border = theme.UI_TEXT_COLOR
+        border = theme.draw_color(encoder, .Text)
     }
     _ = native.draw_encoder_rectangle_outline(
         encoder, prepared.control_geometry.bounds, 1, border)
     _ = native.draw_encoder_push_scissor(encoder, prepared.inner)
     if prepared.selection.width > 0 {
         _ = native.draw_encoder_rectangle(
-            encoder, prepared.selection, theme.UI_BORDER_COLOR)
+            encoder, prepared.selection,
+            theme.draw_color(encoder, .Selection_Background))
     }
-    _ = viewtext.ui_text_shaped({encoder = encoder, resolver = params.resolver,
-        key = .Regular, text = params.descriptor.text,
-        position = {prepared.text_x, prepared.caret.y}, color = theme.UI_TEXT_COLOR,
-        font = viewtext.ui_text_font(params.font)})
-    if prepared.focused {
-        _ = native.draw_encoder_rectangle(encoder, prepared.caret, theme.UI_TEXT_COLOR)
-    }
+    draw_encoded_input_box_text(encoder, params, prepared)
+    draw_encoded_input_box_caret(encoder, prepared)
     _ = native.draw_encoder_pop_scissor(encoder)
     draw_encoded_input_box_completion(encoder, params, prepared)
+}
+
+// draw_encoded_input_box_text clips full shaped runs so selection never changes glyph layout.
+draw_encoded_input_box_text :: proc(
+    encoder: ^native.Draw_Encoder,
+    params: Input_Box_Params, prepared: Input_Box_Result) {
+    request := viewtext.Shaped_Text_Draw{
+        encoder = encoder, resolver = params.resolver, key = .Regular,
+        text = params.descriptor.text, position = {prepared.text_x, prepared.caret.y},
+        color = theme.draw_color(encoder, .Text),
+        font = viewtext.ui_text_font(params.font),
+    }
+    if prepared.selection.width <= 0 {
+        _ = viewtext.ui_text_shaped(request)
+        return
+    }
+    left, right := prepared.inner, prepared.inner
+    left.width = max(0, min(prepared.selection.x, left.x + left.width) - left.x)
+    right.x = max(right.x, prepared.selection.x + prepared.selection.width)
+    right.width = max(0, prepared.inner.x + prepared.inner.width - right.x)
+    clips := [3]geometry.Rectangle{left, right, prepared.selection}
+    for clip, index in clips {
+        if clip.width <= 0 {
+            continue
+        }
+        request.color =
+            theme.draw_color(encoder, .Selection_Text) if index == 2 else
+                theme.draw_color(encoder, .Text)
+        _ = native.draw_encoder_push_scissor(encoder, clip)
+        _ = viewtext.ui_text_shaped(request)
+        _ = native.draw_encoder_pop_scissor(encoder)
+    }
+}
+
+// draw_encoded_input_box_caret contrasts each caret fragment with its selected or plain backing.
+draw_encoded_input_box_caret :: proc(
+    encoder: ^native.Draw_Encoder, prepared: Input_Box_Result) {
+    if !prepared.focused {
+        return
+    }
+    _ = native.draw_encoder_rectangle(
+        encoder, prepared.caret, theme.draw_color(encoder, .Text))
+    if prepared.selection.width > 0 {
+        _ = native.draw_encoder_push_scissor(encoder, prepared.selection)
+        _ = native.draw_encoder_rectangle(
+            encoder, prepared.caret, theme.draw_color(encoder, .Selection_Text))
+        _ = native.draw_encoder_pop_scissor(encoder)
+    }
 }
 
 // draw_encoded_input_box_completion borrows the regular text path for the inline hint.
@@ -754,9 +798,12 @@ draw_encoded_input_box_completion :: proc(
     count := copy(bytes[:], prepared.unicode_completion.text)
     count += copy(bytes[count:], " \u2192")
     _ = native.draw_encoder_push_scissor(encoder, prepared.control_geometry.bounds)
-    _ = viewtext.ui_text_shaped({encoder = encoder, resolver = params.resolver,
+    _ = viewtext.ui_text_shaped({
+        encoder = encoder, resolver = params.resolver,
         key = .Regular, text = string(bytes[:count]),
         position = {prepared.unicode_hint.x, prepared.unicode_hint.y},
-        color = theme.UI_TEXT_COLOR, font = viewtext.ui_text_font(params.font)})
+        color = theme.draw_color(encoder, .Text),
+        font = viewtext.ui_text_font(params.font),
+    })
     _ = native.draw_encoder_pop_scissor(encoder)
 }

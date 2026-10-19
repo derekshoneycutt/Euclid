@@ -163,6 +163,18 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "System requests reduced motion"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1223),
+            "ui.settings.increased_contrast",
+            "Increased interface contrast checkbox; system requests also apply.",
+            LocalizedContent.MessageArgument[]),
+        "Increased contrast"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1224),
+            "ui.settings.system_increased_contrast",
+            "Settings notice when the platform independently requests increased contrast.",
+            LocalizedContent.MessageArgument[]),
+        "System requests increased contrast"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1201), "ui.settings.display_fps",
             "Display FPS checkbox label.", LocalizedContent.MessageArgument[]),
         "Display FPS"),

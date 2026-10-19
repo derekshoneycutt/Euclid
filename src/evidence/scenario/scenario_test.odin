@@ -9,6 +9,15 @@ import settings "../../settings"
 
 import "core:testing"
 
+// Verify the checked-in selection fixture stays accepted by the shipped scenario parser.
+@(test)
+scenario_test_dynview_selection_fixture :: proc(t: ^testing.T) {
+    source := #load("../../../tools/scenarios/dynview-selection-acceptance.jsonl", string)
+    program: Program
+    testing.expect_value(t, parse(source, &program), Parse_Error.None)
+    testing.expect_value(t, program.count, 30)
+}
+
 // Highlight waits use the same additive vocabulary as recorded display publications.
 @(test)
 scenario_test_highlight_event_names :: proc(t: ^testing.T) {

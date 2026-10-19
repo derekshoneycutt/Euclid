@@ -15,6 +15,7 @@ import termattachment "../../terminal/attachment"
 import termhist "../../terminal/history"
 import termhyperlink "../../terminal/hyperlink"
 import termpalette "../../terminal/palette"
+import termmodel "../../terminal/model"
 import termshellintegration "../../terminal/shell_integration"
 import "../input"
 import "core:fmt"
@@ -958,6 +959,7 @@ terminal_append_submitted_input :: proc(
     prompt_cell_style := termgrid.Cell_Style{
         foreground = termpalette.terminal_color_direct(prompt_style.color_rgba),
         bold = prompt_style.is_bold,
+        application_prompt = terminal_application_prompt(term.input_mode),
     }
     input_cell_style := termgrid.Cell_Style{}
     remaining := text
@@ -1013,7 +1015,12 @@ terminal_prompt_palette_color :: proc(
 // Returns:
 //   - The configured prompt color assigned to that mode.
 terminal_prompt_draw_color :: proc(
-    mode: protocol.Evaluation_Mode) -> color.Color_RGBA8 {
+    mode: protocol.Evaluation_Mode,
+    theme: Terminal_Draw_Theme = {}) -> color.Color_RGBA8 {
+    custom := theme.prompt_colors[terminal_application_prompt(mode)]
+    if custom.a > 0 {
+        return custom
+    }
     switch mode {
     case .Pkg:
         return TERMINAL_PKG_PROMPT_COLOR
@@ -1024,5 +1031,22 @@ terminal_prompt_draw_color :: proc(
     case .Normal:
         return TERMINAL_PROMPT_COLOR
     }
+
     return TERMINAL_PROMPT_COLOR
+}
+
+// terminal_application_prompt preserves prefix ownership through grid scrolling and reflow.
+terminal_application_prompt :: proc(
+    mode: protocol.Evaluation_Mode) -> termmodel.Application_Prompt {
+    switch mode {
+    case .Normal:
+        return .Julia
+    case .Help:
+        return .Help
+    case .Pkg:
+        return .Package
+    case .Shell:
+        return .Shell
+    }
+    return .None
 }

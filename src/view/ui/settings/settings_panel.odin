@@ -32,6 +32,7 @@ Settings_View_Labels :: struct {
     simd: string,
     gpu_dust: string,
     reduce_motion: string,
+    increased_contrast: string,
 }
 
 // Shared component and input dependencies for one settings panel preparation.
@@ -45,6 +46,7 @@ Settings_View_Context :: struct {
     particle_system: ^particlemodel.Particle_System,
     gpu_dust_available: bool,
     platform_reduce_motion: bool,
+    platform_increased_contrast: bool,
     simd_available: bool,
     labels: Settings_View_Labels,
     font: view_font.Font_Face,
@@ -61,6 +63,7 @@ Settings_View_Rows :: struct {
     simd_y : f32,
     gpu_dust_y : f32,
     reduce_motion_y: f32,
+    increased_contrast_y: f32,
 }
 
 //   Fixed prepared interaction results for all settings controls.
@@ -74,6 +77,7 @@ Settings_View_Preparation :: struct {
     simd: uiwidgets.Checkbox_Result,
     gpu_dust: uiwidgets.Checkbox_Result,
     reduce_motion: uiwidgets.Checkbox_Result,
+    increased_contrast: uiwidgets.Checkbox_Result,
     simd_available: bool,
     gpu_available: bool,
 }
@@ -131,6 +135,8 @@ settings_view_context :: proc(
         simd = settings_simd_label(state, simd_available),
         gpu_dust = settings_gpu_dust_label(state, gpu_available),
         reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion),
+        increased_contrast = viewmessages.shell_message(
+            state, .Settings_Increased_Contrast),
     }
     return Settings_View_Context{
         panel = panel, mouse_input = mouse_input,
@@ -140,6 +146,7 @@ settings_view_context :: proc(
         preferences = preferences, particle_system = &state^.particle_system,
         gpu_dust_available = gpu_available,
         platform_reduce_motion = state^.ui_runtime.platform_reduce_motion,
+        platform_increased_contrast = state^.ui_runtime.platform_increased_contrast,
         simd_available = simd_available, labels = labels,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
@@ -150,7 +157,8 @@ settings_view_context :: proc(
 draw_encoded_checkbox_geometry :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(rectangle), 1, theme.UI_BORDER_COLOR)
+        encoder, geometry.Rectangle(rectangle), 1,
+        theme.draw_color(encoder, .Control_Border))
     if !checked {
         return
     }
@@ -159,8 +167,10 @@ draw_encoded_checkbox_geometry :: proc(
     second := geometry.Vector2{rectangle.x + 6,
         rectangle.y + rectangle.height - 3}
     third := geometry.Vector2{rectangle.x + rectangle.width - 3, rectangle.y + 3}
-    _ = native.draw_encoder_line(encoder, first, second, 1.6, theme.UI_TEXT_COLOR)
-    _ = native.draw_encoder_line(encoder, second, third, 1.6, theme.UI_TEXT_COLOR)
+    _ = native.draw_encoder_line(
+        encoder, first, second, 1.6, theme.draw_color(encoder, .Text))
+    _ = native.draw_encoder_line(
+        encoder, second, third, 1.6, theme.draw_color(encoder, .Text))
 }
 
 // draw_encoded_slider_geometry encodes one slider track, fill, and knob.
@@ -172,17 +182,22 @@ draw_encoded_slider_geometry :: proc(
     fill := geometry.Rectangle{prepared.track.x, prepared.track.y,
         max(0, knob_center_x - prepared.track.x), prepared.track.height}
     _ = native.draw_encoder_rectangle(
-        encoder, fill, theme.UI_BORDER_COLOR)
+        encoder, fill, theme.draw_color(encoder, .Control_Border))
     _ = native.draw_encoder_rectangle(
-        encoder, prepared.knob, theme.UI_TEXT_COLOR)
+        encoder, prepared.knob, theme.draw_color(encoder, .Text))
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, prepared.track, 1, theme.draw_color(encoder, .Control_Border))
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, prepared.knob, 1, theme.UI_SELECTION_TEXT_COLOR)
 }
 
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
-    checks := [6]uiwidgets.Checkbox_Result{
+    checks := [7]uiwidgets.Checkbox_Result{
         prepared.fps, prepared.limit, prepared.sound,
         prepared.simd, prepared.gpu_dust, prepared.reduce_motion,
+        prepared.increased_contrast,
     }
     for check in checks {
         draw_encoded_checkbox_geometry(
@@ -202,7 +217,7 @@ draw_encoded_settings_geometry :: proc(
 draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
-    labels := [6]struct{label: string, y: f32}{
+    labels := [7]struct{label: string, y: f32}{
         {viewmessages.shell_message(state, .Settings_Display_Fps), rows.fps_y},
         {viewmessages.shell_message(state, .Settings_Limit_Fps), rows.limit_y},
         {viewmessages.shell_message(state, .Settings_Drawing_Sound), rows.sound_y},
@@ -210,16 +225,25 @@ draw_encoded_settings_check_labels :: proc(
         {settings_gpu_dust_label(state, prepared.gpu_available), rows.gpu_dust_y},
         {viewmessages.shell_message(
             state, .Settings_Reduce_Motion), rows.reduce_motion_y},
+        {viewmessages.shell_message(
+            state, .Settings_Increased_Contrast), rows.increased_contrast_y},
     }
     for item in labels {
         viewtext.draw_encoded_label(&state^.font_cache, encoder, item.label,
             x + theme.SETTINGS_CHECKBOX_SIZE + theme.SETTINGS_CHECKBOX_LABEL_GAP,
             item.y - theme.SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
     }
+    notice_y := rows.increased_contrast_y + theme.SETTINGS_TOGGLE_ROW_GAP
     if state^.ui_runtime.platform_reduce_motion {
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             viewmessages.shell_message(state, .Settings_System_Reduce_Motion),
-            x, rows.reduce_motion_y + theme.SETTINGS_TOGGLE_ROW_GAP)
+            x, notice_y)
+        notice_y += theme.SETTINGS_TOGGLE_ROW_GAP
+    }
+    if state^.ui_runtime.platform_increased_contrast {
+        viewtext.draw_encoded_label(&state^.font_cache, encoder,
+            viewmessages.shell_message(state, .Settings_System_Increased_Contrast),
+            x, notice_y)
     }
 }
 
@@ -252,8 +276,11 @@ draw_encoded_settings_text :: proc(
         animation_entries_added = animation_entries_added,
     })
     draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
-    status_y := rows.reduce_motion_y + theme.SETTINGS_TOGGLE_ROW_GAP
+    status_y := rows.increased_contrast_y + theme.SETTINGS_TOGGLE_ROW_GAP
     if state^.ui_runtime.platform_reduce_motion {
+        status_y += theme.SETTINGS_TOGGLE_ROW_GAP
+    }
+    if state^.ui_runtime.platform_increased_contrast {
         status_y += theme.SETTINGS_TOGGLE_ROW_GAP
     }
     draw_encoded_settings_save_status(state, encoder, x, status_y)
@@ -385,7 +412,7 @@ draw_settings_stat_row :: proc(
             ctx.panel.x + theme.SETTINGS_PANEL_INSET,
             ctx.stats_y + f32(row)*theme.SETTINGS_STATS_ROW_GAP,
         },
-        color = theme.UI_TEXT_COLOR,
+        color = theme.draw_color(ctx.encoder, .Text),
         font = viewtext.ui_text_font(ctx.font),
     })
 }
@@ -430,7 +457,10 @@ settings_view_layout_rows :: proc(
         sound_row.cursor_out)
     gpu_dust_row := settings_stack_row(stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP,
         simd_row.cursor_out)
-    reduce_motion_row := settings_stack_row(stack_rect, 0, gpu_dust_row.cursor_out)
+    reduce_motion_row := settings_stack_row(
+        stack_rect, theme.SETTINGS_TOGGLE_ROW_GAP, gpu_dust_row.cursor_out)
+    increased_contrast_row := settings_stack_row(
+        stack_rect, 0, reduce_motion_row.cursor_out)
 
     return Settings_View_Rows{
         slider_label_y = slider_label_row.segment_rect.y,
@@ -441,6 +471,7 @@ settings_view_layout_rows :: proc(
         simd_y = simd_row.segment_rect.y,
         gpu_dust_y = gpu_dust_row.segment_rect.y,
         reduce_motion_y = reduce_motion_row.segment_rect.y,
+        increased_contrast_y = increased_contrast_row.segment_rect.y,
     }
 }
 
@@ -467,7 +498,7 @@ update_settings_controls :: proc(
     return {result, result.simd_available, result.gpu_available}
 }
 
-// Prepare capability-gated toggles and motion policy without committing preference edits.
+// Prepare capability-gated toggles and interface policy without committing preference edits.
 prepare_settings_optional_controls :: proc(
     ctx: Settings_View_Context, rows: Settings_View_Rows,
     interactive: bool, result: ^Settings_View_Preparation) {
@@ -490,15 +521,25 @@ prepare_settings_optional_controls :: proc(
         ctx.labels.reduce_motion,
         ctx.preferences.interface.reduce_motion, true, 6}),
         ctx.press_owner, interactive)
+    result.increased_contrast = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.increased_contrast_y, 4007,
+            ctx.labels.increased_contrast,
+            ctx.preferences.interface.increased_contrast, true, 7,
+        }), ctx.press_owner, interactive)
 }
 
-// settings_scroll_content_height reserves controls, the platform notice, and save status.
-settings_scroll_content_height :: proc(system_notice: bool) -> f32 {
+// settings_scroll_content_height reserves controls, platform notices, and save status.
+settings_scroll_content_height :: proc(
+    system_motion_notice: bool, system_contrast_notice := false) -> f32 {
     height := f32(
         theme.SETTINGS_SLIDER_LABEL_TOP_OFFSET + theme.SETTINGS_TRACK_TOP_OFFSET +
-        theme.SETTINGS_TOGGLE_TOP_OFFSET + 6 * theme.SETTINGS_TOGGLE_ROW_GAP +
+        theme.SETTINGS_TOGGLE_TOP_OFFSET + 7 * theme.SETTINGS_TOGGLE_ROW_GAP +
         theme.TREE_FONT_SIZE + theme.SETTINGS_PANEL_INSET)
-    if system_notice {
+    if system_motion_notice {
+        height += theme.SETTINGS_TOGGLE_ROW_GAP
+    }
+    if system_contrast_notice {
         height += theme.SETTINGS_TOGGLE_ROW_GAP
     }
     return height
@@ -516,7 +557,7 @@ register_settings_scroll_semantics :: proc(
         id = uisemantics.semantic_control_id(.Settings_Control, 6102), role = .Panel,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Scroll, .Set_Value}, region = .Accordion_Content,
-        traversal_order = 7, bounds = geometry.Rectangle(scroll.view_rect),
+        traversal_order = 8, bounds = geometry.Rectangle(scroll.view_rect),
         clip_bounds = geometry.Rectangle(scroll.view_rect),
         numeric_range = {0, f64(scroll.maximum), f64(scroll.scroll_y_out),
             f64(scroll.step), .Vertical, true},
@@ -529,7 +570,8 @@ prepare_settings_scroll :: proc(
     ctx: Settings_View_Context,
     interactive: bool) -> uiwidgets.Scroll_Container_Update_Result {
     panel_state := ctx.settings_panel
-    height := settings_scroll_content_height(ctx.platform_reduce_motion)
+    height := settings_scroll_content_height(
+        ctx.platform_reduce_motion, ctx.platform_increased_contrast)
     scroll := uiwidgets.scroll_container_visual(
         ctx.panel, height, panel_state^.scroll_y, theme.SETTINGS_TOGGLE_ROW_GAP)
     if interactive {
@@ -623,6 +665,10 @@ apply_settings_primary_preparation :: proc(
         settings_record_preference_edit(state, .Interface_Reduce_Motion,
             setting_model.boolean_value(prepared.reduce_motion.checked_out))
     }
+    if prepared.increased_contrast.toggled {
+        settings_record_preference_edit(state, .Interface_Increased_Contrast,
+            setting_model.boolean_value(prepared.increased_contrast.checked_out))
+    }
 }
 
 // Preserve optional-feature intent while deriving hardware-gated runtime state.
@@ -710,6 +756,8 @@ settings_control_edit_preparation :: proc(
         prepared.fps = {toggled = true, checked_out = value.boolean}
     case .Interface_Reduce_Motion:
         prepared.reduce_motion = {toggled = true, checked_out = value.boolean}
+    case .Interface_Increased_Contrast:
+        prepared.increased_contrast = {toggled = true, checked_out = value.boolean}
     case .Rendering_Limit_Fps:
         prepared.limit = {toggled = true, checked_out = value.boolean}
     case .Drawing_Sound_Enabled:

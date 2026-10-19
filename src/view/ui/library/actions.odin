@@ -583,7 +583,8 @@ draw_encoded_tree_actions_geometry :: proc(
     if geometry.rectangles_intersect(toggle, clip) {
         _ = native.draw_encoder_push_scissor(ctx.encoder, clip)
         draw_tree_actions_toggle(
-            ctx.encoder, toggle, ctx.actions_toggle, row.actions.open)
+            ctx.encoder, toggle, ctx.actions_toggle, row.actions.open,
+            ctx.state^.ui_runtime.library.tree.selected_item_id == row.item^.key)
         _ = native.draw_encoder_pop_scissor(ctx.encoder)
     }
     draw_tree_actions_drawer_surfaces(ctx, row)
@@ -619,17 +620,18 @@ draw_tree_actions_drawer_surfaces :: proc(
     _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }
 
-// draw_tree_actions_toggle inverts the ellipsis while its drawer is logically open.
+// draw_tree_actions_toggle contrasts the ellipsis with its selected or open backing.
 draw_tree_actions_toggle :: proc(
     encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
-    result: uiwidgets.Icon_Button_Result, open: bool) {
-    dot_color := theme.UI_TEXT_COLOR
+    result: uiwidgets.Icon_Button_Result, open: bool, selected: bool = false) {
+    dot_color := theme.draw_color(encoder, .Tree_Text) if
+        selected else theme.draw_color(encoder, .Text)
     if open {
-        _ = native.draw_encoder_rectangle(encoder, rect, theme.UI_TEXT_COLOR)
-        dot_color = theme.UI_BORDER_COLOR
+        _ = native.draw_encoder_rectangle(
+            encoder, rect, theme.UI_TREE_SELECTION_BACKGROUND_COLOR)
+        dot_color = theme.draw_color(encoder, .Tree_Text)
     } else if result.hovered || result.pressed || result.action.activated {
-        highlight := theme.UI_TEXT_COLOR
-        highlight.a = 24
+        highlight := theme.UI_SELECTED_HOVER_COLOR if selected else theme.UI_HOVER_COLOR
         _ = native.draw_encoder_rectangle(encoder, rect, highlight)
     }
     center := geometry.Vector2{rect.x + rect.width * 0.5,
@@ -653,9 +655,7 @@ draw_tree_actions_button_surface :: proc(
     }
     _ = native.draw_encoder_rectangle(encoder, rect, fill)
     if enabled && (result.hovered || result.pressed || result.action.activated) {
-        highlight := theme.UI_TEXT_COLOR
-        highlight.a = 24
-        _ = native.draw_encoder_rectangle(encoder, rect, highlight)
+        _ = native.draw_encoder_rectangle(encoder, rect, theme.UI_HOVER_COLOR)
     }
 }
 
@@ -692,9 +692,9 @@ draw_tree_actions_button_label :: proc(
     if !geometry.rectangles_intersect(rect, clip) {
         return
     }
-    text_color := theme.UI_TEXT_COLOR
+    text_color := theme.draw_color(encoder, .Text)
     if !enabled {
-        text_color.a = 110
+        text_color = theme.draw_color(encoder, .Disabled_Text)
     }
     _ = native.draw_encoder_push_scissor(encoder, clip)
     viewtext.draw_encoded_colored_label(&state^.font_cache, encoder, label,

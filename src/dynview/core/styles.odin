@@ -10,7 +10,7 @@ UI_TEXT_COLOR :: color.Color_RGBA8{175, 150, 150, 255}
 TEXT_PADDING :: 8
 
 // Style schema revision used for cache invalidation when style mapping changes.
-DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: 3
+DYNVIEW_STYLE_REVISION_PLAIN_TEXT :: 4
 
 DYNVIEW_STYLE_DEFAULT :: 0
 DYNVIEW_STYLE_PROMPT :: 1
@@ -64,7 +64,7 @@ STYLE_TABLE :: []Style_Entry{
         line_height_multiplier = 1.0,
     }},
     {DYNVIEW_STYLE_ERROR, Dynview_Text_Style{
-        color = color.Color_RGBA8{220, 95, 95, 255},
+        color = color.Color_RGBA8{221, 128, 122, 255},
         font_flags = .Regular,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,

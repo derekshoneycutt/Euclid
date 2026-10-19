@@ -156,12 +156,15 @@ draw_encoded_prepared_tree_label :: proc(
         uiwidgets.draw_encoded_input_box(ctx.encoder,
             ctx.entry_name_params^, ctx.entry_name_input^)
     } else {
-        viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder,
+        selected := ctx.state^.ui_runtime.library.tree.selected_item_id == row.item^.key
+        tint := theme.draw_color(ctx.encoder, .Tree_Text) if
+            selected else theme.draw_color(ctx.encoder, .Text)
+        viewtext.draw_encoded_colored_label(&ctx.state^.font_cache, ctx.encoder,
             tree_item_label(ctx.ji, row.item,
                 &ctx.state^.preferences_runtime.collections_state),
-            bounds.x + f32(row.depth) *
+            {bounds.x + f32(row.depth) *
                 theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X,
-            bounds.y + theme.TREE_ROW_LABEL_OFFSET_Y)
+             bounds.y + theme.TREE_ROW_LABEL_OFFSET_Y}, tint)
     }
     _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }

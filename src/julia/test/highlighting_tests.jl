@@ -226,6 +226,7 @@ end
         adapter = joinpath(@__DIR__, "..", "eval", "highlighting.jl")
         code = """
             pushfirst!(DEPOT_PATH, $(repr(directory)))
+            import StyledStrings
             include($(repr(adapter)))
             H = SyntaxHighlighting
             runs = H.highlight_source("\\"text\\"")
@@ -234,6 +235,11 @@ end
                 H.RgbColor, UInt32(0xabcdef)) for run in runs)
             @assert runs[2].start_byte == 1 && runs[2].end_byte == 5
             @assert runs[2].style.weight == H.BoldWeight
+            StyledStrings.withfaces(:julia_comment => StyledStrings.Face(
+                foreground=0x010203)) do
+                @assert only(H.highlight_source("# custom")).style.foreground ==
+                    H.HighlightColor(H.RgbColor, UInt32(0x010203))
+            end
             """
         project = dirname(@__DIR__)
         command = `$(Base.julia_cmd()) --startup-file=no --project=$project -e $code`

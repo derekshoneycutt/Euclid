@@ -6,7 +6,6 @@ import color "../../../core/color"
 import geometry "../../../core/geometry"
 import core "../../../core"
 import dynmath "../../../dynview/math"
-import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import view_font "../../font"
 import theme "../theme"
@@ -39,6 +38,8 @@ Presentation_Draw_Params :: struct {
     font : view_font.Font_Face,
     font_cache : ^view_font.Font_Cache,
     metrics : Wrapped_Text_Metrics,
+    selected_text: bool,
+    selection_clip: geometry.Rectangle,
 }
 
 //   Baseline draw position for one child math program.
@@ -63,7 +64,8 @@ draw_presentation_fallback_text :: proc(
             font = params.font,
             text_padding = params.metrics.padding,
             text_row_height = params.metrics.row_height,
-            text_color = fallback.color,
+            text_color = theme.draw_color(params.encoder, .Text_Selection_Foreground) if
+                params.selected_text else fallback.color,
             wrap_advance = params.metrics.wrap_advance,
             font_size = params.metrics.font_size,
             font_cache = params.font_cache,
@@ -99,29 +101,30 @@ draw_presentation_dynview :: proc(
         !runtime^.compile_cache.is_valid || runtime^.command_buffer.has_stream_error {
         return false
     }
+    document := dynlayout.document_layout_is_authoritative(runtime)
+    if !document && (runtime^.command_buffer.command_count <= 0 ||
+        !runtime^.compile_cache.layout_is_valid) {
+        return false
+    }
     ctx := Layout_Draw_Context{
         encoder = params.encoder,
         state = state, runtime = runtime, panel = params.panel,
         font = params.font, font_size = params.metrics.font_size,
+        selected_text = params.selected_text, selection_clip = params.selection_clip,
     }
-    native.draw_encoder_set_ink_sink(params.encoder, {
-        user_data = &state^.font_cache,
-        record = view_font.cache_ink_capture_sample,
-    })
-    defer native.draw_encoder_set_ink_sink(params.encoder, {})
-    if dynlayout.document_layout_is_authoritative(runtime) {
+    if !params.selected_text {
+        native.draw_encoder_set_ink_sink(params.encoder, {
+            user_data = &state^.font_cache,
+            record = view_font.cache_ink_capture_sample,
+        })
         view_font.cache_ink_capture_mark_drawn(&state^.font_cache)
+    }
+    defer native.draw_encoder_set_ink_sink(params.encoder, {})
+    if document {
         draw_document_layout(ctx, params.scroll_y, params.metrics.padding)
-        return true
+    } else {
+        draw_cached_layout(ctx, params.scroll_y, params.metrics.padding)
     }
-    if runtime^.command_buffer.command_count <= 0 {
-        return false
-    }
-    if !runtime^.compile_cache.layout_is_valid {
-        return false
-    }
-    view_font.cache_ink_capture_mark_drawn(&state^.font_cache)
-    draw_cached_layout(ctx, params.scroll_y, params.metrics.padding)
     _ = ui_runtime
     return true
 }
@@ -157,7 +160,7 @@ draw_math_program_at :: proc(
         child_x += dynmath.math_program_command_leading_space(
             &runtime^.compile_cache, program, command_index, child_ctx.font_size)
         child_y := position.baseline_y - child_item.ascent
-        child_style := dyncore.style_by_id(child_item.style_id)
+        child_style := layout_draw_style(child_ctx, child_item.style_id)
         draw_cached_text_item(child_ctx, child_style, child_item, child_x, child_y)
         child_x += child_item.draw_width
     }

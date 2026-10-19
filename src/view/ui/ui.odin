@@ -215,8 +215,7 @@ draw_encoded_focus_outline :: proc(
     }
     node := snapshot^.nodes[index]
     _ = native.draw_encoder_push_scissor(encoder, node.clip_bounds)
-    _ = native.draw_encoder_rectangle_outline(
-        encoder, node.bounds, 2, theme.UI_TEXT_COLOR)
+    uiwidgets.draw_encoded_focus_ring(encoder, node.bounds)
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 

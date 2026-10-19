@@ -44,11 +44,11 @@ TERMINAL_CURSOR_TEXT_COLOR :: color.Color_RGBA8{36, 5, 16, 255}
 // Prompt colors distinguish Julia's four input modes.
 TERMINAL_PROMPT_COLOR :: color.Color_RGBA8{0x38, 0x98, 0x26, 0xFF}
 TERMINAL_HELP_PROMPT_COLOR :: color.Color_RGBA8{0xD4, 0xB0, 0x06, 0xFF}
-TERMINAL_PKG_PROMPT_COLOR :: color.Color_RGBA8{0x40, 0x63, 0xD8, 0xFF}
-TERMINAL_SHELL_PROMPT_COLOR :: color.Color_RGBA8{0xCB, 0x3C, 0x33, 0xFF}
+TERMINAL_PKG_PROMPT_COLOR :: color.Color_RGBA8{0x83, 0x9A, 0xE6, 0xFF}
+TERMINAL_SHELL_PROMPT_COLOR :: color.Color_RGBA8{0xDD, 0x80, 0x7A, 0xFF}
 
 // Muted foreground used for noncommitted inline completion insertion.
-TERMINAL_COMPLETION_PREVIEW_COLOR :: color.Color_RGBA8{0x59, 0x59, 0x59, 0xFF}
+TERMINAL_COMPLETION_PREVIEW_COLOR :: color.Color_RGBA8{0x84, 0x84, 0x84, 0xFF}
 
 // Termhist history-entry tags recording which prompt mode submitted a line.
 TERMINAL_HISTORY_TAG_NORMAL :: 0

@@ -1,7 +1,6 @@
 package uipresentation
 
 import geometry "../../../core/geometry"
-import color "../../../core/color"
 import native "../../native"
 import core "../../../core"
 import dynlayout "../../../dynview/layout"
@@ -128,29 +127,31 @@ draw_encoded_presentation_text :: proc(
     }
     _ = native.draw_encoder_push_scissor(
         encoder, geometry.Rectangle(presentation.scroll.view_rect))
-    ui_dynview.dynview_draw_selection({
+    fallback := ui_dynview.Fallback_Text_Content{
+        presentation.view_text, theme.draw_color(encoder, .Text)}
+    params := ui_dynview.Presentation_Draw_Params{
+        encoder = encoder,
+        panel = geometry.Rectangle(presentation.text_panel),
+        scroll_y = state^.ui_runtime.presentation.text_scroll_y,
+        font = font.cache_borrow(&state^.font_cache, .Regular),
+        font_cache = &state^.font_cache,
+        metrics = {
+            padding = theme.TEXT_PADDING,
+            row_height = theme.TEXT_ROW_HEIGHT,
+            wrap_advance = theme.TEXT_WRAP_ADVANCE,
+            font_size = theme.TREE_FONT_SIZE,
+        },
+    }
+    ui_dynview.draw_presentation_styled_or_fallback(
+        state, &state^.ui_runtime, fallback, params)
+    selected := ui_dynview.Presentation_Selection_Draw{
+        state, &state^.ui_runtime, fallback, params}
+    ui_dynview.draw_presentation_selection(&selected, {
         encoder = encoder,
         runtime = &state^.dynview,
         selection = state^.ui_runtime.presentation.selection,
         view = presentation.selection_view,
-        color = color.Color_RGBA8{82, 96, 112, 112},
     })
-    fallback := ui_dynview.Fallback_Text_Content{
-        presentation.view_text, theme.UI_TEXT_COLOR}
-    ui_dynview.draw_presentation_styled_or_fallback(
-        state, &state^.ui_runtime, fallback, {
-            encoder = encoder,
-            panel = geometry.Rectangle(presentation.text_panel),
-            scroll_y = state^.ui_runtime.presentation.text_scroll_y,
-            font = font.cache_borrow(&state^.font_cache, .Regular),
-            font_cache = &state^.font_cache,
-            metrics = {
-                padding = theme.TEXT_PADDING,
-                row_height = theme.TEXT_ROW_HEIGHT,
-                wrap_advance = theme.TEXT_WRAP_ADVANCE,
-                font_size = theme.TREE_FONT_SIZE,
-            },
-        })
     _ = native.draw_encoder_pop_scissor(encoder)
     uiwidgets.draw_encoded_scrollbar(encoder, presentation.scroll.scrollbar)
 }

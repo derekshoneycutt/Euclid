@@ -3,7 +3,6 @@ package ui_dynview
 import native "../../native"
 
 import geometry "../../../core/geometry"
-import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import dynviewmodel "../../../dynview/model"
 
@@ -275,12 +274,15 @@ encode_inline_rule :: proc(
 // encode_inline_item encodes one font-independent cached Dynview item.
 encode_inline_item :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
-    item_x, item_y: f32) {
-    style := dyncore.style_by_id(item.style_id)
+    item_x, item_y: f32, selected_rule_color := dynviewmodel.Color{}) {
+    style := layout_draw_style({encoder = encoder}, item.style_id)
     draw_color := dynlayout.inline_draw_color(style, item)
     origin := geometry.Vector2{item_x, item_y}
     if encode_inline_shape(encoder, item, origin, draw_color) {
         return
+    }
+    if selected_rule_color.a > 0 {
+        style.color = selected_rule_color
     }
     encode_inline_rule(encoder, item, origin, style.color)
 }

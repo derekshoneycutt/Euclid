@@ -1,0 +1,32 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"interface.increased_contrast","value":true}}
+{"assert_setting":{"key":"interface.increased_contrast","value":true}}
+{"select_animation":"Proposition I","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"set_arrival_style":"immediate"}
+{"set_view_content":{"mime":"text/latex","source":"Default prose and $x_i^2 + \\frac{a}{b} + \\sqrt{x}$.\n\n\\textcolor{lightgreen}{Authored green stays green.}"},"as":"document"}
+{"wait_event":"presentation_semantic_published","correlation":"document","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"key":"tab"}
+{"key":{"name":"tab","shift":true}}
+{"assert_focus":"presentation"}
+{"screenshot":".build/increased-contrast-default.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"screenshot":".build/increased-contrast-selected.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_setting":{"key":"interface.increased_contrast","value":false}}
+{"assert_setting":{"key":"interface.increased_contrast","value":false}}
+{"screenshot":".build/increased-contrast-restored.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_setting":{"key":"interface.increased_contrast","value":true}}
+{"set_view_content":{"mime":"text/plain","source":"Default fallback text updates without rebuilding semantic content."},"as":"fallback"}
+{"wait_event":"dynview_published","timeout_ms":10000}
+{"wait_state":"presentation_effects_settled","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"screenshot":".build/increased-contrast-fallback.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

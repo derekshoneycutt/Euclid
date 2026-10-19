@@ -884,6 +884,7 @@ Euclid_Ui_Runtime_State :: struct {
     rendering: Ui_Rendering_Control_State,
     playback: Ui_Playback_Control_State,
     platform_reduce_motion: bool,
+    platform_increased_contrast: bool,
     gif_path_input: Ui_Input_Box_State,
     tooltip: Ui_Tooltip_State,
     context_menu: Ui_Context_Menu_State,

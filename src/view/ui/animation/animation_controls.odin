@@ -13,7 +13,6 @@ import uiwidgets "../widgets"
 import theme "../theme"
 import input "../../input"
 import uisemantics "../semantics"
-import worldmodel "../../world/model"
 import uioverlay "../overlay"
 import bridgemodel "../../../bridge/model"
 import collections "../../../collections"
@@ -596,15 +595,14 @@ draw_encoded_animation_control_backing :: proc(
     rectangle: geometry.Rectangle,
     hovered, pressed: bool,
     toggle_active: bool) -> color.Color_RGBA8 {
-    draw_color := theme.UI_TEXT_COLOR
+    draw_color := theme.draw_color(encoder, .Text)
     if hovered {
-        highlight := theme.UI_TEXT_COLOR
-        highlight.a = 24
-        draw_encoded_animation_control_hover(encoder, rectangle, highlight)
+        draw_encoded_animation_control_hover(encoder, rectangle, theme.UI_HOVER_COLOR)
     }
     if pressed || toggle_active {
-        _ = native.draw_encoder_rectangle(encoder, rectangle, theme.UI_BORDER_COLOR)
-        draw_color = worldmodel.BACKGROUND_COLOR
+        _ = native.draw_encoder_rectangle(
+            encoder, rectangle, theme.draw_color(encoder, .Selection_Background))
+        draw_color = theme.draw_color(encoder, .Selection_Text)
     }
     return draw_color
 }
@@ -644,6 +642,6 @@ draw_encoded_animation_controls :: proc(
             prepared.favorite.pressed, false)
         draw_encoded_control_glyph(
             encoder, .Star, prepared.favorite.icon_drawn_rect,
-            theme.UI_TEXT_COLOR, prepared.favorite_active)
+            theme.draw_color(encoder, .Text), prepared.favorite_active)
     }
 }

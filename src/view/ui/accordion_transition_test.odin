@@ -310,18 +310,25 @@ accordion_settings_scroll_is_retained_and_visual_preparation_is_pure :: proc(
         theme.SETTINGS_HEADER_TOP_OFFSET - selected.scroll_y_out,
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
         panel.height - theme.SETTINGS_HEADER_TOP_OFFSET})
-    testing.expect(t, rows.reduce_motion_y + theme.SETTINGS_CHECKBOX_SIZE < panel.height)
+    testing.expect(t,
+        rows.increased_contrast_y + theme.SETTINGS_CHECKBOX_SIZE < panel.height)
     retained := uisettings.prepare_settings_scroll(ctx, false)
     testing.expect_value(t, retained.scroll_y_out, selected.scroll_y_out)
     testing.expect_value(t,
         state^.ui_runtime.settings_panel.scroll_y, selected.scroll_y_out)
 }
 
-// System reduced motion reserves exactly the notice row in the Settings scroll extent.
+// Each independent platform accessibility request reserves its own Settings notice row.
 @(test)
 accordion_settings_system_notice_reserves_one_row :: proc(t: ^testing.T) {
     with_notice := uisettings.settings_scroll_content_height(true)
     without_notice := uisettings.settings_scroll_content_height(false)
     testing.expect_value(t, with_notice - without_notice,
         f32(theme.SETTINGS_TOGGLE_ROW_GAP))
+    contrast_notice := uisettings.settings_scroll_content_height(false, true)
+    both_notices := uisettings.settings_scroll_content_height(true, true)
+    testing.expect_value(t, contrast_notice - without_notice,
+        f32(theme.SETTINGS_TOGGLE_ROW_GAP))
+    testing.expect_value(t, both_notices - without_notice,
+        f32(2 * theme.SETTINGS_TOGGLE_ROW_GAP))
 }

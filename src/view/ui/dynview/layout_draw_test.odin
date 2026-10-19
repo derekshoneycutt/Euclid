@@ -7,6 +7,87 @@ import font "../../font"
 import "core:testing"
 
 import dynmath "../../../dynview/math"
+import dyncore "../../../dynview/core"
+import theme "../theme"
+
+// Verify enhanced appearance changes only defaults, with selected and authored provenance intact.
+@(test)
+layout_draw_test_increased_defaults_preserve_authored_color :: proc(t: ^testing.T) {
+    encoder: native.Draw_Encoder
+    theme.prepare_draw_colors(&encoder, true)
+    ctx := Layout_Draw_Context{encoder = &encoder}
+    testing.expect_value(t, document_selected_draw_color(ctx, {}),
+        theme.appearance_color(true, .Text))
+    authored := dynviewmodel.Dynview_Document_Color{true, dyncore.UI_TEXT_COLOR}
+    testing.expect_value(t, document_selected_draw_color(ctx, authored), authored.value)
+    for entry in dyncore.STYLE_TABLE {
+        style := layout_draw_style(ctx, entry.id)
+        style.color = entry.style.color
+        testing.expect_value(t, style, entry.style)
+    }
+    ctx.selected_text = true
+    testing.expect_value(t, document_selected_draw_color(ctx, {}),
+        theme.appearance_color(true, .Text_Selection_Foreground))
+    testing.expect_value(t, document_selected_draw_color(ctx, authored), authored.value)
+}
+
+// Verify selection changes only the foreground of stock styles, not typography or authored colors.
+@(test)
+layout_draw_test_selection_preserves_style_and_authored_colors :: proc(t: ^testing.T) {
+    ctx := Layout_Draw_Context{selected_text = true}
+    for entry in dyncore.STYLE_TABLE {
+        selected := layout_draw_style(ctx, entry.id)
+        testing.expect_value(t, selected.color, theme.UI_TEXT_SELECTION_FOREGROUND_COLOR)
+        selected.color = entry.style.color
+        testing.expect_value(t, selected, entry.style)
+    }
+    testing.expect_value(t, document_selected_draw_color(ctx, {}),
+        theme.UI_TEXT_SELECTION_FOREGROUND_COLOR)
+    colors := [?]dynviewmodel.Color{dyncore.UI_TEXT_COLOR, {120, 200, 90, 255}}
+    for authored in colors {
+        testing.expect_value(t,
+            document_selected_draw_color(ctx, {true, authored}), authored)
+    }
+    testing.expect_value(t, document_selected_draw_color({}, {}), dyncore.UI_TEXT_COLOR)
+    item := dynviewmodel.Dynview_Layout_Item{
+        has_brush_color = true, brush_color = dyncore.UI_TEXT_COLOR}
+    selected_style := layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT)
+    params := text_run_draw_params(ctx, selected_style, item, {}, 0)
+    testing.expect_value(t, params.text_color, item.brush_color)
+    item.has_brush_color = false
+    params = text_run_draw_params(ctx, selected_style, item, {}, 0)
+    testing.expect_value(t, params.text_color, theme.UI_TEXT_SELECTION_FOREGROUND_COLOR)
+}
+
+// Verify selected fraction rules brighten without changing geometry, including accent style overrides.
+@(test)
+layout_draw_test_selected_fraction_rule_keeps_geometry :: proc(t: ^testing.T) {
+    vertices: [8]native.Draw_Vertex
+    indices: [12]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    item := dynviewmodel.Dynview_Layout_Item{
+        fraction_rule_left = 0, fraction_rule_right = 30,
+        fraction_rule_center = 0, fraction_rule_thickness = 2,
+        accent_style_id = dyncore.DYNVIEW_STYLE_DEFAULT}
+    states := [2]bool{false, true}
+    for selected in states {
+        ctx := Layout_Draw_Context{encoder = &encoder, selected_text = selected}
+        style := layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT)
+        draw_fraction_divider(ctx, style, item, 10, 20)
+    }
+    testing.expect_value(t, encoder.vertex_count, 8)
+    for index in 0..<4 {
+        testing.expect_value(t, vertices[index].position, vertices[index+4].position)
+        testing.expect_value(t, vertices[index].color, dyncore.STYLE_DEFAULT.color)
+        testing.expect_value(t,
+            vertices[index+4].color, theme.UI_TEXT_SELECTION_FOREGROUND_COLOR)
+    }
+}
 
 //   Verify stacked limits remain inside the large operator's measured box.
 @(test)

@@ -10,7 +10,8 @@ import color "../../../core/color"
 draw_encoded_label :: proc(
     cache: ^view_font.Font_Cache, encoder: ^native.Draw_Encoder,
     text: string, x, y: f32) {
-    draw_encoded_colored_label(cache, encoder, text, {x, y}, theme.UI_TEXT_COLOR)
+    draw_encoded_colored_label(
+        cache, encoder, text, {x, y}, theme.draw_color(encoder, .Text))
 }
 
 // draw_encoded_colored_label shapes a regular UI label with an explicit position and color.

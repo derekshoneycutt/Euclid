@@ -39,6 +39,7 @@ import uianimation "ui/animation"
 import capturemodel "capture/model"
 import storage "../core/storage"
 import nativeaccessibility "native/accessibility"
+import uitheme "ui/theme"
 
 when !core.SCENARIOS_ENABLED {
     _ :: storage
@@ -65,6 +66,7 @@ Window_Frame_Context :: struct {
 
 //   Frame-local values consumed only by observational drawing.
 Frame_Draw_Preparation :: struct {
+    increased_contrast: bool,
     input_frame: input.Input_Frame,
     terminal_frame: uiterminal.Terminal_Prepared_Frame,
     controls: ui.Ui_Control_Preparation,
@@ -226,6 +228,8 @@ service_sdl_frame_runtime :: proc(
     frame_dt: f32, sample_seconds: f64) {
     state^.ui_runtime.platform_reduce_motion = native.sdl_platform_refresh_motion(
         ctx.platform, sample_seconds)
+    state^.ui_runtime.platform_increased_contrast =
+        native.sdl_platform_refresh_contrast(ctx.platform, sample_seconds)
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
     sync_window_math_shaping(state)
@@ -312,6 +316,9 @@ prepare_sdl_frame :: proc(
         frame_dt = frame_dt, input_frame = input_frame,
         routed_frame = routed_frame, ui_geometry = ui_geometry,
     }, prepared)
+    prepared^.increased_contrast = uitheme.increased_contrast(
+        state^.ui_runtime.preferences.values.interface.increased_contrast,
+        state^.ui_runtime.platform_increased_contrast)
 }
 
 // prepare_sdl_frame_owners updates UI, services, simulation, and accessibility in frame order.
@@ -356,8 +363,9 @@ prepare_sdl_frame_owners :: proc(
 // effects against that frame's Presentation viewport.
 prepare_sdl_layout_and_effects :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
-    update: Sdl_Frame_Update, terminal_frame: uiterminal.Terminal_Prepared_Frame) ->
-    ui.Ui_Layout_Interaction_Preparation {
+    update: Sdl_Frame_Update,
+    terminal_frame: uiterminal.Terminal_Prepared_Frame) ->
+        ui.Ui_Layout_Interaction_Preparation {
     layout_interaction := ui.prepare_and_finish_ui_layout(
         state, update.routed_frame, terminal_frame)
     update_sdl_presentation_effects(
@@ -468,6 +476,7 @@ encode_sdl_geometry_frame :: proc(
         f32(ctx.platform^.metrics.logical_width),
         f32(ctx.platform^.metrics.logical_height),
     }, {ctx.platform^.scene_width, ctx.platform^.scene_height})
+    uitheme.prepare_draw_colors(&encoder, prepared^.increased_contrast)
     native.draw_encoder_enable_strokes(&encoder, ctx.draw_runtime^.stroke_ready)
     native.draw_encoder_enable_dust_instancing(
         &encoder, ctx.draw_runtime^.dust_ready)

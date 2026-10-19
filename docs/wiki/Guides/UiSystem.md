@@ -13,6 +13,8 @@
 1. [Layout And Panel Composition](#layout-and-panel-composition)
     1. [Surface Elevation](#surface-elevation)
 1. [Input, Capture, And Focus](#input-capture-and-focus)
+1. [Normal-Mode Contrast](#normal-mode-contrast)
+1. [Increased Contrast](#increased-contrast)
 1. [Choose A Route By Task](#choose-a-route-by-task)
 1. [Changing The UI](#changing-the-ui)
 
@@ -397,6 +399,115 @@ Follow this path when debugging an event that disappears or reaches the wrong pl
 4. Follow the target owner: a widget, Library, Presentation, or the Terminal facade.
 5. Check semantic registration separately if pointer behavior works but keyboard or
    accessibility behavior does not.
+
+## Normal-Mode Contrast
+
+The stock normal presentation targets at least **4.5:1 for enabled informational
+text** and **3:1 for essential control boundaries, glyphs, and state indicators**.
+These are WCAG 2.2 AA-informed contrast thresholds, not a claim of full WCAG
+conformance. Ordinary 16-logical-pixel text does not use the large-text exception.
+Evaluate alpha layers after compositing on the renderer's UNORM scene target,
+then apply the WCAG sRGB relative-luminance formula; do not round a failing ratio
+up to the threshold.
+
+The [UI palette](../../../src/view/ui/theme/palette.odin) separates decorative
+borders from essential control boundaries and selection roles. Keep ordinary
+warm text and dark backgrounds where they already pass. Do not reuse the faint
+decorative border as selected-text backing or as the only visible checkbox,
+input, scrollbar, or other essential control indicator.
+
+| Stock pair or state | Nominal contrast |
+| --- | --- |
+| Ordinary text on burgundy / dark panel | 5.05:1 / 6.38:1 |
+| Selected Library row: warm `#C7AEB3` on drawer rose `#563742` | 5.01:1 |
+| Selected input, GIF timing, or active animation glyph: dark on muted rose | 6.38:1 |
+| Essential control outline on burgundy / dark panel | 3.28:1 / 4.15:1 |
+| Terminal package / shell prompt on dark panel | 6.47:1 / 6.23:1 |
+| Terminal completion preview on dark panel | 4.70:1 |
+| Terminal and default presentation selected text / selection fill against dark panel | 5.55:1 / 3.17:1 |
+| Fully shown blue splitter feedback against burgundy | 3.38:1 |
+
+These are source-color ratios, not measurements of antialiased glyph-edge pixels.
+The [contrast tests](../../../src/view/ui/contrast_test.odin) cover production
+colors and composited states. Draw-encoder tests and rendered scenarios separately
+check that the intended colors actually reach the draw paths.
+
+Selection, keyboard focus, and pressing have independent meanings. Selected rows
+keep their drawer-rose fill when focus leaves; labels, disclosures, and action
+glyphs must use a foreground that matches their actual backing. Keyboard focus
+uses light and dark edges so it remains visible on selected and unselected fills.
+Editable selection clips full shaped runs rather than reshaping selected
+substrings. Presentation selection uses the Terminal's opaque blue-gray `#5A6A7C`
+fill and white selected stock text, including prose, math glyphs and rules, and
+plain-text fallback. It clips repainting to the existing selection fragments without
+reshaping, mutating semantic caches, or contributing selection ink to presentation
+effects. Explicit authored colors remain unchanged (even if they match the ordinary
+text color); their contrast against selection is not guaranteed. No selection outline
+is drawn. Splitters preserve their blue,
+hover-only feedback and existing fade; no permanent splitter stripe is introduced.
+
+Julia/StyledStrings owns syntax highlighting in both modes, including stock
+comments, keywords, syntax-error faces, `faces.toml`, and environment customizations.
+Euclid neither installs replacement faces nor rehighlights when contrast changes.
+Resolved syntax colors are not part of the application's contrast guarantee.
+Completion previews remain application-owned and have a dotted underline as well
+as a distinct, readable foreground.
+
+Scope and exceptions:
+
+- Disabled labels remain readable but subdued; inactive controls are exempt from
+  the numerical pass/fail target and remain unavailable to input.
+- Decorative panel borders, separators, shadows, and animation fade endpoints are
+  not essential control boundaries. Do not brighten them indiscriminately.
+- Authored presentation/animation colors, arbitrary Terminal output, explicit
+  backgrounds, indexed/direct colors, OSC palette changes, and all Julia syntax
+  theme colors are preserved, not automatically contrast-corrected.
+- Default Dynview prose/math and fallback text remain in scope. Their owning style
+  package must not import the UI theme; update its style revision if defaults change.
+- Font sizing remains separate work.
+
+## Increased Contrast
+
+Settings exposes a persisted **Increased contrast** checkbox. Effective policy is
+the manual request OR the last successfully acquired system request; an unchecked
+checkbox does not disable a system request. The localized system-active note has
+its own accessible static-text node. Only manual intent is saved.
+
+The [appearance roles](../../../src/view/ui/theme/appearance.odin) are immutable,
+display-selected tables borrowed for one frame. Native drawing does not interpret
+or remap RGB values. Default Dynview prose, math, rules, and fallback text resolve
+roles at draw time; geometry, semantic caches, authored colors, and layout stay
+unchanged. Terminal live and retained app-authored prefixes have explicit ownership
+markers, so they can update without recoloring identical arbitrary output. Explicit
+OSC foreground/cursor overrides take precedence until their corresponding reset.
+
+Enabled application-owned informational text targets **7:1**, including composited
+hover/selected states, prompts, completion previews, and selection lettering.
+Essential control outlines retain the **3:1** target. Disabled controls, authored
+content, Julia syntax colors, and arbitrary terminal output retain the exceptions
+above. These targets are not a claim of full accessibility conformance.
+
+| Increased pair | Nominal contrast |
+| --- | --- |
+| Warm `#D6BFC3` on unchanged burgundy / dark panel | 8.00:1 / 10.13:1 |
+| Selected tree `#E8D2D6` on unchanged drawer rose `#563742` | 7.24:1 |
+| Selected Terminal/Dynview white on blue-gray `#4A5868` | 7.27:1 |
+
+The darker text-selection fill is an explicit trade-off: its distinction from the
+dark panel is approximately 2.42:1, not 3:1. A single uniform fill cannot reach both
+3:1 against that panel and 7:1 with white lettering. The selected-text target takes
+precedence here; no outline, panel redesign, or change to Standard selection is
+introduced. Tree selection likewise retains the exact existing drawer fill.
+Splitters keep their original blue hover-only behavior in both modes.
+
+Native preference acquisition belongs to
+[the SDL contrast boundary](../../../src/view/native/sdl_contrast.odin): Windows
+uses `SPI_GETHIGHCONTRAST`, macOS uses `NSWorkspace`'s increased-contrast request,
+and Linux optionally reads the appearance portal's `contrast` key. Linux desktop
+service work runs off the display thread, with a bounded request and joined teardown.
+Queries refresh on reactivation and every five seconds. Unsupported services and
+failed queries are reported separately and retain the last successful request.
+This follows a system accessibility request, not the operating system's palette.
 
 ## Choose A Route By Task
 

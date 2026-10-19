@@ -7,6 +7,90 @@ import geometry "../../../core/geometry"
 import testing "core:testing"
 import input "../../input"
 import viewmodel "../model"
+import theme "../theme"
+
+// Verify clipped selection repaint uses the same partial/multiline geometry and restores the scissor.
+@(test)
+dynview_selection_repaint_preserves_fragments :: proc(t: ^testing.T) {
+    vertices: [8]native.Draw_Vertex
+    indices: [12]u32
+    batches: [2]native.Draw_Batch
+    commands: [2]native.Draw_Command
+    encoder: native.Draw_Encoder
+    view := Dynview_Selection_View{
+        panel = {10, 20, 40, 60}, text_padding = 5, row_height = 20,
+        wrap_advance = 10, fallback_text = "abcdef"}
+    draw := Presentation_Selection_Draw{
+        params = {encoder = &encoder, panel = view.panel}}
+    directions := [2]bool{false, true}
+    for reversed in directions {
+        testing.expect(t, native.draw_encoder_begin(&encoder,
+            {vertices[:], indices[:], batches[:], commands[:], nil},
+            {100, 100}, {100, 100}))
+        anchor, head := 1, 5
+        if reversed {anchor, head = head, anchor}
+        draw_presentation_selection(&draw, {
+            encoder = &encoder,
+            selection = {.Wrapped_Text, 0, {anchor}, {head}, true, false},
+            view = view,
+        })
+        testing.expect_value(t, encoder.vertex_count, 8)
+        testing.expect_value(t, encoder.scissor_count, 1)
+        testing.expect_value(t, encoder.batch_count, 2)
+        testing.expect_value(t, batches[0].scissor, native.Draw_Scissor{25, 25, 20, 20})
+        testing.expect_value(t, batches[1].scissor, native.Draw_Scissor{15, 45, 20, 20})
+        for vertex in vertices {
+            testing.expect_value(t,
+                vertex.color, theme.UI_TEXT_SELECTION_BACKGROUND_COLOR)
+        }
+    }
+}
+
+// Verify offscreen selection does not redraw content and panel scissoring remains in force.
+@(test)
+dynview_selection_repaint_culls_hidden_fragments :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    panel := geometry.Rectangle{10, 20, 40, 60}
+    _ = native.draw_encoder_push_scissor(&encoder, panel)
+    draw := Presentation_Selection_Draw{
+        params = {encoder = &encoder, panel = panel}}
+    draw_presentation_selection_fragment(&draw, {10, 100, 20, 20})
+    testing.expect_value(t, encoder.vertex_count, 0)
+    draw_presentation_selection_fragment(&draw, {0, 10, 20, 20})
+    testing.expect_value(t, encoder.vertex_count, 4)
+    testing.expect_value(t, encoder.scissor_count, 2)
+    testing.expect_value(t, batches[0].scissor, native.Draw_Scissor{10, 20, 10, 10})
+    testing.expect_value(t, encoder.statistics.command_overflows, u32(0))
+}
+
+// Verify presentation selection emits only its fill, never an outline over the text.
+@(test)
+dynview_selection_draws_fill_only :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    dynview_draw_selection_rect({
+        encoder = &encoder, color = theme.UI_PRESENTATION_SELECTION_COLOR},
+        {10, 20, 40, 24})
+    testing.expect_value(t, encoder.vertex_count, 4)
+    testing.expect_value(t, encoder.index_count, 6)
+    testing.expect_value(t, encoder.statistics.command_overflows, u32(0))
+    for vertex in vertices {
+        testing.expect_value(t, vertex.color, theme.UI_PRESENTATION_SELECTION_COLOR)
+    }
+}
 
 // Verify selection boundaries normalize forward and reverse drags.
 @(test)

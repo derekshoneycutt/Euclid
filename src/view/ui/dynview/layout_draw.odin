@@ -12,6 +12,7 @@ import font "../../font"
 import math "core:math"
 import fmt "core:fmt"
 import viewtext "../text"
+import theme "../theme"
 
 //   Measured per-cell items plus per-column widths and per-row extents.
 Matrix_Draw_Cells :: struct {
@@ -219,6 +220,8 @@ Layout_Draw_Context :: struct {
     panel : geometry.Rectangle,
     font : font.Font_Face,
     font_size : f32,
+    selected_text: bool,
+    selection_clip: geometry.Rectangle,
 }
 
 //   Complete inputs for emitting one selected horizontal glyph-accent run.
@@ -347,6 +350,28 @@ DOCUMENT_SHAPE_DRAW_KINDS ::
     .Perpendicular = .Inline_Perpendicular,
     .Triangle = .Inline_Triangle,
     .Pentagon = .Inline_Pentagon,
+}
+
+// layout_draw_style brightens stock text during selected repaint without changing cached styles.
+layout_draw_style :: proc(
+    ctx: Layout_Draw_Context, style_id: i32) -> dyncore.Dynview_Text_Style {
+    style := dyncore.style_by_id(style_id)
+    if ctx.encoder != nil && len(ctx.encoder^.semantic_colors) > 0 {
+        role: theme.Color_Role = .Text
+        switch style_id {
+        case dyncore.DYNVIEW_STYLE_PROMPT:
+            role = .Prompt_Text
+        case dyncore.DYNVIEW_STYLE_ERROR:
+            role = .Error_Text
+        case dyncore.DYNVIEW_STYLE_INLINE_ATOM:
+            role = .Inline_Text
+        }
+        style.color = theme.draw_color(ctx.encoder, role)
+    }
+    if ctx.selected_text {
+        style.color = theme.draw_color(ctx.encoder, .Text_Selection_Foreground)
+    }
+    return style
 }
 
 //   Draw math text without shaping while allowing any cmap-supported glyph.
@@ -542,7 +567,7 @@ draw_recursive_accent_item :: proc(
             draw_x+item.accent_child_x,
             baseline_y + item.accent_child_baseline, 0, {}, 0})
 
-    accent_style := dyncore.style_by_id(item.accent_style_id)
+    accent_style := layout_draw_style(ctx, item.accent_style_id)
     if item.accent_mode > 2 {
         _ = draw_glyph_accent_construction(
             ctx, item, draw_x, baseline_y, accent_style.color)
@@ -665,7 +690,7 @@ radical_layout_for_child :: proc(
     draw_x, item_y: f32) -> Radical_Layout {
 
     baseline_y := item_y + item.ascent
-    style := dyncore.style_by_id(item.style_id)
+    style := layout_draw_style(ctx, item.style_id)
     base_advance :=
         dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
     lead_width := dynmath.radical_lead_width(ctx.font_size, base_advance)
@@ -795,13 +820,13 @@ draw_recursive_radical_item :: proc(
         return
     }
 
-    script_style := dyncore.style_by_id(item.script_style_id)
+    script_style := layout_draw_style(ctx, item.script_style_id)
     script_font := resolve_font_for_style(ctx.state, script_style, ctx.font)
     index_text := dyncore.text_span_from_buffer(
         &ctx.runtime^.command_buffer,
         item.radical_index_text_offset,
         item.radical_index_text_len)
-    radical_style := dyncore.style_by_id(item.accent_style_id)
+    radical_style := layout_draw_style(ctx, item.accent_style_id)
 
     if draw_sealed_radical(layout, radical_style) {
         return
@@ -850,7 +875,7 @@ script_attach_style :: proc(
     item: dynviewmodel.Dynview_Layout_Item) -> Script_Attach_Style {
 
     out := Script_Attach_Style{}
-    out.style = dyncore.style_by_id(item.script_style_id)
+    out.style = layout_draw_style(ctx, item.script_style_id)
     out.font = resolve_font_for_style(ctx.state, out.style, ctx.font)
     script_scale := max(0.2, item.script_scale)
     offsets := dynmath.script_draw_offsets(
@@ -992,29 +1017,30 @@ fraction_resolve_programs :: proc(
 
 //   Resolve the fraction divider color, honoring an accent-style override.
 fraction_divider_color :: #force_inline proc(
+    ctx: Layout_Draw_Context,
     item: dynviewmodel.Dynview_Layout_Item,
     style: dyncore.Dynview_Text_Style) -> dynviewmodel.Color {
 
     if item.accent_style_id > 0 {
-        return dyncore.style_by_id(item.accent_style_id).color
+        return layout_draw_style(ctx, item.accent_style_id).color
     }
     return style.color
 }
 
 //   Draw the centered divider rule for one recursive fraction.
 draw_fraction_divider :: proc(
-    encoder: ^native.Draw_Encoder,
+    ctx: Layout_Draw_Context,
     style: dyncore.Dynview_Text_Style,
     item: dynviewmodel.Dynview_Layout_Item,
     draw_x, baseline_y: f32) {
 
-    _ = native.draw_encoder_line(encoder,
+    _ = native.draw_encoder_line(ctx.encoder,
         {draw_x + item.fraction_rule_left,
             baseline_y + item.fraction_rule_center},
         {draw_x + item.fraction_rule_right,
             baseline_y + item.fraction_rule_center},
         max(1, item.fraction_rule_thickness),
-        fraction_divider_color(item, style))
+        fraction_divider_color(ctx, item, style))
 }
 
 //   Draw one recursive fraction with centered numerator/denominator and center divider.
@@ -1050,7 +1076,7 @@ draw_recursive_fraction_item :: #force_inline proc(
         Program_Draw_Position{draw_x + item.fraction_denominator_x,
             baseline_y + item.fraction_denominator_baseline,
             denominator_size, denominator_style, 0})
-    draw_fraction_divider(ctx.encoder, style, item, draw_x, baseline_y)
+    draw_fraction_divider(ctx, style, item, draw_x, baseline_y)
 }
 
 //   Draw one normalized cubic Bezier segment as line samples in pixel space.
@@ -2104,7 +2130,7 @@ large_op_apply_program_limit :: proc(
 large_op_measure_limits :: proc(d: Math_Item_Draw, m: ^Large_Op_Metrics) {
     ctx := d.ctx
     item := d.item
-    m^.script_style = dyncore.style_by_id(item.script_style_id)
+    m^.script_style = layout_draw_style(ctx, item.script_style_id)
     m^.script_font = resolve_font_for_style(ctx.state, m^.script_style, d.resolved_font)
     limit_scale := max(0.2, item.script_scale)
     m^.limit_font_size = max(1.0, ctx.font_size * limit_scale)
@@ -2485,17 +2511,31 @@ draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
 
 //   Draw one cached inline shape item.
 draw_cached_inline_item :: proc(
-    encoder: ^native.Draw_Encoder,
+    ctx: Layout_Draw_Context,
     item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
 
-    encode_inline_item(encoder, item, item_x, item_y)
+    selected_ink := layout_draw_style(ctx, item.style_id).color
+    encode_inline_item(ctx.encoder, item, item_x, item_y, selected_ink)
 }
 
 // Resolve one semantic color against the standard Dynview foreground.
 document_draw_color :: #force_inline proc(
     color: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
     return color.value if color.present else dyncore.UI_TEXT_COLOR
+}
+
+// document_selected_draw_color preserves explicit colors, even when equal to the stock text color.
+document_selected_draw_color :: proc(
+    ctx: Layout_Draw_Context,
+    authored: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
+    if ctx.selected_text && !authored.present {
+        return theme.draw_color(ctx.encoder, .Text_Selection_Foreground)
+    }
+    if !authored.present {
+        return theme.draw_color(ctx.encoder, .Text)
+    }
+    return document_draw_color(authored)
 }
 
 // Preserve an optional semantic color as the transparent-zero shape sentinel.
@@ -2640,7 +2680,7 @@ draw_document_prose_item :: proc(
             glyphs = cache^.document_shaped_glyphs[
                 run.glyph_start:run.glyph_start+run.glyph_count],
             position = {position.x, line_top},
-            color = document_draw_color(semantic_inline.color),
+            color = document_selected_draw_color(ctx, semantic_inline.color),
             font_size = ctx.font_size, base_pixel_size = run.base_pixel_size,
         },
         text = content.text,
@@ -2693,7 +2733,7 @@ draw_document_display_number :: proc(
     if line.display_number <= 0 {
         return
     }
-    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
+    style := layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT)
     baseline := origin.y+line.baseline+line.display_number_baseline_offset
     position := geometry.Vector2{origin.x+line.display_number_x,
         baseline-ctx.font_size*0.8}
@@ -2722,8 +2762,9 @@ draw_document_layout :: proc(
         ctx.panel.x+text_padding,
         ctx.panel.y+text_padding-scroll_y,
     }
-    panel_top := ctx.panel.y
-    panel_bottom := ctx.panel.y+ctx.panel.height
+    clip := ctx.selection_clip if ctx.selected_text else ctx.panel
+    panel_top := clip.y
+    panel_bottom := clip.y+clip.height
     for line in cache^.document_layout_lines {
         if layout_line_outside_panel(
             origin.y+line.top, origin.y+line.bottom, panel_top, panel_bottom) {
@@ -2749,7 +2790,7 @@ draw_cached_line :: proc(
     item_end := line.item_start + line.item_count
     for item_index in line.item_start..<item_end {
         item := runtime^.compile_cache.layout_items[item_index]
-        style := dyncore.style_by_id(item.style_id)
+        style := layout_draw_style(ctx, item.style_id)
         item_x := ctx.panel.x + text_padding +
             f32(item.col_start) * cache^.last_cell_width + item.content_offset_x
         item_y := line_top + f32(item.row_offset) * cache^.last_cell_height +
@@ -2767,7 +2808,7 @@ draw_cached_line :: proc(
             continue
         }
 
-        draw_cached_inline_item(ctx.encoder, item, item_x, item_y)
+        draw_cached_inline_item(ctx, item, item_x, item_y)
     }
 }
 
@@ -2787,8 +2828,9 @@ draw_cached_layout :: proc(
     }
 
     panel := ctx.panel
-    panel_top := panel.y
-    panel_bottom := panel.y + panel.height
+    clip := ctx.selection_clip if ctx.selected_text else panel
+    panel_top := clip.y
+    panel_bottom := clip.y + clip.height
     for line_index in 0..<cache^.layout_line_count {
         line := cache^.layout_lines[line_index]
         line_top := panel.y + text_padding +
@@ -2805,4 +2847,3 @@ draw_cached_layout :: proc(
         draw_cached_line(ctx, line, line_top, text_padding)
     }
 }
-

@@ -1097,27 +1097,29 @@ draw_encoded_tree_row :: proc(
     depth: int, row_y: f32, expanded: bool = false) {
     row := geometry.Rectangle{
         ctx.panel.x, row_y, ctx.panel.width, theme.TREE_ROW_HEIGHT}
+    selected := ctx.state^.ui_runtime.library.tree.selected_item_id == item^.key
     if row.y + row.height >= ctx.panel.y &&
         row.y <= ctx.panel.y + ctx.panel.height {
-        if ctx.state^.ui_runtime.library.tree.selected_item_id == item^.key {
+        if selected {
             _ = native.draw_encoder_rectangle(
-                ctx.encoder, geometry.Rectangle(row), theme.UI_BORDER_COLOR)
+                ctx.encoder, geometry.Rectangle(row),
+                theme.UI_TREE_SELECTION_BACKGROUND_COLOR)
         }
         if item == ctx.pressed_node {
-            highlight := theme.UI_TEXT_COLOR
-            highlight.a = 24
-            _ = native.draw_encoder_rectangle(ctx.encoder, row, highlight)
+            tint := theme.UI_SELECTED_HOVER_COLOR if selected else theme.UI_HOVER_COLOR
+            _ = native.draw_encoder_rectangle(ctx.encoder, row, tint)
         }
         if !ctx.render_only &&
            tree_placement_is_keyboard_active(&ctx.state^.ui_runtime, item) {
-            _ = native.draw_encoder_rectangle_outline(
-                ctx.encoder, geometry.Rectangle(row), 2, theme.UI_TEXT_COLOR)
+            uiwidgets.draw_encoded_focus_ring(ctx.encoder, row)
         }
         if item^.first_child != TREE_NO_ITEM {
             icon := geometry.Rectangle{row.x + f32(depth) * theme.TREE_INDENT +
                 theme.TREE_ROW_ICON_OFFSET_X, row.y + theme.TREE_ROW_ICON_OFFSET_Y,
                 theme.TREE_ROW_ICON_SIZE, theme.TREE_ROW_ICON_SIZE}
-            uiwidgets.draw_encoded_disclosure(ctx.encoder, icon, expanded)
+            tint := theme.draw_color(ctx.encoder, .Tree_Text) if
+                selected else theme.draw_color(ctx.encoder, .Text)
+            uiwidgets.draw_encoded_disclosure(ctx.encoder, icon, expanded, tint)
         }
     }
 }
