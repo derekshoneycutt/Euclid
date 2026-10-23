@@ -38,6 +38,7 @@ termhist_test_initialization :: proc(t: ^testing.T) {
         &state, 0, -1, context.allocator))
     defer termhist_destroy(&state)
 
+    testing.expect_value(t, state.borrowed_allocator, context.allocator)
     testing.expect_value(t, len(state.text), 1)
     testing.expect_value(t, len(state.history), 1)
     testing.expect_value(t, termhist_current_text(&state), "")

@@ -4,6 +4,7 @@ import bridgemodel "../bridge/model"
 import font "font"
 import terminalview "terminal"
 import core "../core"
+import animation_model "../core/animation"
 import julia "../bridge"
 import evidence_session "../evidence/session"
 import runtime "base:runtime"
@@ -99,7 +100,8 @@ free_animations_state :: proc(state : ^core.Euclid_General_State) {
     viewcapture.gif_capture_destroy_session(&state^.gif_capture)
     terminalservice.terminal_graphics_runtime_destroy(state)
     terminalservice.shell_service_runtime_destroy(state)
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
     viewmodel.ui_tree_projection_destroy(
         &state^.ui_runtime.library.tree.projection)
     viewmodel.library_search_destroy(&state^.ui_runtime.library.search)

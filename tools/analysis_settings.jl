@@ -494,7 +494,8 @@ AnalysisSettings(
             AllocatorSourcePattern("owner.backing_allocator", :custom);
             AllocatorSourcePattern("store.allocator", :custom);
             AllocatorSourcePattern("store.payload_allocator", :custom);
-            AllocatorSourcePattern("state.allocator", :custom)
+            AllocatorSourcePattern("state.allocator", :custom);
+            AllocatorSourcePattern("state.borrowed_allocator", :custom)
         ],
         [
             AllocationResponseOverride(r"_test\.odin$", :context, Ignore),
@@ -1222,10 +1223,10 @@ AnalysisSettings(
                 "src/terminal/history/termhist.odin",
                 "termhist_allocate_storage",
                 :custom,
-                "Editor text and backup storage are explicitly destroyed with the history state.";
+                "Editor text and backup release through the borrowed domain; its owner controls reclamation.";
                 operation="make",
                 target="[]u8",
-                allocator_source="state.allocator",
+                allocator_source="state.borrowed_allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=2,
@@ -1235,10 +1236,10 @@ AnalysisSettings(
                 "src/terminal/history/termhist.odin",
                 "termhist_allocate_storage",
                 :custom,
-                "History entry storage is explicitly destroyed with the history state.";
+                "History entry storage releases through the borrowed domain before owner teardown.";
                 operation="make",
                 target="[]Termhist_Entry",
-                allocator_source="state.allocator",
+                allocator_source="state.borrowed_allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1248,7 +1249,7 @@ AnalysisSettings(
                 "src/terminal/history/termhist.odin",
                 "termhist_clone_text",
                 :custom,
-                "Exact UTF-8 history snapshot is deleted on replacement or with the bounded history owner.";
+                "Exact UTF-8 history snapshots release on replacement or teardown under allocator policy.";
                 operation="make",
                 target="[]u8",
                 allocator_source="allocator",
@@ -1326,10 +1327,10 @@ AnalysisSettings(
                 "src/terminal/history/termhist.odin",
                 "termhist_ensure_history_capacity",
                 :custom,
-                "Bounded history growth replaces and frees prior owner-backed storage.";
+                "History growth replaces storage and issues releases through the borrowed allocation domain.";
                 operation="make",
                 target="[]Termhist_Entry",
-                allocator_source="state.allocator",
+                allocator_source="state.borrowed_allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1339,10 +1340,10 @@ AnalysisSettings(
                 "src/terminal/history/termhist.odin",
                 "termhist_ensure_u8_capacity",
                 :custom,
-                "Bounded UTF-8 buffer growth replaces and frees prior owner-backed storage.";
+                "UTF-8 buffer growth replaces storage and issues releases through the borrowed allocation domain.";
                 operation="make",
                 target="[]u8",
-                allocator_source="state.allocator",
+                allocator_source="state.borrowed_allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,

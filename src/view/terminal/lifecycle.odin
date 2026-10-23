@@ -183,7 +183,7 @@ terminal_init_with_allocator :: proc(
     if term.initialized || term.history != nil {
         return false
     }
-    term^ = {allocator = allocator, animation_generation = generation}
+    term^ = {animation_generation = generation}
     if !terminal_construct_candidate(term, allocator, ambiguous_width) {
         term^ = {}
         return false
@@ -494,8 +494,9 @@ terminal_output_destroy :: proc(term: ^viewterminalmodel.Terminal_State) {
 //
 // Side effects:
 //   - Logs final diagnostics, destroys history and display resources, releases retained
-//     source views, destroys the storage arena, and clears published storage handles.
-terminal_destroy_semantics :: proc(term: ^viewterminalmodel.Terminal_State) {
+//     source views, and clears published storage handles without resetting the arena.
+terminal_destroy_semantics :: proc(
+    term: ^viewterminalmodel.Terminal_State, allocator: mem.Allocator) {
     if term == nil {
         return
     }
@@ -505,7 +506,7 @@ terminal_destroy_semantics :: proc(term: ^viewterminalmodel.Terminal_State) {
     terminal_log_teardown(term)
     terminal_log_shell_index_teardown(term)
     terminal_log_clipboard_teardown(term)
-    terminal_highlight_destroy(term)
+    terminal_highlight_destroy(term, allocator)
 
     if term.history != nil {
         termhist.termhist_destroy(term.history)
@@ -528,12 +529,13 @@ terminal_destroy_semantics :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.shell_integration = nil
 }
 
-// Release semantic terminal owners before the animation owner resets shared memory.
-terminal_destroy :: proc(term: ^viewterminalmodel.Terminal_State) {
+// Release semantic owners with the initialization allocator before its owner resets memory.
+terminal_destroy :: proc(
+    term: ^viewterminalmodel.Terminal_State, allocator: mem.Allocator) {
     if term == nil || !term.initialized {
         return
     }
-    terminal_destroy_semantics(term)
+    terminal_destroy_semantics(term, allocator)
     term^ = {}
 }
 

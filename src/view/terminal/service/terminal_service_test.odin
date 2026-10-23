@@ -146,7 +146,8 @@ terminal_service_test_real_pty_lifecycle :: proc(t: ^testing.T) {
         defer animation_model.animation_memory_destroy(&state^.animation_memory)
         testing.expect(t, terminalview.terminal_init_for_animation(
             &state^.terminal, &state^.animation_memory, 1))
-        defer terminalview.terminal_destroy(&state^.terminal)
+        defer terminalview.terminal_destroy(&state^.terminal,
+            animation_model.animation_memory_allocator(&state^.animation_memory))
         testing.expect(t, shell_service_runtime_init(state))
         defer shell_service_runtime_destroy(state)
 
@@ -188,7 +189,8 @@ terminal_service_test_hidden_view_preserves_session_and_output :: proc(t: ^testi
         defer animation_model.animation_memory_destroy(&state^.animation_memory)
         testing.expect(t, terminalview.terminal_init_for_animation(
             &state^.terminal, &state^.animation_memory, 2))
-        defer terminalview.terminal_destroy(&state^.terminal)
+        defer terminalview.terminal_destroy(&state^.terminal,
+            animation_model.animation_memory_allocator(&state^.animation_memory))
         testing.expect(t, shell_service_runtime_init(state))
         defer shell_service_runtime_destroy(state)
         terminalview.terminal_append_ansi_output(&state^.terminal, "before-hide\n")
@@ -256,7 +258,8 @@ terminal_service_test_entry_waits_for_julia_session :: proc(t: ^testing.T) {
     testing.expect_value(t, terminal_service_test_dispatch_egress(t, state), 1)
     testing.expect(t, terminal_service_test_contains(state, "Julia Version test"))
     testing.expect(t, !terminal_service_test_contains(state, "Euclid Terminal"))
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
 // Verify animation reset retirement permits pristine entry in the next generation.
@@ -273,13 +276,15 @@ terminal_service_test_generation_reentry_is_pristine :: proc(t: ^testing.T) {
     terminalview.terminal_append_ansi_output(
         &state^.terminal, "old generation\n")
 
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
     testing.expect_value(t, animation_model.animation_memory_begin_generation(
         &state^.animation_memory, 8), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, terminal_service_enter(state))
     testing.expect_value(t, state^.terminal.animation_generation, u64(8))
     testing.expect(t, !terminal_service_test_contains(state, "old generation"))
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
 // Verify typed transport applies ordered output and completion without entering Julia.
@@ -318,7 +323,8 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
     testing.expect(t, terminal_service_test_contains(state, "first"))
     testing.expect(t, terminal_service_test_contains(state, "second"))
     testing.expect(t, !state^.terminal.awaiting_eval)
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
 // Verify only a current ambiguous completion may append its candidate table.
@@ -352,7 +358,8 @@ terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
     })
     testing.expect(t, !terminal_service_dispatch_completion_result(state, &stale))
     testing.expect(t, !terminal_service_test_contains(state, "stale candidate"))
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
 // Verify late terminal egress cannot mutate a replacement animation generation.
@@ -366,7 +373,8 @@ terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
     testing.expect_value(t, animation_model.animation_memory_begin_generation(
         &state^.animation_memory, 21), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, terminal_service_enter(state))
@@ -382,7 +390,8 @@ terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
         state^.julia_runtime_service)
     testing.expect(t, !received_event)
     testing.expect(t, !terminal_service_test_contains(state, "stale output"))
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
 // Verify display dispatch accepts current fixed responses and rejects stale families.
@@ -423,5 +432,6 @@ terminal_service_test_dispatches_fixed_response_families :: proc(t: ^testing.T) 
     stale := bridgemodel.Julia_Host_Egress(protocol.Terminal_Session_Stopped{
         animation_generation = 29})
     testing.expect(t, !terminal_service_dispatch_egress(state, &stale))
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }

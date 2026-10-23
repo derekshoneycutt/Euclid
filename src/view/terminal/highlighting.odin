@@ -20,14 +20,15 @@ terminal_highlight_init :: proc(
 }
 
 // Release storage before the enclosing generation allocator is reset.
-terminal_highlight_destroy :: proc(term: ^model.Terminal_State) {
+terminal_highlight_destroy :: proc(
+    term: ^model.Terminal_State, allocator: mem.Allocator) {
     if term.highlighting == nil {
         return
     }
     h := term.highlighting
     log.debugf("terminal highlights rejected=%d stale=%d failed=%d evicted=%d",
         h.rejected_count, h.stale_count, h.failure_count, h.eviction_count)
-    free(h, term.allocator)
+    free(h, allocator)
     term.highlighting = nil
 }
 

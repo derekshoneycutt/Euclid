@@ -182,11 +182,11 @@ terminal_test_theme_preserves_prompt_provenance :: proc(t: ^testing.T) {
 terminal_test_reinitialization_is_rejected :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
-    allocator := term.allocator
+    defer terminal_destroy(&term, context.allocator)
+    allocator := term.history.borrowed_allocator
 
     testing.expect(t, !terminal_init(&term))
-    testing.expect_value(t, term.allocator, allocator)
+    testing.expect_value(t, term.history.borrowed_allocator, allocator)
     testing.expect(t, term.history != nil)
 }
 
@@ -196,9 +196,9 @@ terminal_test_destroy_is_idempotent :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
 
-    terminal_destroy(&term)
+    terminal_destroy(&term, context.allocator)
     testing.expect(t, !term.initialized)
-    terminal_destroy(&term)
+    terminal_destroy(&term, context.allocator)
     testing.expect(t, !term.initialized)
     testing.expect(t, term.history == nil)
     testing.expect(t, term.output_interpreter.title_state == nil)
@@ -281,7 +281,7 @@ terminal_test_write_clipboard :: proc(user_data: rawptr, text: string) -> bool {
 terminal_test_shell_integration_navigation :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.geometry.line_height = 20
     terminal_append_ansi_output(&term,
         "\e]7;file:///tmp/project\a\e]133;A\aone\r\n" +
@@ -320,7 +320,7 @@ terminal_test_apply_shell_shortcut :: proc(
 terminal_test_shell_command_navigation_and_selection :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.geometry.line_height = 20
     terminal_append_ansi_output(&term,
         "\e]133;A\ap$ \e]133;B\aecho one\e]133;C\a\r\none\r\n" +
@@ -351,7 +351,7 @@ terminal_test_shell_command_navigation_and_selection :: proc(t: ^testing.T) {
 terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 20, rows = 4}, term.output_grid.allocator))
     terminal_append_ansi_output(&term,
@@ -386,7 +386,7 @@ terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
 terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_ansi_output(&term,
         "\e]133;A\a\e]133;B\aecho β\e]133;C\a\e]133;D;0\a")
     testing.expect(t, terminal_command_search_begin(&term))
@@ -563,7 +563,7 @@ terminal_test_resolve_mouse_frame_uses_live_grid :: proc(t: ^testing.T) {
 terminal_test_primary_grid_resize_rebuilds_checkpoint :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "\e[34;1HCAPTURED"))
     testing.expect(t, termgrid.display_checkpoint_capture(
@@ -594,7 +594,7 @@ terminal_test_primary_grid_resize_rebuilds_checkpoint :: proc(t: ^testing.T) {
 terminal_test_primary_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     dimensions := term.geometry.dimensions
     columns := term.output_grid.columns
     rows := term.output_grid.row_count
@@ -616,7 +616,7 @@ terminal_test_primary_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) 
 terminal_test_second_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     active_cells := raw_data(term.output_grid.cells)
     inactive_cells := raw_data(term.output_alternate_grid.cells)
     failure_storage: [size_of(termgrid.Cell)*100*30 +
@@ -640,7 +640,7 @@ terminal_test_second_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
 terminal_test_resized_grid_commits_new_width_scrollback :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 6, rows = 2}, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
@@ -672,7 +672,7 @@ terminal_test_expect_narrow_reflow :: proc(
 terminal_test_primary_reflow_round_trip_preserves_selection :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 6, rows = 2}, term.output_grid.allocator))
     term.output_started = true
@@ -742,7 +742,7 @@ terminal_test_admit_reflow_placement :: proc(
 terminal_test_raster_resolves_blank_grid_row :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 6, rows = 2}, term.output_grid.allocator))
     term.output_started = true
@@ -759,7 +759,7 @@ terminal_test_raster_resolves_blank_grid_row :: proc(t: ^testing.T) {
 terminal_test_raster_extends_content_height :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 6, rows = 2}, term.output_grid.allocator))
     term.output_started = true
@@ -783,7 +783,7 @@ terminal_test_raster_extends_content_height :: proc(t: ^testing.T) {
 terminal_test_primary_reflow_relocates_viewport_anchor :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 3, rows = 2}, term.output_grid.allocator))
     term.output_started = true
@@ -803,7 +803,7 @@ terminal_test_primary_reflow_relocates_viewport_anchor :: proc(t: ^testing.T) {
 terminal_test_primary_reflow_relocates_placements :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 6, rows = 2}, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
@@ -842,7 +842,7 @@ terminal_test_primary_reflow_relocates_placements :: proc(t: ^testing.T) {
 terminal_test_primary_reflow_preserves_delayed_wrap :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 6, rows = 2}, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
@@ -864,7 +864,7 @@ terminal_test_primary_reflow_preserves_delayed_wrap :: proc(t: ^testing.T) {
 terminal_test_primary_reflow_rebuilds_semantic_checkpoint :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
         &term, {columns = 9, rows = 2}, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
@@ -893,7 +893,7 @@ terminal_test_primary_reflow_rebuilds_semantic_checkpoint :: proc(t: ^testing.T)
 terminal_test_resize_reconciles_view_selection :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     term.view_selection_active = true
     term.view_selection_anchor = {line = 0, byte_offset = 2}
@@ -910,7 +910,7 @@ terminal_test_resize_reconciles_view_selection :: proc(t: ^testing.T) {
 terminal_test_resize_preserves_valid_view_selection :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     term.view_selection_active = true
     term.view_selection_anchor = {line = 0, byte_offset = 2}
@@ -927,7 +927,7 @@ terminal_test_alternate_screen_resize_restores_resized_primary :: proc(
     t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     interpreter := &term.output_interpreter
     testing.expect(t, termemulator.interpreter_write(
         interpreter, "\e[34;1HPRIMARY\e[s\e[?1049h\e[34;1HALT\e[s"))
@@ -1003,7 +1003,8 @@ terminal_test_animation_generation_replacement :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init_for_animation(&term, &memory, 7))
     testing.expect_value(t, term.animation_generation, u64(7))
     testing.expect(t,
-        term.allocator == animation_model.animation_memory_allocator(&memory))
+        term.history.borrowed_allocator ==
+            animation_model.animation_memory_allocator(&memory))
     initial := animation_model.animation_memory_diagnostics(&memory)
     testing.expect(t, initial.current_used > 0)
 
@@ -1011,7 +1012,7 @@ terminal_test_animation_generation_replacement :: proc(t: ^testing.T) {
     churned := animation_model.animation_memory_diagnostics(&memory)
     testing.expect(t, churned.current_used >= initial.current_used)
 
-    terminal_destroy(&term)
+    terminal_destroy(&term, animation_model.animation_memory_allocator(&memory))
     testing.expect_value(t, animation_model.animation_memory_begin_generation(
         &memory, 8), animation_model.Animation_Memory_Status.Ok)
     reset := animation_model.animation_memory_diagnostics(&memory)
@@ -1019,7 +1020,7 @@ terminal_test_animation_generation_replacement :: proc(t: ^testing.T) {
     testing.expect_value(t, reset.reset_count, churned.reset_count + 1)
     testing.expect(t, terminal_init_for_animation(&term, &memory, 8))
     testing.expect_value(t, term.animation_generation, u64(8))
-    terminal_destroy(&term)
+    terminal_destroy(&term, animation_model.animation_memory_allocator(&memory))
 }
 
 // Verify terminal initialization and replacement grids retain wide ambiguous policy.
@@ -1028,7 +1029,7 @@ terminal_test_ambiguous_width_policy_is_terminal_lifetime_state :: proc(
     t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term, .Wide))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     palette := &term.output_interpreter.title_state.palette
     testing.expect_value(t, palette.colors[196], u32(0xFF0000FF))
     testing.expect_value(t, palette.defaults, palette.colors)
@@ -1282,7 +1283,7 @@ terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
 
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_insert_text(term.history, "ac"))
     testing.expect(t, termhist.termhist_move_left(term.history))
     testing.expect(t, terminal_insert_clipboard_text(&term, "β"))
@@ -1295,7 +1296,7 @@ terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
 terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     frame := input.Input_Frame{events = []input.Input_Event{{
         kind = .Text,
@@ -1316,7 +1317,7 @@ terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
 terminal_test_keyboard_inserts_ordered_committed_text :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     frame := input.Input_Frame{events = []input.Input_Event{
         {kind = .Text, codepoint = 'A'},
@@ -1337,7 +1338,7 @@ terminal_test_keyboard_inserts_ordered_committed_text :: proc(t: ^testing.T) {
 terminal_test_banner_gates_prompt_and_input :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, !terminal_prompt_visible(&term))
     update := terminal_update_keyboard(&term, input.Input_Frame{})
@@ -1354,7 +1355,7 @@ terminal_test_banner_gates_prompt_and_input :: proc(t: ^testing.T) {
 terminal_test_prompt_waits_for_eval_completion :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     testing.expect(t, terminal_prompt_visible(&term))
 
@@ -1379,7 +1380,7 @@ terminal_test_prompt_waits_for_eval_completion :: proc(t: ^testing.T) {
 terminal_test_continuation_is_multiline_editable :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     termhist.termhist_insert_text(term.history, "begin\n    value")
     submitted := terminal_submit(&term)
@@ -1412,7 +1413,7 @@ terminal_test_continuation_is_multiline_editable :: proc(t: ^testing.T) {
 terminal_test_continuation_restores_display_checkpoint :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_output_line(&term, "before")
     testing.expect(t, termhist.termhist_insert_text(term.history, "begin"))
@@ -1435,7 +1436,7 @@ terminal_test_repeated_continuation_does_not_duplicate_prompt_rows :: proc(
 
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "for i in 1:2"))
     first := terminal_submit(&term)
@@ -1471,7 +1472,7 @@ terminal_test_repeated_continuation_does_not_duplicate_prompt_rows :: proc(
 terminal_test_help_mode_keeps_text_after_leading_question_mark :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     termhist.termhist_insert_text(term.history, "sort")
     termhist.termhist_move_home(term.history)
@@ -1487,7 +1488,7 @@ terminal_test_help_mode_keeps_text_after_leading_question_mark :: proc(t: ^testi
 terminal_test_question_mark_mid_line_does_not_enter_help_mode :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     termhist.termhist_insert_text(term.history, "sort")
 
@@ -1501,7 +1502,7 @@ terminal_test_question_mark_mid_line_does_not_enter_help_mode :: proc(t: ^testin
 terminal_test_exit_help_mode_restores_standard_prompt :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_enter_help_mode_on_question_mark(&term, '?'))
     testing.expect(t, terminal_is_help_mode(&term))
@@ -1516,7 +1517,7 @@ terminal_test_exit_help_mode_restores_standard_prompt :: proc(t: ^testing.T) {
 terminal_test_pkg_mode_keeps_text_after_leading_bracket :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     termhist.termhist_insert_text(term.history, "status")
     termhist.termhist_move_home(term.history)
@@ -1532,7 +1533,7 @@ terminal_test_pkg_mode_keeps_text_after_leading_bracket :: proc(t: ^testing.T) {
 terminal_test_bracket_mid_line_does_not_enter_pkg_mode :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     termhist.termhist_insert_text(term.history, "status")
 
@@ -1546,7 +1547,7 @@ terminal_test_bracket_mid_line_does_not_enter_pkg_mode :: proc(t: ^testing.T) {
 terminal_test_pkg_mode_stays_active_across_submit :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_enter_pkg_mode_on_bracket(&term, ']'))
     termhist.termhist_insert_text(term.history, "status")
@@ -1564,7 +1565,7 @@ terminal_test_pkg_mode_stays_active_across_submit :: proc(t: ^testing.T) {
 terminal_test_backspace_on_empty_exits_pkg_mode :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_enter_pkg_mode_on_bracket(&term, ']'))
     testing.expect(t, terminal_try_exit_mode_on_empty_backspace(&term))
@@ -1577,7 +1578,7 @@ terminal_test_backspace_on_empty_exits_pkg_mode :: proc(t: ^testing.T) {
 terminal_test_cancel_pkg_mode :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_enter_pkg_mode_on_bracket(&term, ']'))
     termhist.termhist_insert_text(term.history, "status")
@@ -1593,7 +1594,7 @@ terminal_test_cancel_pkg_mode :: proc(t: ^testing.T) {
 terminal_test_history_browse_restores_recorded_mode :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_enter_pkg_mode_on_bracket(&term, ']'))
     termhist.termhist_insert_text(term.history, "status")
@@ -1649,7 +1650,7 @@ terminal_test_expect_hyperlink_precedence :: proc(
 terminal_test_can_exit_on_ctrl_d :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_can_exit_on_ctrl_d(&term))
 
@@ -1673,7 +1674,7 @@ terminal_test_can_exit_on_ctrl_d :: proc(t: ^testing.T) {
 terminal_test_completion_adds_prompt_spacing :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, terminal_begin_eval(&term, "1 + 1"))
     terminal_append_output_line(&term, "2")
@@ -1689,7 +1690,7 @@ terminal_test_completion_adds_prompt_spacing :: proc(t: ^testing.T) {
 terminal_test_hyperlink_click_activation :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_ansi_output(
         &term, "\e]8;;https://example.com/path\a界\e]8;;\a")
     term.geometry.column_width = 10
@@ -1720,7 +1721,7 @@ terminal_test_hyperlink_click_activation :: proc(t: ^testing.T) {
 terminal_test_detects_plain_text_links :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_output_line(&term,
         "See https://example.com/a(b). mailto:user@example.com! www.example.com")
     cells, present := terminal_output_row(&term, 0)
@@ -1755,7 +1756,7 @@ terminal_test_detects_plain_text_links :: proc(t: ^testing.T) {
 terminal_test_detected_link_boundaries_and_explicit_precedence :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_output_line(&term, "https://example.com/path) tail")
     cells, _ := terminal_output_row(&term, 0)
     detected := terminal_detect_link_at(cells, 0, 5)
@@ -1778,7 +1779,7 @@ terminal_test_detected_link_boundaries_and_explicit_precedence :: proc(t: ^testi
 terminal_test_detected_link_click_activation :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_output_line(&term, "https://example.com/path")
     term.geometry.column_width = 10
     term.geometry.line_height = 20
@@ -1815,7 +1816,7 @@ terminal_test_detected_link_click_activation :: proc(t: ^testing.T) {
 terminal_test_detected_link_changed_target_rejected :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_output_line(
         &term, "https://one.example https://two.example")
     cells, _ := terminal_output_row(&term, 0)
@@ -1831,7 +1832,7 @@ terminal_test_detected_link_changed_target_rejected :: proc(t: ^testing.T) {
 terminal_test_publishes_osc_clipboard_writes :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     producer := termmodel.Terminal_Producer{.Julia_Evaluation, 19, 0}
     terminal_append_ansi_output(
         &term, "\e]52;c;b25l\a\e]52;;zrI=\e\\", producer)
@@ -1859,7 +1860,7 @@ terminal_test_publishes_osc_clipboard_writes :: proc(t: ^testing.T) {
 terminal_test_discards_stale_osc_clipboard_writes :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     first := termmodel.Terminal_Producer{.Terminal_Session, 3, 1}
     second := termmodel.Terminal_Producer{.Terminal_Session, 3, 2}
     terminal_append_ansi_output(&term, "\e]52;c;b2xk\a", first)
@@ -1887,7 +1888,7 @@ terminal_test_discards_stale_osc_clipboard_writes :: proc(t: ^testing.T) {
 terminal_test_rejects_retained_text_overflow :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     oversized: [protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES + 1]u8
     source := string(oversized[:])
@@ -1918,7 +1919,7 @@ terminal_test_rejects_retained_text_overflow :: proc(t: ^testing.T) {
 terminal_test_accepts_unicode_completion_preview :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "x=\\alpha"))
     request := terminal_request_completion(&term)
@@ -1941,7 +1942,7 @@ terminal_test_accepts_unicode_completion_preview :: proc(t: ^testing.T) {
 terminal_test_discards_stale_completion :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "\\alpha"))
     request := terminal_request_completion(&term)
@@ -1962,7 +1963,7 @@ terminal_test_discards_stale_completion :: proc(t: ^testing.T) {
 terminal_test_completion_debounce :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "\\alpha"))
     terminal_schedule_completion(&term, 1)
@@ -1986,7 +1987,7 @@ terminal_test_completion_debounce :: proc(t: ^testing.T) {
 terminal_test_discards_duplicate_completion_result :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "\\alpha"))
     request := terminal_request_completion(&term)
@@ -2012,7 +2013,7 @@ terminal_test_discards_duplicate_completion_result :: proc(t: ^testing.T) {
 terminal_test_completion_requires_current_identity_and_cursor :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "print"))
     request := terminal_request_completion(&term)
@@ -2037,7 +2038,7 @@ terminal_test_completion_requires_current_identity_and_cursor :: proc(t: ^testin
 terminal_test_completion_failure_respects_snapshot :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     testing.expect(t, termhist.termhist_insert_text(term.history, "print"))
     request := terminal_request_completion(&term)
@@ -2076,7 +2077,7 @@ terminal_test_font_weight_selection :: proc(t: ^testing.T) {
 terminal_test_ansi_output_styles :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(
         &term, "\e[1;31mERROR\e[0m plain \e[4;96mlink\e[0m\n")
@@ -2099,7 +2100,7 @@ terminal_test_ansi_output_styles :: proc(t: ^testing.T) {
 terminal_test_ansi_output_carriage_return_overwrite :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "10%\r50%\r100%\n")
 
@@ -2112,7 +2113,7 @@ terminal_test_ansi_output_carriage_return_overwrite :: proc(t: ^testing.T) {
 terminal_test_synchronized_output_defers_presentation :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "old")
     terminal_append_ansi_output(&term, "\e[?2026h\e[31mnew")
@@ -2141,7 +2142,7 @@ terminal_test_synchronized_output_defers_presentation :: proc(t: ^testing.T) {
 terminal_test_synchronized_output_defers_hyperlinks :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(
         &term, "\e]8;;https://old.example\aA\e]8;;\a")
@@ -2163,7 +2164,7 @@ terminal_test_synchronized_output_defers_hyperlinks :: proc(t: ^testing.T) {
 terminal_test_synchronized_output_deadline_forces_publication :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "old\e[?2026hnew")
     terminal_update_synchronized_output(&term, 10)
@@ -2182,7 +2183,7 @@ terminal_test_synchronized_output_deadline_forces_publication :: proc(t: ^testin
 terminal_test_ansi_output_carriage_return_keeps_style :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "\e[31mfoo\rbar\e[0m\n")
 
@@ -2197,7 +2198,7 @@ terminal_test_ansi_output_carriage_return_keeps_style :: proc(t: ^testing.T) {
 terminal_test_ansi_output_crlf_normalized :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "a\r\nb\n")
 
@@ -2211,7 +2212,7 @@ terminal_test_ansi_output_crlf_normalized :: proc(t: ^testing.T) {
 terminal_test_ansi_output_chunk_boundary_preserves_lines :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "poop 1")
     terminal_append_ansi_output(&term, "\npoop 2\n")
@@ -2226,7 +2227,7 @@ terminal_test_ansi_output_chunk_boundary_preserves_lines :: proc(t: ^testing.T) 
 terminal_test_completion_restores_stranded_alternate_screen :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
 
     terminal_append_ansi_output(&term, "primary\n")
@@ -2257,7 +2258,7 @@ terminal_test_completion_restores_stranded_alternate_screen :: proc(t: ^testing.
 terminal_test_output_cursor_presentation :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "abc\e[2;3H")
     cursor := terminal_output_cursor_presentation(&term, true)
@@ -2287,7 +2288,7 @@ terminal_test_output_cursor_presentation :: proc(t: ^testing.T) {
 terminal_test_ansi_output_carriage_return_keeps_prior_line :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
 
     terminal_append_ansi_output(&term, "first\n")
     terminal_append_ansi_output(&term, "10%\r100%\n")

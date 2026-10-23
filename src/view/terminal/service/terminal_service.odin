@@ -2,6 +2,7 @@ package terminalservice
 
 import bridgemodel "../../../bridge/model"
 import core "../../../core"
+import animation_model "../../../core/animation"
 import protocol "../../../core/protocol"
 import evidence_session "../../../evidence/session"
 import julia "../../../bridge"
@@ -30,12 +31,14 @@ terminal_service_enter :: proc(state: ^core.Euclid_General_State) -> bool {
         return false
     }
     if !shell_service_begin_generation(state, generation) {
-        terminalview.terminal_destroy(&state^.terminal)
+        terminalview.terminal_destroy(&state^.terminal,
+            animation_model.animation_memory_allocator(&state^.animation_memory))
         return false
     }
     if !terminal_graphics_bind_generation(state, generation) {
         termsession.terminal_session_destroy(&state^.shell.session)
-        terminalview.terminal_destroy(&state^.terminal)
+        terminalview.terminal_destroy(&state^.terminal,
+            animation_model.animation_memory_allocator(&state^.animation_memory))
         return false
     }
     outcome := julia.send_terminal_ingress(

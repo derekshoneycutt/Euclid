@@ -19,7 +19,7 @@ terminal_service_test_highlight_failure_preserves_presentation :: proc(t: ^testi
     term := &state.terminal
     testing.expect(t, terminalview.terminal_init_with_allocator(
         term, context.allocator, 1))
-    defer terminalview.terminal_destroy(term)
+    defer terminalview.terminal_destroy(term, context.allocator)
     term.banner_ready = true
     term.julia_session_ready = true
     testing.expect(t, termhist.termhist_insert_text(term.history, "ab"))
@@ -47,7 +47,7 @@ terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     testing.expect(t, terminalview.terminal_init_with_allocator(
         &state.terminal, context.allocator, 1))
-    defer terminalview.terminal_destroy(&state.terminal)
+    defer terminalview.terminal_destroy(&state.terminal, context.allocator)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     state.evidence_session.enabled = true
@@ -96,7 +96,7 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
     defer free(state, context.allocator)
     testing.expect(t, terminalview.terminal_init_with_allocator(
         &state.terminal, context.allocator, 1))
-    defer terminalview.terminal_destroy(&state.terminal)
+    defer terminalview.terminal_destroy(&state.terminal, context.allocator)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     term := &state.terminal
@@ -133,7 +133,7 @@ terminal_service_test_highlight_outcome_evidence :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     testing.expect(t, terminalview.terminal_init_with_allocator(
         &state.terminal, context.allocator, 1))
-    defer terminalview.terminal_destroy(&state.terminal)
+    defer terminalview.terminal_destroy(&state.terminal, context.allocator)
     state.evidence_session.enabled = true
     state.evidence_session.lanes = evidence_session.ALL_LANES
     term := &state.terminal

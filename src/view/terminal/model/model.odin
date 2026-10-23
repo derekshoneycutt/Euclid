@@ -12,8 +12,6 @@ import termmodel "../../../terminal/model"
 import termsession "../../../terminal/session"
 import termshellintegration "../../../terminal/shell_integration"
 
-import "base:runtime"
-
 SHELL_SESSION_OWNER_ID :: u64(1)
 SHELL_TERMINFO_NAME :: "euclid"
 SHELL_TERMINFO_RELATIVE_DIRECTORY :: "assets/terminfo"
@@ -28,55 +26,72 @@ Terminal_View_Position :: struct {
 Terminal_Graphics_Lifecycle_Proc :: proc(
     user_data: rawptr, pool: ^taskpool.Task_Pool)
 
-// TODO : This looks like hell lmfao, reconsider this struct or clean it up or something
 // Terminal_State owns the display-thread terminal runtime for one animation generation.
+// Keep its address stable after initialization: history and interpreter bindings point
+// into embedded fields. Retire graphics-worker borrowers and destroy Terminal resources
+// and source aliases before the animation owner resets the generation arena.
 Terminal_State :: struct {
+    // Generation and initialization.
     animation_generation: u64,
-    allocator: runtime.Allocator,
     initialized: bool,
+
+    // Editor/history. Published history points to history_storage, not a separate owner.
     history_storage: termhist.Termhist_State,
     history: ^termhist.Termhist_State,
+    input_mode: protocol.Evaluation_Mode,
+    input_mode_backup: protocol.Evaluation_Mode,
+    collecting_continuation: bool,
+
+    // Output grids and interpretation. Interpreter bindings borrow these embedded grids;
+    // checkpoints and service pointers below refer to generation-allocated storage.
     output_grid: termgrid.Grid,
     output_alternate_grid: termgrid.Grid,
     output_scrollback: termgrid.Scrollback,
     output_interpreter: termemulator.Interpreter,
-    hyperlink_registry: ^termhyperlink.Hyperlink_Registry,
     clipboard_actions: ^termclipboard.Clipboard_Action_Queue,
     shell_integration: ^termshellintegration.Shell_Integration_State,
     raster_renderer: termattachment.Raster_Renderer,
     output_producer: termmodel.Terminal_Producer,
+    output_checkpoint: ^termgrid.Display_Checkpoint,
+    // Also borrows output_scrollback and output_started within this state.
+    synchronized_output: ^termemulator.Synchronized_Output_State,
+    output_checkpoint_started: bool,
+    output_started: bool,
+
+    // Geometry and scrolling.
     geometry: protocol.Terminal_Geometry,
     text_size_percent: int,
     julia_geometry_generation: u64,
     dimension_limits: protocol.Terminal_Dimension_Limits,
     rejected_geometry_count: u64,
-    output_checkpoint: ^termgrid.Display_Checkpoint,
-    synchronized_output: ^termemulator.Synchronized_Output_State,
     scroll_offset_y: f32,
     scroll_content_height: f32,
+
+    // Pointer selection and links. The interpreter borrows the generation-owned registry.
     view_selection_anchor: Terminal_View_Position,
     view_selection_head: Terminal_View_Position,
+    view_selection_active: bool,
+    view_selection_dragging: bool,
+    hyperlink_registry: ^termhyperlink.Hyperlink_Registry,
     hyperlink_pressed: termmodel.Hyperlink_Handle,
+
+    // Evaluation/session state. Source borrows the used prefix of pending_eval_storage.
     banner_ready: bool,
     julia_session_ready: bool,
     julia_session_start_sent: bool,
     awaiting_eval: bool,
-    collecting_continuation: bool,
-    input_mode: protocol.Evaluation_Mode,
-    input_mode_backup: protocol.Evaluation_Mode,
-    output_checkpoint_started: bool,
-    output_started: bool,
     julia_capabilities_observed: bool,
-    view_selection_active: bool,
-    view_selection_dragging: bool,
-    completion_result_received: bool,
-    completion_request_scheduled: bool,
     pending_eval_storage: []u8,
     pending_eval_source: string,
     next_eval_request_id: protocol.Request_Id,
     pending_eval_request_id: protocol.Request_Id,
     interactive_input_request_id: protocol.Request_Id,
     interactive_input_dropped_event_count: u64,
+
+    // Completion. Source and insertion borrow used prefixes of their respective
+    // generation-owned storage slices, never returned bridge-message storage.
+    completion_result_received: bool,
+    completion_request_scheduled: bool,
     next_completion_request_id: protocol.Request_Id,
     pending_completion_request_id: protocol.Request_Id,
     pending_completion_cursor: int,
@@ -87,6 +102,8 @@ Terminal_State :: struct {
     completion_preview_end: int,
     completion_preview_storage: []u8,
     completion_preview_insertion: string,
+
+    // Highlighting. Generation allocation released with the explicit lifecycle allocator.
     highlighting: ^Terminal_Highlighting,
 }
 

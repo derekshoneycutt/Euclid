@@ -36,7 +36,7 @@ terminal_highlight_test_submit :: proc(
 terminal_test_highlight_live_debounce :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_insert_text(term.history, "α = \"hi\""))
     terminal_highlight_observe_live(&term, 1)
     _, early := terminal_highlight_take_request(&term, 1.1)
@@ -58,7 +58,7 @@ terminal_test_highlight_live_debounce :: proc(t: ^testing.T) {
 terminal_test_highlight_stale_live_revision :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     termhist.termhist_insert_text(term.history, "x")
     terminal_highlight_observe_live(&term, 0)
     first, _ := terminal_highlight_take_request(&term, 1)
@@ -79,7 +79,7 @@ terminal_test_highlight_stale_live_revision :: proc(t: ^testing.T) {
 terminal_test_highlight_atomic_rejection :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     termhist.termhist_insert_text(term.history, "αx")
     for kind in 0..<4 {
         terminal_highlight_invalidate(&term)
@@ -107,7 +107,7 @@ terminal_test_highlight_atomic_rejection :: proc(t: ^testing.T) {
 terminal_test_highlight_faces_and_modes :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     termhist.termhist_insert_text(term.history, "x")
     terminal_highlight_observe_live(&term, 0)
     first, _ := terminal_highlight_take_request(&term, 1)
@@ -130,7 +130,7 @@ terminal_test_highlight_faces_and_modes :: proc(t: ^testing.T) {
 terminal_test_highlight_failure_and_pending_bound :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     requests: [model.TERMINAL_HIGHLIGHT_PENDING_CAPACITY]protocol.Highlight_Requested
     for &request in requests {
         termhist.termhist_insert_text(term.history, "x")
@@ -158,7 +158,7 @@ terminal_test_highlight_failure_and_pending_bound :: proc(t: ^testing.T) {
 terminal_test_highlight_visible_history :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_highlight_test_submit(t, &term, "α = 1\nβ = 2")
     terminal_highlight_observe_history(&term, 100, 110)
     _, hidden := terminal_highlight_take_request(&term, 1)
@@ -184,7 +184,7 @@ terminal_test_highlight_visible_history :: proc(t: ^testing.T) {
 terminal_test_highlight_history_eviction_and_revisit :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     for i in 0..<20 {
         terminal_highlight_test_submit(t, &term, "x")
         terminal_highlight_observe_history(&term, i, i + 1)
@@ -205,7 +205,7 @@ terminal_test_highlight_history_eviction_and_revisit :: proc(t: ^testing.T) {
 terminal_test_highlight_history_replacement :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_highlight_test_submit(t, &term, "begin")
     terminal_highlight_observe_history(&term, 0, 1)
     first, _ := terminal_highlight_take_request(&term, 1)
@@ -224,7 +224,7 @@ terminal_test_highlight_history_replacement :: proc(t: ^testing.T) {
 terminal_test_highlight_identity_and_copy :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     termhist.termhist_insert_text(term.history, "x")
     terminal_highlight_observe_live(&term, 0)
     request, _ := terminal_highlight_take_request(&term, 1)
@@ -237,7 +237,7 @@ terminal_test_highlight_identity_and_copy :: proc(t: ^testing.T) {
     runs[0].weight = .Dim
     testing.expect_value(t, terminal_live_highlight_runs(&term)[0].weight,
         protocol.Highlight_Weight.Bold)
-    terminal_destroy(&term)
+    terminal_destroy(&term, context.allocator)
     testing.expect(t, !terminal_highlight_publish(&term, result))
 }
 
@@ -246,7 +246,7 @@ terminal_test_highlight_identity_and_copy :: proc(t: ^testing.T) {
 terminal_test_highlight_wrapped_history :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     source: [200]u8
     for &byte in source {
         byte = 'a'
@@ -267,7 +267,7 @@ terminal_test_highlight_wrapped_history :: proc(t: ^testing.T) {
 terminal_test_highlight_live_priority :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_highlight_test_submit(t, &term, "x")
     terminal_highlight_observe_history(&term, 0, 1)
     termhist.termhist_insert_text(term.history, "y")
@@ -285,7 +285,7 @@ terminal_test_highlight_live_priority :: proc(t: ^testing.T) {
 terminal_test_highlight_visible_cache_pressure :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     for _ in 0..<12 {
         terminal_highlight_test_submit(t, &term, "x")
     }
@@ -310,7 +310,7 @@ terminal_test_highlight_visible_cache_pressure :: proc(t: ^testing.T) {
 terminal_test_highlight_history_face_change :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_highlight_test_submit(t, &term, "x")
     terminal_highlight_observe_history(&term, 0, 1)
     first, _ := terminal_highlight_take_request(&term, 1)
@@ -328,7 +328,7 @@ terminal_test_highlight_history_face_change :: proc(t: ^testing.T) {
 terminal_test_highlight_source_bounds :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     source := make([]u8, protocol.TERMINAL_HIGHLIGHT_SOURCE_MAX_BYTES + 1,
         context.allocator)
     defer delete(source, context.allocator)
@@ -358,7 +358,7 @@ terminal_test_highlight_source_bounds :: proc(t: ^testing.T) {
 terminal_test_highlight_continuation_replacement :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_highlight_test_submit(t, &term, "begin")
     testing.expect(t, terminal_begin_eval(&term, "begin"))
     terminal_highlight_observe_history(&term, 0, 1)
@@ -380,7 +380,7 @@ terminal_test_highlight_continuation_replacement :: proc(t: ^testing.T) {
 terminal_test_highlight_non_julia_and_history_eviction :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.input_mode = .Shell
     terminal_highlight_test_submit(t, &term, "echo hi")
     terminal_highlight_observe_history(&term, 0, 1)
@@ -405,7 +405,7 @@ terminal_test_highlight_non_julia_and_history_eviction :: proc(t: ^testing.T) {
 terminal_test_highlight_pending_history_not_evicted :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     for _ in 0..<12 {
         terminal_highlight_test_submit(t, &term, "x")
     }

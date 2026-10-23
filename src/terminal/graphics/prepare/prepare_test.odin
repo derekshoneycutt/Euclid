@@ -151,7 +151,41 @@ graphics_test_prepare_gif_first_frame :: proc(t: ^testing.T) {
         output = output[:],
     }
     testing.expect(t, prepare(&request))
-    testing.expect_value(t, output[3], u8(255))
+    testing.expect_value(t, output, [4]u8{255, 255, 255, 255})
+}
+
+// Verify first-frame conversion resolves indexed GIF colors through its palette.
+@(test)
+graphics_test_prepare_gif_palette :: proc(t: ^testing.T) {
+    output: [4]u8
+    gif_bytes := GRAPHICS_TEST_GIF
+    gif_bytes[16] = 23
+    gif_bytes[17] = 101
+    gif_bytes[18] = 207
+    request := Prepare_Request{
+        kind = .Encoded_Image, input = gif_bytes[:], width = 1, height = 1,
+        output = output[:],
+    }
+    testing.expect(t, prepare(&request))
+    testing.expect_value(t, output, [4]u8{23, 101, 207, 255})
+}
+
+// Verify transparent indexed pixels do not retain caller-buffer contents.
+@(test)
+graphics_test_prepare_gif_transparency :: proc(t: ^testing.T) {
+    output := [4]u8{23, 101, 207, 255}
+    original := GRAPHICS_TEST_GIF
+    control := [8]u8{0x21, 0xf9, 4, 1, 0, 0, 1, 0}
+    gif_bytes: [42]u8
+    copy(gif_bytes[:19], original[:19])
+    copy(gif_bytes[19:27], control[:])
+    copy(gif_bytes[27:], original[19:])
+    request := Prepare_Request{
+        kind = .Encoded_Image, input = gif_bytes[:], width = 1, height = 1,
+        output = output[:],
+    }
+    testing.expect(t, prepare(&request))
+    testing.expect_value(t, output, [4]u8{})
 }
 
 // Verify exact RGB and RGBA zlib streams expand without a second pixel buffer.

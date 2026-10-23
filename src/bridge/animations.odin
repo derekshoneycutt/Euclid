@@ -5,6 +5,7 @@ import shapemodel "../shapes/model"
 import audio "../audio"
 import julialib "../../libs/julia/bindings"
 import core "../core"
+import animation_model "../core/animation"
 import protocol "../core/protocol"
 import files "../files"
 import evidence_session "../evidence/session"
@@ -650,7 +651,8 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
             state^.terminal_graphics_user_data,
             &state^.simulation_executor^.pool)
     }
-    terminalview.terminal_destroy(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
     particles.discard_dust_tool_contacts(&state^.particle_system)
     if emit_shape_world_clear_departures(state) {
         projection.screenshake_on_dust_kick(&state^.iso_scale)

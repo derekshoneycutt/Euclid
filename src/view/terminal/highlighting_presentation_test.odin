@@ -50,7 +50,7 @@ terminal_presentation_test_colors :: proc(
 terminal_test_presentation_insert_pending :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     term.history.cursor = 2
     testing.expect(t, termhist.termhist_insert_text(term.history, "XY"))
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
@@ -73,7 +73,7 @@ terminal_test_presentation_insert_pending :: proc(t: ^testing.T) {
 terminal_test_presentation_repeated_edits :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_replace_input_range(term.history, 1, 2, "X"))
     terminal_highlight_observe_live(&term, 2)
     first, _ := terminal_highlight_take_request(&term, 3)
@@ -122,7 +122,7 @@ terminal_test_presentation_edit_ranges :: proc(t: ^testing.T) {
             testing.expect_value(t,
                 terminal_syntax_run_at(runs, middle).foreground, u32(0))
         }
-        terminal_destroy(&term)
+        terminal_destroy(&term, context.allocator)
     }
 }
 
@@ -137,7 +137,7 @@ terminal_test_presentation_unicode_edges :: proc(t: ^testing.T) {
     testing.expect_value(t, suffix, 1)
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "aα\n界e\u0301z")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_replace_input_range(term.history, 1, 3, "β"))
     terminal_highlight_observe_live(&term, 2)
     runs := terminal_live_highlight_runs(&term)
@@ -167,7 +167,7 @@ terminal_test_presentation_reset_boundaries :: proc(t: ^testing.T) {
         }
         terminal_highlight_observe_live(&term, 2)
         testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
-        terminal_destroy(&term)
+        terminal_destroy(&term, context.allocator)
     }
 }
 
@@ -176,7 +176,7 @@ terminal_test_presentation_reset_boundaries :: proc(t: ^testing.T) {
 terminal_test_presentation_malformed_result :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_insert_text(term.history, "X"))
     terminal_highlight_observe_live(&term, 2)
     request, ready := terminal_highlight_take_request(&term, 3)
@@ -194,7 +194,7 @@ terminal_test_presentation_malformed_result :: proc(t: ^testing.T) {
 terminal_test_presentation_distinct_runs :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcdef")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_highlight_invalidate(&term)
     terminal_highlight_observe_live(&term, 1)
     request, _ := terminal_highlight_take_request(&term, 2)
@@ -220,7 +220,7 @@ terminal_test_presentation_distinct_runs :: proc(t: ^testing.T) {
 terminal_test_presentation_run_capacity :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_highlight_test_init(t, &term)
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     source := make([]u8, protocol.TERMINAL_HIGHLIGHT_RUN_CAPACITY, context.allocator)
     defer delete(source, context.allocator)
     for &byte in source {
@@ -260,7 +260,7 @@ terminal_test_presentation_run_capacity :: proc(t: ^testing.T) {
 terminal_test_presentation_pending_saturation :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     for index in 0..<model.TERMINAL_HIGHLIGHT_PENDING_CAPACITY {
         testing.expect(t, termhist.termhist_replace_input_range(term.history, 1, 2, "b"))
         terminal_highlight_observe_live(&term, f64(index * 2 + 2))
@@ -281,7 +281,7 @@ terminal_test_presentation_pending_saturation :: proc(t: ^testing.T) {
 terminal_test_presentation_recall_and_delete_all :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_history_push(term.history, "abcd"))
     testing.expect(t, termhist.termhist_history_prev(term.history))
     terminal_highlight_observe_live(&term, 2)
@@ -301,7 +301,7 @@ terminal_test_presentation_recall_and_delete_all :: proc(t: ^testing.T) {
 terminal_test_presentation_completion_and_paste :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "x=\\alpha")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     completion := terminal_request_completion(&term)
     testing.expect(t, completion.requested)
     testing.expect(t, terminal_set_completion_preview(&term, {

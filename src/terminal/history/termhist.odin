@@ -37,11 +37,14 @@ Termhist_Text_Style :: struct {
 // Termhist_State stores the current editable line plus committed history.
 //
 // Notes:
-//   - Retains one free-capable allocator for all long-lived text storage.
+//   - Manages editor buffers and retained history through a borrowed allocation domain.
 //   - Treats the active line as UTF-8 bytes with its cursor measured in byte
 //     offsets on codepoint boundaries.
 Termhist_State :: struct {
-    allocator: mem.Allocator,
+    // Production normally borrows the animation-generation arena.
+    // History issues release calls on replacement and teardown; actual reclamation
+    // follows allocator policy. The domain must remain valid through teardown.
+    borrowed_allocator: mem.Allocator,
 
     text: []u8,
     text_len: int,
@@ -65,18 +68,18 @@ Termhist_State :: struct {
 //   - True after all slices are assigned; false after the first allocation failure.
 termhist_allocate_storage :: proc(
     state: ^Termhist_State, text_capacity, history_capacity: int) -> bool {
-    text, text_err := make([]u8, text_capacity, state.allocator)
+    text, text_err := make([]u8, text_capacity, state.borrowed_allocator)
     if text_err != nil {
         return false
     }
     state.text = text
-    backup, backup_err := make([]u8, text_capacity, state.allocator)
+    backup, backup_err := make([]u8, text_capacity, state.borrowed_allocator)
     if backup_err != nil {
         return false
     }
     state.backup = backup
     history, history_err := make(
-        []Termhist_Entry, history_capacity, state.allocator)
+        []Termhist_Entry, history_capacity, state.borrowed_allocator)
     if history_err != nil {
         return false
     }
@@ -113,7 +116,7 @@ termhist_init_with_allocator :: proc(
         history_capacity = 1
     }
 
-    state^ = {allocator = allocator}
+    state^ = {borrowed_allocator = allocator}
 
     if !termhist_allocate_storage(state, text_capacity, history_capacity) {
         termhist_destroy(state)
@@ -134,18 +137,19 @@ termhist_init_with_allocator :: proc(
 //   - state: Caller-owned state initialized by termhist_init.
 //
 // Side effects:
-//   - Releases every owned entry and backing slice, then clears the state.
+//   - Issues release calls for every owned entry and backing slice, then clears state.
+//     The borrowed allocator determines when backing memory is reclaimed.
 termhist_destroy :: proc(state: ^Termhist_State) {
     if state == nil {
         return
     }
 
     for entry in state.history[:state.history_len] {
-        delete(entry.text, state.allocator)
+        delete(entry.text, state.borrowed_allocator)
     }
-    delete(state.history, state.allocator)
-    delete(state.backup, state.allocator)
-    delete(state.text, state.allocator)
+    delete(state.history, state.borrowed_allocator)
+    delete(state.backup, state.borrowed_allocator)
+    delete(state.text, state.borrowed_allocator)
     state^ = {}
 }
 
@@ -367,7 +371,7 @@ termhist_accept_current :: proc(
 
     text := string(state.text[:state.text_len])
     if replace_latest && state.history_len > 0 {
-        entry_text, ok := termhist_clone_text(state.allocator, text)
+        entry_text, ok := termhist_clone_text(state.borrowed_allocator, text)
         if !ok {
             return false
         }
@@ -375,7 +379,7 @@ termhist_accept_current :: proc(
         state.next_entry_id += 1
         state.history[state.history_len - 1] =
             Termhist_Entry{text = entry_text, tag = tag, id = state.next_entry_id}
-        delete(old_text, state.allocator)
+        delete(old_text, state.borrowed_allocator)
         termhist_clear(state)
         return true
     }
@@ -466,7 +470,7 @@ termhist_history_push :: proc(
         return false
     }
 
-    entry_text, ok := termhist_clone_text(state.allocator, text)
+    entry_text, ok := termhist_clone_text(state.borrowed_allocator, text)
     if !ok {
         return false
     }
@@ -592,7 +596,7 @@ termhist_ensure_history_capacity :: proc(state: ^Termhist_State, needed: int) ->
     }
 
     new_history, history_err := make(
-        []Termhist_Entry, new_capacity, state.allocator)
+        []Termhist_Entry, new_capacity, state.borrowed_allocator)
     if history_err != nil {
         return false
     }
@@ -601,7 +605,7 @@ termhist_ensure_history_capacity :: proc(state: ^Termhist_State, needed: int) ->
         copy(new_history[:state.history_len], state.history[:state.history_len])
     }
 
-    delete(state.history, state.allocator)
+    delete(state.history, state.borrowed_allocator)
     state.history = new_history
     return true
 }
@@ -628,7 +632,7 @@ termhist_ensure_u8_capacity :: proc(
         new_capacity = needed
     }
 
-    new_buffer, buffer_err := make([]u8, new_capacity, state.allocator)
+    new_buffer, buffer_err := make([]u8, new_capacity, state.borrowed_allocator)
     if buffer_err != nil {
         return false
     }
@@ -637,7 +641,7 @@ termhist_ensure_u8_capacity :: proc(
         copy(new_buffer[:copy_len], current[:copy_len])
     }
 
-    delete(current, state.allocator)
+    delete(current, state.borrowed_allocator)
     buffer^ = new_buffer
     return true
 }
@@ -645,7 +649,7 @@ termhist_ensure_u8_capacity :: proc(
 //   Clone UTF-8 text into allocator-backed persistent storage.
 //
 // Parameters:
-//   - allocator: Free-capable allocator that owns the cloned bytes.
+//   - allocator: Borrowed allocation domain for the cloned bytes.
 //   - text: UTF-8 bytes to duplicate.
 //
 // Returns:

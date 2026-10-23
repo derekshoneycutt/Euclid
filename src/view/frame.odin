@@ -357,7 +357,7 @@ prepare_sdl_frame_owners :: proc(
     apply_sdl_cursor(state, ctx.platform)
     prepare_sdl_simulation_frame(
         state, ctx, update.frame_dt, update.ui_geometry.compile_dynview)
-    layout_interaction := prepare_sdl_layout_and_effects(
+    prepared^.layout_interaction = prepare_sdl_layout_and_effects(
         state, ctx, update, terminal_frame)
     execute_context_menu_command(state, ctx.input_runtime)
     terminalview.terminal_highlight_observe_live(
@@ -368,7 +368,6 @@ prepare_sdl_frame_owners :: proc(
     prepared^.input_frame = update.input_frame
     prepared^.terminal_frame = terminal_frame
     prepared^.splitters = update.ui_geometry.splitters
-    prepared^.layout_interaction = layout_interaction
 }
 
 // prepare_sdl_layout_and_effects resolves UI layout, then advances presentation

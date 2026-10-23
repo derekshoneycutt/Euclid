@@ -16,7 +16,7 @@ import "core:testing"
 terminal_test_syntax_provisional_segments :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     testing.expect(t, termhist.termhist_replace_input_range(term.history, 2, 2, "X"))
     terminal_highlight_observe_live(&term, 2)
     request := Terminal_Prompt_Text_Draw{
@@ -154,7 +154,7 @@ terminal_test_syntax_multiline_offsets :: proc(t: ^testing.T) {
 terminal_test_syntax_history_copy_and_prefix :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_syntax_test_history(t, &term, "α = 1\nβ = 2")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     cells: [TERMINAL_MAX_COLUMNS]termgrid.Cell
     styles: [TERMINAL_MAX_COLUMNS]Terminal_Syntax_Style
     original, _ := terminal_output_row(&term, 0)
@@ -183,7 +183,7 @@ terminal_test_syntax_history_wrapping_unicode :: proc(t: ^testing.T) {
     }
     term: model.Terminal_State
     terminal_syntax_test_history(t, &term, string(source[:]))
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     cells: [TERMINAL_MAX_COLUMNS]termgrid.Cell
     styles: [TERMINAL_MAX_COLUMNS]Terminal_Syntax_Style
     wrapped, _ := terminal_output_row(&term, 1)
@@ -213,7 +213,7 @@ terminal_test_syntax_history_wrapping_unicode :: proc(t: ^testing.T) {
 terminal_test_syntax_history_rewrite_and_fallback :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_syntax_test_history(t, &term, "abc")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     cells: [TERMINAL_MAX_COLUMNS]termgrid.Cell
     styles: [TERMINAL_MAX_COLUMNS]Terminal_Syntax_Style
     original, _ := terminal_output_row(&term, 0)
@@ -289,7 +289,7 @@ terminal_syntax_test_font :: proc(_: rawptr, _: font.Font_Key) -> font.Font_Face
 terminal_test_syntax_synchronized_and_alternate :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_syntax_test_history(t, &term, "x = 1")
-    defer terminal_destroy(&term)
+    defer terminal_destroy(&term, context.allocator)
     terminal_append_ansi_output(&term, "\e[?2026h\e[1;8Hz")
     testing.expect(t, term.synchronized_output.active)
     cells: [TERMINAL_MAX_COLUMNS]termgrid.Cell

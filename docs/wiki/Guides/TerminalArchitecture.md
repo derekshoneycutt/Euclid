@@ -713,6 +713,14 @@ while handling the envelope and must not retain aliases after return. Long-lived
 state uses fixed-capacity storage or dedicated owner-managed arenas. Julia collections
 remain under Julia GC but are bounded by service policy.
 
+Terminal initialization receives the owner's allocator explicitly, and teardown
+receives the same allocator for directly allocated lifecycle resources; the outer
+`Terminal_State` does not cache it. The editor/history component retains a
+`borrowed_allocator` for buffer growth and release. Production supplies the
+animation-generation arena, whose owner must keep it valid through Terminal teardown.
+History issues release calls when replacing or destroying storage; actual memory
+reclamation follows allocator policy. Terminal teardown does not reset that arena.
+
 ## Failure And Shutdown
 
 Failures remain local to the owner that can recover:

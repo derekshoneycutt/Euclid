@@ -62,9 +62,15 @@ decode_static_image :: proc(
         surface.pixels == nil || surface.pitch <= 0 {
         return false
     }
-    return sdl.ConvertPixels(
-        surface.w, surface.h, surface.format, surface.pixels, surface.pitch,
-        .RGBA32, raw_data(output), c.int(width * 4))
+    destination := sdl.CreateSurfaceFrom(
+        surface.w, surface.h, .RGBA32, raw_data(output), c.int(width * 4))
+    if destination == nil {
+        return false
+    }
+    defer sdl.DestroySurface(destination)
+    return sdl.FillSurfaceRect(destination, nil, 0) &&
+        sdl.SetSurfaceBlendMode(surface, sdl.BLENDMODE_NONE) &&
+        sdl.BlitSurface(surface, nil, destination, nil)
 }
 
 // animated_gif_decode_cancelled polls one optional worker cancellation source.
@@ -156,4 +162,3 @@ decode_animated_gif :: proc(
     result.complete = image.GetAnimationDecoderStatus(decoder) == .COMPLETE
     return result
 }
-
