@@ -29,6 +29,36 @@ Communication_Link_Egress_Collector :: struct {
 
 COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE :: 33
 
+// Worker polling reclaims a full return queue without requiring another outgoing result.
+@(test)
+julia_worker_reclaims_returns_before_ingress :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    for _ in 0..<JULIA_EVENT_CAPACITY {
+        message, allocation_error := communication_link_alloc(&service.event_link)
+        testing.expect_value(t, allocation_error, runtime.Allocator_Error.None)
+        bytes, bytes_error := communication_link_alloc_bytes(&service.event_link, 4)
+        testing.expect_value(t, bytes_error, runtime.Allocator_Error.None)
+        copy(bytes, "test")
+        message^ = protocol.Terminal_Output_Batch{bytes = string(bytes)}
+        testing.expect(t, communication_link_return(&service.event_link, message))
+    }
+    final_message, final_error := communication_link_alloc(&service.event_link)
+    testing.expect_value(t, final_error, runtime.Allocator_Error.None)
+    final_message^ = protocol.Evaluation_Completed{request_id = 1}
+    testing.expect(t, communication_link_try_send(&service.event_link, final_message))
+    ingress, ingress_error := communication_link_alloc(&service.request_link)
+    testing.expect_value(t, ingress_error, runtime.Allocator_Error.None)
+    ingress^ = bridgemodel.Scenario_View_Content_Requested{}
+    testing.expect(t, communication_link_try_send(&service.request_link, ingress))
+    _ = julia_runtime_worker_run_host(service)
+    testing.expect_value(t, drain_julia_egress_returns(service), 0)
+    received, available := communication_link_try_recv(&service.event_link)
+    testing.expect(t, available && received == final_message)
+    testing.expect(t, return_julia_egress(service, received))
+    testing.expect_value(t, drain_julia_egress_returns(service), 1)
+}
+
 // Retain routed test envelopes in arrival order for ownership assertions.
 communication_link_test_collect_egress :: proc(
     user_data: rawptr, message: ^bridgemodel.Julia_Host_Egress) -> bool {

@@ -38,6 +38,7 @@ terminal_highlight_invalidate :: proc(term: ^model.Terminal_State) {
         return
     }
     h.live.phase = .Empty
+    terminal_highlight_clear_presentation(term)
     for &slot in h.cache {
         slot.phase = .Empty
     }
@@ -82,19 +83,25 @@ terminal_highlight_observe_live :: proc(term: ^model.Terminal_State, now: f64) {
         return
     }
     revision := termhist.termhist_content_revision(term.history) + 1
+    reset_revision := termhist.termhist_reset_revision(term.history)
     editable := terminal_prompt_visible(term) && term.input_mode == .Normal
     if h.observed_revision == revision && h.observed_mode == term.input_mode &&
-        h.observed_editable == editable {
+        h.observed_editable == editable && h.observed_reset_revision == reset_revision &&
+        h.observed_animation_generation == term.animation_generation {
         return
     }
     h.live.phase = .Empty
     h.observed_revision = revision
+    h.observed_reset_revision = reset_revision
+    h.observed_animation_generation = term.animation_generation
     h.observed_mode = term.input_mode
     h.observed_editable = editable
     if !editable {
+        terminal_highlight_clear_presentation(term)
         return
     }
     source := termhist.termhist_current_text(term.history)
+    terminal_highlight_observe_presentation(term, source, revision, reset_revision)
     if len(source) == 0 {
         return
     }
@@ -148,17 +155,17 @@ terminal_highlight_slot_current :: proc(
         source == string(term.history.history[entry.history_index].text)
 }
 
-// Borrow only complete styles for the exact currently editable source.
+// Borrow current decoration independently of pending exact classification.
 terminal_live_highlight_runs :: proc(
     term: ^model.Terminal_State) -> []protocol.Highlight_Run {
     if term == nil || term.highlighting == nil {
         return nil
     }
-    slot := &term.highlighting.live
-    if slot.phase != .Ready || !terminal_highlight_slot_current(term, slot) {
+    if !terminal_highlight_presentation_current(term) {
         return nil
     }
-    return slot.runs[:slot.run_count]
+    p := &term.highlighting.presentation
+    return p.runs[:p.run_count]
 }
 
 // Select live work first, then visible historical work, with a fixed outstanding limit.
@@ -253,6 +260,9 @@ terminal_highlight_publish :: proc(
     copy(slot.runs[:], result.runs)
     slot.run_count = len(result.runs)
     slot.phase = .Ready
+    if result.identity.target_kind == .Live_Input {
+        terminal_highlight_publish_presentation(term, result)
+    }
     return true
 }
 

@@ -25,6 +25,7 @@ import viewpresentation "presentation"
 import uipresentation "ui/presentation"
 import viewscenario "scenario"
 import terminalservice "terminal/service"
+import terminalview "terminal"
 import uiaccessibility "ui/accessibility"
 import viewpreferences "preferences"
 import libraryservice "ui/library/service"
@@ -359,6 +360,8 @@ prepare_sdl_frame_owners :: proc(
     layout_interaction := prepare_sdl_layout_and_effects(
         state, ctx, update, terminal_frame)
     execute_context_menu_command(state, ctx.input_runtime)
+    terminalview.terminal_highlight_observe_live(
+        &state^.terminal, update.routed_frame.sample_time_seconds)
     uiaccessibility.publish_accessibility_controls(
         state^.ui_runtime.semantic_focus, ctx.platform)
     service_scenario_before_present(ctx)

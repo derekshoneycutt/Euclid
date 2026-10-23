@@ -39,9 +39,25 @@ Terminal_Highlight_Slot :: struct {
     runs: [protocol.TERMINAL_HIGHLIGHT_RUN_CAPACITY]protocol.Highlight_Run,
 }
 
+// Current prompt decoration and mapping scratch share the generation-owned cache lifetime.
+Terminal_Highlight_Presentation :: struct {
+    identity: protocol.Highlight_Identity,
+    reset_revision: u64,
+    source_length: int,
+    run_count: int,
+    scratch_count: int,
+    authoritative: bool,
+    degraded: bool,
+    degradation_reported: bool,
+    source: [protocol.TERMINAL_HIGHLIGHT_SOURCE_MAX_BYTES]u8,
+    runs: [protocol.TERMINAL_HIGHLIGHT_RUN_CAPACITY]protocol.Highlight_Run,
+    scratch: [protocol.TERMINAL_HIGHLIGHT_RUN_CAPACITY]protocol.Highlight_Run,
+}
+
 // Fixed generation-owned storage, including cancelled work still occupying the bridge.
 Terminal_Highlighting :: struct {
     live: Terminal_Highlight_Slot,
+    presentation: Terminal_Highlight_Presentation,
     cache: [TERMINAL_HIGHLIGHT_CACHE_CAPACITY]Terminal_Highlight_Slot,
     history: [TERMINAL_HIGHLIGHT_HISTORY_CAPACITY]Terminal_Highlight_History,
     pending: [TERMINAL_HIGHLIGHT_PENDING_CAPACITY]protocol.Highlight_Identity,
@@ -50,6 +66,8 @@ Terminal_Highlighting :: struct {
     face_generation: u64,
     epoch: u64,
     observed_revision: u64,
+    observed_reset_revision: u64,
+    observed_animation_generation: u64,
     observed_mode: protocol.Evaluation_Mode,
     observed_editable: bool,
     recording: bool,

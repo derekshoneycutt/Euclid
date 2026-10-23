@@ -439,7 +439,31 @@ The display debounces live edits and requests visible history through an indepen
 session actor. Results carry bounded UTF-8 style runs and are accepted only when the
 request, session, source revision, face generation, and exact source still match.
 Stale replies cannot overwrite newer input or reused history entries. Failure or
-capacity exhaustion leaves plain text without blocking editing or evaluation.
+capacity exhaustion never blocks editing or evaluation.
+
+Live prompt presentation is separate from the exact-source request slot. An ordinary
+edit keeps the last displayed styles on a UTF-8-aligned common prefix and suffix,
+translates suffix offsets, and gives the changed middle default prompt appearance.
+Multiple edits observed together conservatively replace their combined middle.
+The display updates this bounded snapshot before drawing; no old byte offsets are
+applied to new text. Only a complete, current Julia result atomically replaces it
+with authoritative styles. The 120 ms debounce controls classification requests,
+not the lifetime of visible decoration.
+
+Provisional styles can temporarily have outdated syntax meaning after a quote or
+comment edit. They do not imply acceptance of stale results, and newly inserted text
+stays plain until Julia classifies it. Request failures preserve safe provisional
+decoration, report the failure, and do not retry unchanged failed source each frame.
+Before the first result, input remains plain.
+
+Clear, whole-buffer load, and history recall/draft restoration advance an editor reset
+identity so unrelated input cannot inherit matching-edge styles. Empty input,
+non-Normal modes, evaluation/prompt hiding, session resets, and face invalidation also
+discard live decoration. Invalid UTF-8 or input beyond the existing 64 KiB source
+limit remains plain. Run-capacity exhaustion preserves representable styles and
+defaults the remaining tail, with a content-free warning once per Terminal generation.
+Presentation adds 288 KiB of fixed source/run/scratch arrays plus identity metadata to
+the generation-owned highlighting allocation; mapping never allocates per edit.
 
 Historical source retains its identity, not submission-time colors. The renderer
 validates source against visible cells and applies accepted styles to frame-local
@@ -730,6 +754,7 @@ Use the narrowest registered suite for the owner being changed:
 | Julia actors, evaluation, completion, or lifecycle | Julia runtime tests |
 | Terminal editing, selection, rendering, and geometry | Terminal view and UI tests |
 | Live and historical Julia highlighting | Adapter, cache, and renderer tests; [highlighting acceptance scenario](../../../tools/scenarios/terminal-highlighting-acceptance.jsonl) |
+| Evaluation error recovery and idle bridge reclamation | Full-return-queue bridge regression; [error acceptance scenario](../../../tools/scenarios/terminal-error-acceptance.jsonl) |
 | VT/DEC parsing, modes, OSC, DCS, APC, and queries | Emulator and input-encoding tests |
 | Grid, scrollback, and reflow | Termgrid tests |
 | PTY/ConPTY and shell behavior | Terminal session and shell tests |

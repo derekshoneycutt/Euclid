@@ -1,0 +1,20 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"function f(x,y) ; x + y ; end ; f(\"weee\", \"poo\")"}
+{"wait_event":"terminal_live_highlight_published","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"MethodError","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"function f(x,y) ; x + y ; end ; f(\"weee\", \"poo\")"}
+{"wait_event":"terminal_live_highlight_published","timeout_ms":10000}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"println(\"terminal recovered after error\")"}
+{"wait_event":"terminal_live_highlight_published","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"terminal recovered after error","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

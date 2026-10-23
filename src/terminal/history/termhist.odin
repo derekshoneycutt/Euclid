@@ -55,6 +55,7 @@ Termhist_State :: struct {
 
     cursor: int,
     content_revision: u64,
+    reset_revision: u64,
     next_entry_id: u64,
 }
 
@@ -178,6 +179,14 @@ termhist_content_revision :: proc(state: ^Termhist_State) -> u64 {
     return state.content_revision
 }
 
+// Identify whole-buffer resets independently of ordinary range edits.
+termhist_reset_revision :: proc(state: ^Termhist_State) -> u64 {
+    if state == nil {
+        return 0
+    }
+    return state.reset_revision
+}
+
 //   Clear the active line without modifying history.
 //
 // Parameters:
@@ -190,6 +199,7 @@ termhist_clear :: proc(state: ^Termhist_State) {
     state.cursor = 0
     state.history_index = state.history_len
     state.content_revision += 1
+    state.reset_revision += 1
 }
 
 //   Insert UTF-8 text at the cursor.
@@ -511,6 +521,7 @@ termhist_load_entry :: proc(state: ^Termhist_State, text: []u8) -> bool {
     state.text_len = len(text)
     state.cursor = state.text_len
     state.content_revision += 1
+    state.reset_revision += 1
     return true
 }
 

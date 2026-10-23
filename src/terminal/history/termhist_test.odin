@@ -3,6 +3,33 @@ package termhist
 
 import "core:testing"
 
+// Resets distinguish identical recalled commands from edits and cursor movement.
+@(test)
+termhist_test_reset_revision :: proc(t: ^testing.T) {
+    state: Termhist_State
+    testing.expect(t, termhist_init_with_allocator(
+        &state, 8, 1, context.allocator))
+    defer termhist_destroy(&state)
+    testing.expect(t, termhist_insert_text(&state, "αx"))
+    testing.expect(t, termhist_move_left(&state))
+    testing.expect(t, termhist_replace_input_range(&state, 2, 3, "y"))
+    testing.expect(t, !termhist_replace_input_range(&state, 1, 2, "z"))
+    testing.expect_value(t, termhist_reset_revision(&state), u64(0))
+    testing.expect(t, termhist_load_entry(&state, state.text[:state.text_len]))
+    testing.expect_value(t, termhist_reset_revision(&state), u64(1))
+    testing.expect(t, termhist_accept_current(&state))
+    testing.expect_value(t, termhist_reset_revision(&state), u64(2))
+    testing.expect(t, termhist_insert_text(&state, "draft"))
+    testing.expect(t, termhist_history_prev(&state))
+    testing.expect_value(t, termhist_reset_revision(&state), u64(3))
+    testing.expect(t, termhist_history_next(&state))
+    testing.expect_value(t, termhist_current_text(&state), "draft")
+    testing.expect_value(t, termhist_reset_revision(&state), u64(4))
+    termhist_clear(&state)
+    testing.expect(t, termhist_insert_text(&state, "draft"))
+    testing.expect_value(t, termhist_reset_revision(&state), u64(5))
+}
+
 // Verify initialization normalizes capacities and establishes empty state.
 @(test)
 termhist_test_initialization :: proc(t: ^testing.T) {

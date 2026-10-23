@@ -92,6 +92,10 @@ The bridge uses two typed tagged unions:
   results and events back to the display.
 
 Each direction has a bounded communication link with a producer-owned envelope pool.
+The Julia host drains returned egress envelopes on every worker-loop iteration, even
+when no request or result is ready. Reclamation cannot depend on producing the next
+message: a completed output burst can fill the return queue while the display still
+needs to return its final envelope, blocking the display if the idle host stops draining.
 The consumer borrows a message, interprets or copies its contents, then returns it to
 the link that allocated it. This makes memory ownership travel with the message; the
 receiver does not free memory from the other thread's pool.

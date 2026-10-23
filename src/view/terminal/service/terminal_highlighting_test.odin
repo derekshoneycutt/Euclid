@@ -11,6 +11,35 @@ import evidence_session "../../../evidence/session"
 import trace "../../../evidence/trace"
 import "core:testing"
 
+// Transport admission failure records an outcome without dropping safe prompt decoration.
+@(test)
+terminal_service_test_highlight_failure_preserves_presentation :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    term := &state.terminal
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        term, context.allocator, 1))
+    defer terminalview.terminal_destroy(term)
+    term.banner_ready = true
+    term.julia_session_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "ab"))
+    terminalview.terminal_highlight_observe_live(term, 0)
+    request, ready := terminalview.terminal_highlight_take_request(term, 1)
+    testing.expect(t, ready)
+    runs := [1]protocol.Highlight_Run{{end_byte = 2, weight = .Bold}}
+    testing.expect(t, terminalview.terminal_highlight_publish(term,
+        {request.identity, request.source, runs[:]}))
+    testing.expect(t, termhist.termhist_insert_text(term.history, "X"))
+    terminal_highlight_service_update(state, {}, 2)
+    terminal_highlight_service_update(state, {}, 3)
+    mapped := terminalview.terminal_live_highlight_runs(term)
+    testing.expect_value(t, len(mapped), 2)
+    testing.expect_value(t, mapped[0].weight, protocol.Highlight_Weight.Bold)
+    testing.expect_value(t, mapped[0].end_byte, u32(2))
+    testing.expect_value(t, mapped[1].weight, protocol.Highlight_Weight.Normal)
+    testing.expect_value(t, term.highlighting.failure_count, u64(1))
+}
+
 // Round-trip actual producer-owned envelopes and return them before reading retained runs.
 @(test)
 terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {

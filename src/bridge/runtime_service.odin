@@ -4073,6 +4073,7 @@ julia_runtime_worker_run_host :: proc(
     worker_context := context
     state: Julia_Worker_State
     for {
+        _ = drain_julia_egress_returns(service)
         request_message, received := communication_link_try_recv(
             &service^.request_link)
         if received {

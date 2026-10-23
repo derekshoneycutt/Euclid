@@ -9,6 +9,7 @@ there are some things that do need to start early.
 
 - Terminal REPL history explorer and persistence
 - Input/IME enhancements
+- Custom notes on collection items
 - Optional checkboxes in tree
 - Animation slider
 - Search history / Autocomplete features
@@ -16,6 +17,7 @@ there are some things that do need to start early.
 - Export / Import by file
 - Accessibility completion work
 - Ip-2-ip sharing protocol
+
 - UI animation polish
 - Comprehensive terminal animation commands
 

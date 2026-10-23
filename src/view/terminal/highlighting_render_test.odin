@@ -3,12 +3,44 @@
 package terminalview
 
 import protocol "../../core/protocol"
+import termhist "../../terminal/history"
 import model "model"
 import termgrid "../../terminal/grid"
 import termpalette "../../terminal/palette"
 import font "../font"
 import native "../native"
 import "core:testing"
+
+// The prompt renderer sees preserved colors/font and a default middle before Julia replies.
+@(test)
+terminal_test_syntax_provisional_segments :: proc(t: ^testing.T) {
+    term: model.Terminal_State
+    terminal_presentation_test_seed(t, &term, "abcd")
+    defer terminal_destroy(&term)
+    testing.expect(t, termhist.termhist_replace_input_range(term.history, 2, 2, "X"))
+    terminal_highlight_observe_live(&term, 2)
+    request := Terminal_Prompt_Text_Draw{
+        current_text = termhist.termhist_current_text(term.history),
+        highlights = terminal_live_highlight_runs(&term),
+        theme = terminal_syntax_test_theme(),
+        exclusions = {cursor_start = -1, cursor_end = -1,
+            selection_start = -1, selection_end = -1},
+    }
+    testing.expect_value(t, terminal_syntax_segment_end(request, 0), 2)
+    testing.expect_value(t, terminal_syntax_segment_end(request, 2), 3)
+    testing.expect_value(t, terminal_syntax_segment_end(request, 3), 5)
+    retained := terminal_syntax_style(
+        terminal_syntax_run_at(request.highlights, 3), nil, request.theme)
+    middle := terminal_syntax_style(
+        terminal_syntax_run_at(request.highlights, 2), nil, request.theme)
+    testing.expect_value(t, retained.foreground, Color{0x12, 0x34, 0x56, 255})
+    testing.expect_value(t, retained.key, font.Font_Key.Bold_Italic)
+    testing.expect_value(t, middle.foreground, request.theme.default_foreground)
+    testing.expect_value(t, middle.key, font.Font_Key.Regular)
+    request.exclusions.selection_start = 1
+    request.exclusions.selection_end = 4
+    testing.expect_value(t, terminal_syntax_segment_end(request, 0), 1)
+}
 
 // Supply distinct overlay colors so precedence tests cannot pass on equal defaults.
 terminal_syntax_test_theme :: proc() -> Terminal_Draw_Theme {
