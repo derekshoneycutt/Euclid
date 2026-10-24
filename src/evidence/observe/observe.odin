@@ -113,6 +113,7 @@ Display :: struct {
     terminal_ready : bool,
     terminal_idle : bool,
     terminal_continuation : bool,
+    terminal_completion_ready : bool,
 
     // Terminal graphics transfer, publication, residency, and playback state.
     graphics_transfer_admission_count : u64,
@@ -510,6 +511,21 @@ observe_display_particles :: proc(
     }
 }
 
+// Copy Terminal lifecycle and useful-preview readiness without retaining editor bytes.
+observe_display_terminal :: proc(
+    terminal: ^viewterminalmodel.Terminal_State, result: ^Display) {
+    if terminal == nil {
+        return
+    }
+    result.terminal_ready = terminal.initialized && terminal.julia_session_ready
+    result.terminal_idle = result.terminal_ready && !terminal.awaiting_eval
+    result.terminal_continuation = result.terminal_ready &&
+        terminal.collecting_continuation
+    result.terminal_completion_ready = result.terminal_idle &&
+        terminal.completion_result_received &&
+        len(terminal.completion_preview_insertion) > 0
+}
+
 //   Copy display-owned Euclid truth without advancing any subsystem.
 //
 // Parameters:
@@ -536,13 +552,7 @@ display :: proc(source: ^Display_Source) -> Display {
     observe_display_preferences(source.preferences_runtime, &result)
     observe_display_telemetry(source.telemetry, &result)
     observe_display_capture(source, &result)
-    if source.terminal != nil {
-        result.terminal_ready = source.terminal.initialized &&
-            source.terminal.julia_session_ready
-        result.terminal_idle = result.terminal_ready && !source.terminal.awaiting_eval
-        result.terminal_continuation = result.terminal_ready &&
-            source.terminal.collecting_continuation
-    }
+    observe_display_terminal(source.terminal, &result)
     if source.dynview != nil {
         result.dynview_enabled = source.dynview.enabled
         result.dynview_pending_invalidation_mask =

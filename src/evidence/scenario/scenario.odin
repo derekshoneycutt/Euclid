@@ -1346,6 +1346,7 @@ terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "terminal_ready": return display.terminal_ready
     case "terminal_idle": return display.terminal_idle
     case "terminal_continuation": return display.terminal_continuation
+    case "terminal_completion_ready": return display.terminal_completion_ready
     }
     return false
 }

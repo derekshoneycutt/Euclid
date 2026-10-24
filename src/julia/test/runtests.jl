@@ -41,6 +41,10 @@ using Test
         include("runtime_host_tests.jl")
     end
 
+    @testset "Completion Adapter" begin
+        include("completion_tests.jl")
+    end
+
     @testset "Highlighting Service" begin
         include("highlighting_service_tests.jl")
     end

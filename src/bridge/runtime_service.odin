@@ -3851,21 +3851,35 @@ julia_terminal_send_completion :: proc(
         })
     }
     insertion_value := julialib.jl_get_nth_field(command, 6)
-    insertion := string(julialib.jl_string_ptr(insertion_value))
-    for {
-        outcome := send_terminal_completion_result(service, {
-                    request_id = request_id,
-                    animation_generation = host^.terminal_generation,
-                    found = julialib.jl_unbox_bool(
-                        julialib.jl_get_nth_field(command, 2)) != 0,
-                    replacement_start = int(julialib.jl_unbox_int32(
-                        julialib.jl_get_nth_field(command, 3))),
-                    replacement_end = int(julialib.jl_unbox_int32(
-                        julialib.jl_get_nth_field(command, 4))),
-                    insertion = insertion,
-                    show_candidates = julialib.jl_unbox_bool(
-                        julialib.jl_get_nth_field(command, 5)) != 0,
+    return send_terminal_completion_until_sent(service, {
+        request_id = request_id,
+        animation_generation = host^.terminal_generation,
+        found = julialib.jl_unbox_bool(
+            julialib.jl_get_nth_field(command, 2)) != 0,
+        replacement_start = int(julialib.jl_unbox_int32(
+            julialib.jl_get_nth_field(command, 3))),
+        replacement_end = int(julialib.jl_unbox_int32(
+            julialib.jl_get_nth_field(command, 4))),
+        insertion = string(julialib.jl_string_ptr(insertion_value)),
+        show_candidates = julialib.jl_unbox_bool(
+            julialib.jl_get_nth_field(command, 5)) != 0,
+    })
+}
+
+// Reject permanent capacity failures before retrying transient completion backpressure.
+send_terminal_completion_until_sent :: proc(
+    service: ^Julia_Runtime_Service, result: protocol.Completion_Result) -> bool {
+    if len(result.insertion) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
+        log.warnf("terminal_completion_rejected reason=result_capacity bytes=%d",
+            len(result.insertion))
+        return send_terminal_value_until_sent(service, protocol.Completion_Failed{
+            request_id = result.request_id,
+            animation_generation = result.animation_generation,
+            reason = .Internal_Failure,
         })
+    }
+    for {
+        outcome := send_terminal_completion_result(service, result)
         if outcome == .Sent {
             return true
         }

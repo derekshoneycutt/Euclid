@@ -356,6 +356,43 @@ terminal_transport_round_trips_completion_payloads :: proc(t: ^testing.T) {
     testing.expect_value(t, drain_julia_egress_returns(service), 1)
 }
 
+// Capacity admission sends a complete boundary result or one correlated permanent failure.
+@(test)
+terminal_transport_completion_capacity :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    bytes := make([]u8, protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES + 1,
+        context.allocator)
+    defer delete(bytes, context.allocator)
+    for &byte in bytes {
+        byte = 'x'
+    }
+    for size in ([2]int{len(bytes) - 1, len(bytes)}) {
+        testing.expect(t, send_terminal_completion_until_sent(service, {
+            request_id = 71, animation_generation = 3,
+            insertion = string(bytes[:size]), show_candidates = true,
+        }))
+        message, received := communication_link_try_recv(&service.event_link)
+        testing.expect(t, received)
+        if result, ok := message^.(protocol.Completion_Result); ok {
+            testing.expect_value(t, size, len(bytes) - 1)
+            testing.expect_value(t, len(result.insertion),
+                protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES)
+            testing.expect_value(t, result.request_id, 71)
+        } else {
+            failure, is_failure := message^.(protocol.Completion_Failed)
+            testing.expect(t, is_failure)
+            testing.expect_value(t, size, len(bytes))
+            testing.expect_value(t, failure.request_id, 71)
+            testing.expect_value(t, failure.animation_generation, 3)
+        }
+        testing.expect(t, communication_link_return(&service.event_link, message))
+        testing.expect_value(t, drain_julia_egress_returns(service), 1)
+        _, extra := communication_link_try_recv(&service.event_link)
+        testing.expect(t, !extra)
+    }
+}
+
 // Verify session-ready transport clones borrowed banner text into producer storage.
 @(test)
 terminal_transport_clones_session_ready_banner :: proc(t: ^testing.T) {

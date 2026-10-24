@@ -14,6 +14,7 @@ import input "../input"
 import font "../font"
 import fmt "core:fmt"
 import math "core:math"
+import strings "core:strings"
 import utf8 "core:unicode/utf8"
 import viewtext "../ui/text"
 
@@ -1211,8 +1212,8 @@ terminal_draw_completion_preview :: proc(
         return
     }
 
-    start := math.clamp(term.completion_preview_start, 0, len(current_text))
-    end := math.clamp(term.completion_preview_end, start, len(current_text))
+    preview := terminal_completion_display_span(term, current_text)
+    start, end := preview.replacement_start, preview.replacement_end
     text_percent := draw.encoder^.ui_text_size_percent
     prefix_width := terminal_text_column_width(draw.font, prompt_prefix, text_percent)
     start_x := draw.position.x + prefix_width +
@@ -1232,12 +1233,28 @@ terminal_draw_completion_preview :: proc(
         preview_color = TERMINAL_COMPLETION_PREVIEW_COLOR
     }
     _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver, .Regular,
-        term.completion_preview_insertion, preview_position,
+        preview.insertion, preview_position,
         preview_color})
     terminal_syntax_underline(draw.encoder, {
         underline = .Dotted, underline_color = preview_color},
         preview_position, terminal_text_column_width(draw.font,
-            term.completion_preview_insertion, text_percent))
+            preview.insertion, text_percent))
+}
+
+// Extension hints borrow only the untyped suffix; transformed replacements keep their mask.
+terminal_completion_display_span :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    source: string) -> Terminal_Completion_Preview {
+    start := math.clamp(term.completion_preview_start, 0, len(source))
+    end := math.clamp(term.completion_preview_end, start, len(source))
+    insertion := term.completion_preview_insertion
+    replaced := source[start:end]
+    if strings.has_prefix(insertion, replaced) {
+        insertion = insertion[len(replaced):]
+        start = end
+    }
+    return {found = true, replacement_start = start,
+        replacement_end = end, insertion = insertion}
 }
 
 //   Draw the live input line's base text: a bold prompt (green for `julia>`,

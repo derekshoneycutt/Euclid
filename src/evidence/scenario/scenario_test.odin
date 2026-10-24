@@ -606,6 +606,9 @@ scenario_test_terminal_commands :: proc(t: ^testing.T) {
         program.commands[2].kind, Command_Kind.Assert_Terminal_Contains)
     testing.expect(t, state_matches(
         "terminal_idle", observe.Display{terminal_idle = true}))
+    testing.expect(t, state_matches(
+        "terminal_completion_ready", observe.Display{terminal_completion_ready = true}))
+    testing.expect(t, !state_matches("terminal_completion_ready", observe.Display{}))
 }
 
 // Verify event predicates progress immediately and deadlines bound failure.

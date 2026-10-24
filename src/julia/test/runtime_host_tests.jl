@@ -387,6 +387,17 @@ end
     @test preview.insertion == "println"
     @test !preview.show_candidates
 
+    EuclidHost.ingest_completion_preview_for_host(
+        host.reactor, UInt64(43), "func", Int32(4), UInt64(4))
+    prefix = drain_runtime_host_completion(host, UInt64(43))
+    @test prefix.found && prefix.insertion == "function"
+    @test !prefix.show_candidates
+    EuclidHost.ingest_completion_candidates_for_host(
+        host.reactor, UInt64(44), "function", Int32(8), UInt64(4))
+    alternatives = drain_runtime_host_completion(host, UInt64(44))
+    @test !alternatives.found && alternatives.show_candidates
+    @test occursin("functionloc", alternatives.insertion)
+
     EuclidHost.ingest_completion_candidates_for_host(
         host.reactor, UInt64(42), "Base.", Int32(5), UInt64(4))
     candidates = drain_runtime_host_completion(host, UInt64(42))

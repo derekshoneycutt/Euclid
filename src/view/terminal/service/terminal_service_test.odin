@@ -362,6 +362,105 @@ terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
         animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
+// Background common prefixes remain previews; explicit Tab commits the same result once.
+@(test)
+terminal_service_test_common_prefix_tab :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 17)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    testing.expect(t, terminal_service_enter(state))
+    defer terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
+    term := &state^.terminal
+    testing.expect(t, termhist.termhist_insert_text(term.history, "func"))
+    request := terminalview.terminal_request_completion(term, false)
+    result := bridgemodel.Julia_Host_Egress(protocol.Completion_Result{
+        request_id = request.request_id, animation_generation = 17,
+        found = true, replacement_end = 4, insertion = "function",
+    })
+    testing.expect(t, terminal_service_dispatch_completion_result(state, &result))
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "func")
+    testing.expect_value(t, term.completion_preview_insertion, "function")
+    request = terminalview.terminal_request_completion(term, true)
+    result = protocol.Completion_Result{
+        request_id = request.request_id, animation_generation = 17,
+        found = true, replacement_end = 4,
+        insertion = "function", show_candidates = true,
+    }
+    testing.expect(t, terminal_service_dispatch_completion_result(state, &result))
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "function")
+    testing.expect(t, !terminal_service_dispatch_completion_result(state, &result))
+    testing.expect(t, termhist.termhist_undo(term.history))
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "func")
+    testing.expect(t, termhist.termhist_redo(term.history))
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "function")
+}
+
+// Late explicit results and failures cannot change a newer draft or request.
+@(test)
+terminal_service_test_explicit_completion_stale :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 18)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    testing.expect(t, terminal_service_enter(state))
+    defer terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
+    term := &state^.terminal
+    testing.expect(t, termhist.termhist_insert_text(term.history, "func"))
+    request := terminalview.terminal_request_completion(term, true)
+    testing.expect(t, termhist.termhist_insert_text(term.history, "x"))
+    result := bridgemodel.Julia_Host_Egress(protocol.Completion_Result{
+        request_id = request.request_id, animation_generation = 18,
+        found = true, replacement_end = 4,
+        insertion = "function", show_candidates = true,
+    })
+    testing.expect(t, !terminal_service_dispatch_completion_result(state, &result))
+    current := terminalview.terminal_request_completion(term, false)
+    result = protocol.Completion_Failed{
+        request_id = request.request_id,
+        animation_generation = 18,
+        reason = .Internal_Failure,
+    }
+    testing.expect(t, !terminal_service_dispatch_completion_result(state, &result))
+    testing.expect_value(t, term.pending_completion_request_id, current.request_id)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "funcx")
+}
+
+// Matching provider and ingress failures retire visibly without changing the draft.
+@(test)
+terminal_service_test_completion_failures :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 19)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    testing.expect(t, terminal_service_enter(state))
+    defer terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
+    terminal_service_test_runtime_init(t, state)
+    defer terminal_service_test_runtime_destroy(state)
+    term := &state^.terminal
+    testing.expect(t, termhist.termhist_insert_text(term.history, "func"))
+    request := terminalview.terminal_request_completion(term, true)
+    failure := bridgemodel.Julia_Host_Egress(protocol.Completion_Failed{
+        request_id = request.request_id, animation_generation = 19,
+        reason = .Internal_Failure,
+    })
+    testing.expect(t, terminal_service_dispatch_completion_result(state, &failure))
+    testing.expect_value(t, term.pending_completion_request_id, 0)
+    testing.expect(t, !terminal_service_dispatch_completion_result(state, &failure))
+    request = terminalview.terminal_request_completion(term, true)
+    state^.julia_runtime_service.lifecycle = .Shutdown_Requested
+    terminal_service_send_completion(state, request)
+    testing.expect_value(t, term.pending_completion_request_id, 0)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "func")
+    testing.expect(t, terminal_service_test_contains(state, "Terminal completion unavailable"))
+}
+
 // Verify late terminal egress cannot mutate a replacement animation generation.
 @(test)
 terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {

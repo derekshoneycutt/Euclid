@@ -137,6 +137,19 @@ Undo model and Terminal tests also cover Julia aliases, cursor/selection restora
 operation grouping, transient preedit, completion, retained capacity, and allocation
 failure without partial draft/timeline publication.
 
+The [Terminal completion scenario](../../../tools/scenarios/terminal-completion-acceptance.jsonl)
+exercises `func` → `function`, subsequent alternatives without replacing the draft,
+evaluation of the resulting function, unique `println` completion, and clean shutdown.
+The debug/test-only `terminal_completion_ready` predicate waits for a retained useful
+preview before capture or acceptance, rather than guessing at debounce or Julia
+response timing. Its screenshots are supporting single-row visual evidence.
+Owner-level tests deterministically cover Tab with a ready preview and
+before its response, Right acceptance, stale/duplicate responses, undo, Unicode byte
+boundaries, multiline replacement, bounded-buffer reuse, and capacity rejection at
+the exact byte limit and one byte over. Julia adapter tests exercise common prefixes,
+list-only contexts, Unicode cursor conversion, and no-op suppression separately from
+host propagation. No popup or candidate-navigation behavior is implied.
+
 These synthetic tests do not certify a desktop IME. Native Linux composition with an
 installed IBus/Fcitx engine, candidate-window placement through resize/scroll/DPI changes,
 and cancellation during window/menu transitions still require interactive testing.

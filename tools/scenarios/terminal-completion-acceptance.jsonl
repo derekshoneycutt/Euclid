@@ -1,0 +1,33 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"func"}
+{"wait_state":"terminal_completion_ready","timeout_ms":10000}
+{"screenshot":".build/scenarios/terminal-completion-prefix.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"tab"}
+{"screenshot":".build/scenarios/terminal-completion-accepted.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"tab"}
+{"wait_terminal_contains":"functionloc","timeout_ms":10000}
+{"screenshot":".build/scenarios/terminal-completion-alternatives.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":" completion_probe(x)\n    x + 1\nend"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"println(\"completion-\" * string(completion_probe(41)))"}
+{"key":"enter"}
+{"wait_terminal_contains":"completion-42","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"printl"}
+{"wait_state":"terminal_completion_ready","timeout_ms":10000}
+{"key":"tab"}
+{"screenshot":".build/scenarios/terminal-completion-unique.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"(\"unique-\" * \"completion\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"unique-completion","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

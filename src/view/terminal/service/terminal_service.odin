@@ -162,12 +162,20 @@ terminal_service_dispatch_completion_result :: proc(
                 terminalview.terminal_append_ansi_output(
                     &state^.terminal, payload.insertion)
             }
+            if accepted && payload.show_candidates && payload.found {
+                return terminalview.terminal_accept_completion_preview(&state^.terminal)
+            }
             return accepted
         }
     case protocol.Completion_Failed:
         if terminal_service_generation_matches(state, payload.animation_generation) {
-            return terminalview.terminal_fail_completion(
+            accepted := terminalview.terminal_fail_completion(
                 &state^.terminal, payload.request_id)
+            if accepted {
+                terminalview.terminal_reject_completion(
+                    &state^.terminal, "provider_or_transport_failure")
+            }
+            return accepted
         }
     }
     return false
@@ -300,8 +308,11 @@ terminal_service_send_completion :: proc(
             show_candidates = completion.show_candidates,
         })
     if outcome != .Sent {
-        _ = terminalview.terminal_fail_completion(
-            &state^.terminal, completion.request_id)
+        if terminalview.terminal_fail_completion(
+            &state^.terminal, completion.request_id) {
+            terminalview.terminal_reject_completion(
+                &state^.terminal, "request_transport_failure")
+        }
     }
 }
 

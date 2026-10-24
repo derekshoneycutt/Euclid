@@ -410,6 +410,26 @@ request in the active session module and returns a replacement range plus insert
 The display applies it only when the generation and request identity are still current.
 Older completion results cannot overwrite newer typing.
 
+Julia's existing provider determines whether a context permits replacement or only
+listing. A unique replacement or useful Unicode-safe common prefix becomes a preview:
+`func` suggests `function`, leaving the typed `func` normally colored and only `tion`
+dimmed. Tab or Right accepts that preview as one undoable edit. Tab before a preview
+arrives requests explicit completion; its matching useful result is applied immediately.
+Once `function` is committed, the next Tab lists `function` and `functionloc` without
+changing the draft. Background requests never print alternatives or offer equal,
+no-op replacements. Non-prefix replacements such as `\alpha` to `α` retain the
+replacement-mask preview. Ghost drawing remains single-row; byte-correct completion
+acceptance still works in multiline source.
+
+Julia retains provider objects under its GC. Native requests and previews reuse the
+existing bounded, animation-generation-owned backing, and bridge responses copy into
+producer-owned pooled bytes. No candidate model, popup, or new native allocation owner
+is involved. Oversized source, replacement, or alternatives fail explicitly without
+truncating text or changing the draft. A permanent oversized bridge result sends one
+correlated failure rather than entering the transient-backpressure retry loop; the
+display retires a matching failed transaction and reports the failure in Terminal.
+Stale failures cannot clear a newer transaction.
+
 Native composition suppresses completion requests and acceptance. Starting preedit
 retires an existing completion transaction, so a delayed response cannot overlay or
 replace text being composed. This uses the existing completion mechanism; structured

@@ -13,6 +13,7 @@ import "../font"
 import "../input"
 
 import "core:unicode/utf8"
+import "core:log"
 
 // Arm or expire the synchronized-output safety deadline on the display clock.
 terminal_update_synchronized_output :: proc(
@@ -377,6 +378,7 @@ terminal_request_completion :: proc(
     }
     source := termhist.termhist_current_text(term.history)
     if len(source) > len(term.pending_completion_storage) {
+        terminal_reject_completion(term, "source_capacity")
         return {}
     }
     terminal_clear_completion(term)
@@ -416,18 +418,24 @@ terminal_set_completion_preview :: proc(
     if term == nil || term.history == nil ||
         term.history.preedit_active ||
         term.completion_result_received ||
+        term.pending_completion_request_id == 0 ||
         preview.request_id != term.pending_completion_request_id ||
         termhist.termhist_cursor(term.history) != term.pending_completion_cursor ||
         termhist.termhist_current_text(term.history) != term.pending_completion_source {
         return false
     }
     term.completion_result_received = true
+    if len(preview.insertion) > len(term.completion_preview_storage) {
+        terminal_reject_completion(term, "result_capacity")
+        return false
+    }
     if !preview.found {
         terminal_clear_completion(term)
         return true
     }
-    if len(preview.insertion) > len(term.completion_preview_storage) {
-        terminal_clear_completion(term)
+    if !terminal_completion_replacement_valid(
+        termhist.termhist_current_text(term.history), preview) {
+        terminal_reject_completion(term, "replacement_range")
         return false
     }
     terminal_clear_completion_preview(term)
@@ -440,6 +448,16 @@ terminal_set_completion_preview :: proc(
     term.completion_preview_insertion = string(
         term.completion_preview_storage[:len(preview.insertion)])
     return true
+}
+
+// Admit only valid UTF-8 replacements whose source range follows grapheme boundaries.
+terminal_completion_replacement_valid :: proc(
+    source: string, preview: Terminal_Completion_Preview) -> bool {
+    start, end := preview.replacement_start, preview.replacement_end
+    return start >= 0 && end >= start && end <= len(source) &&
+        utf8.valid_string(preview.insertion) &&
+        coretext.text_grapheme_clamp_boundary(source, start) == start &&
+        coretext.text_grapheme_clamp_boundary(source, end) == end
 }
 
 //   Consume a current completion failure without disturbing newer input.
@@ -456,6 +474,7 @@ terminal_set_completion_preview :: proc(
 terminal_fail_completion :: proc(
     term: ^viewterminalmodel.Terminal_State, request_id: protocol.Request_Id) -> bool {
     if term == nil || term.history == nil || term.completion_result_received ||
+        request_id == 0 ||
         request_id != term.pending_completion_request_id ||
         termhist.termhist_cursor(term.history) != term.pending_completion_cursor ||
         termhist.termhist_current_text(term.history) != term.pending_completion_source {
@@ -488,7 +507,22 @@ terminal_accept_completion_preview :: proc(
         term.history, term.completion_preview_start,
         term.completion_preview_end, term.completion_preview_insertion)
     terminal_clear_completion(term)
+    terminal_report_edit_failure(term)
+    if applied {
+        term.view_selection_active = false
+        term.view_selection_dragging = false
+        term.draft_selection_dragging = false
+    }
     return applied
+}
+
+// Retire a rejected transaction visibly without changing the editable draft.
+terminal_reject_completion :: proc(
+    term: ^viewterminalmodel.Terminal_State, reason: string) {
+    terminal_clear_completion(term)
+    log.warnf("terminal_completion_rejected reason=%s", reason)
+    terminal_append_output_line(
+        term, "Terminal completion unavailable: request failed or exceeded supported limits.")
 }
 
 //   Exit the active help/pkg mode on an empty line instead of backspacing,
@@ -927,7 +961,7 @@ terminal_update_editor_shortcuts :: proc(
         }
         return {
             completion = completion,
-            cursor_moved = true,
+            cursor_moved = completion.requested,
         }, true
     }
     return {}, false

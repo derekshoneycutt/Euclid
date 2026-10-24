@@ -61,6 +61,25 @@ observe_test_display_fixture_destroy :: proc(fixture: ^Observe_Display_Fixture) 
     free(fixture^.source.evidence_ring, context.allocator)
 }
 
+// Completion readiness reflects a useful retained response, never just an idle prompt.
+@(test)
+observe_test_terminal_completion_readiness :: proc(t: ^testing.T) {
+    terminal := viewterminalmodel.Terminal_State{
+        initialized = true, julia_session_ready = true,
+    }
+    source := Display_Source{terminal = &terminal}
+    testing.expect(t, !display(&source).terminal_completion_ready)
+    terminal.completion_result_received = true
+    testing.expect(t, !display(&source).terminal_completion_ready)
+    terminal.completion_preview_insertion = "function"
+    snapshot := display(&source)
+    testing.expect(t, snapshot.terminal_completion_ready)
+    terminal.awaiting_eval = true
+    testing.expect(t, !display(&source).terminal_completion_ready)
+    terminal.completion_preview_insertion = ""
+    testing.expect(t, snapshot.terminal_completion_ready)
+}
+
 // Verify capture evidence survives an absent UI and never borrows policy storage.
 @(test)
 observe_test_independent_capture_owner :: proc(t: ^testing.T) {

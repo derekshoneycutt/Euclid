@@ -1,24 +1,32 @@
 """Return the insertion text for every standard Julia completion kind."""
 completion_insertion(item) = REPL.REPLCompletions.named_completion(item).completion
 
-"""Find the first standard Julia REPL completion at a zero-indexed byte cursor."""
+"""Resolve a useful REPL replacement, or explicit alternatives, at a byte cursor."""
 function complete_input(
     code::AbstractString, cursor_byte::Integer;
     show_candidates::Bool=true,
     context_module::Module=Main)::CompletionResult
-    cursor_byte < 0 || cursor_byte > ncodeunits(code) &&
+    0 < cursor_byte <= ncodeunits(code) || return CompletionResult(false, 0, 0, "")
+    (cursor_byte == ncodeunits(code) || isvalid(code, Int(cursor_byte) + 1)) ||
         return CompletionResult(false, 0, 0, "")
-    cursor_byte == 0 && return CompletionResult(false, 0, 0, "")
 
-    items, range, _ = REPL.REPLCompletions.completions(
-        String(code), Int(cursor_byte), context_module, true, false)
+    # Julia's provider takes the last character index, not the end-exclusive byte cursor.
+    items, range, should_complete = REPL.REPLCompletions.completions(
+        String(code), prevind(code, Int(cursor_byte) + 1), context_module, true, false)
     isempty(items) && return CompletionResult(false, 0, 0, "")
 
-    insertion = completion_insertion(first(items))
-    insertion = show_candidates && length(items) > 1 ?
-        format_completion_candidates(items) : insertion
+    insertion = ""
+    if should_complete
+        insertion = length(items) == 1 ? completion_insertion(first(items)) :
+            REPL.LineEdit.common_prefix(completion_insertion.(items))
+    end
+    replaced = code[range]
+    useful = !isempty(insertion) && insertion != replaced
+    if !useful
+        insertion = show_candidates ? format_completion_candidates(items) : ""
+    end
     return CompletionResult(
-        length(items) == 1, first(range) - 1, last(range), insertion)
+        useful, first(range) - 1, first(range) - 1 + ncodeunits(replaced), insertion)
 end
 
 """Format completion names using Julia REPL-style multi-column rows."""
