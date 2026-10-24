@@ -120,7 +120,9 @@ membership_open :: proc(
         state.preferences_runtime.collections_state.collections[menu.order[0]].id
     menu.pending_valid, menu.dragging = false, false
     membership_place(state)
+    origin := state.ui_runtime.semantic_focus.focus_origin
     membership_focus(state, menu.focused)
+    state.ui_runtime.semantic_focus.focus_origin = origin
     return true
 }
 

@@ -39,6 +39,33 @@ membership_test_fixture :: proc(t: ^testing.T, state: ^core.Euclid_General_State
     state.ui_runtime.layout.ui_regions.world_rect = {0, 0, 640, 480}
 }
 
+// Pointer opening stays visually quiet; keyboard navigation restores visible row focus.
+@(test)
+membership_popup_preserves_focus_modality :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    membership_test_fixture(t, state, &ji, &nodes)
+    _ = membership_test_head(t, state, 1)
+    focus := state.ui_runtime.semantic_focus
+    focus.focus_origin = .Pointer
+    testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
+    testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
+    uioverlay.membership_key(state, {kind = .Press, key = .Down})
+    testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Keyboard)
+    row := uioverlay.membership_row(&state.ui_runtime.membership, 0)
+    uioverlay.membership_pointer(state, {
+        window_focused = true,
+        mouse_position = {row.x + 50, row.y + row.height * 0.5},
+        mouse_pressed = {.Left}, mouse_down = {.Left},
+    })
+    testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
+    uioverlay.membership_close(state, true)
+    testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
+    testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Keyboard)
+}
+
 // Opening preserves duplicate-name identities, empty destinations, Library order and star parity.
 @(test)
 membership_popup_uses_custom_heads_and_retains_accepted_membership :: proc(

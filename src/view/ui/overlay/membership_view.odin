@@ -87,7 +87,8 @@ membership_draw_row :: proc(
     }
     head := &state.preferences_runtime.collections_state.collections[menu.order[index]]
     params := membership_checkbox(state, index, {})
-    if head.id == menu.focused {
+    if head.id == menu.focused &&
+        state.ui_runtime.semantic_focus.focus_origin == .Keyboard {
         uiwidgets.draw_encoded_focus_ring(encoder, row)
     }
     uiwidgets.draw_encoded_checkbox_geometry(encoder, params.rect, params.checked)

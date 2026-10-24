@@ -390,6 +390,9 @@ before admitting a clean cycle boundary.
 
 **Add to collections** lists custom destinations—including empty ones—in Library
 order. Checkboxes read accepted membership; rejected edits never change their checks.
+The popup retains a thin outer border. Destination rows show the stronger focus ring
+only for keyboard/native focus, not pointer opening or clicking; keyboard navigation
+restores it without changing membership.
 
 | Interaction | Behavior |
 | --- | --- |

@@ -138,6 +138,7 @@ membership_pointer :: proc(
             menu.focused = menu.pressed
             state.ui_runtime.semantic_focus.logical_focus = membership_id(
                 menu, menu.focused)
+            state.ui_runtime.semantic_focus.focus_origin = .Pointer
         }
         if result.toggled && menu.pressed == set.collections[slot].id {
             membership_request(state, menu.pressed)
