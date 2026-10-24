@@ -80,9 +80,13 @@ terminal_update_keyboard :: proc(
 terminal_update_keyboard_event :: proc(
     term: ^viewterminalmodel.Terminal_State, event: input.Input_Event,
     clipboard_text: string) -> Terminal_Keyboard_Update {
+    defer terminal_report_edit_failure(term)
     composing := term.history != nil && term.history.preedit_active
     if input.input_event_composition_owns_key(event, &composing) {
         return {}
+    }
+    if update, handled := terminal_update_undo_key(term, event); handled {
+        return update
     }
     if event.kind == .Text {
         return {cursor_moved = terminal_update_char_input_event(term, event)}
@@ -186,7 +190,33 @@ terminal_try_enter_mode :: proc(
         return false
     }
     term.input_mode = mode
+    term.history.undo.sequence = false
     return true
+}
+
+// Consume exact undo/redo chords without capturing AltGr or other modified text.
+terminal_update_undo_key :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    event: input.Input_Event) -> (Terminal_Keyboard_Update, bool) {
+    if event.kind != .Press && event.kind != .Repeat {
+        return {}, false
+    }
+    control := event.modifiers == {.Control}
+    control_shift := event.modifiers == {.Control, .Shift}
+    redo := event.key == .Z && control_shift ||
+        event.key == .Minus && event.modifiers == {.Super, .Shift}
+    undo := event.key == .Z && control || event.key == .Slash && control ||
+        event.key == .Minus && control_shift
+    if !undo && !redo {
+        return {}, false
+    }
+    changed := termhist.termhist_redo(term.history) if redo else
+        termhist.termhist_undo(term.history)
+    if changed {
+        terminal_clear_completion(term)
+        term.draft_selection_dragging = false
+    }
+    return {cursor_moved = changed}, true
 }
 
 //   Switch to the `help?>` prompt when `?` is typed at the start of a
@@ -477,6 +507,7 @@ terminal_try_exit_mode_on_empty_backspace :: proc(
     if term.input_mode != .Normal &&
        len(termhist.termhist_current_text(term.history)) == 0 {
         term.input_mode = .Normal
+        term.history.undo.sequence = false
         return true
     }
     return false
@@ -880,6 +911,7 @@ terminal_update_editor_shortcuts :: proc(
     }
     if terminal_input_chord(frame, .L, {.Control}) {
         terminal_clear_console(term)
+        term.history.undo.sequence = false
         return {cursor_moved = true}, true
     }
     if terminal_input_chord(frame, .Tab, {.Control}) {
@@ -889,8 +921,12 @@ terminal_update_editor_shortcuts :: proc(
         if terminal_accept_completion_preview(term) {
             return {cursor_moved = true}, true
         }
+        completion := terminal_request_completion(term, true)
+        if completion.requested {
+            term.history.undo.sequence = false
+        }
         return {
-            completion = terminal_request_completion(term, true),
+            completion = completion,
             cursor_moved = true,
         }, true
     }
@@ -944,6 +980,7 @@ terminal_cancel_draft :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.collecting_continuation = false
     term.input_mode = .Normal
     term.input_mode_backup = .Normal
+    term.pending_draft_valid = false
 }
 
 // Clear the visible Terminal output through its owned grid and scrollback state.

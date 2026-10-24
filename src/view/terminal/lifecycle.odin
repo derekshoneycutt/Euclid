@@ -599,6 +599,8 @@ terminal_complete_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.collecting_continuation = false
     term.output_checkpoint.valid = false
     term.pending_eval_request_id = 0
+    term.pending_draft_valid = false
+    termhist.termhist_reset_undo(term.history)
     terminal_clear_completion(term)
     if len(term.pending_eval_source) > 0 {
         term.pending_eval_source = ""
@@ -652,20 +654,43 @@ terminal_continue_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     terminal_highlight_remove_latest(term)
     terminal_restore_output_checkpoint(term)
     term.pending_eval_request_id = 0
-    source := term.pending_eval_source
-    termhist.termhist_clear(term.history)
-    if !termhist.termhist_insert_text(term.history, source) {
-        return
-    }
-
-    termhist.termhist_insert_text(term.history, "\n")
-    termhist.termhist_insert_text(term.history, terminal_continuation_indent(source))
+    terminal_restore_continuation_draft(term)
     if len(term.pending_eval_source) > 0 {
         term.pending_eval_source = ""
     }
     term.awaiting_eval = false
     term.collecting_continuation = true
     terminal_clear_completion(term)
+}
+
+// Restore the submitted editing position before committing one continuation suffix.
+terminal_restore_continuation_draft :: proc(
+    term: ^viewterminalmodel.Terminal_State) {
+    source := term.pending_eval_source
+    snapshot := term.pending_draft
+    if !term.pending_draft_valid {
+        snapshot = {
+            length = len(source), cursor = len(source),
+            anchor = len(source), preferred_column = -1,
+        }
+    }
+    if termhist.termhist_resume_draft(term.history, source, snapshot) {
+        _ = termhist.termhist_continue_draft(
+            term.history, terminal_continuation_indent(source))
+    }
+    term.pending_draft_valid = false
+    terminal_report_edit_failure(term)
+}
+
+// Surface rejected allocation-backed edits once at their display-owned boundary.
+terminal_report_edit_failure :: proc(term: ^viewterminalmodel.Terminal_State) {
+    if term.history == nil || !term.history.allocation_failed {
+        return
+    }
+    term.history.allocation_failed = false
+    log.error("terminal_edit_rejected reason=allocation_failed")
+    terminal_append_output_line(
+        term, "Terminal edit rejected: unable to allocate edit history storage.")
 }
 
 //   Return the source submitted for the current live line.
@@ -905,6 +930,12 @@ terminal_update :: proc(
 //     caller appends the real evaluated result once it arrives.
 terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     text := termhist.termhist_current_text(term.history)
+    term.pending_draft = {
+        length = len(text), cursor = term.history.cursor,
+        anchor = term.history.anchor, preferred_column = term.history.preferred_column,
+    }
+    term.pending_draft_valid = true
+    term.history.undo.sequence = false
     if term.collecting_continuation {
         terminal_restore_output_checkpoint(term)
     } else {
@@ -923,7 +954,7 @@ terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     terminal_highlight_begin_submission(term, text)
     terminal_append_submitted_input(term, text, prompt_style)
     if termhist.termhist_accept_current(
-        term.history, history_tag, term.collecting_continuation) {
+        term.history, history_tag, term.collecting_continuation, true) {
         terminal_highlight_end_submission(term)
     } else if term.highlighting != nil {
         term.highlighting.recording = false

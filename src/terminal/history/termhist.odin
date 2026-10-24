@@ -43,7 +43,7 @@ Termhist_Visual_Row_Bounds :: struct {
     found: bool,
 }
 
-// Termhist_State stores the current editable line plus committed history.
+// Termhist_State owns the editable draft, draft undo, and submitted command history.
 //
 // Notes:
 //   - Manages editor buffers and retained history through a borrowed allocation domain.
@@ -54,6 +54,9 @@ Termhist_State :: struct {
     // History issues release calls on replacement and teardown; actual reclamation
     // follows allocator policy. The domain must remain valid through teardown.
     borrowed_allocator: mem.Allocator,
+
+    undo: Termhist_Undo,
+    allocation_failed: bool,
 
     text: []u8,
     text_len: int,
@@ -106,7 +109,7 @@ termhist_allocate_storage :: proc(
         return false
     }
     state.history = history
-    return true
+    return termhist_reserve_undo(state, history_capacity, text_capacity)
 }
 
 //   Initialize caller-owned UTF-8 editing state with explicit storage ownership.
@@ -173,6 +176,8 @@ termhist_destroy :: proc(state: ^Termhist_State) {
         delete(entry.text, state.borrowed_allocator)
     }
     delete(state.history, state.borrowed_allocator)
+    delete(state.undo.snapshots, state.borrowed_allocator)
+    delete(state.undo.bytes, state.borrowed_allocator)
     delete(state.backup, state.borrowed_allocator)
     delete(state.text, state.borrowed_allocator)
     state^ = {}
@@ -312,6 +317,13 @@ termhist_reset_revision :: proc(state: ^Termhist_State) -> u64 {
 // Side effects:
 //   - Clears the live buffer and resets the cursor.
 termhist_clear :: proc(state: ^Termhist_State) {
+    termhist_reset_undo(state)
+    termhist_clear_draft(state)
+}
+
+// Clear visible draft state without discarding a provisionally submitted timeline.
+termhist_clear_draft :: proc(state: ^Termhist_State) {
+    termhist_clear_preedit(state)
     state.text_len = 0
     state.cursor = 0
     state.anchor = 0
@@ -354,6 +366,7 @@ termhist_replace_normalized_range :: proc(
     normalized, allocation_error := make(
         []u8, normalized_length, state.borrowed_allocator)
     if allocation_error != nil {
+        state.allocation_failed = true
         return false
     }
     defer delete(normalized, state.borrowed_allocator)
@@ -512,6 +525,7 @@ termhist_move_left :: proc(state: ^Termhist_State, extend := false) -> bool {
         state.cursor = min(state.anchor, state.cursor)
         state.anchor = state.cursor
         state.preferred_column = -1
+        state.undo.sequence = false
         return true
     }
     if state.cursor == 0 {
@@ -527,6 +541,7 @@ termhist_move_left :: proc(state: ^Termhist_State, extend := false) -> bool {
         state.anchor = state.cursor
     }
     state.preferred_column = -1
+    state.undo.sequence = false
     return true
 }
 
@@ -544,6 +559,7 @@ termhist_move_right :: proc(state: ^Termhist_State, extend := false) -> bool {
         state.cursor = max(state.anchor, state.cursor)
         state.anchor = state.cursor
         state.preferred_column = -1
+        state.undo.sequence = false
         return true
     }
     if state.cursor >= state.text_len {
@@ -559,6 +575,7 @@ termhist_move_right :: proc(state: ^Termhist_State, extend := false) -> bool {
         state.anchor = state.cursor
     }
     state.preferred_column = -1
+    state.undo.sequence = false
     return true
 }
 
@@ -576,12 +593,15 @@ termhist_move_home :: proc(state: ^Termhist_State, extend := false) -> bool {
     for start > 0 && text[start - 1] != '\n' {
         start -= 1
     }
-    moved := state.cursor != start
+    moved := state.cursor != start || !extend && state.anchor != start
     state.cursor = start
     if !extend {
         state.anchor = start
     }
     state.preferred_column = -1
+    if moved {
+        state.undo.sequence = false
+    }
     return moved
 }
 
@@ -599,12 +619,15 @@ termhist_move_end :: proc(state: ^Termhist_State, extend := false) -> bool {
     for end < len(text) && text[end] != '\n' {
         end += 1
     }
-    moved := state.cursor != end
+    moved := state.cursor != end || !extend && state.anchor != end
     state.cursor = end
     if !extend {
         state.anchor = end
     }
     state.preferred_column = -1
+    if moved {
+        state.undo.sequence = false
+    }
     return moved
 }
 
@@ -618,13 +641,16 @@ termhist_set_cursor :: proc(
     state: ^Termhist_State, cursor: int, extend := false) -> bool {
     text := string(state.text[:state.text_len])
     target := coretext.text_grapheme_clamp_boundary(text, clamp(cursor, 0, len(text)))
+    moved := target != state.cursor || !extend && state.anchor != target
     if !extend || state.anchor == state.cursor {
         state.anchor = state.cursor if extend else target
     }
-    moved := target != state.cursor
     state.cursor = target
     state.preferred_column = -1
     termhist_end_history_browse(state)
+    if moved {
+        state.undo.sequence = false
+    }
     return moved
 }
 
@@ -762,6 +788,7 @@ termhist_move_vertical :: proc(
         state.anchor = target
     }
     termhist_end_history_browse(state)
+    state.undo.sequence = false
     return true
 }
 
@@ -860,15 +887,18 @@ termhist_delete_to_line_edge :: proc(state: ^Termhist_State, right: bool) -> boo
 //   - state: The active term history state.
 //   - tag: Opaque caller metadata recorded with the committed entry.
 //   - replace_latest: Replace the newest provisional entry instead of appending.
+//   - preserve_undo: Suspend draft undo until evaluation reports completion or continuation.
 //
 // Returns:
 //   - true if a non-empty line was committed.
 termhist_accept_current :: proc(
-    state: ^Termhist_State, tag: int = 0, replace_latest: bool = false) -> bool {
+    state: ^Termhist_State,
+    tag: int = 0, replace_latest: bool = false,
+    preserve_undo: bool = false) -> bool {
     termhist_end_history_browse(state)
 
     if state.text_len == 0 {
-        termhist_clear(state)
+        termhist_finish_accept(state, preserve_undo)
         return false
     }
 
@@ -883,7 +913,7 @@ termhist_accept_current :: proc(
         state.history[state.history_len - 1] =
             Termhist_Entry{text = entry_text, tag = tag, id = state.next_entry_id}
         delete(old_text, state.borrowed_allocator)
-        termhist_clear(state)
+        termhist_finish_accept(state, preserve_undo)
         return true
     }
 
@@ -891,7 +921,7 @@ termhist_accept_current :: proc(
         return false
     }
 
-    termhist_clear(state)
+    termhist_finish_accept(state, preserve_undo)
     return true
 }
 
@@ -1037,6 +1067,8 @@ termhist_load_entry :: proc(state: ^Termhist_State, text: []u8) -> bool {
     }
 
     state.text_len = len(text)
+    termhist_reset_undo(state)
+    termhist_clear_preedit(state)
     state.cursor = state.text_len
     state.anchor = state.cursor
     state.preferred_column = -1
@@ -1068,9 +1100,17 @@ termhist_replace_range :: proc(
     delete_len := end - start
     insert_len := len(replacement)
     new_len := state.text_len - delete_len + insert_len
+    if delete_len == 0 && insert_len == 0 {
+        return true
+    }
     if !termhist_ensure_u8_capacity(state, &state.text, new_len, state.text_len) {
+        state.allocation_failed = true
         return false
     }
+    if !termhist_prepare_undo(state) {
+        return false
+    }
+    termhist_capture_undo(state, true)
     termhist_shift_replacement_tail(state, start, end, insert_len, delete_len)
     if insert_len > 0 {
         copy(state.text[start:start + insert_len], replacement)

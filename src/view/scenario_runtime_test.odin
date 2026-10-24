@@ -318,6 +318,14 @@ scenario_runtime_key_injection_is_display_wide :: proc(t: ^testing.T) {
     testing.expect_value(t, input_runtime^.injected_event_count, 1)
     testing.expect_value(t,
         input_runtime^.injected_events[0].key, input.Input_Key.Space)
+    command.text, _ = scenario.text_copy("z")
+    command.key_control = true
+    command.key_shift = true
+    testing.expect(t, viewscenario.scenario_issue_key(&runtime, &command))
+    testing.expect_value(t,
+        input_runtime^.injected_events[1].key, input.Input_Key.Z)
+    testing.expect_value(t, input_runtime^.injected_events[1].modifiers,
+        input.Input_Modifiers{.Control, .Shift})
 }
 
 // Verify ordinary state requests and orderly shutdown flow through the action sink.

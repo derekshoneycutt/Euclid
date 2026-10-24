@@ -92,7 +92,7 @@ Scenario_Key_Name :: struct {name: string, key: input.Input_Key}
 
 // Supported deterministic portable keys.
 SCENARIO_KEY_NAMES :: [?]Scenario_Key_Name{
-    {"a", .A},
+    {"a", .A}, {"z", .Z},
     {"escape", .Escape}, {"enter", .Enter}, {"space", .Space}, {"tab", .Tab},
     {"backspace", .Backspace}, {"delete", .Delete},
     {"left", .Left}, {"right", .Right}, {"up", .Up}, {"down", .Down},

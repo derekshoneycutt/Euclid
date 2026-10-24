@@ -101,6 +101,7 @@ terminal_insert_clipboard_text :: proc(
     if len(text) == 0 {
         return false
     }
+    defer terminal_report_edit_failure(term)
     return termhist.termhist_insert_text(term.history, text)
 }
 
@@ -162,12 +163,18 @@ terminal_update_clipboard_copy :: proc(
 
 // Publish nonempty view-selection text without changing cursor or selection state.
 terminal_copy_view_selection :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
+    copied := false
     if term != nil && term.history != nil &&
         term.history.cursor != term.history.anchor {
         start, end := termhist.termhist_selection_range(term.history)
         text := termhist.termhist_current_text(term.history)
-        return input.input_set_clipboard_text(text[start:end])
+        copied = input.input_set_clipboard_text(text[start:end])
+    } else {
+        selected := terminal_view_selection_text(term)
+        copied = len(selected) > 0 && input.input_set_clipboard_text(selected)
     }
-    selected := terminal_view_selection_text(term)
-    return len(selected) > 0 && input.input_set_clipboard_text(selected)
+    if copied && term.history != nil {
+        term.history.undo.sequence = false
+    }
+    return copied
 }

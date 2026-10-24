@@ -127,8 +127,15 @@ checks real field-to-Terminal focus ownership. The
 [Terminal editor scenario](../../../tools/scenarios/terminal-editor-acceptance.jsonl)
 checks selection replacement, explicit multiline source, continuation, and clean
 shutdown. Run the existing keyboard-focus and context-menu scenarios alongside them.
+The [Terminal undo scenario](../../../tools/scenarios/terminal-undo-acceptance.jsonl)
+checks desktop undo/redo shortcuts, redo-branch replacement, completed-command reset,
+and retained edits across incomplete evaluation using evaluated output and clean
+shutdown. Its `z` key uses the existing structured `ctrl`/`shift` modifiers.
 Unit tests separately cover SDL preedit/commit translation, composing-key suppression,
 ordered commit-before-Enter, atomic edits, owner retirement, and foreground encoders.
+Undo model and Terminal tests also cover Julia aliases, cursor/selection restoration,
+operation grouping, transient preedit, completion, retained capacity, and allocation
+failure without partial draft/timeline publication.
 
 These synthetic tests do not certify a desktop IME. Native Linux composition with an
 installed IBus/Fcitx engine, candidate-window placement through resize/scroll/DPI changes,

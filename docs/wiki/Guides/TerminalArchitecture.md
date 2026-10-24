@@ -429,15 +429,40 @@ text-input area follows the eligible editor's prepared caret in logical coordina
 | Shift plus movement | Extend the draft selection |
 | Ctrl+Left/Right | Move by word |
 | Home/End; Ctrl+Home/End | Move to line edge; buffer edge |
-| Alt+Enter; Ctrl+J | Insert a newline without submitting |
+| Alt+Enter | Insert a newline without submitting |
+| Enter; Ctrl+J | Submit input for evaluation, continuing if incomplete |
 | Up/Down | Move across displayed draft rows, then use history at the boundary |
 | Ctrl+C | Cancel draft/continuation; does not interrupt running Julia |
 | Ctrl+L | Clear output while preserving draft and history |
 | Ctrl+D | Delete forward in content; preserve existing empty-prompt exit behavior |
+| Ctrl+/; Ctrl+Shift+Minus (Ctrl+_); Ctrl+Z | Undo one draft edit |
+| Super+Shift+Minus; Ctrl+Shift+Z | Redo during an uninterrupted undo/redo sequence |
 | Ctrl+Tab / Ctrl+Shift+Tab | Traverse application focus out of Terminal |
 
 Super-based aliases avoid consuming Option/AltGr text entry. Native composition takes
 precedence over these editor commands, except explicit Ctrl+Tab focus traversal.
+
+Draft undo follows Julia REPL's whole-buffer, operation-level snapshots, not timed
+typing groups. Each character event or deletion is separate; a whole paste, native
+IME commit, selection replacement, or existing completion acceptance is one edit.
+Preedit and asynchronous completion previews do not create snapshots. Restoring an
+edit restores text, cursor, selection anchor, and preferred vertical column, while
+content/reset revisions advance monotonically and old completion state is retired.
+
+`termhist` owns a reusable descriptor array and packed text bytes through its existing
+borrowed animation-generation allocator. Storage grows geometrically without a fixed
+history cap; branch truncation and prompt resets reuse retained capacity rather than
+allocating individual snapshot strings. Old backing blocks may remain in the arena
+until generation teardown. Whole-buffer snapshots trade memory for simple semantics.
+Storage admission failure rejects the edit/undo without changing draft or timeline,
+logs the failure, and prints an explicit Terminal error.
+
+Redo ends after a successful intervening editor command, including cursor/selection
+movement. Failed edits and unavailable undo/redo do not change the timeline. Successful
+command-history recall (including returning to the saved draft), cancellation, completed
+evaluation, and generation replacement clear edit history. Incomplete evaluation
+preserves prior edits and adds the continuation newline/indentation as one undoable
+operation. Prompt-mode changes and executed Julia effects are not undoable.
 
 Some Julia operations request terminal input while evaluation is active. The evaluator
 publishes an explicit lease:

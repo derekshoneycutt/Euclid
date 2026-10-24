@@ -84,6 +84,8 @@ Terminal_State :: struct {
     julia_capabilities_observed: bool,
     pending_eval_storage: []u8,
     pending_eval_source: string,
+    pending_draft: termhist.Termhist_Snapshot,
+    pending_draft_valid: bool,
     next_eval_request_id: protocol.Request_Id,
     pending_eval_request_id: protocol.Request_Id,
     interactive_input_request_id: protocol.Request_Id,
