@@ -3,7 +3,31 @@ package view
 import core "../core"
 import dynviewmodel "../dynview/model"
 import input "input"
+import uilibrary "ui/library"
+import termhist "../terminal/history"
 import testing "core:testing"
+
+// Verify losing the editable owner cancels hidden preedit without changing source.
+@(test)
+runtime_text_owner_retirement_clears_hidden_compositions :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.terminal.history = &state^.terminal.history_storage
+    state^.terminal.history.preedit_active = true
+    state^.ui_runtime.library.search.input.preedit_active = true
+    state^.ui_runtime.library.entry_name.input.preedit_active = true
+    state^.ui_runtime.gif_path_input.preedit_active = true
+    sdl_frame_retire_preedit(state, {
+        kind = .Input_Box, id = uilibrary.LIBRARY_SEARCH_INPUT_ID,
+    })
+    testing.expect(t, state^.ui_runtime.library.search.input.preedit_active)
+    testing.expect(t, !state^.ui_runtime.library.entry_name.input.preedit_active)
+    testing.expect(t, !state^.ui_runtime.gif_path_input.preedit_active)
+    testing.expect(t, !state^.terminal.history.preedit_active)
+    sdl_frame_retire_preedit(state, {})
+    testing.expect(t, !sdl_frame_composition_active(state))
+    testing.expect_value(t, termhist.termhist_current_text(state^.terminal.history), "")
+}
 
 // Verify fixed runtime children and input history remain in the stable state root.
 @(test)

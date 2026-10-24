@@ -167,6 +167,18 @@ in semantic publication and drawing. The exact contract varies by widget: for ex
 an input box edits caller-owned bounded text storage, while the button helper converges
 pointer activation with addressed semantic activation.
 
+Editable Library search/name and GIF-path fields share grapheme-aware, atomic UTF-8
+range editing. SDL commit and preedit events keep their poll order and carry their
+editable target identity. Preedit is transient widget state, not model text: it does
+not trigger search, autosave, or submission. Native composing keys are claimed before
+semantic traversal and widget editing; a later commit restores ordinary key handling
+in that same ordered frame. Losing focus or eligibility clears composition, including
+when the old field is hidden and no longer prepared.
+
+The display frame publishes native text-input eligibility and the prepared logical
+caret rectangle. Terminal uses the same lifecycle but retains its own draft editor and
+foreground-input ownership; no Julia call occurs from native input callbacks.
+
 This division is useful when extending the UI: add common control mechanics to the
 widget layer when multiple callers can share them; keep feature policy in the owning
 panel. The Library tree is a notable specialization: it uses treeview primitives, but

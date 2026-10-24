@@ -472,6 +472,25 @@ input_test_terminal_ring_encodes_alt_and_modified_editing :: proc(t: ^testing.T)
         t, string(bytes[:count]), "\eé\e[3;4~\e[Z\e\e")
 }
 
+// Verify whole commits reach only the active Terminal text lease.
+@(test)
+input_test_terminal_ring_routes_committed_payload_by_target :: proc(t: ^testing.T) {
+    runtime: Input_Runtime
+    event := Input_Event{
+        kind = .Text_Commit, text_length = 6,
+        text_target = {kind = .Terminal},
+    }
+    text := "日本"
+    copy(event.text[:6], transmute([]u8)text)
+    bytes, count := input_test_encode_frame(&runtime, []Input_Event{event})
+    testing.expect_value(t, string(bytes[:count]), "日本")
+
+    runtime = {}
+    event.text_target = {kind = .Input_Box, id = 7}
+    bytes, count = input_test_encode_frame(&runtime, []Input_Event{event})
+    testing.expect_value(t, count, 0)
+}
+
 // Verify fixed runtime capture retains exactly its declared rune capacity.
 @(test)
 input_test_runtime_events_are_fixed_capacity :: proc(t: ^testing.T) {
@@ -632,6 +651,23 @@ input_test_runtime_correlation_preserves_isolated_events :: proc(t: ^testing.T) 
     input_runtime_reconcile_events(&runtime)
     testing.expect(t, !runtime.events[0].correlation.valid)
     testing.expect_value(t, runtime.correlation_ambiguous_count, u64(0))
+}
+
+// Verify target retirement advances generations and preserves copied event identity.
+@(test)
+input_test_text_target_generation_and_retirement :: proc(t: ^testing.T) {
+    runtime: Input_Runtime
+    testing.expect(t, input_runtime_set_text_target(&runtime, .Input_Box, 27))
+    first_target := runtime.text_target
+    testing.expect(t, input_runtime_append_text_event(
+        &runtime, .Text_Commit, "é"))
+    testing.expect(t, input_runtime_set_text_target(&runtime, .None, 0))
+    testing.expect_value(t, runtime.text_target.kind, Input_Text_Target_Kind.None)
+    testing.expect(t, input_runtime_set_text_target(&runtime, .Terminal, 0))
+    testing.expect(t, runtime.text_target.generation > first_target.generation)
+    events := input_runtime_events(&runtime)
+    testing.expect_value(t, len(events), 1)
+    testing.expect_value(t, events[0].text_target, first_target)
 }
 
 // Verify modifier mismatch and capture overflow produce counted ambiguity.

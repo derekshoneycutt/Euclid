@@ -1,5 +1,7 @@
 package native
 
+import "core:c"
+import "core:log"
 import sdl "vendor:sdl3"
 
 // Sdl_Cursor_Kind identifies one retained platform cursor.
@@ -10,16 +12,40 @@ Sdl_Cursor_Kind :: enum u8 {
     Resize_Ns,
 }
 
-// sdl_platform_sync_text_input follows the window's effective focus exactly once.
+// sdl_platform_sync_text_input follows effective editable ownership exactly once.
 sdl_platform_sync_text_input :: proc(platform: ^Sdl_Platform, focused: bool) {
     if platform^.text_input_active == focused {
-       return
+        return
     }
     changed := sdl.StartTextInput(platform^.window) if focused else
         sdl.StopTextInput(platform^.window)
     if changed {
-       platform^.text_input_active = focused
+        platform^.text_input_active = focused
+        platform^.text_input_area_valid = false
+    } else {
+        log.errorf("sdl_text_input_sync_failed active=%t error=%s",
+            focused, sdl.GetError())
     }
+}
+
+// sdl_platform_set_text_input_area publishes logical caret geometry when it changes.
+sdl_platform_set_text_input_area :: proc(
+    platform: ^Sdl_Platform, area: sdl.Rect, cursor: int) {
+    if platform == nil || !platform^.text_input_active ||
+        area.w <= 0 || area.h <= 0 ||
+        platform^.text_input_area_valid &&
+        platform^.text_input_area == area &&
+        platform^.text_input_cursor == cursor {
+        return
+    }
+    mutable_area := area
+    if !sdl.SetTextInputArea(platform^.window, &mutable_area, c.int(cursor)) {
+        log.errorf("sdl_text_input_area_failed error=%s", sdl.GetError())
+        return
+    }
+    platform^.text_input_area = area
+    platform^.text_input_cursor = cursor
+    platform^.text_input_area_valid = true
 }
 
 // sdl_platform_admit_cursors creates every cursor required by current UI policy.

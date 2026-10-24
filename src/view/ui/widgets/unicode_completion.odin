@@ -107,24 +107,22 @@ input_box_apply_completion_event :: proc(
 input_box_accept_completion :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
     candidate: Unicode_Completion, result: ^Input_Box_Update) {
-    if candidate.start + len(candidate.text) > len(target.bytes) {
-        return
-    }
-    state^.anchor_byte = candidate.start
-    result^.changed = input_box_replace_selection(
-        state, target, candidate.text) || result^.changed
+    text_length := clamp(target.length^, 0, len(target.bytes))
+    result^.changed = input_box_replace_range(
+        state, target, {first = candidate.start, last = text_length},
+        candidate.text, result) || result^.changed
 }
 
 // input_box_accept_end_suggestion rejects stale frame-borrowed spelling corrections.
 input_box_accept_end_suggestion :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
     policy: Input_Box_Edit_Policy, result: ^Input_Box_Update) -> bool {
-    if result^.changed || len(policy.end_suggestion) == 0 ||
-        len(policy.end_suggestion) > len(target.bytes) {
+    if result^.changed || len(policy.end_suggestion) == 0 {
         return false
     }
-    state^.anchor_byte = 0
-    result^.changed = input_box_replace_selection(state, target, policy.end_suggestion)
-    result^.suggestion_accepted = true
+    result^.changed = input_box_replace_range(
+        state, target, {first = 0, last = target.length^}, policy.end_suggestion,
+        result) || result^.changed
+    result^.suggestion_accepted = !result^.edit_rejected
     return true
 }

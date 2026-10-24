@@ -118,7 +118,38 @@ Input_Event_Kind :: enum {
     Repeat,
     Release,
     Text,
+    Text_Commit,
+    Text_Preedit,
+    Text_Cancel,
 }
+
+// Input_Text_Target_Kind identifies an eligible committed-text owner.
+Input_Text_Target_Kind :: enum u8 {
+    None,
+    Input_Box,
+    Terminal,
+}
+
+// Input_Text_Target ties native text events to one owner generation.
+Input_Text_Target :: struct {
+    kind: Input_Text_Target_Kind,
+    id: int,
+    generation: u64,
+}
+
+// Input_Text_Event_Metadata carries SDL composition offsets and event-time modifiers.
+Input_Text_Event_Metadata :: struct {
+    preedit_start: i32,
+    preedit_length: i32,
+    modifiers: Input_Modifiers,
+}
+
+INPUT_TEXT_EVENT_METADATA_DEFAULT :: Input_Text_Event_Metadata{
+    preedit_start = -1, preedit_length = -1,
+}
+
+// SDL3 text events are bounded to a small inline UTF-8 payload.
+INPUT_TEXT_EVENT_CAPACITY :: 32
 
 // Source category used to prevent synthetic and device events from being paired.
 Input_Event_Origin :: enum u8 {
@@ -140,6 +171,11 @@ Input_Event :: struct {
     key: Input_Key,
     modifiers: Input_Modifiers,
     codepoint: rune,
+    text: [INPUT_TEXT_EVENT_CAPACITY]u8,
+    text_length: u8,
+    preedit_start: i32,
+    preedit_length: i32,
+    text_target: Input_Text_Target,
     origin: Input_Event_Origin,
     correlation: Input_Event_Correlation,
 }

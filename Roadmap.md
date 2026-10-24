@@ -8,7 +8,6 @@ there are some things that do need to start early.
 ## Current Backlog
 
 - Terminal REPL history explorer and persistence
-- Input/IME enhancements
 - Custom notes on collection items
 - Optional checkboxes in tree
 - Animation slider
@@ -18,8 +17,12 @@ there are some things that do need to start early.
 - Accessibility completion work
 - Ip-2-ip sharing protocol
 
+-----------------
+
 - UI animation polish
 - Comprehensive terminal animation commands
+
+-----------------
 
 - Logic animations
 - Tarski animations
@@ -195,6 +198,7 @@ General features:
 - [X] SDL3 Migration
 - [X] Drawing Sounds
 - [X] Comprehensive mouse/keyboard focus system
+- [X] Improved input after full input system migration (IME, etc.)
 - [X] Fast-forward option
 - [ ] Animation Slider
   - [ ] Initial slider support
@@ -231,7 +235,6 @@ General features:
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
   - [X] Julia syntax highlighting
   - [ ] History explorer Julia-REPL style
-  - [ ] Improved input after full input system migration (IME, etc.)
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support

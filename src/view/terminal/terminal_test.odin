@@ -1303,9 +1303,12 @@ terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
         codepoint = 'x',
     }}}
 
+    testing.expect(t, termhist.termhist_update_preedit(
+        term.history, "仮", 0, 1))
     update := terminal_update_keyboard(&term, frame, false)
     testing.expect(t, !update.cursor_moved)
     testing.expect_value(t, termhist.termhist_current_text(term.history), "")
+    testing.expect(t, !term.history.preedit_active)
 
     update = terminal_update_keyboard(&term, frame, true)
     testing.expect(t, update.cursor_moved)
@@ -1330,6 +1333,364 @@ terminal_test_keyboard_inserts_ordered_committed_text :: proc(t: ^testing.T) {
     testing.expect_value(
         t, termhist.termhist_current_text(term.history), "A界β")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("A界β"))
+}
+
+// Verify a same-drain IME commit reaches Enter submission before the key is handled.
+@(test)
+terminal_test_ime_commit_precedes_enter_submission :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    preedit := input.Input_Event{
+        kind = .Text_Preedit, text_length = 3,
+        preedit_start = 0, preedit_length = 1,
+    }
+    copy(preedit.text[:3], "仮")
+    commit := input.Input_Event{kind = .Text_Commit, text_length = 6}
+    copy(commit.text[:6], "確定")
+    events := [3]input.Input_Event{
+        preedit, commit, {kind = .Press, key = .Enter},
+    }
+    update := terminal_update_keyboard(&term, {events = events[:]})
+    testing.expect(t, update.submission.submitted)
+    testing.expect_value(t, update.submission.text, "確定")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "")
+}
+
+// Verify native composition owns editing, completion, and submission keys until commit.
+@(test)
+terminal_test_ime_keys_do_not_edit_or_submit :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
+    request := terminal_request_completion(&term)
+    testing.expect(t, termhist.termhist_update_preedit(term.history, "仮", 0, 1))
+    testing.expect(t, !terminal_request_completion(&term).requested)
+    testing.expect(t, !terminal_set_completion_preview(&term, {
+        request_id = request.request_id, found = true,
+        replacement_end = len("draft"), insertion = "replacement",
+    }))
+    events := []input.Input_Event{
+        {kind = .Press, key = .Enter}, {kind = .Press, key = .Tab},
+        {kind = .Press, key = .Backspace}, {kind = .Press, key = .Left},
+        {kind = .Press, key = .Escape}, {kind = .Press, key = .C, modifiers = {.Control}},
+    }
+    update := terminal_update_keyboard(&term, {events = events})
+    testing.expect(t, !update.submission.submitted && !update.completion.requested)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("draft"))
+    testing.expect(t, term.history.preedit_active)
+    _ = terminal_update_keyboard(&term, {
+        events = []input.Input_Event{{kind = .Text_Cancel}},
+    })
+    testing.expect(t, !term.history.preedit_active)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
+}
+
+// Verify terminal text edits respect the order of navigation and committed text.
+@(test)
+terminal_test_keyboard_preserves_text_navigation_order :: proc(t: ^testing.T) {
+    left_first: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&left_first))
+    defer terminal_destroy(&left_first, context.allocator)
+    left_first.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(left_first.history, "ab"))
+    events := [2]input.Input_Event{
+        {kind = .Press, key = .Left},
+        {kind = .Text, codepoint = 'x'},
+    }
+    _ = terminal_update_keyboard(&left_first, {events = events[:]})
+    testing.expect_value(t, termhist.termhist_current_text(left_first.history), "axb")
+    testing.expect_value(t, termhist.termhist_cursor(left_first.history), 2)
+
+    text_first: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&text_first))
+    defer terminal_destroy(&text_first, context.allocator)
+    text_first.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(text_first.history, "ab"))
+    events[0] = {kind = .Text, codepoint = 'x'}
+    events[1] = {kind = .Press, key = .Left}
+    _ = terminal_update_keyboard(&text_first, {events = events[:]})
+    testing.expect_value(t, termhist.termhist_current_text(text_first.history), "abx")
+    testing.expect_value(t, termhist.termhist_cursor(text_first.history), 2)
+}
+
+// Verify local selection chords, replacement, newline insertion, and Ctrl+J submit.
+@(test)
+terminal_test_editing_keymap_selection_newline_and_submit :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "α beta"))
+    _ = termhist.termhist_move_buffer_home(term.history)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Right, modifiers = {.Control, .Shift},
+    }, "")
+    testing.expect_value(t, termhist.termhist_anchor(term.history), 0)
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("α "))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Text, codepoint = 'X',
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "Xbeta")
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Enter, modifiers = {.Alt},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "X\nbeta")
+    update := terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .J, modifiers = {.Control},
+    }, "")
+    testing.expect(t, update.submission.submitted)
+    testing.expect_value(t, update.submission.text, "X\nbeta")
+}
+
+// Verify navigation, logical-line, buffer, and word deletion bindings.
+@(test)
+terminal_test_navigation_and_word_keymap :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "one two"))
+    _ = termhist.termhist_move_buffer_home(term.history)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .F, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), 1)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .B, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), 0)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Right, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("one "))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .W, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "two")
+}
+
+// Verify logical-line and whole-buffer cursor/deletion bindings.
+@(test)
+terminal_test_line_and_buffer_navigation_keymap :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "abc\ndef"))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .A, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("abc\n"))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .E, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("abc\ndef"))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Home, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), 0)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .End, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("abc\ndef"))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .U, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "abc\n")
+    _ = termhist.termhist_move_buffer_home(term.history)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .K, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "\n")
+}
+
+// Verify word deletion aliases, traversal reservation, and AltGr text preservation.
+@(test)
+terminal_test_word_deletion_and_shortcut_reservations :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "abc def"))
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Backspace, modifiers = {.Super},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "abc ")
+    _ = termhist.termhist_move_buffer_home(term.history)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Delete, modifiers = {.Super},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "")
+    update := terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Tab, modifiers = {.Control},
+    }, "")
+    testing.expect(t, !update.completion.requested)
+    update = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .B, modifiers = {.Alt},
+    }, "")
+    testing.expect(t, !update.cursor_moved)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Text, codepoint = 'ø',
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "ø")
+}
+
+// Verify vertical history traversal restores the draft's cursor, selection, and mode.
+@(test)
+terminal_test_vertical_history_preserves_draft_editor_state :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    term.geometry.dimensions.columns = 80
+    testing.expect(t, termhist.termhist_history_push(
+        term.history, "prior", TERMINAL_HISTORY_TAG_PKG))
+    testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
+    _ = termhist.termhist_move_left(term.history)
+    _ = termhist.termhist_move_left(term.history, true)
+    cursor := termhist.termhist_cursor(term.history)
+    anchor := termhist.termhist_anchor(term.history)
+    term.input_mode = .Help
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Up,
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "prior")
+    testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Pkg)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .Down,
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), cursor)
+    testing.expect_value(t, termhist.termhist_anchor(term.history), anchor)
+    testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Help)
+}
+
+// Verify Ctrl+D deletes content, Ctrl+C cancels only the draft, and Ctrl+L clears output.
+@(test)
+terminal_test_editing_keymap_delete_cancel_and_clear :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
+    _ = termhist.termhist_move_buffer_home(term.history)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .D, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "raft")
+    terminal_append_output_line(&term, "visible")
+    testing.expect(t, term.output_grid.rows[0].cells[0].grapheme_len > 0)
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .L, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "raft")
+    testing.expect_value(t, term.output_grid.rows[0].cells[0].grapheme_len, u8(0))
+    testing.expect_value(t, term.output_scrollback.count, 0)
+    testing.expect(t, !term.output_started)
+    term.input_mode = .Help
+    term.collecting_continuation = true
+    _ = terminal_update_keyboard_event(&term, {
+        kind = .Press, key = .C, modifiers = {.Control},
+    }, "")
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "")
+    testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Normal)
+    testing.expect(t, !term.collecting_continuation)
+}
+
+// Verify a prompt drag updates draft selection without activating output selection.
+@(test)
+terminal_test_mouse_selects_editable_prompt :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    term.geometry.column_width = 10
+    term.geometry.line_height = 20
+    testing.expect(t, termhist.termhist_insert_text(term.history, "abc"))
+    bounds := geometry.Rectangle{0, 0, 240, 800}
+    padded := terminal_padded_bounds(bounds)
+    first_x := padded.x + f32(len(TERMINAL_PROMPT) + 1) * 10 + 5
+    second_x := first_x + 10
+    prompt_y := terminal_padded_bounds(bounds).y +
+        f32(terminal_line_count(&term)) * term.geometry.line_height
+    terminal_update_mouse_selection(&term, {
+        mouse_position = {first_x, prompt_y + 10}, mouse_pressed = {.Left},
+    }, {}, bounds)
+    terminal_update_mouse_selection(&term, {
+        mouse_position = {second_x, prompt_y + 10},
+    }, {}, bounds)
+    terminal_update_mouse_selection(&term, {
+        mouse_position = {second_x, prompt_y + 10}, mouse_released = {.Left},
+    }, {}, bounds)
+    testing.expect_value(t, termhist.termhist_anchor(term.history), 1)
+    testing.expect_value(t, termhist.termhist_cursor(term.history), 2)
+    testing.expect(t, !term.view_selection_active)
+    testing.expect(t, !term.draft_selection_dragging)
+}
+
+// Verify prompt layout exposes explicit and soft-wrapped draft rows consistently.
+@(test)
+terminal_test_prompt_visual_rows_wrap_at_cell_width :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    term.geometry.dimensions.columns = 10
+    testing.expect(t, termhist.termhist_insert_text(term.history, "abcd\nxy"))
+    testing.expect_value(t, terminal_live_input_line_count(&term), 3)
+    text := termhist.termhist_current_text(term.history)
+    testing.expect_value(t, terminal_live_input_visual_line_text(&term, text, 0), "abc")
+    testing.expect_value(t, terminal_live_input_visual_line_text(&term, text, 1), "d")
+    testing.expect_value(t, terminal_live_input_visual_line_text(&term, text, 2), "xy")
+}
+
+// Verify paste mutates the draft between adjacent ordered text and key events.
+@(test)
+terminal_test_keyboard_applies_paste_at_event_position :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    events := [?]input.Input_Event{
+        {kind = .Text, codepoint = 'A'},
+        {kind = .Press, key = .V, modifiers = {.Control, .Shift}},
+        {kind = .Press, key = .Left},
+        {kind = .Text, codepoint = 'x'},
+    }
+    testing.expect_value(t,
+        terminal_update_keyboard_event(&term, events[0], "").cursor_moved, true)
+    testing.expect_value(t,
+        terminal_update_keyboard_event(&term, events[1], "β").cursor_moved, true)
+    testing.expect_value(t,
+        terminal_update_keyboard_event(&term, events[2], "").cursor_moved, true)
+    testing.expect_value(t,
+        terminal_update_keyboard_event(&term, events[3], "").cursor_moved, true)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "Axβ")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("Ax"))
+}
+
+// Verify Tab completion snapshots the draft as it exists at that event position.
+@(test)
+terminal_test_keyboard_completion_uses_ordered_draft :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    term.banner_ready = true
+    events := [2]input.Input_Event{
+        {kind = .Text, codepoint = 'x'},
+        {kind = .Press, key = .Tab},
+    }
+    update := terminal_update_keyboard(&term, {events = events[:]})
+    testing.expect(t, update.completion.requested)
+    testing.expect_value(t, update.completion.code, "x")
+    testing.expect_value(t, update.completion.request_id,
+        term.pending_completion_request_id)
+    testing.expect_value(t, update.completion.request_id, protocol.Request_Id(1))
 }
 
 // Verify the prompt and keyboard input stay blocked until Julia's real

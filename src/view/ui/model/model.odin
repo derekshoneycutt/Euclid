@@ -351,6 +351,7 @@ Ui_Semantic_Node :: struct {
     traversal_order: u32,
     bounds: geometry.Rectangle,
     clip_bounds: geometry.Rectangle,
+    text_input_area: geometry.Rectangle,
     numeric_range: Ui_Numeric_Range,
     label_offset: u32,
     label_length: u32,
@@ -517,11 +518,19 @@ Ui_Tooltip_State :: struct {
 Ui_Input_Box_State :: struct {
     cursor_byte: int,
     anchor_byte: int,
+    preedit: [32]u8,
+    preedit_length: int,
+    preedit_selection_start: int,
+    preedit_selection_end: int,
+    preedit_replace_start: int,
+    preedit_replace_end: int,
+    preedit_content_revision: u64,
     scroll_x: f32,
     content_revision: u64,
     dragging: bool,
     fixed_selection: bool,
     unicode_dismissed: bool,
+    preedit_active: bool,
 }
 
 // Library_Search_State owns bounded display-side query and accepted-result state.

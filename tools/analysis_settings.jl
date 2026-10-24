@@ -335,6 +335,7 @@ function euclid_architecture_settings()
                 "src/core/geometry",
                 "src/core/protocol",
                 "src/core/storage",
+                "src/core/text",
                 "src/settings",
                 "src/userdata",
                 ViewSubstratePaths...,
@@ -1231,6 +1232,19 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=2,
                 maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "terminal-history-newline-normalization",
+                "src/terminal/history/termhist.odin",
+                "termhist_replace_normalized_range",
+                :custom,
+                "Temporary normalized input is allocated from the history owner's borrowed allocator, released before return, and allocation failure rejects the edit before draft mutation.";
+                operation="make",
+                target="[]u8",
+                allocator_source="state.borrowed_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "terminal-history-entry-storage",
                 "src/terminal/history/termhist.odin",

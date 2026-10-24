@@ -72,6 +72,7 @@ Terminal_State :: struct {
     view_selection_head: Terminal_View_Position,
     view_selection_active: bool,
     view_selection_dragging: bool,
+    draft_selection_dragging: bool,
     hyperlink_registry: ^termhyperlink.Hyperlink_Registry,
     hyperlink_pressed: termmodel.Hyperlink_Handle,
 

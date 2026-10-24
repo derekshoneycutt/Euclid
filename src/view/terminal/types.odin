@@ -317,7 +317,6 @@ Terminal_Multiline_Prompt_Row_Draw :: struct {
     prompt_color: Color,
     position: geometry.Vector2,
     line: int,
-    line_start: int,
     cursor: int,
     theme: Terminal_Draw_Theme,
 }

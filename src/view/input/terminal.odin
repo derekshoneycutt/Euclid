@@ -475,6 +475,26 @@ input_terminal_enqueue_text_event :: proc(
     input_runtime_enqueue_bytes(runtime, bytes[:start + count])
 }
 
+// input_terminal_enqueue_text_commit admits one complete UTF-8 commit atomically.
+input_terminal_enqueue_text_commit :: proc(
+    runtime: ^Input_Runtime, event: Input_Event) {
+    if .Control in event.modifiers || event.text_length == 0 ||
+        int(event.text_length) > len(event.text) {
+        return
+    }
+    bytes: [INPUT_TEXT_EVENT_CAPACITY + 1]u8
+    start := 0
+    if .Alt in event.modifiers {
+        bytes[0] = '\e'
+        start = 1
+    }
+    payload := event
+    text := input_event_text_payload(&payload)
+    copy(bytes[start:], transmute([]u8)text)
+    input_runtime_enqueue_bytes(
+        runtime, bytes[:start + int(event.text_length)])
+}
+
 // Append one nonnegative decimal integer to fixed byte storage.
 //
 // Parameters:
@@ -964,9 +984,8 @@ input_terminal_modify_other_keys_codepoint :: proc(
     }
     if event.correlation.valid {
         partner := int(event.correlation.partner_index)
-        if partner >= 0 && partner < len(frame.events) &&
-            frame.events[partner].kind == .Text {
-            return frame.events[partner].codepoint, true
+        if partner >= 0 && partner < len(frame.events) {
+            return input_event_text_codepoint(&frame.events[partner])
         }
     }
     if .Shift not_in event.modifiers &&
@@ -1065,7 +1084,8 @@ input_terminal_kitty_event_type :: proc(kind: Input_Event_Kind) -> (u8, bool) {
     case .Press:   return 1, true
     case .Repeat:  return 2, true
     case .Release: return 3, true
-    case .Text:    return 0, false
+    case .Text, .Text_Commit, .Text_Preedit, .Text_Cancel:
+        return 0, false
     }
     return 0, false
 }
@@ -1082,13 +1102,15 @@ input_terminal_kitty_associated_text :: proc(
         start = int(event.correlation.partner_index),
         count = max(int(event.correlation.partner_count), 1),
     }
-    if !event.correlation.valid || event.kind == .Text || result.start < 0 ||
+    if !event.correlation.valid || event.kind == .Text ||
+        event.kind == .Text_Commit || result.start < 0 ||
         result.start + result.count > len(frame.events) {
         return {}
     }
     for index in result.start..<result.start + result.count {
         text := frame.events[index]
-        if text.kind != .Text || !text.correlation.valid ||
+        if !input_event_is_single_text_scalar(&frame.events[index]) ||
+            !text.correlation.valid ||
             text.correlation.partner_index != u16(event_index) {
             return {}
         }
@@ -1127,11 +1149,12 @@ input_terminal_format_kitty_key :: proc(
     bytes[count] = '\e'; count += 1
     bytes[count] = '['; count += 1
     input_terminal_append_decimal(bytes, &count, int(codepoint))
+    associated_codepoint, associated_valid :=
+        input_event_text_codepoint(&frame.events[associated.start])
     if flags & 4 != 0 && .Shift in event.modifiers && associated.available &&
-        frame.events[associated.start].codepoint != codepoint {
+        associated_valid && associated_codepoint != codepoint {
         bytes[count] = ':'; count += 1
-        input_terminal_append_decimal(
-            bytes, &count, int(frame.events[associated.start].codepoint))
+        input_terminal_append_decimal(bytes, &count, int(associated_codepoint))
     }
     input_terminal_append_kitty_modifiers(
         bytes, &count, event, flags, force = report_text)
@@ -1141,8 +1164,11 @@ input_terminal_format_kitty_key :: proc(
             if offset > 0 {
                 bytes[count] = ':'; count += 1 
             }
-            input_terminal_append_decimal(bytes, &count,
-                int(frame.events[associated.start + offset].codepoint))
+            text_codepoint, valid := input_event_text_codepoint(
+                &frame.events[associated.start + offset])
+            if valid {
+                input_terminal_append_decimal(bytes, &count, int(text_codepoint))
+            }
         }
     }
     bytes[count] = 'u'; count += 1
@@ -1194,7 +1220,7 @@ input_terminal_kitty_keypad_codepoint :: proc(key: Input_Key) -> (rune, bool) {
 // Return whether a frame contains any unclaimed text evidence.
 input_terminal_frame_has_text :: proc(frame: Input_Frame) -> bool {
     for event in frame.events {
-        if event.kind == .Text {
+        if event.kind == .Text || event.kind == .Text_Commit {
             return true 
         }
     }
@@ -1650,6 +1676,11 @@ input_terminal_enqueue_frame_event :: proc(
     mode: Input_Terminal_Encoding_Mode,
     claims: ^Input_Event_Claim_State) -> bool {
     event := frame.events[event_index]
+    if input_event_is_text_payload(event) &&
+        event.text_target.kind != .None &&
+        event.text_target.kind != .Terminal {
+        return true
+    }
     if claims.claimed[event_index] ||
         input_terminal_enqueue_clipboard_chord(runtime, event, mode.terminal) {
         return true
@@ -1666,6 +1697,10 @@ input_terminal_enqueue_frame_event :: proc(
         }
     case .Text:
         input_terminal_enqueue_text_event(runtime, event)
+    case .Text_Commit:
+        input_terminal_enqueue_text_commit(runtime, event)
+    case .Text_Preedit, .Text_Cancel:
+        // Composition is editor state, not committed terminal input.
     }
     return true
 }

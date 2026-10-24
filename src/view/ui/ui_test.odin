@@ -2184,6 +2184,7 @@ terminal_editable_descriptor_exposes_only_committed_input :: proc(t: ^testing.T)
     copy(bytes[:], "x=α")
     history := termhist.Termhist_State{
         text = bytes[:], text_len = len("x=α"), cursor = len("x=α"),
+        anchor = len("x=α"),
         content_revision = 9,
     }
     state^.terminal.history = &history
@@ -2504,6 +2505,31 @@ accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = uiaccordion.prepare_accordion(ctx, sections, &active)
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
+}
+
+// Verify composing keys are claimed before traversal while commit restores key delivery.
+@(test)
+ime_routing_preserves_order_and_explicit_traversal :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
+    events := []input.Input_Event{
+        {kind = .Text_Preedit, text_length = 1},
+        {kind = .Press, key = .Tab},
+        {kind = .Press, key = .Enter},
+        {kind = .Press, key = .Escape},
+        {kind = .Press, key = .Tab, modifiers = {.Control}},
+        {kind = .Text_Commit, text_length = 1},
+        {kind = .Press, key = .Enter},
+    }
+    claims := uisemantics.semantic_route_keyboard(
+        semantic, {events = events}, true)
+    testing.expect(t, claims.claimed[1] && claims.claimed[2] && claims.claimed[3])
+    testing.expect(t, !claims.claimed[0] && !claims.claimed[4] &&
+        !claims.claimed[5] && !claims.claimed[6])
+    claims = uisemantics.semantic_route_keyboard(
+        semantic, {events = events[1:4]}, true, true)
+    testing.expect(t, claims.claimed[0] && claims.claimed[1] && claims.claimed[2])
 }
 
 // Verify a native Expand command selects the same accordion section owner.

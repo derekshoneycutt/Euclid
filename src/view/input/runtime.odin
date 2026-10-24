@@ -1,6 +1,7 @@
 package input
 
 import "../../core/protocol"
+import utf8 "core:unicode/utf8"
 
 // Maximum device-independent events retained in one device-poll frame.
 INPUT_EVENT_CAPACITY :: 128
@@ -28,6 +29,11 @@ Input_Runtime :: struct {
     event_frame_overflowed: bool,
     correlation_accepted_count: u64,
     correlation_ambiguous_count: u64,
+    text_target: Input_Text_Target,
+    text_target_generation: u64,
+    invalid_text_payload_count: u64,
+    oversized_text_payload_count: u64,
+    unowned_text_event_count: u64,
 
     // Synthetic events awaiting transfer into a later device frame.
     injected_events: [INPUT_INJECTED_EVENT_CAPACITY]Input_Event,
@@ -104,6 +110,55 @@ Input_Event_Correlation_Status :: enum u8 {
 // Fixed frame-local record of events already consumed by an extended encoder.
 Input_Event_Claim_State :: struct {
     claimed: [INPUT_EVENT_CAPACITY]bool,
+}
+
+// input_runtime_set_text_target advances the session when eligible ownership changes.
+input_runtime_set_text_target :: proc(
+    runtime: ^Input_Runtime, kind: Input_Text_Target_Kind, id: int) -> bool {
+    if runtime == nil {
+        return false
+    }
+    if runtime.text_target.kind == kind &&
+        (kind == .None || runtime.text_target.id == id) {
+        return false
+    }
+    runtime.text_target_generation += 1
+    runtime.text_target = {
+        kind = kind, id = id, generation = runtime.text_target_generation}
+    return true
+}
+
+// input_runtime_append_text_event copies one valid native payload before return.
+input_runtime_append_text_event :: proc(
+    runtime: ^Input_Runtime, kind: Input_Event_Kind, text: string,
+    metadata: Input_Text_Event_Metadata =
+        INPUT_TEXT_EVENT_METADATA_DEFAULT) -> bool {
+    if runtime == nil ||
+        (kind != .Text_Commit && kind != .Text_Preedit) {
+        return false
+    }
+    if runtime.text_target.kind == .None {
+        runtime.unowned_text_event_count += 1
+        return false
+    }
+    if !utf8.valid_string(text) {
+        runtime.invalid_text_payload_count += 1
+        return false
+    }
+    if len(text) >= INPUT_TEXT_EVENT_CAPACITY {
+        runtime.oversized_text_payload_count += 1
+        return false
+    }
+    event := Input_Event{
+        kind = kind, text_target = runtime.text_target,
+        text_length = u8(len(text)), preedit_start = metadata.preedit_start,
+        preedit_length = metadata.preedit_length, modifiers = metadata.modifiers,
+        origin = .Device}
+    copy(event.text[:len(text)], transmute([]u8)text)
+    if input_runtime_append_event(runtime, event) {
+        return true
+    }
+    return false
 }
 
 // input_event_claim atomically claims one event and any reciprocal text pair.
@@ -290,6 +345,68 @@ input_runtime_append_event :: proc(
     return true
 }
 
+// input_event_text_payload borrows one owned commit or preedit payload.
+input_event_text_payload :: proc(event: ^Input_Event) -> string {
+    if event == nil || int(event.text_length) > len(event.text) {
+        return ""
+    }
+    return string(event.text[:int(event.text_length)])
+}
+
+// input_event_is_single_text_scalar recognizes legacy runes and one-scalar commits.
+input_event_is_single_text_scalar :: proc(event: ^Input_Event) -> bool {
+    if event == nil {
+        return false
+    }
+    if event.kind == .Text {
+        return event.codepoint != 0
+    }
+    if event.kind != .Text_Commit || event.text_length == 0 {
+        return false
+    }
+    text := input_event_text_payload(event)
+    _, width := utf8.decode_rune_in_string(text)
+    return width == len(text)
+}
+
+// input_event_is_text_payload classifies committed and transient text facts.
+input_event_is_text_payload :: proc(event: Input_Event) -> bool {
+    return event.kind == .Text || event.kind == .Text_Commit ||
+        event.kind == .Text_Preedit || event.kind == .Text_Cancel
+}
+
+// Track ordered composition facts and reserve composing keys for the native IME.
+// Ctrl+Tab remains the application's explicit focus-traversal escape.
+input_event_composition_owns_key :: proc(
+    event: Input_Event, composing: ^bool) -> bool {
+    #partial switch event.kind {
+    case .Text_Preedit:
+        composing^ = event.text_length > 0
+    case .Text_Commit, .Text_Cancel:
+        composing^ = false
+    case .Press, .Repeat:
+        return composing^ &&
+            !(event.key == .Tab && .Control in event.modifiers)
+    case:
+    }
+    return false
+}
+
+// input_event_text_codepoint returns the scalar represented by a legacy or commit event.
+input_event_text_codepoint :: proc(event: ^Input_Event) -> (rune, bool) {
+    if event == nil {
+        return 0, false
+    }
+    if event.kind == .Text && event.codepoint != 0 {
+        return event.codepoint, true
+    }
+    if !input_event_is_single_text_scalar(event) {
+        return 0, false
+    }
+    value, _ := utf8.decode_rune_in_string(input_event_text_payload(event))
+    return value, true
+}
+
 // Report whether one device key can plausibly produce a text event.
 input_event_is_text_candidate :: proc(event: Input_Event) -> bool {
     if event.origin != .Device ||
@@ -312,8 +429,8 @@ input_runtime_correlation_candidates :: proc(
         if input_event_is_text_candidate(event) {
             candidates.physical_index = index
             candidates.physical_count += 1
-        } else if event.origin == .Device && event.kind == .Text &&
-            event.codepoint != 0 {
+        } else if event.origin == .Device &&
+            input_event_is_single_text_scalar(&runtime.events[index]) {
             if candidates.text_start < 0 {
                 candidates.text_start = index 
             }
@@ -402,7 +519,8 @@ input_event_text_claims_valid :: proc(
     state: ^Input_Event_Claim_State) -> bool {
     for index in text_start..<text_start + text_count {
         text := frame.events[index]
-        if text.kind != .Text || state.claimed[index] ||
+        if !input_event_is_single_text_scalar(&frame.events[index]) ||
+            state.claimed[index] ||
             !text.correlation.valid ||
             text.correlation.partner_index != u16(physical_index) {
             return false
@@ -430,11 +548,13 @@ input_event_claim_pair :: proc(
         return false
     }
     physical_index := event_index
-    if event.kind == .Text {
+    if event.kind == .Text || event.kind == .Text_Commit {
         physical_index = int(event.correlation.partner_index)
     }
     if physical_index < 0 || physical_index >= len(frame.events) ||
-        frame.events[physical_index].kind == .Text || state.claimed[physical_index] {
+        frame.events[physical_index].kind == .Text ||
+        frame.events[physical_index].kind == .Text_Commit ||
+        state.claimed[physical_index] {
         return false
     }
     physical := frame.events[physical_index]

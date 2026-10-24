@@ -81,7 +81,8 @@ terminal_log_clipboard_teardown :: proc(term: ^viewterminalmodel.Terminal_State)
 //   - True when the frame contains a Ctrl+Shift+V press chord.
 terminal_clipboard_paste_requested :: proc(
     frame: input.Input_Frame, focused: bool = true) -> bool {
-    return focused && input.input_chord_pressed(frame, .V, {.Control, .Shift})
+    return focused && (input.input_chord_pressed(frame, .V, {.Control, .Shift}) ||
+        input.input_chord_pressed(frame, .V, {.Super, .Shift}))
 }
 
 //   Insert clipboard text at the live input cursor.
@@ -115,7 +116,8 @@ terminal_insert_clipboard_text :: proc(
 //   - True when the frame contains a Ctrl+Shift+C press chord.
 terminal_clipboard_copy_requested :: proc(
     frame: input.Input_Frame, focused: bool = true) -> bool {
-    return focused && input.input_chord_pressed(frame, .C, {.Control, .Shift})
+    return focused && (input.input_chord_pressed(frame, .C, {.Control, .Shift}) ||
+        input.input_chord_pressed(frame, .C, {.Super, .Shift}))
 }
 
 // Extract the active view selection as plain text for clipboard publication.
@@ -145,7 +147,9 @@ terminal_view_selection_text :: proc(term: ^viewterminalmodel.Terminal_State) ->
 terminal_update_clipboard_copy :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     focused: bool) {
-    if !focused || !term.view_selection_active {
+    draft_selected := term.history != nil &&
+        term.history.cursor != term.history.anchor
+    if !focused || (!term.view_selection_active && !draft_selected) {
         return
     }
 
@@ -158,6 +162,12 @@ terminal_update_clipboard_copy :: proc(
 
 // Publish nonempty view-selection text without changing cursor or selection state.
 terminal_copy_view_selection :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
+    if term != nil && term.history != nil &&
+        term.history.cursor != term.history.anchor {
+        start, end := termhist.termhist_selection_range(term.history)
+        text := termhist.termhist_current_text(term.history)
+        return input.input_set_clipboard_text(text[start:end])
+    }
     selected := terminal_view_selection_text(term)
     return len(selected) > 0 && input.input_set_clipboard_text(selected)
 }

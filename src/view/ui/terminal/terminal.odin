@@ -2,6 +2,7 @@ package uiterminal
 
 import viewterminalmodel "../../terminal/model"
 import core "../../../core"
+import coretext "../../../core/text"
 import geometry "../../../core/geometry"
 import termemulator "../../../terminal/emulator"
 import termhist "../../../terminal/history"
@@ -15,6 +16,13 @@ import uiwidgets "../widgets"
 import uisemantics "../semantics"
 import theme "../theme"
 import uiaccordion "../layout/accordion"
+
+// Terminal_Editable_Cursor_Position holds row-local caret geometry for the draft.
+Terminal_Editable_Cursor_Position :: struct {
+    row: int,
+    column: int,
+    prompt_prefix_columns: int,
+}
 
 // UI-facing actions produced by one terminal input frame.
 Terminal_Frame_Update :: terminalview.Terminal_Frame_Update
@@ -70,17 +78,21 @@ terminal_semantic_id :: #force_inline proc(
         generation = state^.terminal.animation_generation}
 }
 
-// terminal_editable_cursor_row resolves the cursor's physical row and row start.
-terminal_editable_cursor_row :: proc(text: string, cursor: int) -> (int, int) {
-    row := 0
-    line_start := 0
-    for byte, index in text[:cursor] {
-        if byte == '\n' {
-            row += 1
-            line_start = index + 1
-        }
+// Resolve row-local prompt coordinates for one editable byte offset.
+terminal_editable_cursor_position :: proc(
+    term: ^viewterminalmodel.Terminal_State, text: string, cursor: int) ->
+        Terminal_Editable_Cursor_Position {
+    columns := terminalview.terminal_live_input_wrap_columns(term, text)
+    row, column := termhist.termhist_visual_cursor_row(text, cursor, columns)
+    prefix := terminalview.TERMINAL_CONTINUATION_PROMPT
+    if row == 0 {
+        prefix = terminalview.terminal_primary_prompt_prefix(term)
     }
-    return row, line_start
+    return {
+        row = row,
+        column = column,
+        prompt_prefix_columns = coretext.text_grapheme_column(prefix, len(prefix)),
+    }
 }
 
 // Build caret and selection geometry for committed Terminal text.
@@ -91,28 +103,43 @@ terminal_editable_text_geometry :: proc(
     text: string,
     cursor: int) -> viewmodel.Ui_Editable_Text_Geometry {
     term := &state^.terminal
-    row, line_start := terminal_editable_cursor_row(text, cursor)
-    prefix := terminalview.TERMINAL_CONTINUATION_PROMPT
-    if row == 0 {
-        prefix = terminalview.terminal_primary_prompt_prefix(term)
-    }
-    column := uiwidgets.input_box_byte_column(
-        text[line_start:cursor], cursor - line_start)
-    prefix_columns := uiwidgets.input_box_byte_column(prefix, len(prefix))
+    cursor_position := terminal_editable_cursor_position(term, text, cursor)
+    anchor := termhist.termhist_anchor(term.history)
+    anchor_position := terminal_editable_cursor_position(term, text, anchor)
     column_width := layout.column_width
     origin_y := scroll.view_rect.y - scroll.scroll_y_out
     caret := geometry.Rectangle{
-        layout.padded_bounds.x + f32(prefix_columns + column) * column_width,
-        origin_y + f32(layout.line_count + row) * layout.line_height,
+        layout.padded_bounds.x +
+            f32(cursor_position.prompt_prefix_columns + cursor_position.column) *
+                column_width,
+        origin_y + f32(layout.line_count + cursor_position.row) * layout.line_height,
         max(f32(1), column_width), layout.line_height,
     }
+    selection := terminal_editable_selection_geometry(
+        layout, caret, cursor_position, anchor_position)
     control := scroll.control_geometry
     return {
         control = control, caret = caret,
-        selection = {caret.x, caret.y, 0, caret.height},
-        cursor_column = uiwidgets.input_box_byte_column(text, cursor),
-        anchor_column = uiwidgets.input_box_byte_column(text, cursor),
+        selection = selection,
+        cursor_column = cursor_position.column,
+        anchor_column = anchor_position.column,
     }
+}
+
+// Resolve the selection rectangle between cursor and anchor on one visual row.
+terminal_editable_selection_geometry :: proc(
+    layout: terminalview.Terminal_Draw_Layout, caret: geometry.Rectangle,
+    cursor, anchor: Terminal_Editable_Cursor_Position) ->
+        geometry.Rectangle {
+    selection := geometry.Rectangle{caret.x, caret.y, 0, caret.height}
+    if cursor.row != anchor.row {
+        return selection
+    }
+    anchor_x := layout.padded_bounds.x +
+        f32(anchor.prompt_prefix_columns + anchor.column) * layout.column_width
+    selection.x = min(caret.x, anchor_x)
+    selection.width = abs(caret.x - anchor_x)
+    return selection
 }
 
 // terminal_editable_text_adapter exposes committed prompt input without preview text.
@@ -126,13 +153,13 @@ terminal_editable_text_adapter :: proc(
         return {}, {}
     }
     text := termhist.termhist_current_text(term.history)
-    cursor := uiwidgets.input_box_clamp_boundary(
-        text, termhist.termhist_cursor(term.history))
+    cursor := termhist.termhist_cursor(term.history)
+    anchor := termhist.termhist_anchor(term.history)
     geometry := terminal_editable_text_geometry(state, layout, scroll, text, cursor)
     descriptor := viewmodel.Ui_Editable_Text_Descriptor{
         id = terminal_semantic_id(state), region = .Presentation,
         label = "Terminal input", text = text, mode = .Editable,
-        cursor_byte = cursor, anchor_byte = cursor,
+        cursor_byte = cursor, anchor_byte = anchor,
         content_revision = termhist.termhist_content_revision(term.history),
     }
     return descriptor, geometry
@@ -255,6 +282,7 @@ terminal_commit_prepared_scroll :: proc(
         &state^.ui_runtime.input.interaction_frame, route.over_track,
         scroll.pointer_reserved, route.resolved.mouse_wheel_delta != 0)
     local_capture := state^.terminal.view_selection_dragging ||
+        state^.terminal.draft_selection_dragging ||
         state^.terminal.hyperlink_pressed != 0
     return ui_route_terminal_content_frame(
         state^.ui_runtime.input.interaction_frame.terminal, route.resolved,

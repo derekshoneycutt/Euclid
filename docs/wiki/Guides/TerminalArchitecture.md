@@ -154,8 +154,10 @@ input state resets at an evaluation or process stream boundary.
 The display input owner conservatively correlates an unambiguous physical key with its
 bounded committed-text events before xterm or Kitty encoding. Local editing and child
 encoding consume the same once-polled `Input_Frame`; neither path polls the device
-again. SDL committed-text events do not supply a reversible composition lifecycle, so
-preedit state is neither modeled nor encoded as Terminal bytes.
+again. SDL editing events retain bounded transient preedit separately from committed
+source; only committed text is encoded as Terminal bytes. While composing, native IME
+keys do not edit, complete, submit, or traverse application controls. Ctrl+Tab remains
+explicit application focus traversal and retires composition on owner loss.
 
 The display-owned UI runtime supplies effective Terminal focus separately from the raw
 window-focus sample. It combines logical Terminal focus, Terminal presentation, and OS
@@ -407,6 +409,35 @@ Completion snapshots the complete source and cursor byte offset. Julia resolves 
 request in the active session module and returns a replacement range plus insertion.
 The display applies it only when the generation and request identity are still current.
 Older completion results cannot overwrite newer typing.
+
+Native composition suppresses completion requests and acceptance. Starting preedit
+retires an existing completion transaction, so a delayed response cannot overlay or
+replace text being composed. This uses the existing completion mechanism; structured
+candidate lists are not part of the input/IME work.
+
+### Draft Editing And Composition
+
+The display-owned draft retains committed UTF-8, cursor, and selection independently
+of output/scrollback selection. Editing follows grapheme boundaries. Whole committed
+text replaces the current selection atomically; preedit remains transient and is never
+saved, evaluated, or copied into history. Window focus loss, hidden or replaced edit
+owners, and context-menu focus changes retire preedit without committing it. The SDL
+text-input area follows the eligible editor's prepared caret in logical coordinates.
+
+| Input | Editable prompt behavior |
+| --- | --- |
+| Shift plus movement | Extend the draft selection |
+| Ctrl+Left/Right | Move by word |
+| Home/End; Ctrl+Home/End | Move to line edge; buffer edge |
+| Alt+Enter; Ctrl+J | Insert a newline without submitting |
+| Up/Down | Move across displayed draft rows, then use history at the boundary |
+| Ctrl+C | Cancel draft/continuation; does not interrupt running Julia |
+| Ctrl+L | Clear output while preserving draft and history |
+| Ctrl+D | Delete forward in content; preserve existing empty-prompt exit behavior |
+| Ctrl+Tab / Ctrl+Shift+Tab | Traverse application focus out of Terminal |
+
+Super-based aliases avoid consuming Option/AltGr text entry. Native composition takes
+precedence over these editor commands, except explicit Ctrl+Tab focus traversal.
 
 Some Julia operations request terminal input while evaluation is active. The evaluator
 publishes an explicit lease:

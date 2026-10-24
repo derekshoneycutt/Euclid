@@ -1,6 +1,6 @@
 package uiwidgets
 
-import dyncore "../../../dynview/core"
+import coretext "../../../core/text"
 import geometry "../../../core/geometry"
 import input "../../input"
 import native "../../native"
@@ -60,12 +60,19 @@ Input_Box_Update :: struct {
     copied_length: int,
     copied_bytes: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY]u8,
     suggestion_accepted: bool,
+    edit_rejected: bool,
 }
 
 // Input_Box_Edit_Target supplies caller-owned bounded text storage.
 Input_Box_Edit_Target :: struct {
     bytes: []u8,
     length: ^int,
+}
+
+// Input_Box_Edit_Range describes one half-open UTF-8 byte interval.
+Input_Box_Edit_Range :: struct {
+    first: int,
+    last: int,
 }
 
 // Input_Box_Result carries prepared interaction and clipped draw geometry.
@@ -80,6 +87,7 @@ Input_Box_Result :: struct {
     selection: geometry.Rectangle,
     caret: geometry.Rectangle,
     changed: bool,
+    edit_rejected: bool,
     submit_requested: bool,
     tab_requested: bool,
     suggestion_accepted: bool,
@@ -95,55 +103,29 @@ input_box_text_inset :: #force_inline proc(params: Input_Box_Params) -> f32 {
     return INPUT_BOX_TEXT_INSET
 }
 
-// input_box_clamp_boundary clamps one byte offset to a UTF-8 codepoint boundary.
+// input_box_clamp_boundary clamps one byte offset to a complete grapheme boundary.
 input_box_clamp_boundary :: proc(text: string, offset: int) -> int {
-    result := clamp(offset, 0, len(text))
-    for result > 0 && result < len(text) &&
-        dyncore.text_is_utf8_trailing_byte(text[result]) {
-        result -= 1
-    }
-    return result
+    return coretext.text_grapheme_clamp_boundary(text, offset)
 }
 
-// input_box_previous_boundary returns the codepoint boundary before one offset.
+// input_box_previous_boundary returns the grapheme boundary before one offset.
 input_box_previous_boundary :: proc(text: string, offset: int) -> int {
-    result := input_box_clamp_boundary(text, offset)
-    if result <= 0 {
-        return 0
-    }
-    result -= 1
-    for result > 0 && dyncore.text_is_utf8_trailing_byte(text[result]) {
-        result -= 1
-    }
-    return result
+    return coretext.text_grapheme_previous_boundary(text, offset)
 }
 
-// input_box_next_boundary returns the codepoint boundary after one offset.
+// input_box_next_boundary returns the grapheme boundary after one offset.
 input_box_next_boundary :: proc(text: string, offset: int) -> int {
-    result := input_box_clamp_boundary(text, offset)
-    if result >= len(text) {
-        return len(text)
-    }
-    return min(len(text), result + max(1,
-        dyncore.text_utf8_sequence_len(text, result)))
+    return coretext.text_grapheme_next_boundary(text, offset)
 }
 
-// input_box_byte_column returns the codepoint column for one byte boundary.
+// input_box_byte_column returns the display-cell column at one byte boundary.
 input_box_byte_column :: #force_inline proc(text: string, offset: int) -> int {
-    boundary := input_box_clamp_boundary(text, offset)
-    return dyncore.text_codepoint_count_span(text, 0, boundary)
+    return coretext.text_grapheme_column(text, offset)
 }
 
-// input_box_column_boundary returns the byte boundary nearest one codepoint column.
+// input_box_column_boundary maps a display-cell column to the nearest cluster edge.
 input_box_column_boundary :: proc(text: string, column: int) -> int {
-    offset := 0
-    for _ in 0..<max(0, column) {
-        if offset >= len(text) {
-            break
-        }
-        offset = input_box_next_boundary(text, offset)
-    }
-    return offset
+    return coretext.text_grapheme_boundary_for_column(text, column)
 }
 
 // input_box_reconcile_content resets interaction to newly published borrowed text.
@@ -222,35 +204,63 @@ input_box_apply_keyboard :: proc(
     return result
 }
 
-// input_box_replace_selection replaces the selected bytes without splitting UTF-8.
-input_box_replace_selection :: proc(
+// input_box_replace_range admits one complete single-line UTF-8 edit atomically.
+input_box_replace_range :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    replacement: string) -> bool {
+    range: Input_Box_Edit_Range, replacement: string,
+    result: ^Input_Box_Update = nil) -> bool {
     if state == nil || target.length == nil {
         return false
     }
-    text_length := clamp(target.length^, 0, len(target.bytes))
-    text := string(target.bytes[:text_length])
-    first := min(input_box_clamp_boundary(text, state^.anchor_byte),
-        input_box_clamp_boundary(text, state^.cursor_byte))
-    last := max(input_box_clamp_boundary(text, state^.anchor_byte),
-        input_box_clamp_boundary(text, state^.cursor_byte))
-    available := len(target.bytes) - (text_length - (last - first))
-    inserted := min(len(replacement), max(0, available))
-    for inserted > 0 && inserted < len(replacement) &&
-        dyncore.text_is_utf8_trailing_byte(replacement[inserted]) {
-        inserted -= 1
-    }
-    if first == last && inserted == 0 {
+    if target.length^ < 0 || target.length^ > len(target.bytes) {
+        if result != nil {
+            result^.edit_rejected = true
+        }
         return false
     }
-    tail_length := text_length - last
-    changed := text[first:last] != replacement[:inserted]
-    copy(target.bytes[first + inserted:first + inserted + tail_length],
-        target.bytes[last:text_length])
-    copy(target.bytes[first:first + inserted], transmute([]u8)replacement[:inserted])
-    target.length^ = first + inserted + tail_length
-    state^.cursor_byte = first + inserted
+    text_length := target.length^
+    text := string(target.bytes[:text_length])
+    if !input_box_edit_is_admissible(text, range, replacement) {
+        if result != nil {
+            result^.edit_rejected = true
+        }
+        return false
+    }
+    final_length := text_length - (range.last - range.first) + len(replacement)
+    if final_length > len(target.bytes) {
+        if result != nil {
+            result^.edit_rejected = true
+        }
+        return false
+    }
+    return input_box_commit_replacement(
+        state, target, range, replacement, final_length)
+}
+
+// input_box_edit_is_admissible validates source, range, UTF-8, and field policy.
+input_box_edit_is_admissible :: proc(
+    text: string, range: Input_Box_Edit_Range, replacement: string) -> bool {
+    return utf8.valid_string(text) && utf8.valid_string(replacement) &&
+        range.first >= 0 && range.last >= range.first && range.last <= len(text) &&
+        input_box_clamp_boundary(text, range.first) == range.first &&
+        input_box_clamp_boundary(text, range.last) == range.last &&
+        !input_box_edit_contains_line_break(replacement)
+}
+
+// input_box_commit_replacement applies one admitted bounded edit and updates selection.
+input_box_commit_replacement :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    range: Input_Box_Edit_Range, replacement: string, final_length: int) -> bool {
+    text := string(target.bytes[:target.length^])
+    tail_length := len(text) - range.last
+    changed := text[range.first:range.last] != replacement
+    copy(target.bytes[range.first + len(replacement):
+        range.first + len(replacement) + tail_length],
+        target.bytes[range.last:len(text)])
+    copy(target.bytes[range.first:range.first + len(replacement)],
+        transmute([]u8)replacement)
+    target.length^ = final_length
+    state^.cursor_byte = range.first + len(replacement)
     state^.anchor_byte = state^.cursor_byte
     if changed {
         state^.unicode_dismissed = false
@@ -258,11 +268,47 @@ input_box_replace_selection :: proc(
     return changed
 }
 
-// input_box_delete_selection removes a selection or one adjacent codepoint.
+// input_box_edit_contains_line_break rejects single-line field replacements.
+input_box_edit_contains_line_break :: proc(text: string) -> bool {
+    for codepoint in text {
+        if codepoint == '\r' || codepoint == '\n' {
+            return true
+        }
+    }
+    return false
+}
+
+// input_box_replace_selection replaces the selected grapheme range atomically.
+input_box_replace_selection :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    replacement: string, result: ^Input_Box_Update = nil) -> bool {
+    if target.length == nil || state == nil {
+        return false
+    }
+    if target.length^ < 0 || target.length^ > len(target.bytes) {
+        if result != nil {
+            result^.edit_rejected = true
+        }
+        return false
+    }
+    first := min(state^.anchor_byte, state^.cursor_byte)
+    last := max(state^.anchor_byte, state^.cursor_byte)
+    return input_box_replace_range(
+        state, target, {first = first, last = last}, replacement, result)
+}
+
+// input_box_delete_selection removes a selection or one adjacent grapheme.
 input_box_delete_selection :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    backwards: bool) -> bool {
-    text := string(target.bytes[:clamp(target.length^, 0, len(target.bytes))])
+    backwards: bool, result: ^Input_Box_Update) -> bool {
+    if state == nil || target.length == nil {
+        return false
+    }
+    if target.length^ < 0 || target.length^ > len(target.bytes) {
+        result^.edit_rejected = true
+        return false
+    }
+    text := string(target.bytes[:target.length^])
     first := min(state^.anchor_byte, state^.cursor_byte)
     last := max(state^.anchor_byte, state^.cursor_byte)
     if first == last {
@@ -272,9 +318,8 @@ input_box_delete_selection :: proc(
             last = input_box_next_boundary(text, last)
         }
     }
-    state^.anchor_byte = first
-    state^.cursor_byte = last
-    return input_box_replace_selection(state, target, "")
+    return input_box_replace_range(
+        state, target, {first = first, last = last}, "", result)
 }
 
 // input_box_capture_selection copies the current selected bytes into an update.
@@ -302,11 +347,11 @@ input_box_apply_edit_control :: proc(
         input_box_capture_selection(state, target, result)
         if event.key == .X && result^.copy_requested {
             result^.changed = input_box_delete_selection(
-                state, target, false) || result^.changed
+                state, target, false, result) || result^.changed
         }
     } else if event.key == .V {
         result^.changed = input_box_replace_selection(
-            state, target, clipboard_text) || result^.changed
+            state, target, clipboard_text, result) || result^.changed
     } else {
         return false
     }
@@ -321,12 +366,60 @@ input_box_apply_edit_event :: proc(
     if event.kind == .Text {
         encoded, count := utf8.encode_rune(event.codepoint)
         result^.changed = input_box_replace_selection(
-            state, target, string(encoded[:count])) || result^.changed
+            state, target, string(encoded[:count]), result) || result^.changed
+        return
+    }
+    if event.kind == .Text_Preedit {
+        input_box_update_preedit(state, target, event)
+        return
+    }
+    if event.kind == .Text_Cancel {
+        input_box_clear_preedit(state)
+        return
+    }
+    if event.kind == .Text_Commit {
+        input_box_apply_commit_event(state, target, event, result)
         return
     }
     if event.kind != .Press && event.kind != .Repeat {
         return
     }
+    input_box_apply_key_edit(
+        state, target, event, clipboard_text, result)
+}
+
+// input_box_apply_commit_event replaces the active selection atomically.
+input_box_apply_commit_event :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    event: input.Input_Event, result: ^Input_Box_Update) {
+    if int(event.text_length) > len(event.text) {
+        result^.edit_rejected = true
+        return
+    }
+    payload := event
+    replacement := input.input_event_text_payload(&payload)
+    range := Input_Box_Edit_Range{
+        first = min(state^.anchor_byte, state^.cursor_byte),
+        last = max(state^.anchor_byte, state^.cursor_byte),
+    }
+    if state^.preedit_active {
+        if state^.preedit_content_revision != state^.content_revision {
+            result^.edit_rejected = true
+            input_box_clear_preedit(state)
+            return
+        }
+        range = {state^.preedit_replace_start, state^.preedit_replace_end}
+    }
+    input_box_clear_preedit(state)
+    result^.changed = input_box_replace_range(
+        state, target, range, replacement, result) || result^.changed
+}
+
+// input_box_apply_key_edit applies one ordinary editable keyboard event.
+input_box_apply_key_edit :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    event: input.Input_Event, clipboard_text: string,
+    result: ^Input_Box_Update) {
     control := .Control in event.modifiers
     if control && input_box_apply_edit_control(
         state, target, event, clipboard_text, result) {
@@ -337,7 +430,7 @@ input_box_apply_edit_event :: proc(
     }
     if event.key == .Backspace || event.key == .Delete {
         result^.changed = input_box_delete_selection(
-            state, target, event.key == .Backspace) || result^.changed
+            state, target, event.key == .Backspace, result) || result^.changed
     } else if event.key == .Enter {
         result^.submit_requested = true
     } else if event.key == .Tab {
@@ -347,6 +440,66 @@ input_box_apply_edit_event :: proc(
         input_box_move_cursor(
             state, text, event.key, .Shift in event.modifiers)
     }
+}
+
+// input_box_clear_preedit discards composition without changing committed text.
+input_box_clear_preedit :: proc(state: ^viewmodel.Ui_Input_Box_State) {
+    if state == nil {
+        return
+    }
+    state^.preedit_active = false
+    state^.preedit_length = 0
+}
+
+// input_box_preedit_byte_offset maps an SDL codepoint offset into UTF-8 storage.
+input_box_preedit_byte_offset :: proc(text: string, codepoints: int) -> int {
+    if codepoints <= 0 {
+        return 0
+    }
+    offset, remaining := 0, codepoints
+    for offset < len(text) && remaining > 0 {
+        _, width := utf8.decode_rune(text[offset:])
+        offset += width
+        remaining -= 1
+    }
+    return offset
+}
+
+// input_box_update_preedit retains one bounded composition snapshot separately.
+input_box_update_preedit :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    event: input.Input_Event) {
+    payload := event
+    if state == nil || target.length == nil ||
+        int(event.text_length) > len(state^.preedit) ||
+        !utf8.valid_string(input.input_event_text_payload(&payload)) {
+        return
+    }
+    if event.text_length == 0 {
+        input_box_clear_preedit(state)
+        return
+    }
+    if !state^.preedit_active {
+        state^.preedit_replace_start = min(state^.anchor_byte, state^.cursor_byte)
+        state^.preedit_replace_end = max(state^.anchor_byte, state^.cursor_byte)
+        state^.preedit_content_revision = state^.content_revision
+        state^.preedit_active = true
+    }
+    preedit_text := input.input_event_text_payload(&payload)
+    copy(state^.preedit[:len(preedit_text)], transmute([]u8)preedit_text)
+    state^.preedit_length = int(event.text_length)
+    preedit := string(state^.preedit[:state^.preedit_length])
+    rune_count := utf8.rune_count(preedit)
+    start_codepoint := clamp(int(event.preedit_start), 0, rune_count)
+    selection_count := clamp(
+        int(event.preedit_length), 0, rune_count - start_codepoint)
+    start := input_box_clamp_boundary(
+        preedit, input_box_preedit_byte_offset(preedit, start_codepoint))
+    end_offset := input_box_preedit_byte_offset(
+        preedit, start_codepoint + selection_count)
+    end := input_box_clamp_boundary(preedit, end_offset)
+    state^.preedit_selection_start = start
+    state^.preedit_selection_end = end
 }
 
 // input_box_apply_edit_keyboard mutates caller-owned text from one ordered frame.
@@ -359,6 +512,10 @@ input_box_apply_edit_keyboard :: proc(
         return result
     }
     for event in frame.events {
+        composing := state^.preedit_active
+        if input.input_event_composition_owns_key(event, &composing) {
+            continue
+        }
         if input_box_apply_completion_event(state, target, event, policy, &result) {
             continue
         }
@@ -392,16 +549,64 @@ input_box_apply_focused_input :: proc(
     }
     policy := params.edit_policy
     policy.unicode_completion = input_box_unicode_enabled(params)
+    filtered_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event
+    filtered_count := 0
+    for event in params.frame.events {
+        if event.kind == .Text || event.kind == .Text_Commit ||
+            event.kind == .Text_Preedit || event.kind == .Text_Cancel {
+            target := event.text_target
+            if target.kind != .None &&
+                (target.kind != .Input_Box ||
+                 target.id != int(params.descriptor.id.local_id)) {
+                continue
+            }
+        }
+        filtered_events[filtered_count] = event
+        filtered_count += 1
+    }
+    routed_frame := params.frame
+    routed_frame.events = filtered_events[:filtered_count]
     update := input_box_apply_edit_keyboard(
-        params.state, params.edit_target, params.frame, clipboard_text, policy)
+        params.state, params.edit_target, routed_frame, clipboard_text, policy)
     resolved^.descriptor.text = string(
         params.edit_target.bytes[:params.edit_target.length^])
     return update
 }
 
+// input_box_copy_focused_selection publishes one bounded copy result.
+input_box_copy_focused_selection :: proc(
+    params: Input_Box_Params, update: ^Input_Box_Update) {
+    if !update^.copy_requested {
+        return
+    }
+    copied := params.descriptor.text[update^.copy_start:update^.copy_end]
+    if update^.copied_length > 0 {
+        copied = string(update^.copied_bytes[:update^.copied_length])
+    }
+    input.input_set_clipboard_text(copied)
+}
+
+// input_box_merge_focused_update combines ordered keyboard results with semantic edits.
+input_box_merge_focused_update :: proc(
+    update: ^Input_Box_Update, focused: Input_Box_Update) {
+    update^.changed = update^.changed || focused.changed
+    update^.edit_rejected = update^.edit_rejected || focused.edit_rejected
+    update^.submit_requested = focused.submit_requested
+    update^.tab_requested = focused.tab_requested
+    update^.suggestion_accepted = focused.suggestion_accepted
+    if focused.copy_requested {
+        update^.copy_start = focused.copy_start
+        update^.copy_end = focused.copy_end
+        update^.copy_requested = true
+        update^.copied_length = focused.copied_length
+        update^.copied_bytes = focused.copied_bytes
+    }
+}
+
 // input_box_apply_semantic_text consumes copied native edits through owner storage.
 input_box_apply_semantic_text :: proc(
-    params: Input_Box_Params, resolved: ^Input_Box_Params) -> bool {
+    params: Input_Box_Params, resolved: ^Input_Box_Params,
+    update: ^Input_Box_Update) -> bool {
     if params.semantic_focus == nil || params.edit_target.length == nil ||
        params.descriptor.mode != .Editable {
         return false
@@ -420,13 +625,16 @@ input_box_apply_semantic_text :: proc(
                 text, int(command.selection_focus))
         } else if command.kind == .Replace_Selected_Text ||
                   command.kind == .Replace_Text {
-            if command.kind == .Replace_Text {
-                params.state^.anchor_byte = 0
-                params.state^.cursor_byte = len(text)
-            }
             replacement := string(command.payload[:command.payload_length])
-            changed = input_box_replace_selection(
-                params.state, params.edit_target, replacement) || changed
+            if command.kind == .Replace_Text {
+                changed = input_box_replace_range(
+                    params.state, params.edit_target,
+                    {first = 0, last = len(text)},
+                    replacement, update) || changed
+            } else {
+                changed = input_box_replace_selection(
+                    params.state, params.edit_target, replacement, update) || changed
+            }
         }
     }
     resolved^.descriptor.text = string(
@@ -572,27 +780,27 @@ input_box_prepare :: proc(
     resolved := params
     changed := input_box_reconcile_content(
         params.state, params.descriptor.text, params.descriptor.content_revision)
-    semantic_changed := input_box_apply_semantic_text(params, &resolved)
+    if !params.focused {
+        input_box_clear_preedit(params.state)
+    }
+    update: Input_Box_Update
+    semantic_changed := input_box_apply_semantic_text(
+        params, &resolved, &update)
     if semantic_changed {
         resolved.edit_policy.end_suggestion = ""
     }
     hovered := geometry.rectangle_contains(params.rect,
         {params.frame.mouse_position.x, params.frame.mouse_position.y})
     input_box_update_pointer(resolved, hovered, owner)
-    update: Input_Box_Update
     if params.focused {
-        update = input_box_apply_focused_input(resolved, &resolved)
-        if update.copy_requested {
-            copied := params.descriptor.text[update.copy_start:update.copy_end]
-            if update.copied_length > 0 {
-                copied = string(update.copied_bytes[:update.copied_length])
-            }
-            input.input_set_clipboard_text(copied)
-        }
+        focused_update := input_box_apply_focused_input(resolved, &resolved)
+        input_box_copy_focused_selection(resolved, &focused_update)
+        input_box_merge_focused_update(&update, focused_update)
     }
     input_box_reveal_cursor(resolved, changed)
     result := input_box_draw_result(resolved, hovered)
     result.changed = update.changed || semantic_changed
+    result.edit_rejected = update.edit_rejected
     result.submit_requested = update.submit_requested
     result.tab_requested = update.tab_requested
     result.suggestion_accepted = update.suggestion_accepted
@@ -706,6 +914,7 @@ input_box_publish_semantics :: proc(
         traversal_order = descriptor.traversal_order,
         bounds = result^.text_geometry.control.bounds,
         clip_bounds = result^.text_geometry.control.clip_bounds,
+        text_input_area = result^.caret,
         label = descriptor.label, value = descriptor.text,
         placeholder = descriptor.placeholder,
         text_cursor_byte = descriptor.cursor_byte,
@@ -727,6 +936,9 @@ draw_encoded_input_box :: proc(
     if prepared.focused {
         border = theme.draw_color(encoder, .Text)
     }
+    if prepared.edit_rejected {
+        border = theme.draw_color(encoder, .Error_Text)
+    }
     _ = native.draw_encoder_rectangle_outline(
         encoder, prepared.control_geometry.bounds, 1, border)
     _ = native.draw_encoder_push_scissor(encoder, prepared.inner)
@@ -736,9 +948,91 @@ draw_encoded_input_box :: proc(
             theme.draw_color(encoder, .Selection_Background))
     }
     draw_encoded_input_box_text(encoder, params, prepared)
+    draw_encoded_input_box_preedit(encoder, params, prepared)
     draw_encoded_input_box_caret(encoder, prepared)
     _ = native.draw_encoder_pop_scissor(encoder)
     draw_encoded_input_box_completion(encoder, params, prepared)
+}
+
+// draw_encoded_input_box_preedit presents composition without committing its bytes.
+draw_encoded_input_box_preedit :: proc(
+    encoder: ^native.Draw_Encoder, params: Input_Box_Params,
+    prepared: Input_Box_Result) {
+    state := params.state
+    if state == nil || !state^.preedit_active || state^.preedit_length <= 0 {
+        return
+    }
+    x := input_box_preedit_x(encoder, params, prepared)
+    preedit := string(state^.preedit[:state^.preedit_length])
+    width := f32(input_box_byte_column(preedit, len(preedit))) *
+        params.column_advance
+    _ = viewtext.ui_text_shaped({
+        encoder = encoder, resolver = params.resolver, key = .Regular,
+        text = preedit, position = {x, prepared.caret.y},
+        color = theme.draw_color(encoder, .Text),
+        font = viewtext.ui_text_font(params.font,
+            encoder^.ui_text_size_percent if encoder != nil else 100),
+    })
+    input_box_draw_preedit_selection(
+        encoder, params, prepared, preedit, x)
+    if width > 0 {
+        _ = native.draw_encoder_rectangle(encoder,
+            {x, prepared.caret.y + prepared.caret.height - 1, width, 1},
+            theme.draw_color(encoder, .Text))
+    }
+}
+
+// input_box_preedit_x masks the captured replacement and returns its display x.
+input_box_preedit_x :: proc(
+    encoder: ^native.Draw_Encoder, params: Input_Box_Params,
+    prepared: Input_Box_Result) -> f32 {
+    state := params.state
+    source := params.descriptor.text
+    start := input_box_clamp_boundary(source, state^.preedit_replace_start)
+    end := input_box_clamp_boundary(source, state^.preedit_replace_end)
+    x := prepared.text_x + f32(input_box_byte_column(source, start)) *
+        params.column_advance
+    replacement_width := f32(input_box_byte_column(source, end) -
+        input_box_byte_column(source, start)) * params.column_advance
+    if replacement_width > 0 {
+        _ = native.draw_encoder_rectangle(encoder,
+            {x, prepared.caret.y, replacement_width, prepared.caret.height},
+            theme.UI_COMPONENT_BACKGROUND_COLOR)
+    }
+    return x
+}
+
+// input_box_draw_preedit_selection highlights SDL's selected preedit segment.
+input_box_draw_preedit_selection :: proc(
+    encoder: ^native.Draw_Encoder, params: Input_Box_Params,
+    prepared: Input_Box_Result, preedit: string, x: f32) {
+    state := params.state
+    selection_start := input_box_byte_column(
+        preedit, state^.preedit_selection_start)
+    selection_end := input_box_byte_column(
+        preedit, state^.preedit_selection_end)
+    if selection_end <= selection_start {
+        return
+    }
+    selection_text := preedit[
+        state^.preedit_selection_start:state^.preedit_selection_end]
+    selection_x := x + f32(selection_start) * params.column_advance
+    selection_bounds := geometry.Rectangle{
+        selection_x, prepared.caret.y,
+        f32(selection_end - selection_start) * params.column_advance,
+        prepared.caret.height,
+    }
+    _ = native.draw_encoder_rectangle(
+        encoder, selection_bounds, theme.draw_color(encoder, .Selection_Background))
+    _ = native.draw_encoder_push_scissor(encoder, selection_bounds)
+    _ = viewtext.ui_text_shaped({
+        encoder = encoder, resolver = params.resolver, key = .Regular,
+        text = selection_text, position = {selection_x, prepared.caret.y},
+        color = theme.draw_color(encoder, .Selection_Text),
+        font = viewtext.ui_text_font(params.font,
+            encoder^.ui_text_size_percent if encoder != nil else 100),
+    })
+    _ = native.draw_encoder_pop_scissor(encoder)
 }
 
 // draw_encoded_input_box_text clips full shaped runs so selection never changes glyph layout.

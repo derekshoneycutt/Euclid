@@ -70,6 +70,7 @@ library_entry_name_input_params :: proc(
         font = params.font,
         resolver = params.font_resolver,
         edit_target = {draft^.value[:], &draft^.value_length},
+        edit_policy = {unicode_completion = true},
         defer_semantics = true,
     }
 }

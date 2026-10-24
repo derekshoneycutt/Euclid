@@ -10,6 +10,7 @@ import bridgemodel "../../bridge/model"
 import geometry "../../core/geometry"
 import collections "../../collections"
 import uuid "core:encoding/uuid"
+import uiwidgets "widgets"
 
 // Verify selecting another placement flushes exact text and preserves its owned draft.
 @(test)
@@ -51,6 +52,76 @@ library_entry_name_selection_flush_preserves_exact_text :: proc(t: ^testing.T) {
     testing.expect_value(t, string(draft^.value[:draft^.value_length]), name)
     testing.expect_value(t,
         string(draft^.accepted_name[:draft^.accepted_name_length]), name)
+}
+
+// Complete the trailing TeX command without exceeding the name's byte capacity.
+library_entry_name_test_complete_unicode_name :: proc(
+    t: ^testing.T, params: uilibrary.Tree_List_Params,
+    selected: uuid.Identifier, expected: []u8) -> int {
+    state := params.general_state
+    prefix_length := collections.ENTRY_NAME_MAX_BYTES - len("\\alpha")
+    prefill: [collections.ENTRY_NAME_MAX_BYTES]u8
+    for index in 0..<prefix_length {
+        prefill[index] = 'x'
+    }
+    copy(prefill[prefix_length:], "\\alpha")
+    testing.expect(t, uilibrary.library_entry_name_begin(
+        state, selected, string(prefill[:])))
+
+    edit_events := [2]input.Input_Event{
+        {kind = .Press, key = .End}, {kind = .Press, key = .Right}}
+    rect := geometry.Rectangle{0, 0, 320, 30}
+    input_params := uilibrary.library_entry_name_input_params(
+        params, selected, rect, rect, {events = edit_events[:]})
+    input_params.focused = true
+    testing.expect(t, input_params.edit_policy.unicode_completion)
+    testing.expect(t, uiwidgets.input_box_unicode_enabled(input_params))
+    draft := &state^.ui_runtime.library.entry_name
+    prepared := uiwidgets.input_box_apply_edit_keyboard(
+        input_params.state, input_params.edit_target, input_params.frame,
+        "", input_params.edit_policy)
+    copy(expected[:prefix_length], prefill[:prefix_length])
+    copy(expected[prefix_length:], "α")
+    expected_length := prefix_length + len("α")
+    testing.expect(t, prepared.changed)
+    testing.expect_value(t, string(draft^.value[:draft^.value_length]),
+        string(expected[:expected_length]))
+    testing.expect(t, uilibrary.library_entry_name_edit(
+        state, selected, string(draft^.value[:draft^.value_length])))
+    testing.expect(t, draft^.dirty)
+    return expected_length
+}
+
+// Verify the Library editor completes and saves a name at its UTF-8 byte limit.
+@(test)
+library_entry_name_unicode_completion_saves_within_byte_limit :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_actions_test_fixture(state, &ji, &nodes)
+    selected := state^.ui_runtime.library.tree.selected_item_id
+    expected: [collections.ENTRY_NAME_MAX_BYTES]u8
+    expected_length := library_entry_name_test_complete_unicode_name(
+        t, params, selected, expected[:])
+    rect := geometry.Rectangle{0, 0, 320, 30}
+    enter := [1]input.Input_Event{{kind = .Press, key = .Enter}}
+    input_params := uilibrary.library_entry_name_input_params(
+        params, selected, rect, rect, {events = enter[:]})
+    prepared := uiwidgets.input_box_apply_edit_keyboard(
+        input_params.state, input_params.edit_target, input_params.frame,
+        "", input_params.edit_policy)
+    testing.expect(t, prepared.submit_requested)
+    testing.expect(t, uilibrary.library_entry_name_flush(state, selected))
+    entry_index := collections.find_entry(params.collections, selected)
+    testing.expect(t, entry_index >= 0)
+    if entry_index < 0 {
+        return
+    }
+    entry := params.collections^.entries[entry_index]
+    testing.expect_value(t, string(entry.custom_name[:entry.custom_name_length]),
+        string(expected[:expected_length]))
+    testing.expect_value(t, entry.custom_name_length, expected_length)
 }
 
 // Verify tree activity stays separate from selection while actions follow the tree stop.

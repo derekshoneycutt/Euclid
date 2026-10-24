@@ -14,7 +14,6 @@ import input "../input"
 import font "../font"
 import fmt "core:fmt"
 import math "core:math"
-import strings "core:strings"
 import utf8 "core:unicode/utf8"
 import viewtext "../ui/text"
 
@@ -222,7 +221,7 @@ terminal_draw_content_state :: proc(
 terminal_draw_output_cursor_glyph :: proc(
     term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     presentation: Terminal_Output_Cursor_Presentation, position: geometry.Vector2,
-    theme: Terminal_Draw_Theme) {
+    layout: Terminal_Draw_Layout) {
     cells, ok := terminal_output_row(term, presentation.line)
     if !ok || presentation.column >= len(cells) {
         return
@@ -232,15 +231,15 @@ terminal_draw_output_cursor_glyph :: proc(
         return
     }
     key := terminal_font_key_for_cell(cell.style)
-    regular := terminal_font_resolve(font_resolver, .Regular)
     _ = terminal_draw_shaped_output_run({
+        encoder = layout.encoder,
         resolver = font_resolver,
         cells = cells[presentation.column:presentation.column + 1],
         start_column = 0,
         position = position,
-        column_width = terminal_column_width(regular, term.text_size_percent),
+        column_width = layout.column_width,
         key = key,
-        color = theme.cursor_foreground,
+        color = layout.theme.cursor_foreground,
     })
 }
 
@@ -285,7 +284,7 @@ terminal_draw_output_cursor :: proc(
         f32(presentation.width) * column_width, layout.font_size},
         cursor_color)
     terminal_draw_output_cursor_glyph(
-        term, font_resolver, presentation, position, layout.theme)
+        term, font_resolver, presentation, position, layout)
 }
 
 //   Draw every materialized output row and its selection overlay.
@@ -927,7 +926,7 @@ terminal_draw_prompt :: proc(
     current_text := termhist.termhist_current_text(term.history)
     prompt_prefix := terminal_prompt_prefix(term)
 
-    if strings.index_byte(current_text, '\n') >= 0 {
+    if terminal_live_input_line_count(term) > 1 {
         terminal_draw_prompt_lines(
             term, font_resolver, layout.encoder, prompt_position, layout.theme)
         for line in 0..<terminal_live_input_line_count(term) {
@@ -935,6 +934,8 @@ terminal_draw_prompt :: proc(
                 layout.line_count + line, layout,
                 {prompt_position.x, prompt_position.y + f32(line)*layout.line_height})
         }
+        terminal_draw_prompt_preedit(
+            term, font_resolver, layout, prompt_position)
         terminal_draw_multiline_prompt_cursor(
             term, font_resolver, regular, prompt_position, layout)
         return
@@ -948,6 +949,88 @@ terminal_draw_prompt :: proc(
         current_text = current_text,
         prompt_prefix = prompt_prefix,
     })
+    terminal_draw_prompt_preedit(term, font_resolver, layout, prompt_position)
+}
+
+// terminal_draw_prompt_preedit overlays uncommitted text at the captured cursor.
+terminal_draw_prompt_preedit :: proc(
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
+    layout: Terminal_Draw_Layout, position: geometry.Vector2) {
+    history := term.history
+    if history == nil || !history.preedit_active || history.preedit_length <= 0 {
+        return
+    }
+    preedit, preedit_position := terminal_prompt_preedit_position(
+        term, layout, position)
+    _ = terminal_draw_shaped_prompt_span({
+        encoder = layout.encoder, resolver = resolver, key = .Regular,
+        text = preedit, position = preedit_position,
+        color = layout.theme.default_foreground,
+    })
+    terminal_draw_prompt_preedit_selection(
+        history, resolver, layout, preedit, preedit_position)
+    preedit_width := terminal_text_column_width(
+        layout.regular, preedit, layout.text_size_percent)
+    _ = native.draw_encoder_rectangle(layout.encoder, {
+        preedit_position.x, preedit_position.y + layout.font_size - 1,
+        preedit_width, 1,
+    }, layout.theme.default_foreground)
+}
+
+// terminal_prompt_preedit_position resolves the transient text's prompt coordinates.
+terminal_prompt_preedit_position :: proc(
+    term: ^viewterminalmodel.Terminal_State, layout: Terminal_Draw_Layout,
+    position: geometry.Vector2) -> (string, geometry.Vector2) {
+    history := term.history
+    text := termhist.termhist_current_text(history)
+    cursor := termhist.termhist_cursor(history)
+    columns := terminal_live_input_wrap_columns(term, text)
+    line, _ := termhist.termhist_visual_cursor_row(text, cursor, columns)
+    bounds := terminal_live_input_visual_row_bounds(term, text, line)
+    if !bounds.found {
+        return "", position
+    }
+    prefix := TERMINAL_CONTINUATION_PROMPT
+    if line == 0 {
+        prefix = terminal_primary_prompt_prefix(term)
+    }
+    line_prefix := text[bounds.start:min(cursor, bounds.end)]
+    x := position.x + terminal_text_column_width(
+        layout.regular, prefix, layout.text_size_percent) +
+        terminal_text_column_width(
+            layout.regular, line_prefix, layout.text_size_percent)
+    preedit := string(history.preedit[:history.preedit_length])
+    return preedit, {x, position.y + f32(line) * layout.line_height}
+}
+
+// terminal_draw_prompt_preedit_selection overlays the selected candidate segment.
+terminal_draw_prompt_preedit_selection :: proc(
+    history: ^termhist.Termhist_State, resolver: font.Font_Resolver,
+    layout: Terminal_Draw_Layout, preedit: string,
+    position: geometry.Vector2) {
+    start := history.preedit_selection_start
+    end := history.preedit_selection_end
+    if end <= start {
+        return
+    }
+    prefix_text := preedit[:start]
+    selected_text := preedit[start:end]
+    selection_x := position.x + terminal_text_column_width(
+        layout.regular, prefix_text, layout.text_size_percent)
+    selection_width := terminal_text_column_width(
+        layout.regular, selected_text, layout.text_size_percent)
+    selection_bounds := geometry.Rectangle{
+        selection_x, position.y, selection_width, layout.line_height}
+    _ = native.draw_encoder_rectangle(
+        layout.encoder, selection_bounds, layout.theme.selection_background)
+    _ = native.draw_encoder_push_scissor(layout.encoder, selection_bounds)
+    _ = terminal_draw_shaped_prompt_span({
+        encoder = layout.encoder, resolver = resolver, key = .Regular,
+        text = selected_text,
+        position = {selection_x, position.y},
+        color = layout.theme.selection_foreground,
+    })
+    _ = native.draw_encoder_pop_scissor(layout.encoder)
 }
 
 //   Draw one physical multiline prompt row and return the next source byte offset.
@@ -961,23 +1044,16 @@ terminal_draw_prompt :: proc(
 // Side effects:
 //   - Draws the row prefix and text with cursor and selection shaping exclusions.
 terminal_draw_prompt_line :: proc(
-    request: Terminal_Multiline_Prompt_Row_Draw) -> int {
-
-    line_text := terminal_live_input_line_text(request.text, request.line)
-    line_end := request.line_start + len(line_text)
+    request: Terminal_Multiline_Prompt_Row_Draw) {
+    bounds := terminal_live_input_visual_row_bounds(
+        request.term, request.text, request.line)
+    if !bounds.found {
+        return
+    }
+    line_text := request.text[bounds.start:bounds.end]
     prefix := TERMINAL_CONTINUATION_PROMPT
     if request.line == 0 {
         prefix = terminal_primary_prompt_prefix(request.term)
-    }
-    cursor_start, cursor_end := -1, -1
-    if request.cursor >= request.line_start && request.cursor <= line_end {
-        cursor_start = request.cursor - request.line_start
-        cursor_end = terminal_codepoint_end(line_text, cursor_start)
-    }
-    selection_start, selection_end := -1, -1
-    if request.term.view_selection_active {
-        selection_start = 0
-        selection_end = len(line_text)
     }
     terminal_draw_prompt_base({
         encoder = request.encoder, resolver = request.resolver,
@@ -985,18 +1061,46 @@ terminal_draw_prompt_line :: proc(
         prompt_prefix = prefix,
         prompt_color = request.prompt_color,
         position = request.position,
-        exclusions = {
-            cursor_start = cursor_start,
-            cursor_end = cursor_end,
-            selection_start = selection_start,
-            selection_end = selection_end,
-        },
+        exclusions = terminal_prompt_line_exclusions(
+            request, bounds, line_text),
         theme = request.theme,
         highlights = terminal_live_highlight_runs(request.term),
-        source_offset = request.line_start,
+        source_offset = bounds.start,
         palette = &request.term.output_interpreter.title_state.palette,
     })
-    return line_end + 1
+}
+
+// Resolve cursor and selection exclusions relative to one displayed prompt row.
+terminal_prompt_line_exclusions :: proc(
+    request: Terminal_Multiline_Prompt_Row_Draw,
+    bounds: termhist.Termhist_Visual_Row_Bounds,
+    line_text: string) -> Terminal_Prompt_Shape_Exclusions {
+    cursor_start, cursor_end := -1, -1
+    cursor_row, _ := termhist.termhist_visual_cursor_row(
+        request.text, request.cursor,
+        terminal_live_input_wrap_columns(request.term, request.text))
+    if cursor_row == request.line &&
+        request.cursor >= bounds.start && request.cursor <= bounds.end {
+        cursor_start = request.cursor - bounds.start
+        cursor_end = terminal_codepoint_end(line_text, cursor_start)
+    }
+    selection_start, selection_end := -1, -1
+    history := request.term.history
+    if history != nil && history.cursor != history.anchor {
+        selected_start := min(history.cursor, history.anchor)
+        selected_end := max(history.cursor, history.anchor)
+        selection_start = max(selected_start, bounds.start) - bounds.start
+        selection_end = min(selected_end, bounds.end) - bounds.start
+        if selection_end <= selection_start {
+            selection_start, selection_end = -1, -1
+        }
+    }
+    return {
+        cursor_start = cursor_start,
+        cursor_end = cursor_end,
+        selection_start = selection_start,
+        selection_end = selection_end,
+    }
 }
 
 //   Draw every physical row of the editable multiline prompt.
@@ -1020,11 +1124,10 @@ terminal_draw_prompt_lines :: proc(
     line_height := terminal_font_size(term.text_size_percent) +
         terminal_line_spacing(term.text_size_percent)
     cursor := termhist.termhist_cursor(term.history)
-    line_start := 0
     for line := 0; line < terminal_live_input_line_count(term); line += 1 {
         line_position :=
             geometry.Vector2{position.x, position.y + f32(line) * line_height}
-        line_start = terminal_draw_prompt_line({
+        terminal_draw_prompt_line({
             encoder = encoder,
             term = term,
             resolver = font_resolver,
@@ -1032,7 +1135,6 @@ terminal_draw_prompt_lines :: proc(
             prompt_color = prompt_color,
             position = line_position,
             line = line,
-            line_start = line_start,
             cursor = cursor,
             theme = theme,
         })
@@ -1057,21 +1159,19 @@ terminal_draw_multiline_prompt_cursor :: proc(
     layout: Terminal_Draw_Layout) {
     text := termhist.termhist_current_text(term.history)
     cursor := termhist.termhist_cursor(term.history)
-    line := 0
-    line_start := 0
-    for byte, index in text[:cursor] {
-        if byte == '\n' {
-            line += 1
-            line_start = index + 1
-        }
+    columns := terminal_live_input_wrap_columns(term, text)
+    line, _ := termhist.termhist_visual_cursor_row(text, cursor, columns)
+    bounds := terminal_live_input_visual_row_bounds(term, text, line)
+    if !bounds.found {
+        return
     }
-    line_text := terminal_live_input_line_text(text, line)
+    line_text := text[bounds.start:bounds.end]
     prefix := TERMINAL_CONTINUATION_PROMPT
     if line == 0 {
         prefix = terminal_primary_prompt_prefix(term)
     }
     prompt_text := fmt.tprintf("%s%s", prefix, line_text)
-    cursor_position := cursor - line_start + len(prefix)
+    cursor_position := cursor - bounds.start + len(prefix)
     line_height := layout.line_height
     cursor_position_y := position
     cursor_position_y.y += f32(line) * line_height

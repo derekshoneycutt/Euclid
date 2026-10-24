@@ -645,6 +645,26 @@ termgrid_test_unicode_clusters_survive_scrollback :: proc(t: ^testing.T) {
     testing.expect_value(t, history.rows[0][2].width, u8(2))
 }
 
+// Clearing a display preserves grid storage while resetting visible cursor content.
+@(test)
+termgrid_test_clear_display :: proc(t: ^testing.T) {
+    grid: Grid
+    testing.expect(t, grid_init(&grid, 4, 2, context.allocator))
+    defer grid_destroy(&grid)
+    testing.expect(t, grid_write(&grid, "abc"))
+    testing.expect(t, grid_write(&grid, "\r\nxy"))
+    grid_set_cursor(&grid, 1, 2)
+    grid_clear_display(&grid)
+    testing.expect_value(t, grid.cursor.row, 0)
+    testing.expect_value(t, grid.cursor.column, 0)
+    for row in grid.rows {
+        testing.expect(t, row.dirty)
+        for cell in row.cells {
+            testing.expect_value(t, cell.grapheme_len, u8(0))
+        }
+    }
+}
+
 // Verify bounded clusters drop whole extensions and retain valid UTF-8.
 @(test)
 termgrid_test_grapheme_capacity_drops_whole_extensions :: proc(t: ^testing.T) {

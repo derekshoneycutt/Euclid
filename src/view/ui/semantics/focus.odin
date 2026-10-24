@@ -20,6 +20,7 @@ Semantic_Control_Registration :: struct {
     traversal_order: u32,
     bounds: geometry.Rectangle,
     clip_bounds: geometry.Rectangle,
+    text_input_area: geometry.Rectangle,
     numeric_range: viewmodel.Ui_Numeric_Range,
     label: string,
     value: string,
@@ -258,6 +259,7 @@ semantic_register_control :: proc(
             traversal_order = control.traversal_order,
             bounds = control.bounds,
             clip_bounds = geometry.Rectangle(clip),
+            text_input_area = control.text_input_area,
             numeric_range = control.numeric_range,
             text_cursor_byte = u32(
                 clamp(control.text_cursor_byte, 0, len(control.value))),
@@ -804,7 +806,8 @@ semantic_route_focused_command :: proc(
 semantic_route_keyboard :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     frame: input.Input_Frame,
-    terminal_owns_keyboard: bool = false) -> input.Input_Event_Claim_State {
+    terminal_owns_keyboard: bool = false,
+    composing: bool = false) -> input.Input_Event_Claim_State {
     claims: input.Input_Event_Claim_State
     if state == nil {
         return claims
@@ -812,7 +815,13 @@ semantic_route_keyboard :: proc(
     state^.window_focused = frame.window_focused
     state^.command_count = 0
     snapshot := semantic_snapshot(state)
+    composition_active := composing
     for _, event_index in frame.events {
+        if input.input_event_composition_owns_key(
+            frame.events[event_index], &composition_active) {
+            _ = input.input_event_claim(frame, event_index, &claims)
+            continue
+        }
         if semantic_route_traversal(state, frame, event_index,
             terminal_owns_keyboard, &claims) {
             continue

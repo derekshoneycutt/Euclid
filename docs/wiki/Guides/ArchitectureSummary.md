@@ -75,7 +75,7 @@ tables group code by the architectural question a contributor is likely to ask.
 
 | Area | Responsibility | Start in |
 | --- | --- | --- |
-| Core substrate | Bounded storage, animation-generation memory, protocols, portable values | [`src/core/storage/`](../../../src/core/storage/), [`src/core/animation/`](../../../src/core/animation/), [`src/core/protocol/`](../../../src/core/protocol/) |
+| Core substrate | Bounded storage, animation-generation memory, protocols, portable values, shared grapheme text mechanics | [`src/core/storage/`](../../../src/core/storage/), [`src/core/animation/`](../../../src/core/animation/), [`src/core/protocol/`](../../../src/core/protocol/), [`src/core/text/`](../../../src/core/text/) |
 | Geometry and constraints | Shape world, curves, tools, constraints, render preparation | [`src/shapes/`](../../../src/shapes/) |
 | Particles | Loose dust/field physics plus bounded authored formation on accepted animation commits; region targets attach to prepared triangles, label targets to crisp label ink, and both render in a dedicated pass above tools | [`src/particles/`](../../../src/particles/) |
 | UI and interaction | Regions, widgets, panels, focus, accessibility semantics | [`src/view/ui/`](../../../src/view/ui/) |

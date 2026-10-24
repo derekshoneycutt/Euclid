@@ -85,31 +85,55 @@ sdl_input_append_keyboard :: proc(
     })
 }
 
-// sdl_input_append_text publishes every valid rune in one committed UTF-8 event.
+// sdl_input_append_text retains one complete bounded UTF-8 commit event.
 sdl_input_append_text :: proc(
     runtime: ^input.Input_Runtime, text: cstring,
     accumulation: ^Sdl_Input_Accumulation) {
-    if text == nil {
+    if runtime == nil || text == nil {
         return
     }
     source := string(text)
-    if !utf8.valid_string(source) {
+    invalid_count := runtime^.invalid_text_payload_count
+    oversized_count := runtime^.oversized_text_payload_count
+    unowned_count := runtime^.unowned_text_event_count
+    if input.input_runtime_append_text_event(
+        runtime, .Text_Commit, source, metadata = {
+            preedit_start = -1, preedit_length = -1,
+            modifiers = accumulation^.modifiers,
+        }) {
+        accumulation^.diagnostics.text_runes += u64(utf8.rune_count(source))
+        accumulation^.diagnostics.text_commits += 1
+    } else if runtime^.invalid_text_payload_count > invalid_count {
         accumulation^.diagnostics.invalid_text_events += 1
+    } else if runtime^.oversized_text_payload_count > oversized_count {
+        accumulation^.diagnostics.oversized_text_events += 1
+    } else if runtime^.unowned_text_event_count > unowned_count {
+        accumulation^.diagnostics.unowned_text_events += 1
+    }
+}
+
+// sdl_input_append_preedit copies one SDL composition snapshot into portable input.
+sdl_input_append_preedit :: proc(
+    runtime: ^input.Input_Runtime, event: sdl.TextEditingEvent,
+    accumulation: ^Sdl_Input_Accumulation) {
+    if runtime == nil || event.text == nil {
         return
     }
-    for offset := 0; offset < len(source); {
-        codepoint, width := utf8.decode_rune(source[offset:])
-        if width == 0 {
-            return
-        }
-        input.input_runtime_append_event(runtime, {
-            kind = .Text,
+    invalid_count := runtime^.invalid_text_payload_count
+    oversized_count := runtime^.oversized_text_payload_count
+    unowned_count := runtime^.unowned_text_event_count
+    if input.input_runtime_append_text_event(
+        runtime, .Text_Preedit, string(event.text), {
+            preedit_start = event.start, preedit_length = event.length,
             modifiers = accumulation^.modifiers,
-            codepoint = codepoint,
-            origin = .Device,
-        })
-        accumulation^.diagnostics.text_runes += 1
-        offset += width
+        }) {
+        accumulation^.diagnostics.text_preedit_events += 1
+    } else if runtime^.invalid_text_payload_count > invalid_count {
+        accumulation^.diagnostics.invalid_text_events += 1
+    } else if runtime^.oversized_text_payload_count > oversized_count {
+        accumulation^.diagnostics.oversized_text_events += 1
+    } else if runtime^.unowned_text_event_count > unowned_count {
+        accumulation^.diagnostics.unowned_text_events += 1
     }
 }
 
@@ -135,29 +159,56 @@ sdl_input_consume_event :: proc(
     case .KEY_DOWN, .KEY_UP:
         sdl_input_append_keyboard(runtime, event^.key, accumulation)
     case .TEXT_INPUT:
-        sdl_input_append_text(runtime, event^.text.text, accumulation)
-    case .MOUSE_BUTTON_DOWN, .MOUSE_BUTTON_UP:
-        if button, mapped := sdl_input_mouse_button(event^.button.button); mapped {
-            accumulation^.diagnostics.button_events += 1
-            if event^.button.down {
-                accumulation^.mouse_pressed += {button}
-                if button == .Left {
-                    accumulation^.mouse_left_clicks = event^.button.clicks
-                }
-            } else {
-                accumulation^.mouse_released += {button}
-            }
+        if accumulation^.focused {
+            sdl_input_append_text(runtime, event^.text.text, accumulation)
         }
+    case .TEXT_EDITING:
+        if accumulation^.focused {
+            sdl_input_append_preedit(runtime, event^.edit, accumulation)
+        }
+    case .MOUSE_BUTTON_DOWN, .MOUSE_BUTTON_UP:
+        sdl_input_consume_pointer_event(event, accumulation)
     case .MOUSE_WHEEL:
+        sdl_input_consume_pointer_event(event, accumulation)
+    case .WINDOW_FOCUS_GAINED, .WINDOW_FOCUS_LOST:
+        sdl_input_consume_focus_event(runtime, event, accumulation)
+    }
+}
+
+// sdl_input_consume_pointer_event accumulates one button or wheel event.
+sdl_input_consume_pointer_event :: proc(
+    event: ^sdl.Event, accumulation: ^Sdl_Input_Accumulation) {
+    if event^.type == .MOUSE_WHEEL {
         accumulation^.diagnostics.wheel_events += 1
         accumulation^.mouse_wheel_delta += event^.wheel.y
-    case .WINDOW_FOCUS_GAINED:
-        accumulation^.diagnostics.focus_events += 1
-        accumulation^.focused = true
-    case .WINDOW_FOCUS_LOST:
-        accumulation^.diagnostics.focus_events += 1
-        accumulation^.focused = false
+        return
     }
+    if button, mapped := sdl_input_mouse_button(event^.button.button); mapped {
+        accumulation^.diagnostics.button_events += 1
+        if event^.button.down {
+            accumulation^.mouse_pressed += {button}
+            if button == .Left {
+                accumulation^.mouse_left_clicks = event^.button.clicks
+            }
+        } else {
+            accumulation^.mouse_released += {button}
+        }
+    }
+}
+
+// sdl_input_consume_focus_event updates focus and cancels any active composition.
+sdl_input_consume_focus_event :: proc(
+    runtime: ^input.Input_Runtime, event: ^sdl.Event,
+    accumulation: ^Sdl_Input_Accumulation) {
+    accumulation^.diagnostics.focus_events += 1
+    accumulation^.focused = event^.type == .WINDOW_FOCUS_GAINED
+    if accumulation^.focused || runtime^.text_target.kind == .None {
+        return
+    }
+    _ = input.input_runtime_append_event(runtime, {
+        kind = .Text_Cancel, text_target = runtime^.text_target,
+        origin = .Device})
+    _ = input.input_runtime_set_text_target(runtime, .None, 0)
 }
 
 // sdl_input_mouse_buttons converts current SDL button levels.
@@ -184,7 +235,11 @@ sdl_input_commit_diagnostics :: proc(
     platform^.input_diagnostics.unmapped_key_events +=
         diagnostics.unmapped_key_events
     platform^.input_diagnostics.text_runes += diagnostics.text_runes
+    platform^.input_diagnostics.text_commits += diagnostics.text_commits
+    platform^.input_diagnostics.text_preedit_events += diagnostics.text_preedit_events
     platform^.input_diagnostics.invalid_text_events += diagnostics.invalid_text_events
+    platform^.input_diagnostics.oversized_text_events += diagnostics.oversized_text_events
+    platform^.input_diagnostics.unowned_text_events += diagnostics.unowned_text_events
     platform^.input_diagnostics.button_events += diagnostics.button_events
     platform^.input_diagnostics.wheel_events += diagnostics.wheel_events
     platform^.input_diagnostics.focus_events += diagnostics.focus_events
@@ -224,7 +279,6 @@ sdl_input_finish_frame :: proc(
     frame.sample_time_seconds = native.sdl_time_seconds()
     sdl_input_commit_diagnostics(
         platform, accumulation.diagnostics, runtime^.event_overflow_count)
-    native.sdl_platform_sync_text_input(platform, accumulation.focused)
     return frame
 }
 
@@ -285,7 +339,6 @@ sdl_platform_poll_events :: proc(
     }
     sdl_platform_refresh_observed_metrics(platform)
     native.sdl_platform_service_accessibility(platform, accumulation.focused)
-    native.sdl_platform_sync_text_input(platform, accumulation.focused)
     if runtime == nil {
         return {}
     }

@@ -48,18 +48,43 @@ sdl_input_test_keyboard_order_and_kinds :: proc(t: ^testing.T) {
     testing.expect(t, .Control in captured[0].modifiers)
 }
 
-// Verify one committed SDL text payload publishes each valid UTF-8 rune in order.
+// Verify one committed SDL payload retains whole UTF-8 text and owner identity.
 @(test)
 sdl_input_test_text_decodes_multiple_runes :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
     testing.expect(t, input.input_runtime_begin_frame(&runtime))
+    _ = input.input_runtime_set_text_target(&runtime, .Input_Box, 27)
     accumulation := Sdl_Input_Accumulation{modifiers = {.Shift}}
     sdl_input_append_text(&runtime, "A界", &accumulation)
     captured := input.input_runtime_events(&runtime)
-    testing.expect_value(t, len(captured), 2)
-    testing.expect_value(t, captured[0].codepoint, rune('A'))
-    testing.expect_value(t, captured[1].codepoint, rune('界'))
-    testing.expect(t, .Shift in captured[1].modifiers)
+    testing.expect_value(t, len(captured), 1)
+    testing.expect_value(t, captured[0].kind, input.Input_Event_Kind.Text_Commit)
+    testing.expect_value(t, string(captured[0].text[:captured[0].text_length]), "A界")
+    testing.expect_value(t, captured[0].text_target.kind,
+        input.Input_Text_Target_Kind.Input_Box)
+    testing.expect_value(t, captured[0].text_target.id, 27)
+    testing.expect(t, .Shift in captured[0].modifiers)
+    testing.expect_value(t, accumulation.diagnostics.text_runes, u64(2))
+}
+
+// Verify SDL editing updates own their preedit bytes and preserve native offsets.
+@(test)
+sdl_input_test_preedit_payload_and_selection :: proc(t: ^testing.T) {
+    runtime: input.Input_Runtime
+    testing.expect(t, input.input_runtime_begin_frame(&runtime))
+    _ = input.input_runtime_set_text_target(&runtime, .Terminal, 0)
+    accumulation := Sdl_Input_Accumulation{focused = true}
+    event := sdl.TextEditingEvent{text = "にほん", start = 1, length = 2}
+    sdl_input_append_preedit(&runtime, event, &accumulation)
+    events := input.input_runtime_events(&runtime)
+    testing.expect_value(t, len(events), 1)
+    testing.expect_value(t, events[0].kind, input.Input_Event_Kind.Text_Preedit)
+    testing.expect_value(t,
+        string(events[0].text[:events[0].text_length]), "にほん")
+    testing.expect_value(t, events[0].preedit_start, i32(1))
+    testing.expect_value(t, events[0].preedit_length, i32(2))
+    testing.expect_value(t, events[0].text_target.kind,
+        input.Input_Text_Target_Kind.Terminal)
 }
 
 // Verify invalid committed UTF-8 is rejected without partial publication.
@@ -69,8 +94,21 @@ sdl_input_test_text_rejects_invalid_utf8 :: proc(t: ^testing.T) {
     testing.expect(t, input.input_runtime_begin_frame(&runtime))
     invalid := [2]u8{0xff, 0}
     accumulation: Sdl_Input_Accumulation
+    _ = input.input_runtime_set_text_target(&runtime, .Input_Box, 9)
+    runtime.invalid_text_payload_count = 0
     sdl_input_append_text(&runtime, cstring(&invalid[0]), &accumulation)
     testing.expect_value(t, len(input.input_runtime_events(&runtime)), 0)
+}
+
+// Verify SDL text without an eligible owner is rejected and counted.
+@(test)
+sdl_input_test_text_requires_active_target :: proc(t: ^testing.T) {
+    runtime: input.Input_Runtime
+    accumulation: Sdl_Input_Accumulation
+    sdl_input_append_text(&runtime, "x", &accumulation)
+    testing.expect_value(t, len(input.input_runtime_events(&runtime)), 0)
+    testing.expect_value(t, runtime.unowned_text_event_count, u64(1))
+    testing.expect_value(t, accumulation.diagnostics.unowned_text_events, u64(1))
 }
 
 // Verify pointer edges, delivered wheel signs, and focus follow SDL event values.

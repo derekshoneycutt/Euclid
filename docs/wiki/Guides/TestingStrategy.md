@@ -120,6 +120,23 @@ evidence, not proof that the scenario passed.
 Scenarios are intentionally separate from `check`: headed scenarios require a display.
 Required evidence loss makes a scenario inconclusive, never passed.
 
+### Input And IME Evidence
+
+The [IME text-target scenario](../../../tools/scenarios/ime-text-target-acceptance.jsonl)
+checks real field-to-Terminal focus ownership. The
+[Terminal editor scenario](../../../tools/scenarios/terminal-editor-acceptance.jsonl)
+checks selection replacement, explicit multiline source, continuation, and clean
+shutdown. Run the existing keyboard-focus and context-menu scenarios alongside them.
+Unit tests separately cover SDL preedit/commit translation, composing-key suppression,
+ordered commit-before-Enter, atomic edits, owner retirement, and foreground encoders.
+
+These synthetic tests do not certify a desktop IME. Native Linux composition with an
+installed IBus/Fcitx engine, candidate-window placement through resize/scroll/DPI changes,
+and cancellation during window/menu transitions still require interactive testing.
+Windows TSF and macOS input-source checks also require their native platforms. Report
+those checks as unperformed unless actually observed; a Linux headed scenario is not
+evidence of native candidate selection or cross-platform certification.
+
 Large-store, save/reopen, and warmed-reuse coverage starts at the
 [Favorites runner](../../../tools/favorites_scenarios.jl) and owner-local storage tests.
 

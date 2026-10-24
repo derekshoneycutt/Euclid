@@ -1,6 +1,8 @@
 package termhist
 
 import "core:mem"
+import coretext "../../core/text"
+import "core:unicode"
 import utf8 "core:unicode/utf8"
 
 // Termhist_Entry stores one committed UTF-8 line snapshot.
@@ -34,12 +36,19 @@ Termhist_Text_Style :: struct {
     is_underline: bool,
 }
 
+// Termhist_Visual_Row_Bounds stores one row's byte interval and lookup status.
+Termhist_Visual_Row_Bounds :: struct {
+    start: int,
+    end: int,
+    found: bool,
+}
+
 // Termhist_State stores the current editable line plus committed history.
 //
 // Notes:
 //   - Manages editor buffers and retained history through a borrowed allocation domain.
 //   - Treats the active line as UTF-8 bytes with its cursor measured in byte
-//     offsets on codepoint boundaries.
+//     offsets on extended-grapheme boundaries.
 Termhist_State :: struct {
     // Production normally borrows the animation-generation arena.
     // History issues release calls on replacement and teardown; actual reclamation
@@ -51,15 +60,28 @@ Termhist_State :: struct {
 
     backup: []u8,
     backup_len: int,
+    backup_cursor: int,
+    backup_anchor: int,
+    backup_preferred_column: int,
 
     history: []Termhist_Entry,
     history_len: int,
     history_index: int,
 
     cursor: int,
+    anchor: int,
+    preferred_column: int,
     content_revision: u64,
     reset_revision: u64,
     next_entry_id: u64,
+    preedit: [32]u8,
+    preedit_length: int,
+    preedit_selection_start: int,
+    preedit_selection_end: int,
+    preedit_replace_cursor: int,
+    preedit_replace_anchor: int,
+    preedit_content_revision: u64,
+    preedit_active: bool,
 }
 
 //   Allocate every slice required by one history state.
@@ -127,6 +149,9 @@ termhist_init_with_allocator :: proc(
     state.history_len = 0
     state.history_index = 0
     state.cursor = 0
+    state.anchor = 0
+    state.preferred_column = -1
+    state.backup_preferred_column = -1
 
     return true
 }
@@ -170,9 +195,17 @@ termhist_current_text :: proc(state: ^Termhist_State) -> string {
 //   - state: The active term history state.
 //
 // Returns:
-//   - The cursor position on a codepoint boundary.
+//   - The cursor position on an extended-grapheme boundary.
 termhist_cursor :: proc(state: ^Termhist_State) -> int {
     return state.cursor
+}
+
+// Return the live draft's selection anchor byte offset.
+termhist_anchor :: proc(state: ^Termhist_State) -> int {
+    if state == nil {
+        return 0
+    }
+    return state.anchor
 }
 
 // termhist_content_revision returns the live input's monotonic content generation.
@@ -181,6 +214,86 @@ termhist_content_revision :: proc(state: ^Termhist_State) -> u64 {
        return 0
     }
     return state.content_revision
+}
+
+// termhist_clear_preedit discards uncommitted IME text without editing the draft.
+termhist_clear_preedit :: proc(state: ^Termhist_State) {
+    if state == nil {
+        return
+    }
+    state.preedit_active = false
+    state.preedit_length = 0
+}
+
+// termhist_preedit_byte_offset maps a codepoint offset into bounded UTF-8 text.
+termhist_preedit_byte_offset :: proc(text: string, codepoints: int) -> int {
+    if codepoints <= 0 {
+        return 0
+    }
+    offset, remaining := 0, codepoints
+    for offset < len(text) && remaining > 0 {
+        _, width := utf8.decode_rune(text[offset:])
+        offset += width
+        remaining -= 1
+    }
+    return offset
+}
+
+// termhist_update_preedit retains a bounded composition snapshot at the live cursor.
+termhist_update_preedit :: proc(
+    state: ^Termhist_State,
+    text: string,
+    selection_start, selection_length: i32) -> bool {
+    if state == nil || !utf8.valid_string(text) || len(text) > len(state.preedit) {
+        return false
+    }
+    if len(text) == 0 {
+        termhist_clear_preedit(state)
+        return true
+    }
+    if !state.preedit_active {
+        state.preedit_replace_cursor = state.cursor
+        state.preedit_replace_anchor = state.anchor
+        state.preedit_content_revision = state.content_revision
+        state.preedit_active = true
+    }
+    copy(state.preedit[:len(text)], transmute([]u8)text)
+    state.preedit_length = len(text)
+    source := string(state.preedit[:state.preedit_length])
+    rune_count := utf8.rune_count(source)
+    first_codepoint := clamp(int(selection_start), 0, rune_count)
+    selection_count := clamp(
+        int(selection_length), 0, rune_count - first_codepoint)
+    first := termhist_preedit_byte_offset(source, first_codepoint)
+    last := termhist_preedit_byte_offset(
+        source, first_codepoint + selection_count)
+    state.preedit_selection_start =
+        coretext.text_grapheme_clamp_boundary(source, first)
+    state.preedit_selection_end =
+        coretext.text_grapheme_clamp_boundary(source, last)
+    return true
+}
+
+// termhist_commit_text atomically replaces the captured preedit anchor or live cursor.
+termhist_commit_text :: proc(state: ^Termhist_State, text: string) -> bool {
+    if state == nil || !utf8.valid_string(text) {
+        return false
+    }
+    start, end := termhist_selection_range(state)
+    if state.preedit_active {
+        if state.preedit_content_revision != state.content_revision ||
+            state.preedit_replace_cursor != state.cursor ||
+            state.preedit_replace_anchor != state.anchor {
+            termhist_clear_preedit(state)
+            return false
+        }
+    }
+    termhist_clear_preedit(state)
+    changed := termhist_replace_normalized_range(state, start, end, text)
+    if changed {
+        termhist_end_history_browse(state)
+    }
+    return changed
 }
 
 // Identify whole-buffer resets independently of ordinary range edits.
@@ -201,6 +314,8 @@ termhist_reset_revision :: proc(state: ^Termhist_State) -> u64 {
 termhist_clear :: proc(state: ^Termhist_State) {
     state.text_len = 0
     state.cursor = 0
+    state.anchor = 0
+    state.preferred_column = -1
     state.history_index = state.history_len
     state.content_revision += 1
     state.reset_revision += 1
@@ -218,38 +333,116 @@ termhist_insert_text :: proc(state: ^Termhist_State, text: string) -> bool {
     if len(text) == 0 {
         return true
     }
-
-    termhist_end_history_browse(state)
-    return termhist_replace_range(state, state.cursor, state.cursor, text)
+    if !utf8.valid_string(text) {
+        return false
+    }
+    start, end := termhist_selection_range(state)
+    changed := termhist_replace_normalized_range(state, start, end, text)
+    if changed {
+        termhist_end_history_browse(state)
+    }
+    return changed
 }
 
-//   Replace an explicit UTF-8 codepoint-aligned byte range in the live input.
+// termhist_replace_normalized_range atomically replaces after normalizing CR line endings.
+termhist_replace_normalized_range :: proc(
+    state: ^Termhist_State, start, end: int, replacement: string) -> bool {
+    if !termhist_contains_carriage_return(replacement) {
+        return termhist_replace_range(state, start, end, replacement)
+    }
+    normalized_length := termhist_normalized_newline_length(replacement)
+    normalized, allocation_error := make(
+        []u8, normalized_length, state.borrowed_allocator)
+    if allocation_error != nil {
+        return false
+    }
+    defer delete(normalized, state.borrowed_allocator)
+    termhist_copy_normalized_newlines(normalized, replacement)
+    return termhist_replace_range(
+        state, start, end, string(normalized))
+}
+
+// Report whether input needs line-ending normalization.
+termhist_contains_carriage_return :: proc(text: string) -> bool {
+    for byte in text {
+        if byte == '\r' {
+            return true
+        }
+    }
+    return false
+}
+
+// Count bytes after converting CRLF and CR newline forms to LF.
+termhist_normalized_newline_length :: proc(text: string) -> int {
+    length := 0
+    offset := 0
+    for offset < len(text) {
+        if text[offset] == '\r' {
+            length += 1
+            offset += 1
+            if offset < len(text) && text[offset] == '\n' {
+                offset += 1
+            }
+        } else {
+            length += 1
+            offset += 1
+        }
+    }
+    return length
+}
+
+// Copy text into caller-owned storage while normalizing terminal line endings.
+termhist_copy_normalized_newlines :: proc(destination: []u8, text: string) {
+    target := 0
+    offset := 0
+    for offset < len(text) {
+        if text[offset] == '\r' {
+            destination[target] = '\n'
+            target += 1
+            offset += 1
+            if offset < len(text) && text[offset] == '\n' {
+                offset += 1
+            }
+        } else {
+            destination[target] = text[offset]
+            target += 1
+            offset += 1
+        }
+    }
+}
+
+//   Replace an explicit grapheme-aligned byte range in the live input.
 //
 // Parameters:
 //   - state: The active term history state.
-//   - start: Inclusive byte offset at a UTF-8 codepoint boundary.
-//   - end: Exclusive byte offset at a UTF-8 codepoint boundary.
+//   - start: Inclusive byte offset at a grapheme boundary.
+//   - end: Exclusive byte offset at a grapheme boundary.
 //   - replacement: UTF-8 text to insert.
 //
 // Returns:
 //   - true if the aligned range was replaced and the cursor now follows it.
 termhist_replace_input_range :: proc(
     state: ^Termhist_State, start, end: int, replacement: string) -> bool {
-    if state == nil || start < 0 || end < start || end > state.text_len {
+    if state == nil || start < 0 || end < start || end > state.text_len ||
+        !utf8.valid_string(string(state.text[:state.text_len])) ||
+        !utf8.valid_string(replacement) {
         return false
     }
-    if start > 0 && start < state.text_len && utf8_is_continuation(state.text[start]) {
-        return false
-    }
-    if end > 0 && end < state.text_len && utf8_is_continuation(state.text[end]) {
+    source := string(state.text[:state.text_len])
+    if coretext.text_grapheme_clamp_boundary(source, start) != start ||
+        coretext.text_grapheme_clamp_boundary(source, end) != end {
         return false
     }
 
-    termhist_end_history_browse(state)
-    return termhist_replace_range(state, start, end, replacement)
+    changed := termhist_replace_normalized_range(
+        state, start, end, replacement)
+    if changed {
+        termhist_end_history_browse(state)
+    }
+    return changed
 }
 
-//   Delete the UTF-8 codepoint before the cursor.
+//   Delete the grapheme before the cursor.
 //
 // Parameters:
 //   - state: The active term history state.
@@ -257,17 +450,27 @@ termhist_replace_input_range :: proc(
 // Returns:
 //   - true if anything was deleted.
 termhist_backspace :: proc(state: ^Termhist_State) -> bool {
-    termhist_end_history_browse(state)
-
+    if start, end := termhist_selection_range(state); start != end {
+        changed := termhist_replace_range(state, start, end, "")
+        if changed {
+            termhist_end_history_browse(state)
+        }
+        return changed
+    }
     if state.cursor == 0 {
         return false
     }
 
-    start := utf8_prev_boundary(state.text, state.cursor)
-    return termhist_replace_range(state, start, state.cursor, "")
+    start := coretext.text_grapheme_previous_boundary(
+        string(state.text[:state.text_len]), state.cursor)
+    changed := termhist_replace_range(state, start, state.cursor, "")
+    if changed {
+        termhist_end_history_browse(state)
+    }
+    return changed
 }
 
-//   Delete the UTF-8 codepoint at the cursor.
+//   Delete the grapheme at the cursor.
 //
 // Parameters:
 //   - state: The active term history state.
@@ -275,49 +478,87 @@ termhist_backspace :: proc(state: ^Termhist_State) -> bool {
 // Returns:
 //   - true if anything was deleted.
 termhist_delete_forward :: proc(state: ^Termhist_State) -> bool {
-    termhist_end_history_browse(state)
-
+    if start, end := termhist_selection_range(state); start != end {
+        changed := termhist_replace_range(state, start, end, "")
+        if changed {
+            termhist_end_history_browse(state)
+        }
+        return changed
+    }
     if state.cursor >= state.text_len {
         return false
     }
 
-    end := utf8_next_boundary(state.text, state.cursor, state.text_len)
-    return termhist_replace_range(state, state.cursor, end, "")
+    end := coretext.text_grapheme_next_boundary(
+        string(state.text[:state.text_len]), state.cursor)
+    changed := termhist_replace_range(state, state.cursor, end, "")
+    if changed {
+        termhist_end_history_browse(state)
+    }
+    return changed
 }
 
-//   Move the cursor one UTF-8 codepoint to the left.
+//   Move the cursor one grapheme to the left.
 //
 // Parameters:
 //   - state: The active term history state.
 //
 // Returns:
 //   - true if the cursor moved.
-termhist_move_left :: proc(state: ^Termhist_State) -> bool {
+termhist_move_left :: proc(state: ^Termhist_State, extend := false) -> bool {
     termhist_end_history_browse(state)
 
+    if !extend && state.anchor != state.cursor {
+        state.cursor = min(state.anchor, state.cursor)
+        state.anchor = state.cursor
+        state.preferred_column = -1
+        return true
+    }
     if state.cursor == 0 {
         return false
     }
 
-    state.cursor = utf8_prev_boundary(state.text, state.cursor)
+    if !extend {
+        state.anchor = state.cursor
+    }
+    state.cursor = coretext.text_grapheme_previous_boundary(
+        string(state.text[:state.text_len]), state.cursor)
+    if !extend {
+        state.anchor = state.cursor
+    }
+    state.preferred_column = -1
     return true
 }
 
-//   Move the cursor one UTF-8 codepoint to the right.
+//   Move the cursor one grapheme to the right.
 //
 // Parameters:
 //   - state: The active term history state.
 //
 // Returns:
 //   - true if the cursor moved.
-termhist_move_right :: proc(state: ^Termhist_State) -> bool {
+termhist_move_right :: proc(state: ^Termhist_State, extend := false) -> bool {
     termhist_end_history_browse(state)
 
+    if !extend && state.anchor != state.cursor {
+        state.cursor = max(state.anchor, state.cursor)
+        state.anchor = state.cursor
+        state.preferred_column = -1
+        return true
+    }
     if state.cursor >= state.text_len {
         return false
     }
 
-    state.cursor = utf8_next_boundary(state.text, state.cursor, state.text_len)
+    if !extend {
+        state.anchor = state.cursor
+    }
+    state.cursor = coretext.text_grapheme_next_boundary(
+        string(state.text[:state.text_len]), state.cursor)
+    if !extend {
+        state.anchor = state.cursor
+    }
+    state.preferred_column = -1
     return true
 }
 
@@ -328,11 +569,19 @@ termhist_move_right :: proc(state: ^Termhist_State) -> bool {
 //
 // Returns:
 //   - true if the cursor moved.
-termhist_move_home :: proc(state: ^Termhist_State) -> bool {
+termhist_move_home :: proc(state: ^Termhist_State, extend := false) -> bool {
     termhist_end_history_browse(state)
-
-    moved := state.cursor != 0
-    state.cursor = 0
+    text := string(state.text[:state.text_len])
+    start := state.cursor
+    for start > 0 && text[start - 1] != '\n' {
+        start -= 1
+    }
+    moved := state.cursor != start
+    state.cursor = start
+    if !extend {
+        state.anchor = start
+    }
+    state.preferred_column = -1
     return moved
 }
 
@@ -343,12 +592,266 @@ termhist_move_home :: proc(state: ^Termhist_State) -> bool {
 //
 // Returns:
 //   - true if the cursor moved.
-termhist_move_end :: proc(state: ^Termhist_State) -> bool {
+termhist_move_end :: proc(state: ^Termhist_State, extend := false) -> bool {
     termhist_end_history_browse(state)
-
-    moved := state.cursor != state.text_len
-    state.cursor = state.text_len
+    text := string(state.text[:state.text_len])
+    end := state.cursor
+    for end < len(text) && text[end] != '\n' {
+        end += 1
+    }
+    moved := state.cursor != end
+    state.cursor = end
+    if !extend {
+        state.anchor = end
+    }
+    state.preferred_column = -1
     return moved
+}
+
+// Return the ordered byte range currently selected in the editable draft.
+termhist_selection_range :: proc(state: ^Termhist_State) -> (int, int) {
+    return min(state.cursor, state.anchor), max(state.cursor, state.anchor)
+}
+
+// Set the cursor to a grapheme boundary, optionally extending the current selection.
+termhist_set_cursor :: proc(
+    state: ^Termhist_State, cursor: int, extend := false) -> bool {
+    text := string(state.text[:state.text_len])
+    target := coretext.text_grapheme_clamp_boundary(text, clamp(cursor, 0, len(text)))
+    if !extend || state.anchor == state.cursor {
+        state.anchor = state.cursor if extend else target
+    }
+    moved := target != state.cursor
+    state.cursor = target
+    state.preferred_column = -1
+    termhist_end_history_browse(state)
+    return moved
+}
+
+// Move to the start of the entire draft.
+termhist_move_buffer_home :: proc(state: ^Termhist_State, extend := false) -> bool {
+    termhist_end_history_browse(state)
+    moved := termhist_set_cursor(state, 0, extend)
+    state.preferred_column = -1
+    return moved
+}
+
+// Move to the end of the entire draft.
+termhist_move_buffer_end :: proc(state: ^Termhist_State, extend := false) -> bool {
+    termhist_end_history_browse(state)
+    moved := termhist_set_cursor(state, state.text_len, extend)
+    state.preferred_column = -1
+    return moved
+}
+
+// Resolve a whitespace-delimited grapheme boundary in the requested direction.
+termhist_word_boundary :: proc(text: string, cursor: int, left: bool) -> int {
+    return termhist_word_boundary_left(text, cursor) if left else
+        termhist_word_boundary_right(text, cursor)
+}
+
+// Resolve the start of the whitespace-delimited word before the cursor.
+termhist_word_boundary_left :: proc(text: string, cursor: int) -> int {
+    position := cursor
+    for position > 0 {
+        end := position
+        position = coretext.text_grapheme_previous_boundary(text, position)
+        if text[position] == '\n' {
+            position = end
+            break
+        }
+        if !termhist_grapheme_is_space(text, position, end) {
+            break
+        }
+    }
+    for position > 0 {
+        end := position
+        previous := coretext.text_grapheme_previous_boundary(text, position)
+        if text[previous] == '\n' ||
+            termhist_grapheme_is_space(text, previous, end) {
+            break
+        }
+        position = previous
+    }
+    return position
+}
+
+// Resolve the end of the whitespace-delimited word after the cursor.
+termhist_word_boundary_right :: proc(text: string, cursor: int) -> int {
+    position := cursor
+    for position < len(text) {
+        if text[position] == '\n' {
+            break
+        }
+        end := coretext.text_grapheme_next_boundary(text, position)
+        if termhist_grapheme_is_space(text, position, end) {
+            break
+        }
+        position = end
+    }
+    for position < len(text) {
+        if text[position] == '\n' {
+            break
+        }
+        end := coretext.text_grapheme_next_boundary(text, position)
+        if !termhist_grapheme_is_space(text, position, end) {
+            break
+        }
+        position = end
+    }
+    return position
+}
+
+// Move by a whitespace-delimited word, extending selection when requested.
+termhist_move_word :: proc(
+    state: ^Termhist_State, left: bool, extend := false) -> bool {
+    text := string(state.text[:state.text_len])
+    if !extend && state.anchor != state.cursor {
+        target := min(state.anchor, state.cursor) if left else
+            max(state.anchor, state.cursor)
+        return termhist_set_cursor(state, target)
+    }
+    target := termhist_word_boundary(text, state.cursor, left)
+    return termhist_set_cursor(state, target, extend)
+}
+
+// Delete from the cursor to its whitespace-delimited word boundary.
+termhist_delete_word :: proc(state: ^Termhist_State, left: bool) -> bool {
+    if start, end := termhist_selection_range(state); start != end {
+        return termhist_replace_input_range(state, start, end, "")
+    }
+    target := termhist_word_boundary(
+        string(state.text[:state.text_len]), state.cursor, left)
+    start, end := min(target, state.cursor), max(target, state.cursor)
+    return start != end && termhist_replace_input_range(state, start, end, "")
+}
+
+// Return the first rune of a grapheme's whitespace classification.
+termhist_grapheme_is_space :: proc(text: string, start, end: int) -> bool {
+    if start >= end {
+        return false
+    }
+    value, _ := utf8.decode_rune_in_string(text[start:end])
+    return unicode.is_space(value)
+}
+
+// Move to the previous or next displayed draft row, retaining the preferred column.
+termhist_move_vertical :: proc(
+    state: ^Termhist_State, direction, columns: int, extend := false) -> bool {
+    if direction == 0 {
+        return false
+    }
+    text := string(state.text[:state.text_len])
+    width := max(1, columns)
+    row, column := termhist_visual_cursor_row(text, state.cursor, width)
+    if state.preferred_column < 0 {
+        state.preferred_column = column
+    }
+    target_row := termhist_visual_row_bounds(
+        text, row + (1 if direction > 0 else -1), width)
+    if !target_row.found {
+        return false
+    }
+    target := target_row.start + coretext.text_grapheme_boundary_for_column(
+        text[target_row.start:target_row.end], state.preferred_column)
+    if extend && state.anchor == state.cursor {
+        state.anchor = state.cursor
+    }
+    state.cursor = target
+    if !extend {
+        state.anchor = target
+    }
+    termhist_end_history_browse(state)
+    return true
+}
+
+// Find the visual row and display column containing a grapheme cursor boundary.
+termhist_visual_cursor_row :: proc(
+    text: string, cursor, columns: int) -> (int, int) {
+    row, column := 0, 0
+    for position := 0; position < len(text); {
+        end := coretext.text_grapheme_next_boundary(text, position)
+        if text[position] == '\n' {
+            if position == cursor {
+                break
+            }
+            row += 1
+            column = 0
+            position = end
+            continue
+        }
+        cell_width := coretext.text_grapheme_width(text, position, end)
+        if column > 0 && column + cell_width > columns {
+            row += 1
+            column = 0
+        }
+        if position == cursor {
+            break
+        }
+        if end > cursor {
+            break
+        }
+        column += cell_width
+        position = end
+    }
+    return row, column
+}
+
+// Find the byte bounds of a visual draft row, including soft wrapping.
+termhist_visual_row_bounds :: proc(
+    text: string, target_row, columns: int) -> Termhist_Visual_Row_Bounds {
+    if target_row < 0 {
+        return {}
+    }
+    row, row_start, column := 0, 0, 0
+    for position := 0; position < len(text); {
+        end := coretext.text_grapheme_next_boundary(text, position)
+        if text[position] == '\n' {
+            if row == target_row {
+                return {start = row_start, end = position, found = true}
+            }
+            row += 1
+            row_start = end
+            column = 0
+            position = end
+            continue
+        }
+        cell_width := coretext.text_grapheme_width(text, position, end)
+        if column > 0 && column + cell_width > columns {
+            if row == target_row {
+                return {start = row_start, end = position, found = true}
+            }
+            row += 1
+            row_start = position
+            column = 0
+        }
+        column += cell_width
+        position = end
+    }
+    if row == target_row {
+        return {start = row_start, end = len(text), found = true}
+    }
+    return {}
+}
+
+// Delete from the cursor to the current logical line start or end.
+termhist_delete_to_line_edge :: proc(state: ^Termhist_State, right: bool) -> bool {
+    if start, end := termhist_selection_range(state); start != end {
+        return termhist_replace_input_range(state, start, end, "")
+    }
+    text := string(state.text[:state.text_len])
+    edge := state.cursor
+    if right {
+        for edge < len(text) && text[edge] != '\n' {
+            edge += 1
+        }
+    } else {
+        for edge > 0 && text[edge - 1] != '\n' {
+            edge -= 1
+        }
+    }
+    start, end := min(edge, state.cursor), max(edge, state.cursor)
+    return start != end && termhist_replace_input_range(state, start, end, "")
 }
 
 //   Accept the current line into committed history and clear the editor.
@@ -440,7 +943,15 @@ termhist_history_next :: proc(state: ^Termhist_State) -> bool {
     }
 
     state.history_index = state.history_len
-    return termhist_load_entry(state, state.backup[:state.backup_len])
+    if !termhist_load_entry(state, state.backup[:state.backup_len]) {
+        return false
+    }
+    state.cursor = coretext.text_grapheme_clamp_boundary(
+        string(state.text[:state.text_len]), state.backup_cursor)
+    state.anchor = coretext.text_grapheme_clamp_boundary(
+        string(state.text[:state.text_len]), state.backup_anchor)
+    state.preferred_column = state.backup_preferred_column
+    return true
 }
 
 //   Return the editor to browsing mode after mutation.
@@ -501,6 +1012,9 @@ termhist_backup_current :: proc(state: ^Termhist_State) -> bool {
     }
 
     state.backup_len = state.text_len
+    state.backup_cursor = state.cursor
+    state.backup_anchor = state.anchor
+    state.backup_preferred_column = state.preferred_column
     state.history_index = state.history_len
     return true
 }
@@ -524,6 +1038,8 @@ termhist_load_entry :: proc(state: ^Termhist_State, text: []u8) -> bool {
 
     state.text_len = len(text)
     state.cursor = state.text_len
+    state.anchor = state.cursor
+    state.preferred_column = -1
     state.content_revision += 1
     state.reset_revision += 1
     return true
@@ -541,40 +1057,47 @@ termhist_load_entry :: proc(state: ^Termhist_State, text: []u8) -> bool {
 //   - true if the replacement succeeded.
 termhist_replace_range :: proc(
     state: ^Termhist_State, start, end: int, replacement: string) -> bool {
-    if start < 0 || end < start || end > state.text_len {
+    source := string(state.text[:state.text_len])
+    if start < 0 || end < start || end > state.text_len ||
+        !utf8.valid_string(source) || !utf8.valid_string(replacement) ||
+        coretext.text_grapheme_clamp_boundary(source, start) != start ||
+        coretext.text_grapheme_clamp_boundary(source, end) != end {
         return false
     }
 
     delete_len := end - start
     insert_len := len(replacement)
     new_len := state.text_len - delete_len + insert_len
-
     if !termhist_ensure_u8_capacity(state, &state.text, new_len, state.text_len) {
         return false
     }
-
-    if insert_len > delete_len {
-        shift := insert_len - delete_len
-        i := state.text_len
-        for i > end {
-            i -= 1
-            state.text[i + shift] = state.text[i]
-        }
-    } else if insert_len < delete_len {
-        tail_count := state.text_len - end
-        for i := 0; i < tail_count; i += 1 {
-            state.text[start + insert_len + i] = state.text[end + i]
-        }
-    }
-
+    termhist_shift_replacement_tail(state, start, end, insert_len, delete_len)
     if insert_len > 0 {
         copy(state.text[start:start + insert_len], replacement)
     }
-
     state.text_len = new_len
     state.cursor = start + insert_len
+    state.anchor = state.cursor
+    state.preferred_column = -1
     state.content_revision += 1
     return true
+}
+
+// Shift the retained input tail to make room for one replacement.
+termhist_shift_replacement_tail :: proc(
+    state: ^Termhist_State, start, end, insert_len, delete_len: int) {
+    if insert_len > delete_len {
+        shift := insert_len - delete_len
+        for index := state.text_len; index > end; {
+            index -= 1
+            state.text[index + shift] = state.text[index]
+        }
+    } else if insert_len < delete_len {
+        tail_count := state.text_len - end
+        for index in 0..<tail_count {
+            state.text[start + insert_len + index] = state.text[end + index]
+        }
+    }
 }
 
 //   Grow the history entry slice when another committed line is appended.
@@ -667,55 +1190,4 @@ termhist_clone_text :: proc(
     }
 
     return cloned, true
-}
-
-//   Step left to the previous UTF-8 codepoint boundary.
-//
-// Parameters:
-//   - text: The UTF-8 byte slice being edited.
-//   - index: Current byte offset.
-//
-// Returns:
-//   - The preceding UTF-8 boundary, clamped to the buffer start.
-utf8_prev_boundary :: proc(text: []u8, index: int) -> int {
-    if index <= 0 {
-        return 0
-    }
-
-    _, width := utf8.decode_last_rune_in_bytes(text[:index])
-    return index - width
-}
-
-//   Step right to the next UTF-8 codepoint boundary.
-//
-// Parameters:
-//   - text: The UTF-8 byte slice being edited.
-//   - index: Current byte offset.
-//   - limit: Upper byte bound for the active buffer.
-//
-// Returns:
-//   - The next UTF-8 boundary, clamped to the provided limit.
-utf8_next_boundary :: proc(text: []u8, index, limit: int) -> int {
-    if index >= limit {
-        return limit
-    }
-
-    _, width := utf8.decode_rune_in_bytes(text[index:limit])
-    next := index + width
-    if next > limit {
-        next = limit
-    }
-
-    return next
-}
-
-//   Report whether a byte is a UTF-8 continuation byte.
-//
-// Parameters:
-//   - b: The byte to classify.
-//
-// Returns:
-//   - true when the byte has UTF-8 continuation-bit form.
-utf8_is_continuation :: proc(b: u8) -> bool {
-    return (b & 0xC0) == 0x80
 }

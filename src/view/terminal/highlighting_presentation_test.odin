@@ -52,6 +52,7 @@ terminal_test_presentation_insert_pending :: proc(t: ^testing.T) {
     terminal_presentation_test_seed(t, &term, "abcd")
     defer terminal_destroy(&term, context.allocator)
     term.history.cursor = 2
+    term.history.anchor = 2
     testing.expect(t, termhist.termhist_insert_text(term.history, "XY"))
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
     terminal_highlight_observe_live(&term, 2)
@@ -238,6 +239,7 @@ terminal_test_presentation_run_capacity :: proc(t: ^testing.T) {
     testing.expect(t, terminal_highlight_publish(&term,
         {request.identity, request.source, runs}))
     term.history.cursor = 1
+    term.history.anchor = 1
     testing.expect(t, termhist.termhist_insert_text(term.history, "XY"))
     terminal_highlight_observe_live(&term, 2)
     mapped := terminal_live_highlight_runs(&term)
@@ -246,13 +248,19 @@ terminal_test_presentation_run_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, mapped[len(mapped) - 1].foreground_kind,
         protocol.Highlight_Color_Kind.Default)
     testing.expect(t, term.highlighting.presentation.degradation_reported)
+    terminal_test_highlight_runs_cover_source(t, mapped, len(source) + 2)
+}
+
+// Verify mapped highlight runs cover the complete source without gaps.
+terminal_test_highlight_runs_cover_source :: proc(
+    t: ^testing.T, runs: []protocol.Highlight_Run, source_length: int) {
     offset := u32(0)
-    for run in mapped {
+    for run in runs {
         testing.expect_value(t, run.start_byte, offset)
         testing.expect(t, run.end_byte > offset)
         offset = run.end_byte
     }
-    testing.expect_value(t, offset, u32(len(source) + 2))
+    testing.expect_value(t, offset, u32(source_length))
 }
 
 // Pending saturation and identical-byte edits preserve colors without accepting old revisions.
@@ -268,6 +276,7 @@ terminal_test_presentation_pending_saturation :: proc(t: ^testing.T) {
         testing.expect(t, ready)
     }
     term.history.cursor = term.history.text_len
+    term.history.anchor = term.history.cursor
     testing.expect(t, termhist.termhist_insert_text(term.history, "X"))
     terminal_highlight_observe_live(&term, 20)
     _, full := terminal_highlight_take_request(&term, 21)
@@ -317,6 +326,7 @@ terminal_test_presentation_completion_and_paste :: proc(t: ^testing.T) {
     pasted := [6]u32{0x123456, 0x123456, 0, 0, 0, 0}
     terminal_presentation_test_colors(t, &term, pasted[:])
     term.history.cursor = 0
+    term.history.anchor = 0
     terminal_highlight_observe_live(&term, 4)
     terminal_presentation_test_colors(t, &term, pasted[:])
 }

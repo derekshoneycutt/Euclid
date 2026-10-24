@@ -155,7 +155,8 @@ membership_route_keys :: proc(
     menu := &state.ui_runtime.membership
     for event, index in frame.events {
         bit := u8(1) if event.key == .Enter else u8(2) if event.key == .Space else 0
-        swallowed := event.kind != .Text && bit != 0 && menu.swallowed_keys & bit != 0
+        swallowed := !input.input_event_is_text_payload(event) &&
+            bit != 0 && menu.swallowed_keys & bit != 0
         if menu.active || swallowed {
             input.input_event_claim(frame, index, claims)
             if menu.active {

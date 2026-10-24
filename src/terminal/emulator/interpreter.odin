@@ -456,6 +456,24 @@ interpreter_reset_input_mode :: proc(interpreter: ^Interpreter) {
     }
 }
 
+// Clear both owned screens and reset saved cursor metadata without changing modes.
+interpreter_clear_display :: proc(interpreter: ^Interpreter) {
+    if interpreter == nil || interpreter.grid == nil {
+        return
+    }
+    termgrid.grid_clear_display(interpreter.grid)
+    if interpreter.alternate_grid != nil &&
+        interpreter.alternate_grid != interpreter.grid {
+        termgrid.grid_clear_display(interpreter.alternate_grid)
+    }
+    interpreter.saved_cursor = {}
+    interpreter.has_saved_cursor = false
+    interpreter.primary_cursor = {}
+    interpreter.primary_saved_cursor = {}
+    interpreter.primary_has_saved_cursor = false
+    interpreter.active_hyperlink = 0
+}
+
 // Clear retained command candidates owned outside the interpreter value.
 interpreter_reset_retained_candidates :: proc(interpreter: ^Interpreter) {
     if interpreter.title_state != nil {

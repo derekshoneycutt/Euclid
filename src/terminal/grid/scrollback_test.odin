@@ -109,6 +109,27 @@ termgrid_test_scrollback_ring_overwrites_oldest_row :: proc(t: ^testing.T) {
     testing.expect(t, !second.wrapped)
 }
 
+// Clearing scrollback preserves fixed storage and lifetime commit diagnostics.
+@(test)
+termgrid_test_scrollback_clear :: proc(t: ^testing.T) {
+    scrollback: Scrollback
+    testing.expect(t, scrollback_init(&scrollback, 2, 2, context.allocator))
+    defer scrollback_destroy(&scrollback)
+    cells: [2]Cell
+    cells[0].grapheme[0] = 'x'
+    cells[0].grapheme_len = 1
+    cells[0].width = 1
+    testing.expect(t, scrollback_commit(&scrollback, cells[:], {
+        logical_row_id = 1,
+    }))
+    testing.expect_value(t, scrollback.count, 1)
+    scrollback_clear(&scrollback)
+    testing.expect_value(t, scrollback.count, 0)
+    testing.expect_value(t, scrollback.first, 0)
+    testing.expect_value(t, scrollback.committed_rows, u64(1))
+    testing.expect_value(t, scrollback.cells[0].grapheme_len, u8(0))
+}
+
 // Verify row eviction removes a command only after its last endpoint is gone.
 @(test)
 termgrid_test_scrollback_eviction_prunes_command_index :: proc(t: ^testing.T) {

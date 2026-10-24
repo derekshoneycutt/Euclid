@@ -422,6 +422,21 @@ terminal_command_search_append :: proc(
     return true
 }
 
+// terminal_command_search_append_text atomically admits one committed UTF-8 payload.
+terminal_command_search_append_text :: proc(
+    term: ^viewterminalmodel.Terminal_State, text: string) -> bool {
+    shell := term.shell_integration
+    if shell == nil || !shell.search_editing || !utf8.valid_string(text) ||
+        shell.search_query_byte_count + len(text) > len(shell.search_query) {
+        return false
+    }
+    copy(shell.search_query[shell.search_query_byte_count:], transmute([]u8)text)
+    shell.search_query_byte_count += len(text)
+    shell.search_match_generation = 0
+    shell.search_match_byte_offset = 0
+    return true
+}
+
 // Remove the final UTF-8 scalar from the active command-search query.
 terminal_command_search_backspace :: proc(
     term: ^viewterminalmodel.Terminal_State) -> bool {
@@ -449,8 +464,21 @@ terminal_update_command_search :: proc(
     if shell == nil || !shell.search_editing {
         return false
     }
+    if event.text_target.kind != .None &&
+        event.text_target.kind != .Terminal {
+        return true
+    }
     if event.kind == .Text {
         terminal_command_search_append(term, event.codepoint)
+    } else if event.kind == .Text_Commit {
+        if int(event.text_length) > len(event.text) {
+            return true
+        }
+        payload := event
+        terminal_command_search_append_text(
+            term, input.input_event_text_payload(&payload))
+    } else if event.kind == .Text_Preedit || event.kind == .Text_Cancel {
+        return true
     } else if event.kind == .Press && event.key == .Backspace {
         terminal_command_search_backspace(term)
     } else if event.kind == .Press && event.key == .Escape {

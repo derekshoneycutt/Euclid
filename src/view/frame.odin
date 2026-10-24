@@ -8,6 +8,7 @@ import native "native"
 import viewcontent "content"
 import ui "ui"
 import core "../core"
+import geometry "../core/geometry"
 import dynview "../dynview"
 import julia "../bridge"
 import capture "../evidence/capture"
@@ -41,6 +42,9 @@ import capturemodel "capture/model"
 import storage "../core/storage"
 import nativeaccessibility "native/accessibility"
 import uitheme "ui/theme"
+import termhist "../terminal/history"
+import uiwidgets "ui/widgets"
+import uigif "ui/gif"
 
 when !core.SCENARIOS_ENABLED {
     _ :: storage
@@ -87,6 +91,13 @@ Sdl_Frame_Update :: struct {
 Sdl_Ui_Input_Storage :: struct {
     membership_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event,
     context_menu_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event,
+}
+
+// Sdl_Text_Input_Target carries the eligible portable owner and caret rectangle.
+Sdl_Text_Input_Target :: struct {
+    kind: input.Input_Text_Target_Kind,
+    id: int,
+    area: geometry.Rectangle,
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -256,12 +267,21 @@ route_ui_keyboard_frame :: proc(
     storage: []input.Input_Event) -> input.Input_Frame {
     semantic := state^.ui_runtime.semantic_focus
     event_claims := uisemantics.semantic_route_keyboard(
-        semantic, frame, state^.ui_runtime.input.interaction_frame.terminal_focused)
+        semantic, frame, state^.ui_runtime.input.interaction_frame.terminal_focused,
+        sdl_frame_composition_active(state))
     if uisemantics.semantic_focus_moved(semantic) {
         ui.ui_apply_semantic_focus(&state^.ui_runtime, frame,
             uiterminal.is_terminal_selected(state))
     }
     return input.input_frame_copy_unclaimed_events(frame, &event_claims, storage)
+}
+
+// Read transient composition from the existing display-owned editors.
+sdl_frame_composition_active :: proc(state: ^core.Euclid_General_State) -> bool {
+    ui := &state^.ui_runtime
+    return ui.library.search.input.preedit_active ||
+        ui.library.entry_name.input.preedit_active || ui.gif_path_input.preedit_active ||
+        (state^.terminal.history != nil && state^.terminal.history.preedit_active)
 }
 
 // frame_gif_capture_extents resolves logical and render dimensions for capture.
@@ -326,6 +346,9 @@ prepare_sdl_frame :: proc(
         frame_dt = frame_dt, input_frame = input_frame,
         routed_frame = routed_frame, ui_geometry = ui_geometry,
     }, prepared)
+    sync_sdl_text_input_target(
+        state, ctx.platform, ctx.input_runtime, input_frame,
+        prepared^.terminal_frame)
     prepared^.increased_contrast = uitheme.increased_contrast(
         state^.ui_runtime.preferences.values.interface.increased_contrast,
         state^.ui_runtime.platform_increased_contrast)
@@ -368,6 +391,90 @@ prepare_sdl_frame_owners :: proc(
     prepared^.input_frame = update.input_frame
     prepared^.terminal_frame = terminal_frame
     prepared^.splitters = update.ui_geometry.splitters
+}
+
+// sync_sdl_text_input_target publishes the focused editable owner and native caret area.
+sync_sdl_text_input_target :: proc(
+    state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform,
+    runtime: ^input.Input_Runtime, frame: input.Input_Frame,
+    terminal_frame: uiterminal.Terminal_Prepared_Frame) {
+    if state == nil || platform == nil || runtime == nil {
+        return
+    }
+    target := sdl_frame_resolve_text_input_target(
+        state, frame.window_focused, terminal_frame)
+    sdl_frame_retire_preedit(state, target)
+    if input.input_runtime_set_text_target(runtime, target.kind, target.id) {
+        native.sdl_platform_sync_text_input(platform, false)
+    }
+    native.sdl_platform_sync_text_input(platform, target.kind != .None)
+    if target.kind != .None {
+        native.sdl_platform_set_text_input_area(platform, {
+            x = i32(target.area.x), y = i32(target.area.y),
+            w = max(i32(1), i32(target.area.width)),
+            h = max(i32(1), i32(target.area.height)),
+        }, 0)
+    }
+}
+
+// Retire hidden, blurred, or leased editor compositions before the next input drain.
+sdl_frame_retire_preedit :: proc(
+    state: ^core.Euclid_General_State, target: Sdl_Text_Input_Target) {
+    ui := &state^.ui_runtime
+    if target.kind != .Terminal {
+        termhist.termhist_clear_preedit(state^.terminal.history)
+    }
+    if target.kind != .Input_Box || target.id != uilibrary.LIBRARY_SEARCH_INPUT_ID {
+        uiwidgets.input_box_clear_preedit(&ui.library.search.input)
+    }
+    if target.kind != .Input_Box || target.id != uilibrary.TREE_ENTRY_NAME_INPUT_ID {
+        uiwidgets.input_box_clear_preedit(&ui.library.entry_name.input)
+    }
+    if target.kind != .Input_Box || target.id != uigif.GIF_PATH_INPUT_BOX_ID {
+        uiwidgets.input_box_clear_preedit(&ui.gif_path_input)
+    }
+}
+
+// sdl_frame_resolve_text_input_target selects an eligible focused edit surface.
+sdl_frame_resolve_text_input_target :: proc(
+    state: ^core.Euclid_General_State, window_focused: bool,
+    terminal_frame: uiterminal.Terminal_Prepared_Frame) -> Sdl_Text_Input_Target {
+    if !window_focused {
+        return {}
+    }
+    target := state^.ui_runtime.input.interaction_frame.effective_focus
+    if target.kind == .Terminal && terminal_frame.available &&
+        state^.terminal.history != nil {
+        return {
+            kind = .Terminal, id = target.id,
+            area = terminal_frame.editable_geometry.caret,
+        }
+    }
+    if target.kind == .Input_Box {
+        area, eligible := sdl_frame_input_box_caret_area(state, target.id)
+        if eligible {
+            return {kind = .Input_Box, id = target.id, area = area}
+        }
+    }
+    return {}
+}
+
+// sdl_frame_input_box_caret_area finds the focused mutable semantic input node.
+sdl_frame_input_box_caret_area :: proc(
+    state: ^core.Euclid_General_State, target_id: int) ->
+        (geometry.Rectangle, bool) {
+    snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
+    if snapshot == nil {
+        return {}, false
+    }
+    for node in snapshot^.nodes[:snapshot^.node_count] {
+        if int(node.id.local_id) == target_id && node.role == .Input &&
+            .Visible in node.states && .Enabled in node.states &&
+            .Read_Only not_in node.states {
+            return node.text_input_area, true
+        }
+    }
+    return {}, false
 }
 
 // prepare_sdl_layout_and_effects resolves UI layout, then advances presentation

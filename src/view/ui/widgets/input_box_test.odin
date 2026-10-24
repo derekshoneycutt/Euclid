@@ -119,7 +119,83 @@ input_box_edit_keyboard_preserves_utf8_boundaries :: proc(t: ^testing.T) {
     testing.expect_value(t, state.cursor_byte, 1)
 }
 
-// Verify editable input cuts selections, bounds paste, and reports submission.
+// Verify preedit remains transient and whole commits replace the captured selection.
+@(test)
+input_box_ime_preedit_and_commit_are_atomic :: proc(t: ^testing.T) {
+    buffer: [16]u8
+    copy(buffer[:], "ab")
+    text_length := 2
+    state := viewmodel.Ui_Input_Box_State{cursor_byte = 2, anchor_byte = 1}
+    target := Input_Box_Edit_Target{buffer[:], &text_length}
+    preedit := input.Input_Event{
+        kind = .Text_Preedit, text_length = 3,
+        preedit_start = 0, preedit_length = 1,
+    }
+    copy(preedit.text[:3], "仮")
+    _ = input_box_apply_edit_keyboard(
+        &state, target, input_box_test_frame([]input.Input_Event{preedit}))
+    testing.expect_value(t, string(buffer[:text_length]), "ab")
+    testing.expect(t, state.preedit_active)
+    blocked := []input.Input_Event{
+        {kind = .Press, key = .Enter}, {kind = .Press, key = .Tab},
+        {kind = .Press, key = .Backspace}, {kind = .Press, key = .Left},
+        {kind = .Press, key = .Escape},
+    }
+    blocked_update := input_box_apply_edit_keyboard(
+        &state, target, input_box_test_frame(blocked))
+    testing.expect(t, !blocked_update.changed && !blocked_update.submit_requested &&
+        !blocked_update.tab_requested)
+    testing.expect_value(t, state.cursor_byte, 2)
+    testing.expect_value(t, state.anchor_byte, 1)
+    commit := input.Input_Event{kind = .Text_Commit, text_length = 6}
+    copy(commit.text[:6], "確定")
+    enter := input.Input_Event{kind = .Press, key = .Enter}
+    ordered_events := [2]input.Input_Event{commit, enter}
+    update := input_box_apply_edit_keyboard(
+        &state, target, input_box_test_frame(ordered_events[:]))
+    testing.expect(t, update.changed)
+    testing.expect(t, update.submit_requested)
+    testing.expect_value(t, string(buffer[:text_length]), "a確定")
+    testing.expect(t, !state.preedit_active)
+}
+
+// Verify blur retires composition and commits from another target are ignored.
+@(test)
+input_box_ime_target_retirement_and_blur :: proc(t: ^testing.T) {
+    buffer: [8]u8
+    copy(buffer[:], "ab")
+    text_length := 2
+    state := viewmodel.Ui_Input_Box_State{
+        cursor_byte = 2, anchor_byte = 2, preedit_active = true,
+        preedit_length = 3,
+    }
+    copy(state.preedit[:3], "仮")
+    owner: viewmodel.Ui_Press_Owner_State
+    params := Input_Box_Params{
+        rect = {0, 0, 100, 24}, clip_rect = {0, 0, 100, 24},
+        descriptor = {
+            id = {domain = .Library_Control, local_id = 7},
+            text = "ab", mode = .Editable,
+        },
+        state = &state, column_advance = 8,
+    }
+    _ = input_box_prepare(params, &owner)
+    testing.expect(t, !state.preedit_active)
+
+    params.focused = true
+    params.edit_target = {buffer[:], &text_length}
+    commit := input.Input_Event{
+        kind = .Text_Commit, text_length = 3,
+        text_target = {kind = .Input_Box, id = 8},
+    }
+    copy(commit.text[:3], "確")
+    params.frame = input_box_test_frame([]input.Input_Event{commit})
+    resolved := params
+    _ = input_box_apply_focused_input(params, &resolved)
+    testing.expect_value(t, string(buffer[:text_length]), "ab")
+}
+
+// Verify paste rejection is atomic while prior cut and later submission remain ordered.
 @(test)
 input_box_edit_keyboard_reports_cut_paste_and_submit :: proc(t: ^testing.T) {
     buffer: [6]u8
@@ -136,8 +212,56 @@ input_box_edit_keyboard_reports_cut_paste_and_submit :: proc(t: ^testing.T) {
     testing.expect(t, update.copy_requested && update.changed)
     testing.expect_value(t, update.copy_start, 1)
     testing.expect_value(t, update.copy_end, 3)
-    testing.expect_value(t, string(buffer[:text_length]), "aééd")
+    testing.expect(t, update.edit_rejected)
+    testing.expect_value(t, string(buffer[:text_length]), "ad")
+    testing.expect_value(t, state.cursor_byte, 1)
+    testing.expect_value(t, state.anchor_byte, 1)
     testing.expect(t, update.submit_requested)
+}
+
+// Verify rejected bounded edits preserve source and selection and reject line breaks.
+@(test)
+input_box_edit_rejection_preserves_state :: proc(t: ^testing.T) {
+    buffer: [4]u8
+    copy(buffer[:], "abcd")
+    length := 4
+    state := viewmodel.Ui_Input_Box_State{cursor_byte = 2, anchor_byte = 1}
+    before := buffer
+    update: Input_Box_Update
+    testing.expect(t, !input_box_replace_selection(
+        &state, {buffer[:], &length}, "wide", &update))
+    testing.expect(t, update.edit_rejected)
+    testing.expect_value(t, buffer, before)
+    testing.expect_value(t, length, 4)
+    testing.expect_value(t, state.cursor_byte, 2)
+    testing.expect_value(t, state.anchor_byte, 1)
+
+    update = {}
+    testing.expect(t, !input_box_replace_selection(
+        &state, {buffer[:], &length}, "a\nb", &update))
+    testing.expect(t, update.edit_rejected)
+    testing.expect_value(t, buffer, before)
+    testing.expect_value(t, state.cursor_byte, 2)
+    testing.expect_value(t, state.anchor_byte, 1)
+}
+
+// Verify selection replacement rejects a range inside a grapheme without clamping it.
+@(test)
+input_box_edit_rejects_partial_grapheme_selection :: proc(t: ^testing.T) {
+    buffer: [16]u8
+    source := "e\u0301x"
+    copy(buffer[:], source)
+    length := len(source)
+    state := viewmodel.Ui_Input_Box_State{cursor_byte = len("e\u0301"), anchor_byte = 1}
+    before := buffer
+    update: Input_Box_Update
+    testing.expect(t, !input_box_replace_selection(
+        &state, {buffer[:], &length}, "X", &update))
+    testing.expect(t, update.edit_rejected)
+    testing.expect_value(t, buffer, before)
+    testing.expect_value(t, length, len(source))
+    testing.expect_value(t, state.cursor_byte, len("e\u0301"))
+    testing.expect_value(t, state.anchor_byte, 1)
 }
 
 // Verify an ordinary arrow collapses a selection before further navigation.
@@ -211,10 +335,10 @@ input_box_compact_padding_aligns_utf8_pointer_selection :: proc(t: ^testing.T) {
     released := input_box_prepare(params, &owner)
     testing.expect_value(t, state.cursor_byte, len("a界"))
     testing.expect_value(t, released.text_geometry.anchor_column, 1)
-    testing.expect_value(t, released.text_geometry.cursor_column, 2)
-    testing.expect_value(t, released.selection.x, f32(22))
-    testing.expect_value(t, released.selection.width, f32(10))
-    testing.expect_value(t, released.caret.x, f32(32))
+    testing.expect_value(t, released.text_geometry.cursor_column, 3)
+    testing.expect_value(t, released.selection.x, f32(15))
+    testing.expect_value(t, released.selection.width, f32(20))
+    testing.expect_value(t, released.caret.x, f32(35))
 }
 
 // Verify compact padding keeps a narrow field's end caret inside its reveal range.
@@ -251,7 +375,7 @@ input_box_compact_padding_maps_double_click_run :: proc(t: ^testing.T) {
     testing.expect_value(t, state.anchor_byte, 0)
     testing.expect_value(t, state.cursor_byte, len("界"))
     testing.expect_value(t, prepared.selection.x, f32(12))
-    testing.expect_value(t, prepared.selection.width, f32(10))
+    testing.expect_value(t, prepared.selection.width, f32(20))
 }
 
 // Verify default padding preserves the existing Library and GIF inset geometry.
@@ -446,7 +570,7 @@ input_box_double_click_accounts_for_scroll :: proc(t: ^testing.T) {
     testing.expect_value(t, result.descriptor.anchor_byte, len("one "))
     testing.expect_value(t, result.descriptor.cursor_byte, len("one αβ_界9"))
     testing.expect_value(t, result.text_geometry.anchor_column, 4)
-    testing.expect_value(t, result.text_geometry.cursor_column, 9)
+    testing.expect_value(t, result.text_geometry.cursor_column, 10)
 }
 
 // Verify multi-click selections stay fixed across movement and focus-loss release.

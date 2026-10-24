@@ -44,57 +44,52 @@ terminal_line_text :: proc(term: ^viewterminalmodel.Terminal_State, line: int) -
         if prompt_line == 0 {
             prefix = terminal_primary_prompt_prefix(term)
         }
-        return fmt.tprintf(
-            "%s%s", prefix, terminal_live_input_line_text(text, prompt_line))
+        return fmt.tprintf("%s%s", prefix,
+            terminal_live_input_visual_line_text(term, text, prompt_line))
     }
     return ""
 }
 
-//   Return the number of physical rows in the live editable input.
+//   Return the number of displayed rows in the live editable input.
 //
 // Parameters:
 //   - term: Terminal state whose editable history is inspected; nil yields zero.
 //
 // Returns:
-//   - Zero for unavailable history; otherwise one plus embedded newline count.
+//   - Zero for unavailable history; otherwise explicit and wrapped row count.
 terminal_live_input_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int {
     if term == nil || term.history == nil {
         return 0
     }
     text := termhist.termhist_current_text(term.history)
-    count := 1
-    for byte in text {
-        if byte == '\n' {
-            count += 1
-        }
-    }
-    return count
+    row, _ := termhist.termhist_visual_cursor_row(
+        text, len(text), terminal_live_input_wrap_columns(term, text))
+    return row + 1
 }
 
-//   Return one physical row from live editable text without its prompt.
-//
-// Parameters:
-//   - text: Complete editable source containing newline-delimited physical rows.
-//   - line: Zero-based physical row index to borrow.
-//
-// Returns:
-//   - Borrowed text between newline delimiters, or empty for a negative/out-of-range row.
-terminal_live_input_line_text :: proc(text: string, line: int) -> string {
-    if line < 0 {
-        return ""
+// Return the effective text-cell width available after the Terminal prompt prefix.
+terminal_live_input_wrap_columns :: proc(
+    term: ^viewterminalmodel.Terminal_State, text: string) -> int {
+    columns := int(term.geometry.dimensions.columns)
+    if columns <= 0 {
+        return max(1, len(text) + 1)
     }
-    start := 0
-    current_line := 0
-    for byte, index in text {
-        if byte == '\n' {
-            if current_line == line {
-                return text[start:index]
-            }
-            current_line += 1
-            start = index + 1
-        }
-    }
-    return current_line == line ? text[start:] : ""
+    return max(1, columns - len(TERMINAL_CONTINUATION_PROMPT))
+}
+
+// Resolve one displayed draft row, including explicit newlines and soft wraps.
+terminal_live_input_visual_row_bounds :: proc(
+    term: ^viewterminalmodel.Terminal_State, text: string, row: int) ->
+        termhist.Termhist_Visual_Row_Bounds {
+    return termhist.termhist_visual_row_bounds(
+        text, row, terminal_live_input_wrap_columns(term, text))
+}
+
+// Return one displayed editable row without its prompt prefix.
+terminal_live_input_visual_line_text :: proc(
+    term: ^viewterminalmodel.Terminal_State, text: string, row: int) -> string {
+    bounds := terminal_live_input_visual_row_bounds(term, text, row)
+    return text[bounds.start:bounds.end] if bounds.found else ""
 }
 
 //   Map a screen-space mouse position to a terminal line and byte offset.

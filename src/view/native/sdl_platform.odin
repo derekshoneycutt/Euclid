@@ -59,7 +59,11 @@ Sdl_Input_Diagnostics :: struct {
     key_events: u64,
     unmapped_key_events: u64,
     text_runes: u64,
+    text_commits: u64,
+    text_preedit_events: u64,
     invalid_text_events: u64,
+    oversized_text_events: u64,
+    unowned_text_events: u64,
     button_events: u64,
     wheel_events: u64,
     focus_events: u64,
@@ -130,6 +134,9 @@ Sdl_Platform :: struct {
     close_requested: bool,
     resize_pending: bool,
     text_input_active: bool,
+    text_input_area: sdl.Rect,
+    text_input_cursor: int,
+    text_input_area_valid: bool,
     window_focused: bool,
     accessibility_admission_attempted: bool,
     window_show_attempted: bool,
@@ -633,10 +640,14 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     sdl_contrast_native_destroy(&platform^.contrast)
     diagnostics := platform^.input_diagnostics
     log.infof(
-        "sdl_input_summary keys=%d unmapped=%d text=%d invalid_text=%d " +
-        "buttons=%d wheels=%d focus=%d overflows=%d",
+        "sdl_input_summary keys=%d unmapped=%d text_runes=%d commits=%d " +
+        "preedit=%d invalid_text=%d oversized_text=%d unowned_text=%d " +
+        "buttons=%d " +
+        "wheels=%d focus=%d overflows=%d",
         diagnostics.key_events, diagnostics.unmapped_key_events,
-        diagnostics.text_runes, diagnostics.invalid_text_events,
+        diagnostics.text_runes, diagnostics.text_commits,
+        diagnostics.text_preedit_events, diagnostics.invalid_text_events,
+        diagnostics.oversized_text_events, diagnostics.unowned_text_events,
         diagnostics.button_events, diagnostics.wheel_events,
         diagnostics.focus_events, diagnostics.event_overflows)
     if platform^.text_input_active && platform^.window != nil {

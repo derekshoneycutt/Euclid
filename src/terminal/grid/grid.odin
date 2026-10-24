@@ -791,6 +791,23 @@ grid_clear_row :: proc(grid: ^Grid, row_index: int) {
     row.dirty_end = grid.columns
 }
 
+// Clear visible output and its row-owned semantic resources without reallocating.
+grid_clear_display :: proc(grid: ^Grid) {
+    if grid == nil || grid.editing == nil {
+        return
+    }
+    for row_index in 0..<grid.row_count {
+        row := &grid.rows[row_index]
+        if grid.editing.attachment_store != nil {
+            termattachment.placements_remove_row(
+                grid.editing.attachment_store, grid.editing.screen, row.logical_id)
+        }
+        grid_clear_row(grid, row_index)
+    }
+    grid.cursor = {}
+    grid.hyperlink = 0
+}
+
 //   Erase a clamped cell range using the active style for visible blanks.
 //
 // Parameters:

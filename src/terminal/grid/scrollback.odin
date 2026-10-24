@@ -226,6 +226,30 @@ scrollback_commit :: proc(
     return true
 }
 
+// Discard retained rows while preserving the ring's allocation and lifetime counters.
+scrollback_clear :: proc(scrollback: ^Scrollback) {
+    if scrollback == nil || scrollback.capacity == 0 {
+        return
+    }
+    for index in 0..<scrollback.count {
+        slot := (scrollback.first + index) % scrollback.capacity
+        row := &scrollback.rows[slot]
+        if scrollback.attachment_store != nil {
+            termattachment.placements_remove_row(
+                scrollback.attachment_store, .Primary, row.logical_id)
+        }
+        termshellintegration.shell_command_evict_through(
+            scrollback.shell_integration, i64(row.logical_line_id))
+        row^ = {}
+        start := slot * scrollback.columns
+        for &cell in scrollback.cells[start:start + scrollback.columns] {
+            cell = {}
+        }
+    }
+    scrollback.first = 0
+    scrollback.count = 0
+}
+
 //   Return one oldest-first borrowed row view.
 //
 // Parameters:
