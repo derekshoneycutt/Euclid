@@ -37,6 +37,8 @@ Input_Box_Params :: struct {
     controls: viewmodel.Ui_Node_Id,
     state: ^viewmodel.Ui_Input_Box_State,
     frame: input.Input_Frame,
+    // Zero uses the semantic local ID; remapped controls supply their portable input ID.
+    text_input_id: int,
     focused: bool,
     pointer_routed: bool,
     defer_semantics: bool,
@@ -551,13 +553,15 @@ input_box_apply_focused_input :: proc(
     policy.unicode_completion = input_box_unicode_enabled(params)
     filtered_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     filtered_count := 0
+    target_id := params.text_input_id if params.text_input_id != 0 else
+        int(params.descriptor.id.local_id)
     for event in params.frame.events {
         if event.kind == .Text || event.kind == .Text_Commit ||
             event.kind == .Text_Preedit || event.kind == .Text_Cancel {
             target := event.text_target
             if target.kind != .None &&
                 (target.kind != .Input_Box ||
-                 target.id != int(params.descriptor.id.local_id)) {
+                 target.id != target_id) {
                 continue
             }
         }

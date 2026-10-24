@@ -60,6 +60,7 @@ library_entry_name_input_params :: proc(
         semantic_focus = params.ui_runtime^.semantic_focus,
         state = &draft^.input,
         frame = frame,
+        text_input_id = TREE_ENTRY_NAME_INPUT_ID,
         focused = focus.kind == .Input_Box &&
             focus.id == TREE_ENTRY_NAME_INPUT_ID,
         pointer_routed = target.focus.kind == .Input_Box &&

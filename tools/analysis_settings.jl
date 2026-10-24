@@ -1350,6 +1350,19 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
+                "terminal-history-undo-snapshot-growth",
+                "src/terminal/history/undo.odin",
+                "termhist_reserve_undo",
+                :custom,
+                "Undo descriptors grow geometrically through the history owner's borrowed allocator and reuse retained capacity across prompt and branch resets; superseded arena backing is reclaimed at animation-generation reset.";
+                operation="make",
+                target="[]Termhist_Snapshot",
+                allocator_source="state.borrowed_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "terminal-history-buffer-growth",
                 "src/terminal/history/termhist.odin",
                 "termhist_ensure_u8_capacity",

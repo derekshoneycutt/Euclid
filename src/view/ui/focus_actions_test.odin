@@ -12,6 +12,67 @@ import collections "../../collections"
 import uuid "core:encoding/uuid"
 import uiwidgets "widgets"
 
+// Native addressed events edit collection heads through their remapped input identity.
+@(test)
+library_collection_name_accepts_native_text :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_collections_fixture(t, state, &ji, &nodes)
+    _ = tree_actions_test_semantic_frame(t, &params)
+    testing.expect(t, uilibrary.tree_collection_create(params))
+    library_name_test_native_edit(t, params)
+}
+
+// Placement overrides share the same addressed commit/preedit path as collection heads.
+@(test)
+library_placement_name_accepts_native_text :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_actions_test_fixture(state, &ji, &nodes)
+    testing.expect(t, uilibrary.library_entry_name_begin(
+        state, state^.ui_runtime.library.tree.selected_item_id, "Animation"))
+    library_name_test_native_edit(t, params)
+}
+
+// Preserve transient preedit and reject another owner before committing native text.
+library_name_test_native_edit :: proc(t: ^testing.T, params: uilibrary.Tree_List_Params) {
+    draft := &params.ui_runtime^.library.entry_name
+    before := draft^.value
+    before_length := draft^.value_length
+    draft^.input.anchor_byte = 0
+    draft^.input.cursor_byte = before_length
+    rect := geometry.Rectangle{0, 0, 320, 30}
+    event := input.Input_Event{kind = .Text_Preedit, text_length = 3,
+        text_target = {kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}}
+    copy(event.text[:3], "名")
+    edit := uilibrary.library_entry_name_input_params(
+        params, draft^.entry_id, rect, rect, {events = []input.Input_Event{event}})
+    resolved := edit
+    _ = uiwidgets.input_box_apply_focused_input(edit, &resolved)
+    testing.expect(t, draft^.input.preedit_active)
+    testing.expect_value(t, string(draft^.value[:draft^.value_length]),
+        string(before[:before_length]))
+    event.kind = .Text_Commit
+    event.text_target.id += 1
+    edit.frame.events = []input.Input_Event{event}
+    _ = uiwidgets.input_box_apply_focused_input(edit, &resolved)
+    testing.expect(t, draft^.input.preedit_active)
+    event.text_target.id = uilibrary.TREE_ENTRY_NAME_INPUT_ID
+    edit.frame.events = []input.Input_Event{event}
+    update := uiwidgets.input_box_apply_focused_input(edit, &resolved)
+    testing.expect(t, update.changed && !draft^.input.preedit_active)
+    testing.expect_value(t, string(draft^.value[:draft^.value_length]), "名")
+    testing.expect(t, uilibrary.library_entry_name_edit(params.general_state,
+        draft^.entry_id, string(draft^.value[:draft^.value_length])))
+    testing.expect(t, uilibrary.library_entry_name_flush(params.general_state))
+    testing.expect_value(t, string(draft^.accepted_name[:draft^.accepted_name_length]),
+        "名")
+}
+
 // Verify selecting another placement flushes exact text and preserves its owned draft.
 @(test)
 library_entry_name_selection_flush_preserves_exact_text :: proc(t: ^testing.T) {

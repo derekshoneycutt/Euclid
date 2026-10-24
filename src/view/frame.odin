@@ -467,8 +467,13 @@ sdl_frame_input_box_caret_area :: proc(
     if snapshot == nil {
         return {}, false
     }
+    focus := state^.ui_runtime.input.interaction_frame.effective_focus
+    if focus.kind != .Input_Box || focus.id != target_id {
+        return {}, false
+    }
+    semantic_id := state^.ui_runtime.semantic_focus^.logical_focus
     for node in snapshot^.nodes[:snapshot^.node_count] {
-        if int(node.id.local_id) == target_id && node.role == .Input &&
+        if node.id == semantic_id && node.role == .Input &&
             .Visible in node.states && .Enabled in node.states &&
             .Read_Only not_in node.states {
             return node.text_input_area, true

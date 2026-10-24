@@ -178,6 +178,10 @@ when the old field is hidden and no longer prepared.
 The display frame publishes native text-input eligibility and the prepared logical
 caret rectangle. Terminal uses the same lifecycle but retains its own draft editor and
 foreground-input ownership; no Julia call occurs from native input callbacks.
+Native eligibility resolves the focused node by its full semantic identity, not by
+assuming its local ID equals the portable input ID. Input boxes whose routing ID is
+remapped, such as Library collection/placement names, supply `text_input_id` explicitly
+so addressed commit and preedit events reach the same editor.
 
 This division is useful when extending the UI: add common control mechanics to the
 widget layer when multiple callers can share them; keep feature policy in the owning
