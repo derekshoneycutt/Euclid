@@ -14,7 +14,7 @@ observe_display_state :: proc(
     if state == nil {
         return {}
     }
-    source := observe.Display_Source{
+    source: observe.Display_Source = {
         fixed_step = state.fixed_step,
         simulation_time = state.simulation_time,
         ui_layout = &state.ui_runtime.layout,
@@ -61,7 +61,7 @@ observe_simulation_executor :: proc(
     if executor == nil {
         return {}
     }
-    source := observe.Simulation_Source{
+    source: observe.Simulation_Source = {
         particle = &executor.particle_task.evidence_ring,
         constraint = &executor.constraint_task.evidence_ring,
         shape_cache = &executor.shape_cache_task.evidence_ring,

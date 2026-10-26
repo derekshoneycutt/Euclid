@@ -24,7 +24,8 @@ execute_context_menu_paste :: proc(
         _ = input.input_runtime_set_owner(runtime, {
             kind = .Terminal_Session,
             id = u64(state^.shell.operation_id.slot),
-            generation = state^.shell.operation_id.generation})
+            generation = state^.shell.operation_id.generation,
+        })
         mode := termemulator.interpreter_input_mode(&state^.terminal.output_interpreter)
         accepted = input.input_terminal_enqueue_paste(runtime, text, mode.bracketed_paste)
     } else if state^.shell.phase == .Inactive {

@@ -23,13 +23,25 @@ context_menu_test_state :: proc(t: ^testing.T) -> ^core.Euclid_General_State {
     runtime^.layout.window = {640, 400}
     runtime^.presentation.visible = true
     runtime^.layout.ui_regions.text_rect = {100, 100, 400, 200}
-    runtime^.context_menu = {active = true, generation = 1,
-        target = uipresentation.presentation_semantic_id(state), count = 2, focused = 0,
-        bounds = {120, 120, 160, 72}, pressed_item = -1,
+    runtime^.context_menu = {
+        active = true,
+        generation = 1,
+        target = uipresentation.presentation_semantic_id(state),
+        count = 2,
+        focused = 0,
+        bounds = {120, 120, 160, 72},
+        pressed_item = -1,
         viewport = uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect),
-        window = runtime^.layout.window}
-    runtime^.context_menu.items[0] = {command = .Copy, enabled = true}
-    runtime^.context_menu.items[1] = {command = .Select_All, enabled = true}
+        window = runtime^.layout.window,
+    }
+    runtime^.context_menu.items[0] = {
+        command = .Copy,
+        enabled = true,
+    }
+    runtime^.context_menu.items[1] = {
+        command = .Select_All,
+        enabled = true,
+    }
     uioverlay.context_menu_focus(&runtime^.context_menu, runtime^.semantic_focus)
     return state
 }
@@ -51,7 +63,13 @@ context_menu_opens_exact_surface_commands :: proc(t: ^testing.T) {
     source := "x"
     state^.dynview.content.presentation_bytes = transmute([]u8)source
     selection := &state^.ui_runtime.presentation.selection
-    selection^ = {mode = .Atomic_Source, active = true, head = {unit_index = 1}}
+    selection^ = {
+        mode = .Atomic_Source,
+        active = true,
+        head = {
+            unit_index = 1,
+        },
+    }
     uioverlay.context_menu_open(state,
         uipresentation.presentation_semantic_id(state), {120, 120})
     menu := &state^.ui_runtime.context_menu
@@ -62,7 +80,9 @@ context_menu_opens_exact_surface_commands :: proc(t: ^testing.T) {
     testing.expect_value(t,
         string(menu^.items[1].label[:menu^.items[1].label_length]), "Select All")
     testing.expect(t, selection^.active && selection^.head.unit_index == 1)
-    animation := bridgemodel.Euclid_Julia_Animation_Interface{node_kind = .Terminal}
+    animation: bridgemodel.Euclid_Julia_Animation_Interface = {
+        node_kind = .Terminal,
+    }
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.selected_animation = &animation
     uioverlay.context_menu_open(state, uiterminal.terminal_semantic_id(state), {120, 120})
@@ -74,7 +94,10 @@ context_menu_opens_exact_surface_commands :: proc(t: ^testing.T) {
 // Verify navigation skips disabled rows and remains safe when every row is disabled.
 @(test)
 context_menu_navigation_is_bounded :: proc(t: ^testing.T) {
-    menu := viewmodel.Ui_Context_Menu_State{count = 3, focused = 0}
+    menu: viewmodel.Ui_Context_Menu_State = {
+        count = 3,
+        focused = 0,
+    }
     menu.items[0].enabled = true
     menu.items[2].enabled = true
     uioverlay.context_menu_move(&menu, 1)
@@ -94,8 +117,11 @@ context_menu_navigation_is_bounded :: proc(t: ^testing.T) {
 context_menu_outside_click_passes_through_once :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
-    frame := input.Input_Frame{mouse_position = {10, 10},
-        mouse_pressed = {.Left}, mouse_down = {.Left}}
+    frame: input.Input_Frame = {
+        mouse_position = {10, 10},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+    }
     routed := uioverlay.context_menu_route_pointer(state, frame, false)
     testing.expect(t, !state^.ui_runtime.context_menu.active)
     testing.expect_value(t, routed.mouse_pressed, frame.mouse_pressed)
@@ -108,8 +134,11 @@ context_menu_outside_click_passes_through_once :: proc(t: ^testing.T) {
 context_menu_item_click_never_reaches_underlying_content :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
-    pressed := input.Input_Frame{mouse_position = {130, 135},
-        mouse_pressed = {.Left}, mouse_down = {.Left}}
+    pressed: input.Input_Frame = {
+        mouse_position = {130, 135},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+    }
     routed := uioverlay.context_menu_route_pointer(state, pressed, false)
     testing.expect(t, routed.mouse_pressed == {} && routed.mouse_down == {})
     released := pressed
@@ -128,11 +157,23 @@ context_menu_item_click_never_reaches_underlying_content :: proc(t: ^testing.T) 
 context_menu_claims_ordered_keyboard_and_text :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
-    events := [3]input.Input_Event{
-        {kind = .Press, key = .Escape},
-        {kind = .Text, codepoint = 'x'},
-        {kind = .Press, key = .Enter}}
-    frame := input.Input_Frame{events = events[:]}
+    events: [3]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Escape,
+        },
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+    }
+    frame: input.Input_Frame = {
+        events = events[:],
+    }
     claims: input.Input_Event_Claim_State
     uioverlay.context_menu_route_keyboard(state, frame, &claims)
     testing.expect(t, claims.claimed[0] && claims.claimed[1] && claims.claimed[2])
@@ -146,16 +187,26 @@ context_menu_claims_ordered_keyboard_and_text :: proc(t: ^testing.T) {
 context_menu_pointer_activation_claims_remaining_text :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
-    frame := input.Input_Frame{mouse_position = {130, 135},
-        mouse_pressed = {.Left}, mouse_down = {.Left}}
+    frame: input.Input_Frame = {
+        mouse_position = {130, 135},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+    }
     _ = uioverlay.context_menu_route_pointer(state, frame, false)
     frame.mouse_pressed = {}
     frame.mouse_down = {}
     frame.mouse_released = {.Left}
     _ = uioverlay.context_menu_route_pointer(state, frame, false)
-    events := [1]input.Input_Event{{kind = .Text, codepoint = 'x'}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+    }
     claims: input.Input_Event_Claim_State
-    uioverlay.context_menu_route_keyboard(state, {events = events[:]}, &claims)
+    uioverlay.context_menu_route_keyboard(state, {
+        events = events[:],
+    }, &claims)
     testing.expect(t, claims.claimed[0])
 }
 
@@ -166,11 +217,24 @@ context_menu_activation_release_stays_owned :: proc(t: ^testing.T) {
     defer context_menu_test_destroy(state)
     uioverlay.context_menu_key(
         &state^.ui_runtime.context_menu, state^.ui_runtime.semantic_focus,
-        {kind = .Press, key = .Enter})
-    events := [2]input.Input_Event{
-        {kind = .Repeat, key = .Enter}, {kind = .Release, key = .Enter}}
+        {
+            kind = .Press,
+            key = .Enter,
+        })
+    events: [2]input.Input_Event = {
+        {
+            kind = .Repeat,
+            key = .Enter,
+        },
+        {
+            kind = .Release,
+            key = .Enter,
+        },
+    }
     claims: input.Input_Event_Claim_State
-    uioverlay.context_menu_route_keyboard(state, {events = events[:]}, &claims)
+    uioverlay.context_menu_route_keyboard(state, {
+        events = events[:],
+    }, &claims)
     testing.expect(t, claims.claimed[0] && claims.claimed[1])
     testing.expect_value(t,
         state^.ui_runtime.context_menu.swallowed_activation_keys, u8(0))
@@ -194,12 +258,25 @@ context_menu_rejects_stale_content_and_geometry :: proc(t: ^testing.T) {
 context_menu_placement_and_opening_chords :: proc(t: ^testing.T) {
     box := uioverlay.context_menu_place({639, 399}, {160, 72}, {640, 400})
     testing.expect_value(t, box, geometry.Rectangle{480, 328, 160, 72})
-    testing.expect(t, uioverlay.context_menu_opening_key({kind = .Press, key = .Menu}))
+    testing.expect(t, uioverlay.context_menu_opening_key({
+        kind = .Press,
+        key = .Menu,
+    }))
     testing.expect(t,
         uioverlay.context_menu_opening_key(
-            {kind = .Press, key = .F10, modifiers = {.Shift}}))
-    testing.expect(t, !uioverlay.context_menu_opening_key({kind = .Press, key = .F10}))
-    testing.expect(t, !uioverlay.context_menu_opening_key({kind = .Repeat, key = .Menu}))
+            {
+                kind = .Press,
+                key = .F10,
+                modifiers = {.Shift},
+            }))
+    testing.expect(t, !uioverlay.context_menu_opening_key({
+        kind = .Press,
+        key = .F10,
+    }))
+    testing.expect(t, !uioverlay.context_menu_opening_key({
+        kind = .Repeat,
+        key = .Menu,
+    }))
 }
 
 // The high shadow remains outside the menu content scissor and restores the stack.
@@ -250,8 +327,11 @@ context_menu_disabled_rows_capture_all_buttons :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
     state^.ui_runtime.context_menu.items[0].enabled = false
-    frame := input.Input_Frame{mouse_position = {130, 135},
-        mouse_pressed = {.Left, .Middle, .Right}, mouse_down = {.Left, .Middle, .Right}}
+    frame: input.Input_Frame = {
+        mouse_position = {130, 135},
+        mouse_pressed = {.Left, .Middle, .Right},
+        mouse_down = {.Left, .Middle, .Right},
+    }
     routed := uioverlay.context_menu_route_pointer(state, frame, false)
     testing.expect(t, routed.mouse_pressed == {} && routed.mouse_down == {})
     uioverlay.context_menu_close(
@@ -270,15 +350,23 @@ context_menu_disabled_rows_capture_all_buttons :: proc(t: ^testing.T) {
 context_menu_terminal_pointer_priority :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
-    animation := bridgemodel.Euclid_Julia_Animation_Interface{node_kind = .Terminal}
+    animation: bridgemodel.Euclid_Julia_Animation_Interface = {
+        node_kind = .Terminal,
+    }
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.selected_animation = &animation
     state^.terminal.initialized = true
     state^.terminal.julia_session_ready = true
     state^.terminal.output_interpreter.input_mode = {
-        mouse_tracking = .Button, mouse_sgr_encoding = true}
-    frame := input.Input_Frame{window_focused = true, mouse_position = {150, 150},
-        mouse_pressed = {.Right}, mouse_down = {.Right}}
+        mouse_tracking = .Button,
+        mouse_sgr_encoding = true,
+    }
+    frame: input.Input_Frame = {
+        window_focused = true,
+        mouse_position = {150, 150},
+        mouse_pressed = {.Right},
+        mouse_down = {.Right},
+    }
     testing.expect_value(t, uioverlay.context_menu_pointer_target(state, frame, false),
         viewmodel.Ui_Node_Id{})
     frame.mouse_modifiers = {.Shift}
@@ -298,14 +386,18 @@ context_menu_revokes_invalid_owners :: proc(t: ^testing.T) {
     state := context_menu_test_state(t)
     defer context_menu_test_destroy(state)
     storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
-    _ = uioverlay.context_menu_route(state, {window_focused = false}, storage[:], false)
+    _ = uioverlay.context_menu_route(state, {
+        window_focused = false,
+    }, storage[:], false)
     testing.expect(t, !state^.ui_runtime.context_menu.active)
     testing.expect_value(t, state^.ui_runtime.semantic_focus^.logical_focus,
         viewmodel.Ui_Node_Id{})
     state^.ui_runtime.presentation.visible = false
     testing.expect(t, !uioverlay.context_menu_target_valid(state))
     state^.ui_runtime.presentation.visible = true
-    animation := bridgemodel.Euclid_Julia_Animation_Interface{node_kind = .Terminal}
+    animation: bridgemodel.Euclid_Julia_Animation_Interface = {
+        node_kind = .Terminal,
+    }
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.selected_animation = &animation
     uioverlay.context_menu_open(state, uiterminal.terminal_semantic_id(state), {120, 120})
@@ -323,17 +415,24 @@ context_menu_tab_traverses_from_origin :: proc(t: ^testing.T) {
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect_value(t, uisemantics.semantic_register_node(semantic, {
         node = semantic_test_node(
-            state^.ui_runtime.context_menu.target, {}, .Presentation, 0)}),
+            state^.ui_runtime.context_menu.target, {}, .Presentation, 0),
+    }),
         viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(semantic, {
-        node = semantic_test_node({domain = .Animation_Control, local_id = 1},
-            {}, .Animation_Overlay, 0)}), viewmodel.Ui_Semantic_Status.Ok)
+        node = semantic_test_node({
+            domain = .Animation_Control,
+            local_id = 1,
+        }, {}, .Animation_Overlay, 0),
+    }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_publish(semantic),
         viewmodel.Ui_Semantic_Status.Ok)
     snapshot := uisemantics.semantic_snapshot(semantic)
     uioverlay.context_menu_key(
         &state^.ui_runtime.context_menu, state^.ui_runtime.semantic_focus,
-        {kind = .Press, key = .Tab})
+        {
+            kind = .Press,
+            key = .Tab,
+        })
     testing.expect(t, !state^.ui_runtime.context_menu.active)
     testing.expect_value(t, semantic^.logical_focus, snapshot^.nodes[1].id)
 }

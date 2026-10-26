@@ -124,14 +124,15 @@ collections_membership_readd_resets_alias_and_rejects_stale_remove :: proc(
 collections_membership_nested_placement_is_exact_and_unique :: proc(t: ^testing.T) {
     set := collections_test_membership_set(t)
     defer collections_test_destroy(set)
-    group := Entry{
+    group: Entry = {
         id = collections_test_id(79),
         collection_id = collections_test_id(70),
         kind = .Group,
     }
     testing.expect_value(t, append_entry(set, group), Policy_Error.None)
-    nested := Entry{
-        id = collections_test_id(80), collection_id = group.collection_id,
+    nested: Entry = {
+        id = collections_test_id(80),
+        collection_id = group.collection_id,
         parent_entry_id = group.id,
         kind = .Animation,
         animation_id = collections_test_id(90),

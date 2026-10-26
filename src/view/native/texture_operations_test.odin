@@ -23,7 +23,7 @@ texture_completion_test :: proc(
 // Verify gray-alpha font pixels expand to tintable RGBA coverage.
 @(test)
 texture_operations_test_normalizes_gray_alpha :: proc(t: ^testing.T) {
-    source := [4]u8{255, 0, 128, 64}
+    source: [4]u8 = {255, 0, 128, 64}
     destination: [8]u8
     testing.expect(t, texture_normalize_rgba8(
         destination[:], source[:], .Gray_Alpha8))
@@ -34,8 +34,8 @@ texture_operations_test_normalizes_gray_alpha :: proc(t: ^testing.T) {
 // Verify RGB and RGBA payloads normalize without changing visible channels.
 @(test)
 texture_operations_test_normalizes_terminal_pixels :: proc(t: ^testing.T) {
-    rgb := [3]u8{10, 20, 30}
-    rgba := [4]u8{40, 50, 60, 70}
+    rgb: [3]u8 = {10, 20, 30}
+    rgba: [4]u8 = {40, 50, 60, 70}
     rgb_destination: [4]u8
     rgba_destination: [4]u8
     testing.expect(t, texture_normalize_rgba8(
@@ -49,7 +49,7 @@ texture_operations_test_normalizes_terminal_pixels :: proc(t: ^testing.T) {
 // Verify malformed pixels and overflowing dimensions are rejected.
 @(test)
 texture_operations_test_rejects_invalid_storage :: proc(t: ^testing.T) {
-    source := [3]u8{1, 2, 3}
+    source: [3]u8 = {1, 2, 3}
     destination: [3]u8
     testing.expect(t, !texture_normalize_rgba8(
         destination[:], source[:], .Rgb8))
@@ -61,7 +61,7 @@ texture_operations_test_rejects_invalid_storage :: proc(t: ^testing.T) {
 @(test)
 texture_operations_test_queue_overflow_is_atomic :: proc(t: ^testing.T) {
     queue: Texture_Operation_Queue
-    operation := Texture_Operation{
+    operation: Texture_Operation = {
         kind = .Create,
         texture = rawptr(uintptr(1)),
         width = 1,
@@ -85,13 +85,24 @@ texture_operations_test_queue_overflow_is_atomic :: proc(t: ^testing.T) {
 texture_operations_test_typed_upload_and_retire :: proc(t: ^testing.T) {
     queue: Texture_Operation_Queue
     completion: Texture_Completion_Test_State
-    texture := Sampled_Texture{rawptr(uintptr(1)), 2, 1}
-    source := [6]u8{1, 2, 3, 4, 5, 6}
+    texture: Sampled_Texture = {
+        rawptr(uintptr(1)),
+        2,
+        1,
+    }
+    source: [6]u8 = {1, 2, 3, 4, 5, 6}
     testing.expect(t, texture_operation_enqueue_upload(
         &queue, {
-            kind = .Create, texture = texture, format = .Rgb8,
-            source = source[:], identity = 7, generation = 9,
-            callback = {texture_completion_test, &completion},
+            kind = .Create,
+            texture = texture,
+            format = .Rgb8,
+            source = source[:],
+            identity = 7,
+            generation = 9,
+            callback = {
+                texture_completion_test,
+                &completion,
+            },
         }))
     testing.expect(t, texture_operation_enqueue_retire(&queue, texture, 7, 9))
     testing.expect_value(t, queue.count, 2)

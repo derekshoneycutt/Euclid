@@ -29,21 +29,32 @@ Inline_Column_Measurer :: #type proc(
 //   Non-inline-shape kinds map to nil and are rejected by the caller.
 LAYOUT_INLINE_SHAPE_HANDLERS ::
     [dynviewmodel.Dynview_Command_Kind]Layout_Inline_Shape_Handler{
-    .Begin_Block = nil, .End_Block = nil, .Text_Run = nil, .Math_Glyph_Run = nil,
-    .Math_Block = nil, .Script_Attach = nil, .Frac = nil,
-    .Stretch_Delimiter = nil, .Matrix = nil, .Style_Override = nil, .Stack = nil,
-    .Large_Op = nil, .Accent_Bar = nil, .Radical_Bar = nil,
-    .Line_Break = nil, .Divider = nil,
-    .Inline_Line = layout_consume_inline_line,
-    .Inline_Box = layout_consume_inline_box,
-    .Inline_Circle = layout_consume_inline_circle,
-    .Inline_Filled_Box = layout_consume_inline_filled_box,
-    .Inline_Filled_Circle = layout_consume_inline_filled_circle,
-    .Inline_Pie_Section = layout_consume_inline_pie_section,
-    .Inline_Perpendicular = layout_consume_inline_perpendicular,
-    .Inline_Triangle = layout_consume_inline_triangle,
-    .Inline_Pentagon = layout_consume_inline_pentagon,
-}
+        .Begin_Block = nil,
+        .End_Block = nil,
+        .Text_Run = nil,
+        .Math_Glyph_Run = nil,
+        .Math_Block = nil,
+        .Script_Attach = nil,
+        .Frac = nil,
+        .Stretch_Delimiter = nil,
+        .Matrix = nil,
+        .Style_Override = nil,
+        .Stack = nil,
+        .Large_Op = nil,
+        .Accent_Bar = nil,
+        .Radical_Bar = nil,
+        .Line_Break = nil,
+        .Divider = nil,
+        .Inline_Line = layout_consume_inline_line,
+        .Inline_Box = layout_consume_inline_box,
+        .Inline_Circle = layout_consume_inline_circle,
+        .Inline_Filled_Box = layout_consume_inline_filled_box,
+        .Inline_Filled_Circle = layout_consume_inline_filled_circle,
+        .Inline_Pie_Section = layout_consume_inline_pie_section,
+        .Inline_Perpendicular = layout_consume_inline_perpendicular,
+        .Inline_Triangle = layout_consume_inline_triangle,
+        .Inline_Pentagon = layout_consume_inline_pentagon,
+    }
 
 Layout_Item_Line_Span :: struct {
     first_line: int,
@@ -295,7 +306,7 @@ layout_measure_item_rows :: proc(
     start_index, item_count: int,
     cells: Cell_Metrics) -> (Line_Grid_Extents, bool) {
 
-    extents := Line_Grid_Extents{}
+    extents: Line_Grid_Extents = {}
     item_end := start_index + item_count
     for item_index in start_index..<item_end {
         item := &cache^.layout_items[item_index]
@@ -424,7 +435,7 @@ layout_finalize_line :: proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
     row_span, baseline_row := layout_resolve_line_rows(extents)
-    line_record := dynviewmodel.Dynview_Layout_Line{
+    line_record: dynviewmodel.Dynview_Layout_Line = {
         item_start = acc^.item_start,
         item_count = acc^.item_count,
         row_start = state^.row,
@@ -1251,7 +1262,7 @@ layout_set_empty_default :: proc(cache: ^dynviewmodel.Dynview_Compile_Cache) -> 
     base_ascent := max(1.0, cache^.last_font_size * 0.8)
     base_descent := max(1.0, cache^.last_font_size * 0.2)
     cells := layout_cell_metrics(cache, base_ascent, base_descent)
-    line := dynviewmodel.Dynview_Layout_Line{
+    line: dynviewmodel.Dynview_Layout_Line = {
         row_span = 1,
         max_ascent = base_ascent,
         max_descent = base_descent,
@@ -1549,8 +1560,8 @@ rebuild_layout_cache :: proc(
         return layout_builders_seal(cache)
     }
 
-    state := Dynview_Layout_State{}
-    acc := Dynview_Layout_Line_Accumulator{}
+    state: Dynview_Layout_State = {}
+    acc: Dynview_Layout_Line_Accumulator = {}
     ctx := layout_build_context(cache, buffer, &state, &acc)
     metrics_status := layout_consume_commands(&ctx, commands)
     if metrics_status != dyncore.DYNVIEW_STATUS_OK {
@@ -1677,7 +1688,7 @@ pie_section_bounds :: #force_inline proc(
     end_n := pie_normalize_angle_degrees(end_degrees)
     sweep := pie_positive_sweep_degrees(start_n, end_n)
 
-    bounds := Pie_Section_Bounds{}
+    bounds: Pie_Section_Bounds = {}
     pie_include_angle(&bounds, start_n, radius)
     pie_include_angle(&bounds, end_n, radius)
 

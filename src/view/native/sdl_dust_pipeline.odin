@@ -38,15 +38,48 @@ Sdl_Dust_Fragment_Stage :: struct {
 sdl_dust_vertex_input :: proc() -> Sdl_Dust_Vertex_Input {
     return {
         descriptions = {
-            {slot = 0, pitch = size_of(Dust_Quad_Vertex), input_rate = .VERTEX},
-            {slot = 1, pitch = size_of(Dust_Instance), input_rate = .INSTANCE},
+            {
+                slot = 0,
+                pitch = size_of(Dust_Quad_Vertex),
+                input_rate = .VERTEX,
+            },
+            {
+                slot = 1,
+                pitch = size_of(Dust_Instance),
+                input_rate = .INSTANCE,
+            },
         },
         attributes = {
-            {location = 0, buffer_slot = 0, format = .FLOAT2, offset = 0},
-            {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 8},
-            {location = 2, buffer_slot = 1, format = .FLOAT3, offset = 0},
-            {location = 3, buffer_slot = 1, format = .FLOAT4, offset = 12},
-            {location = 4, buffer_slot = 1, format = .FLOAT, offset = 28},
+            {
+                location = 0,
+                buffer_slot = 0,
+                format = .FLOAT2,
+                offset = 0,
+            },
+            {
+                location = 1,
+                buffer_slot = 0,
+                format = .FLOAT2,
+                offset = 8,
+            },
+            {
+                location = 2,
+                buffer_slot = 1,
+                format = .FLOAT3,
+                offset = 0,
+            },
+            {
+                location = 3,
+                buffer_slot = 1,
+                format = .FLOAT4,
+                offset = 12,
+            },
+            {
+                location = 4,
+                buffer_slot = 1,
+                format = .FLOAT,
+                offset = 28,
+            },
         },
     }
 }
@@ -85,7 +118,7 @@ sdl_dust_pipeline_create :: proc(
     }
     defer sdl.ReleaseGPUShader(device, fragment_shader)
     input := sdl_dust_vertex_input()
-    targets := [1]sdl.GPUColorTargetDescription{stage.target}
+    targets: [1]sdl.GPUColorTargetDescription = {stage.target}
     return sdl.CreateGPUGraphicsPipeline(device, {
         vertex_shader = vertex_shader,
         fragment_shader = fragment_shader,
@@ -96,11 +129,18 @@ sdl_dust_pipeline_create :: proc(
             num_vertex_attributes = len(input.attributes),
         },
         primitive_type = .TRIANGLELIST,
-        rasterizer_state = {fill_mode = .FILL, cull_mode = .NONE,
-            front_face = .COUNTER_CLOCKWISE},
-        multisample_state = {sample_count = sample_count},
-        target_info = {color_target_descriptions = raw_data(targets[:]),
-            num_color_targets = 1},
+        rasterizer_state = {
+            fill_mode = .FILL,
+            cull_mode = .NONE,
+            front_face = .COUNTER_CLOCKWISE,
+        },
+        multisample_state = {
+            sample_count = sample_count,
+        },
+        target_info = {
+            color_target_descriptions = raw_data(targets[:]),
+            num_color_targets = 1,
+        },
     })
 }
 
@@ -120,7 +160,9 @@ sdl_dust_runtime_admit :: proc(
         size_of(Dust_Instance) * DUST_INSTANCE_CAPACITY +
         size_of(Draw_Vertex) * DUST_EXPANDED_VERTEX_CAPACITY
     runtime^.dust_upload_buffer = sdl.CreateGPUTransferBuffer(device, {
-        usage = .UPLOAD, size = u32(upload_size)})
+        usage = .UPLOAD,
+        size = u32(upload_size),
+    })
     if runtime^.dust_expanded_buffer == nil || runtime^.dust_upload_buffer == nil {
         sdl_dust_runtime_release(runtime, device)
         return false
@@ -205,7 +247,7 @@ sdl_dust_stage_upload :: proc(
     if mapped == nil {
        return false
     }
-    quad := [DUST_QUAD_VERTEX_COUNT]Dust_Quad_Vertex{
+    quad: [DUST_QUAD_VERTEX_COUNT]Dust_Quad_Vertex = {
         {{-0.5, -0.5}, {0, 0}}, {{-0.5, 0.5}, {0, 1}},
         {{0.5, 0.5}, {1, 1}}, {{-0.5, -0.5}, {0, 0}},
         {{0.5, 0.5}, {1, 1}}, {{0.5, -0.5}, {1, 0}},
@@ -234,15 +276,26 @@ sdl_dust_record_upload :: proc(
        return false
     }
     if layout.instance_bytes > 0 {
-        sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer},
-            {buffer = runtime^.dust_quad_buffer, size = layout.quad_bytes}, true)
-        sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer,
-            offset = layout.quad_bytes}, {buffer = runtime^.dust_instance_buffer,
-            size = layout.instance_bytes}, true)
+        sdl.UploadToGPUBuffer(copy_pass, {
+            transfer_buffer = runtime^.dust_upload_buffer,
+        }, {
+            buffer = runtime^.dust_quad_buffer,
+            size = layout.quad_bytes,
+        }, true)
+        sdl.UploadToGPUBuffer(copy_pass, {
+            transfer_buffer = runtime^.dust_upload_buffer,
+            offset = layout.quad_bytes,
+        }, {
+            buffer = runtime^.dust_instance_buffer,
+            size = layout.instance_bytes,
+        }, true)
     } else {
-        sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer},
-            {buffer = runtime^.dust_expanded_buffer,
-            size = layout.expanded_bytes}, true)
+        sdl.UploadToGPUBuffer(copy_pass, {
+            transfer_buffer = runtime^.dust_upload_buffer,
+        }, {
+            buffer = runtime^.dust_expanded_buffer,
+            size = layout.expanded_bytes,
+        }, true)
     }
     sdl.EndGPUCopyPass(copy_pass)
     return true
@@ -252,7 +305,7 @@ sdl_dust_record_upload :: proc(
 sdl_dust_upload :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
     device: ^sdl.GPUDevice, command_buffer: ^sdl.GPUCommandBuffer) -> bool {
-    layout := Sdl_Dust_Upload_Layout{
+    layout: Sdl_Dust_Upload_Layout = {
         quad_bytes = u32(DUST_QUAD_VERTEX_COUNT * size_of(Dust_Quad_Vertex)),
         instance_bytes = u32(
             encoder^.dust_instance_count * size_of(Dust_Instance)),
@@ -273,11 +326,15 @@ sdl_dust_upload :: proc(
 sdl_dust_record_instanced :: proc(
     runtime: ^Sdl_Draw_Runtime, command_buffer: ^sdl.GPUCommandBuffer,
     pass: ^sdl.GPURenderPass, draw: ^Dust_Draw) {
-    bindings := [2]sdl.GPUBufferBinding{
-        {buffer = runtime^.dust_quad_buffer},
-        {buffer = runtime^.dust_instance_buffer},
+    bindings: [2]sdl.GPUBufferBinding = {
+        {
+            buffer = runtime^.dust_quad_buffer,
+        },
+        {
+            buffer = runtime^.dust_instance_buffer,
+        },
     }
-    texture_binding := [1]sdl.GPUTextureSamplerBinding{{
+    texture_binding: [1]sdl.GPUTextureSamplerBinding = {{
         texture = cast(^sdl.GPUTexture)draw^.texture,
         sampler = runtime^.linear_sampler,
     }}
@@ -300,9 +357,13 @@ sdl_dust_record_light :: proc(
         runtime^.light_glow_pipeline == nil {
         return
     }
-    bindings := [2]sdl.GPUBufferBinding{
-        {buffer = runtime^.dust_quad_buffer},
-        {buffer = runtime^.dust_instance_buffer},
+    bindings: [2]sdl.GPUBufferBinding = {
+        {
+            buffer = runtime^.dust_quad_buffer,
+        },
+        {
+            buffer = runtime^.dust_instance_buffer,
+        },
     }
     sdl.BindGPUGraphicsPipeline(pass, runtime^.light_brighten_pipeline)
     sdl.BindGPUVertexBuffers(pass, 0, raw_data(bindings[:]), len(bindings))
@@ -320,8 +381,10 @@ sdl_dust_record_light :: proc(
 // sdl_dust_record_expanded binds the dedicated fallback stream and atlas.
 sdl_dust_record_expanded :: proc(
     runtime: ^Sdl_Draw_Runtime, pass: ^sdl.GPURenderPass, draw: ^Dust_Draw) {
-    binding := [1]sdl.GPUBufferBinding{{buffer = runtime^.dust_expanded_buffer}}
-    texture_binding := [1]sdl.GPUTextureSamplerBinding{{
+    binding: [1]sdl.GPUBufferBinding = {{
+        buffer = runtime^.dust_expanded_buffer,
+    }}
+    texture_binding: [1]sdl.GPUTextureSamplerBinding = {{
         texture = cast(^sdl.GPUTexture)draw^.texture,
         sampler = runtime^.linear_sampler,
     }}

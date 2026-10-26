@@ -80,7 +80,7 @@ terminal_indexed_color_rgba :: proc(index: int) -> u32 {
         return palette[index]
     }
     if index < 232 {
-        levels := [6]u32{0, 95, 135, 175, 215, 255}
+        levels: [6]u32 = {0, 95, 135, 175, 215, 255}
         cube := index - 16
         red := levels[cube / 36]
         green := levels[cube / 6 % 6]
@@ -314,20 +314,23 @@ terminal_color_split_payload :: proc(
 
 // Parse OSC 4 indexed set/query pairs into bounded operations.
 terminal_palette_parse_indexed_pairs :: proc(
-    tokens: []([]u8), operations: []Terminal_Palette_Operation) ->
-    Terminal_Palette_Parse_Result {
+    tokens: []([]u8),
+    operations: []Terminal_Palette_Operation) -> Terminal_Palette_Parse_Result {
     if len(tokens) == 0 || len(tokens) % 2 != 0 {
         return {} 
     }
-    result := Terminal_Palette_Parse_Result{valid = true}
+    result: Terminal_Palette_Parse_Result = {
+        valid = true,
+    }
     for index in 0..<len(tokens) / 2 {
             palette_index, index_valid := terminal_color_parse_index(tokens[index * 2])
             if !index_valid {
                 return {} 
             }
             specification := tokens[index * 2 + 1]
-            operation := Terminal_Palette_Operation{
-                target = .Indexed, index = palette_index,
+            operation: Terminal_Palette_Operation = {
+                target = .Indexed,
+                index = palette_index,
             }
             if len(specification) == 1 && specification[0] == '?' {
                 operation.query = true
@@ -347,11 +350,18 @@ terminal_palette_parse_indexed_pairs :: proc(
 
 // Parse OSC 104 indexed reset selectors into bounded operations.
 terminal_palette_parse_indexed_resets :: proc(
-    tokens: []([]u8), operations: []Terminal_Palette_Operation) ->
-    Terminal_Palette_Parse_Result {
+    tokens: []([]u8),
+    operations: []Terminal_Palette_Operation) -> Terminal_Palette_Parse_Result {
     if len(tokens) == 0 {
-        operations[0] = {target = .Indexed, reset = true, reset_all = true}
-        return {count = 1, valid = true}
+        operations[0] = {
+            target = .Indexed,
+            reset = true,
+            reset_all = true,
+        }
+        return {
+            count = 1,
+            valid = true,
+        }
     }
     if len(tokens) > len(operations) {
         return {} 
@@ -362,38 +372,67 @@ terminal_palette_parse_indexed_resets :: proc(
             return {} 
         }
         operations[index] = {
-            target = .Indexed, index = palette_index, reset = true,
+            target = .Indexed,
+            index = palette_index,
+            reset = true,
         }
     }
-    return {count = len(tokens), valid = true}
+    return {
+        count = len(tokens),
+        valid = true,
+    }
+}
+
+// Resolve the default-color target shared by OSC set, query, and reset commands.
+terminal_palette_default_color_target :: proc(
+    command: int) -> (Terminal_Palette_Target, bool) {
+    switch command {
+    case 10, 110:
+        return .Foreground, true
+    case 11, 111:
+        return .Background, true
+    case 12, 112:
+        return .Cursor, true
+    case:
+        return {}, false
+    }
 }
 
 // Parse one default foreground, background, or cursor color operation.
 terminal_palette_parse_default_color :: proc(
     command: int, tokens: []([]u8), operations: []Terminal_Palette_Operation) ->
     Terminal_Palette_Parse_Result {
-    target: Terminal_Palette_Target
-    switch command {
-    case 10, 110: target = .Foreground
-    case 11, 111: target = .Background
-    case 12, 112: target = .Cursor
-    case: return {}
+    target, recognized := terminal_palette_default_color_target(command)
+    if !recognized {
+        return {}
     }
     if command >= 110 {
         if len(tokens) != 0 {
             return {} 
         }
-        operations[0] = {target = target, reset = true}
-        return {count = 1, valid = true}
+        operations[0] = {
+            target = target,
+            reset = true,
+        }
+        return {
+            count = 1,
+            valid = true,
+        }
     }
     if len(tokens) != 1 {
         return {} 
     }
-    operation := Terminal_Palette_Operation{target = target}
+    operation: Terminal_Palette_Operation = {
+        target = target,
+    }
     if len(tokens[0]) == 1 && tokens[0][0] == '?' {
         operation.query = true
         operations[0] = operation
-        return {count = 1, query_count = 1, valid = true}
+        return {
+            count = 1,
+            query_count = 1,
+            valid = true,
+        }
     } else {
         rgba, valid := terminal_color_parse_specification(tokens[0])
         if !valid {
@@ -402,7 +441,10 @@ terminal_palette_parse_default_color :: proc(
         operation.rgba = rgba
     }
     operations[0] = operation
-    return {count = 1, valid = true}
+    return {
+        count = 1,
+        valid = true,
+    }
 }
 
 // Parse one dynamic-color OSC payload into bounded semantic operations.
@@ -433,10 +475,14 @@ terminal_palette_operation_rgba :: proc(
     palette: ^Terminal_Palette_State,
     operation: Terminal_Palette_Operation) -> u32 {
     switch operation.target {
-    case .Indexed: return palette.colors[operation.index]
-    case .Foreground: return palette.foreground
-    case .Background: return palette.background
-    case .Cursor: return palette.cursor
+    case .Indexed:
+        return palette.colors[operation.index]
+    case .Foreground:
+        return palette.foreground
+    case .Background:
+        return palette.background
+    case .Cursor:
+        return palette.cursor
     }
     return 0
 }
@@ -446,10 +492,14 @@ terminal_palette_operation_default :: proc(
     palette: ^Terminal_Palette_State,
     operation: Terminal_Palette_Operation) -> u32 {
     switch operation.target {
-    case .Indexed: return palette.defaults[operation.index]
-    case .Foreground: return palette.default_foreground
-    case .Background: return palette.default_background
-    case .Cursor: return palette.default_cursor
+    case .Indexed:
+        return palette.defaults[operation.index]
+    case .Foreground:
+        return palette.default_foreground
+    case .Background:
+        return palette.default_background
+    case .Cursor:
+        return palette.default_cursor
     }
     return 0
 }

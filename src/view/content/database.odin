@@ -460,32 +460,45 @@ content_database_suggestion :: proc(
 // Execute one admitted query and optionally verify a zero-result correction.
 content_database_execute :: proc(
     database: ^Content_Database, request: Search_Query_Request) -> Search_Execution {
-    result := Search_Query_Result{generation = request.generation,
+    result: Search_Query_Result = {
+        generation = request.generation,
         index_generation = database.index_generation,
-        result_offset = request.result_offset}
+        result_offset = request.result_offset,
+    }
     if int(request.query_length) > len(request.query_bytes) ||
        request.result_offset > u32(max(i32)) {
         result.status = .Invalid_Query
-        return {result = result, ok = true}
+        return {
+            result = result,
+            ok = true,
+        }
     }
     query_bytes := request.query_bytes
     source := string(query_bytes[:int(request.query_length)])
     compiled := search_query_compile(source)
     if compiled.status != .Success {
         result.status = .Invalid_Query
-        return {result = result, ok = true}
+        return {
+            result = result,
+            ok = true,
+        }
     }
     match := search_compiled_text(&compiled)
     total, count_ok := content_database_count(database, match)
     result.total_match_count = total
     if !count_ok || !content_database_rows(database, match, &result) {
         result.status = .Query_Failed
-        return {result = result}
+        return {
+            result = result,
+        }
     }
     returned_end := u64(result.result_offset) + u64(result.returned_count)
     result.more_available = returned_end < u64(total)
     result.status = .Ready
     suggestion_ok := total > 0 || content_database_suggestion(
         database, &compiled, &result)
-    return {result = result, ok = suggestion_ok}
+    return {
+        result = result,
+        ok = suggestion_ok,
+    }
 }

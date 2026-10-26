@@ -33,7 +33,11 @@ create_floor_constraint :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     _, status := shapes.world_create_floor_constraint(&state^.shape_world, {
-        point = entity, height = height, bounce = bounce, enabled = enabled != 0})
+        point = entity,
+        height = height,
+        bounce = bounce,
+        enabled = enabled != 0,
+    })
     return bridge_shape_status(status)
 }
 
@@ -48,8 +52,11 @@ create_snap_to_floor_constraint :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     _, status := shapes.world_create_snap_to_floor_constraint(&state^.shape_world, {
-        point = entity, height = height, allowance = allowance,
-        enabled = enabled != 0})
+        point = entity,
+        height = height,
+        allowance = allowance,
+        enabled = enabled != 0,
+    })
     return bridge_shape_status(status)
 }
 
@@ -64,7 +71,10 @@ create_snap_point_constraint :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     _, status := shapes.world_create_snap_point_constraint(&state^.shape_world, {
-        point = entity, position = position, enabled = enabled != 0})
+        point = entity,
+        position = position,
+        enabled = enabled != 0,
+    })
     return bridge_shape_status(status)
 }
 
@@ -84,8 +94,12 @@ create_distance_constraint :: proc "c" (
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     _, status := shapes.world_create_distance_constraint(&state^.shape_world, {
-        first = first_entity, second = second_entity, length = input.length,
-        movement = policy, enabled = input.enabled != 0})
+        first = first_entity,
+        second = second_entity,
+        length = input.length,
+        movement = policy,
+        enabled = input.enabled != 0,
+    })
     return bridge_shape_status(status)
 }
 
@@ -122,8 +136,13 @@ create_angle_constraint :: proc(
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     _, status := shapes.world_create_angle_constraint(&state^.shape_world, kind, {
-        first = first_entity, pivot = pivot_entity, second = second_entity,
-        limit = input.limit, movement = policy, enabled = input.enabled != 0})
+        first = first_entity,
+        pivot = pivot_entity,
+        second = second_entity,
+        limit = input.limit,
+        movement = policy,
+        enabled = input.enabled != 0,
+    })
     return bridge_shape_status(status)
 }
 
@@ -140,8 +159,11 @@ create_center_pivot_constraint :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     _, status := shapes.world_create_center_pivot_constraint(&state^.shape_world, {
-        first = first_entity, pivot = pivot_entity, second = second_entity,
-        enabled = enabled != 0})
+        first = first_entity,
+        pivot = pivot_entity,
+        second = second_entity,
+        enabled = enabled != 0,
+    })
     return bridge_shape_status(status)
 }
 

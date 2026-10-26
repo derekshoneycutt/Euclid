@@ -52,18 +52,24 @@ terminal_syntax_style :: proc(
         }
         foreground, background = background, foreground
     }
-    weight := termgrid.Cell_Style{italic = run.italic != 0}
+    weight: termgrid.Cell_Style = {
+        italic = run.italic != 0,
+    }
     switch run.weight {
     case .Normal:
-    case .Bold: weight.font_weight = .Bold
-    case .Dim: weight.font_weight = .Light
+    case .Bold:
+        weight.font_weight = .Bold
+    case .Dim:
+        weight.font_weight = .Light
     }
     return {
-        foreground = foreground, background = background,
+        foreground = foreground,
+        background = background,
         underline_color = terminal_syntax_color(
             run.underline_color_kind, run.underline_color, foreground, palette),
         key = terminal_font_key_for_cell(weight),
-        underline = run.underline, strike = run.strikethrough != 0,
+        underline = run.underline,
+        strike = run.strikethrough != 0,
     }
 }
 
@@ -182,7 +188,7 @@ terminal_draw_syntax_segment :: proc(
     style := terminal_syntax_style(
         terminal_syntax_run_at(request.highlights, request.source_offset + start),
         request.palette, request.theme)
-    position := geometry.Vector2{
+    position: geometry.Vector2 = {
         request.position.x + terminal_text_column_width(
             request.regular, request.current_text[:start],
             request.encoder^.ui_text_size_percent), request.position.y}
@@ -193,8 +199,12 @@ terminal_draw_syntax_segment :: proc(
         request.encoder, request.resolver, style.key, text, position, style.foreground})
     if !shaped && terminal_text_is_ascii(text) {
         _ = viewtext.ui_text_unshaped_paged({
-            encoder = request.encoder, resolver = request.resolver, key = style.key,
-            text = text, position = position, color = style.foreground,
+            encoder = request.encoder,
+            resolver = request.resolver,
+            key = style.key,
+            text = text,
+            position = position,
+            color = style.foreground,
             font = {
                 terminal_font_resolve(request.resolver, style.key),
                 terminal_font_size(request.encoder^.ui_text_size_percent),
@@ -336,17 +346,22 @@ terminal_syntax_prepare_history_row :: proc(
 
 // Lower appearance to existing cell fonts/colors, leaving decorations separate.
 terminal_syntax_cell_style :: proc(style: Terminal_Syntax_Style) -> termgrid.Cell_Style {
-    result := termgrid.Cell_Style{
+    result: termgrid.Cell_Style = {
         foreground = termpalette.terminal_color_direct(
             u32(style.foreground.r)<<24 | u32(style.foreground.g)<<16 |
             u32(style.foreground.b)<<8 | 0xff),
     }
     #partial switch style.key {
-    case .Bold: result.font_weight = .Bold
-    case .Bold_Italic: result.font_weight = .Bold; result.italic = true
-    case .Light: result.font_weight = .Light
-    case .Light_Italic: result.font_weight = .Light; result.italic = true
-    case .Regular_Italic: result.italic = true
+    case .Bold:
+        result.font_weight = .Bold
+    case .Bold_Italic:
+        result.font_weight = .Bold; result.italic = true
+    case .Light:
+        result.font_weight = .Light
+    case .Light_Italic:
+        result.font_weight = .Light; result.italic = true
+    case .Regular_Italic:
+        result.italic = true
     }
     if style.background.a != 0 {
         result.background = termpalette.terminal_color_direct(

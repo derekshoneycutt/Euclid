@@ -11,7 +11,7 @@ observe_library_storage :: proc(
     preferences := &state^.preferences_runtime
     projection := &state^.ui_runtime.library.tree.projection
     semantic_text_bytes_index := state^.semantic_focus.committed_index
-    result := observe.Library_Storage{
+    result: observe.Library_Storage = {
         display = storage.tlsf_owner_diagnostics(
             &preferences.collections_state.allocator),
         projection = storage.tlsf_owner_diagnostics(&projection.allocator),

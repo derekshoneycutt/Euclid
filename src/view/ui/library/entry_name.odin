@@ -71,7 +71,9 @@ library_entry_name_input_params :: proc(
         font = params.font,
         resolver = params.font_resolver,
         edit_target = {draft^.value[:], &draft^.value_length},
-        edit_policy = {unicode_completion = true},
+        edit_policy = {
+            unicode_completion = true,
+        },
         defer_semantics = true,
     }
 }
@@ -85,7 +87,8 @@ library_entry_name_semantic_descriptor :: proc(
     text_run_id := id
     text_run_id.local_id = TREE_ENTRY_NAME_TEXT_RUN
     return {
-        id = id, text_run_id = text_run_id,
+        id = id,
+        text_run_id = text_run_id,
         parent = tree_actions_semantic_id(params, entry_id, TREE_ACTION_DRAWER),
         region = .Accordion_Content,
         traversal_order = LIBRARY_ENTRY_NAME_INPUT_TRAVERSAL_ORDER,
@@ -199,8 +202,12 @@ library_placement_name_prefill :: proc(
         log.errorf("library_entry_name_begin_rejected policy=%v", placement_error)
         return {}
     }
-    return {identity = identity, accepted_name = placement.custom_name,
-        accepted_name_length = placement.custom_name_length, valid = true}
+    return {
+        identity = identity,
+        accepted_name = placement.custom_name,
+        accepted_name_length = placement.custom_name_length,
+        valid = true,
+    }
 }
 
 // Replace the owned text immediately and restart its idle-admission deadline.

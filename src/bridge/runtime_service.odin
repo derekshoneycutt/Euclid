@@ -187,15 +187,16 @@ Julia_Worker_State :: struct {
 
 // Result of attempting to route one checked animation completion envelope.
 Animation_Egress_Route_Result :: struct {
-    event    : Julia_Event,
-    accepted : bool,
-    handled  : bool,
+    event: Julia_Event,
+    accepted: bool,
+    handled: bool,
 }
+
+Julia_Event_Handler :: #type proc(service: ^Julia_Runtime_Service, event: Julia_Event)
 
 //   Dispatch table mapping each Julia event kind to its completion handler.
 //   Initialized and Invoke_Complete need no handler and map to nil.
-JULIA_EVENT_HANDLERS ::
-    [Julia_Event_Kind]proc(service: ^Julia_Runtime_Service, event: Julia_Event){
+JULIA_EVENT_HANDLERS :: [Julia_Event_Kind]Julia_Event_Handler{
     .Initialized = nil,
     .Invoke_Complete = nil,
     .Animation_Tick_Complete = julia_event_on_animation_tick,
@@ -278,7 +279,9 @@ julia_service_asset_config :: proc(
     if service == nil {
         return {}
     }
-    return {asset_root_override = service^.asset_root_override}
+    return {
+        asset_root_override = service^.asset_root_override,
+    }
 }
 
 //   Preserve bounded elapsed time while one replaceable tick is in flight.
@@ -300,7 +303,7 @@ coalesce_animation_tick :: proc(
 submit_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
     slot_index: int, total_dt: f32) -> bool {
-    handle := bridgemodel.Animation_Tick_Slot_Handle{
+    handle: bridgemodel.Animation_Tick_Slot_Handle = {
         index = i32(slot_index),
         reservation_generation = slot^.reservation_generation,
     }
@@ -714,7 +717,7 @@ stage_presentation_text_command :: proc(
     if status != BRIDGE_STATUS_OK {
         return status
     }
-    command := dynviewmodel.Dynview_Command{
+    command: dynviewmodel.Dynview_Command = {
         kind = .Text_Run,
         block_id = block_id,
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -913,7 +916,7 @@ view_snapshot_text_payload_is_valid :: proc(
 view_snapshot_command_text_spans_valid :: proc(
     command: dynviewmodel.Dynview_Command, text_count: int) -> bool {
 
-    spans := [5][2]int{
+    spans: [5][2]int = {
         {command.text_offset, command.text_len},
         {command.script_base_text_offset, command.script_base_text_len},
         {command.script_sup_text_offset, command.script_sup_text_len},
@@ -1064,7 +1067,9 @@ view_snapshot_document_list_sequence_is_valid :: proc(
                 body := blocks[index+1]
                 if body.item_first_block && (body.kind == .List_Item ||
                     body.list_id != block.list_id ||
-                    body.item_ordinal != block.item_ordinal) {return false}
+                    body.item_ordinal != block.item_ordinal) {
+                    return false
+                }
             }
         } else if block.list_kind != .None &&
             (block.list_id == 0 || block.item_ordinal == 0) {
@@ -1327,7 +1332,7 @@ prepare_view_snapshot_byte_builders :: proc(
 //   Initialize every future arena-backed payload builder for one free slot generation.
 prepare_view_snapshot_builders :: proc(slot: ^View_Snapshot) -> bool {
     byte_statuses := prepare_view_snapshot_byte_builders(slot)
-    statuses := [12]storage.Bounded_Builder_Status{
+    statuses: [12]storage.Bounded_Builder_Status = {
         byte_statuses[0], byte_statuses[1], byte_statuses[2],
         storage.bounded_element_builder_init(
             &slot^.command_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &slot^.arena),
@@ -1500,7 +1505,7 @@ append_view_snapshot_record_payloads :: proc(
     slot: ^View_Snapshot,
     payloads: View_Snapshot_Record_Payloads) -> bool {
 
-    statuses := [10]storage.Bounded_Builder_Status{
+    statuses: [10]storage.Bounded_Builder_Status = {
         storage.bounded_byte_builder_append(
             &slot^.document_text_builder, payloads.document_text),
         storage.bounded_element_builder_append(
@@ -2066,13 +2071,21 @@ route_animation_egress_completion :: proc(
     if completed, is_tick := message^.(bridgemodel.Animation_Tick_Completed); is_tick {
         event, accepted := accept_animation_tick_completion(service, completed)
         _ = return_julia_egress(service, message)
-        return {event = event, accepted = accepted, handled = true}
+        return {
+            event = event,
+            accepted = accepted,
+            handled = true,
+        }
     }
     if completed, is_lifecycle := message^.(
         bridgemodel.Animation_Lifecycle_Completed); is_lifecycle {
         event, accepted := accept_animation_lifecycle_completion(service, completed)
         _ = return_julia_egress(service, message)
-        return {event = event, accepted = accepted, handled = true}
+        return {
+            event = event,
+            accepted = accepted,
+            handled = true,
+        }
     }
     return {}
 }
@@ -2228,7 +2241,10 @@ allocate_view_content_message :: proc(
         animation_generation = animation_generation,
         presentation_generation = generation,
         animation = animation,
-        content = {mime = mime, bytes = bytes},
+        content = {
+            mime = mime,
+            bytes = bytes,
+        },
     })
     service^.presentation_generation = generation
     return message, .None
@@ -2258,7 +2274,10 @@ allocate_scenario_view_content_message :: proc(
         animation_generation = request.animation_generation,
         presentation_generation = generation,
         animation = request.animation,
-        content = {mime = request.mime, bytes = bytes},
+        content = {
+            mime = request.mime,
+            bytes = bytes,
+        },
     })
     service^.presentation_generation = generation
     return message, .None
@@ -2331,8 +2350,10 @@ try_submit_runtime_initialize :: proc(
         return 0, false
     }
     request_id := service^.next_request_id
-    outcome := send_julia_ingress_control(
-        service, bridgemodel.Runtime_Initialize_Requested{request_id = request_id})
+    outcome := send_julia_ingress_control(service,
+        bridgemodel.Runtime_Initialize_Requested{
+            request_id = request_id,
+        })
     if !finish_julia_request_submission(
         service, request_id, .Initialize, outcome) {
         return 0, false
@@ -2420,7 +2441,7 @@ when core.HARNESS_ENABLED {
         }
         copy(bytes, transmute([]u8)scenario_name)
         request_id := service^.next_request_id
-        request := bridgemodel.Harness_Scenario_Requested{
+        request: bridgemodel.Harness_Scenario_Requested = {
             request_id = request_id,
             scenario_name = string(bytes),
             step_count = step_count,
@@ -2443,8 +2464,10 @@ try_submit_runtime_shutdown :: proc(
         return 0, false
     }
     request_id := service^.next_request_id
-    outcome := send_julia_ingress_control(
-        service, bridgemodel.Runtime_Shutdown_Requested{request_id = request_id})
+    outcome := send_julia_ingress_control(service,
+        bridgemodel.Runtime_Shutdown_Requested{
+            request_id = request_id,
+        })
     if !finish_julia_request_submission(service, request_id, .Shutdown, outcome) {
         return 0, false
     }
@@ -3334,9 +3357,12 @@ execute_julia_control :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
     message: ^bridgemodel.Julia_Host_Ingress,
     decoded: Julia_Decoded_Control) -> (Julia_Event, bool) {
-    event := Julia_Event{request_kind = decoded.request_kind,
-        request_id = decoded.request_id, slot_index = decoded.slot_index,
-        succeeded = true}
+    event: Julia_Event = {
+        request_kind = decoded.request_kind,
+        request_id = decoded.request_id,
+        slot_index = decoded.slot_index,
+        succeeded = true,
+    }
     evidence_profile.zone_begin(&service^.profile, "julia_request")
     shutting_down := execute_julia_control_handler(service, state, message, &event)
     evidence_profile.zone_end(&service^.profile)
@@ -3444,17 +3470,25 @@ decode_julia_animation_control :: proc(
     message: ^bridgemodel.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
     #partial switch request in message^ {
     case bridgemodel.Animation_Tick_Requested:
-        return {protocol = .Animation_Tick, request_kind = .Animation_Tick,
-            request_id = request.request_id, slot_index = request.handle.index,
+        return {
+            protocol = .Animation_Tick,
+            request_kind = .Animation_Tick,
+            request_id = request.request_id,
+            slot_index = request.handle.index,
             tick_handle = request.handle,
             animation_generation = request.animation_generation,
-            sequence = request.sequence}, true
+            sequence = request.sequence,
+        }, true
     case bridgemodel.Animation_Lifecycle_Requested:
-        return {protocol = .Animation_Lifecycle, request_kind = .Invoke,
-            request_id = request.request_id, slot_index = request.handle.index,
+        return {
+            protocol = .Animation_Lifecycle,
+            request_kind = .Invoke,
+            request_id = request.request_id,
+            slot_index = request.handle.index,
             lifecycle_handle = request.handle,
             runtime_generation = request.runtime_generation,
-            animation_generation = request.animation_generation}, true
+            animation_generation = request.animation_generation,
+        }, true
     }
     return {}, false
 }
@@ -3467,21 +3501,37 @@ decode_julia_control :: proc(
     }
     #partial switch request in message^ {
     case bridgemodel.Runtime_Initialize_Requested:
-        return {protocol = .Runtime_Initialize, request_kind = .Initialize,
-            request_id = request.request_id, slot_index = -1}, true
+        return {
+            protocol = .Runtime_Initialize,
+            request_kind = .Initialize,
+            request_id = request.request_id,
+            slot_index = -1,
+        }, true
     case bridgemodel.Runtime_Content_Initialize_Requested:
-        return {protocol = .Runtime_Content_Initialize, request_kind = .Invoke,
-            request_id = request.request_id, slot_index = -1}, true
+        return {
+            protocol = .Runtime_Content_Initialize,
+            request_kind = .Invoke,
+            request_id = request.request_id,
+            slot_index = -1,
+        }, true
     case bridgemodel.Harness_Scenario_Requested:
         when core.HARNESS_ENABLED {
-            return {protocol = .Harness_Scenario, request_kind = .Invoke,
-                request_id = request.request_id, slot_index = -1}, true
+            return {
+                protocol = .Harness_Scenario,
+                request_kind = .Invoke,
+                request_id = request.request_id,
+                slot_index = -1,
+            }, true
         } else {
             return {}, false
         }
     case bridgemodel.Runtime_Shutdown_Requested:
-        return {protocol = .Runtime_Shutdown, request_kind = .Shutdown,
-            request_id = request.request_id, slot_index = -1}, true
+        return {
+            protocol = .Runtime_Shutdown,
+            request_kind = .Shutdown,
+            request_id = request.request_id,
+            slot_index = -1,
+        }, true
     }
     return {}, false
 }
@@ -3509,7 +3559,7 @@ julia_terminal_ingest_evaluation :: proc(
     if host == nil || host^.runtime == nil || gc_stack == nil {
         return false
     }
-    frame := Julia_Terminal_Request_Gc_Frame{
+    frame: Julia_Terminal_Request_Gc_Frame = {
         encoded_root_count = 5 << 2,
         previous = gc_stack^,
     }
@@ -3546,7 +3596,7 @@ julia_terminal_ingest_completion :: proc(
     if callback == nil || gc_stack == nil {
         return false
     }
-    frame := Julia_Terminal_Request_Gc_Frame{
+    frame: Julia_Terminal_Request_Gc_Frame = {
         encoded_root_count = 5 << 2,
         previous = gc_stack^,
     }
@@ -3574,7 +3624,7 @@ julia_terminal_ingest_tick_configuration :: proc(
     if gc_stack == nil {
         return false
     }
-    frame := Julia_Terminal_Request_Gc_Frame{
+    frame: Julia_Terminal_Request_Gc_Frame = {
         encoded_root_count = 5 << 2,
         previous = gc_stack^,
     }
@@ -3601,7 +3651,7 @@ julia_terminal_ingest_tick_pulse :: proc(
     if gc_stack == nil {
         return false
     }
-    frame := Julia_Terminal_Request_Gc_Frame{
+    frame: Julia_Terminal_Request_Gc_Frame = {
         encoded_root_count = 7 << 2,
         previous = gc_stack^,
     }
@@ -3695,7 +3745,7 @@ julia_terminal_emit_evaluation :: proc(
     if gc_stack == nil {
         return false, false
     }
-    frame := Julia_Terminal_Command_Gc_Frame{
+    frame: Julia_Terminal_Command_Gc_Frame = {
         encoded_root_count = 1 << 2,
         previous = gc_stack^,
         command = command,
@@ -3759,13 +3809,13 @@ julia_terminal_lifecycle_command_read :: proc(
     if gc_stack == nil {
         return {}
     }
-    frame := Julia_Terminal_Command_Gc_Frame{
+    frame: Julia_Terminal_Command_Gc_Frame = {
         encoded_root_count = 1 << 2,
         previous = gc_stack^,
         command = command,
     }
     gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
-    result := Julia_Terminal_Lifecycle_Command{
+    result: Julia_Terminal_Lifecycle_Command = {
         kind = i32(julialib.jl_unbox_int32(
             julialib.jl_get_nth_field(command, 0))),
         generation = u64(julialib.jl_unbox_uint64(
@@ -3903,7 +3953,7 @@ julia_terminal_emit_completions :: proc(
         if gc_stack == nil {
             return false
         }
-        frame := Julia_Terminal_Command_Gc_Frame{
+        frame: Julia_Terminal_Command_Gc_Frame = {
             encoded_root_count = 1 << 2,
             previous = gc_stack^,
             command = command,
@@ -4023,10 +4073,17 @@ process_julia_worker_control :: proc(
     if shutting_down {
         shutdown_julia_runtime_host(
             service, &state^.host, &state^.frame, decoded, &event)
-        return {event = event, shutting_down = true, accepted = true}
+        return {
+            event = event,
+            shutting_down = true,
+            accepted = true,
+        }
     }
     attach_julia_control_evidence(service, decoded, &event)
-    return {event = event, accepted = true}
+    return {
+        event = event,
+        accepted = true,
+    }
 }
 
 //   Dispatch and return one Terminal ingress envelope to its producer.
@@ -4105,6 +4162,11 @@ julia_runtime_worker_run_host :: proc(
             fmt.eprintln("Julia worker: Terminal service failed")
             return {}
         }
+
+        // We have a thread-local dedicated temp_allocator in the Julia thread context,
+        // so we free it on each iteration of the loop
+        // This acts separately and in conjunction with the display loop doing the same,
+        // but it has its own thread-local temp_allocator as well.
         context = worker_context
         free_all(context.temp_allocator)
         if !received {
@@ -4137,17 +4199,19 @@ animation_tick_request_evidence :: proc(
     service: ^Julia_Runtime_Service, decoded: Julia_Decoded_Control,
     event: ^Julia_Event) -> evidence_trace.Event {
     return {
-            lane = .Transport,
-            kind = event.succeeded ? .Animation_Tick_Accepted : .Animation_Tick_Rejected,
-            correlation_kind = .Runtime_Request,
-            correlation = decoded.request_id,
-            generation = service.animation_generation,
-            flags = event.succeeded ? {} : {.Failure},
-            payload = {request = {
+        lane = .Transport,
+        kind = event.succeeded ? .Animation_Tick_Accepted : .Animation_Tick_Rejected,
+        correlation_kind = .Runtime_Request,
+        correlation = decoded.request_id,
+        generation = service.animation_generation,
+        flags = event.succeeded ? {} : {.Failure},
+        payload = {
+            request = {
                 status = event.succeeded ? 1 : 0,
                 slot = u32(max(decoded.slot_index, 0)),
-            }},
-        }
+            },
+        },
+    }
 }
 
 //   Attach one owner-recorded Julia completion event to its channel handoff.

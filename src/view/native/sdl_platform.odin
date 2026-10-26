@@ -289,10 +289,14 @@ sdl_scene_sample_count :: proc(
 // sdl_scene_sample_count_value returns the physical sample count for diagnostics.
 sdl_scene_sample_count_value :: proc(sample_count: sdl.GPUSampleCount) -> int {
     switch sample_count {
-    case ._1: return 1
-    case ._2: return 2
-    case ._4: return 4
-    case ._8: return 8
+    case ._1:
+        return 1
+    case ._2:
+        return 2
+    case ._4:
+        return 4
+    case ._8:
+        return 8
     }
     return 1
 }
@@ -311,7 +315,7 @@ sdl_scene_multisample_target_create :: proc(
 sdl_scene_targets_create :: proc(
     device: ^sdl.GPUDevice, width, height: u32,
     sample_count: sdl.GPUSampleCount) -> Sdl_Scene_Targets {
-    targets := Sdl_Scene_Targets{
+    targets: Sdl_Scene_Targets = {
         scene = sdl_scene_target_create(device, width, height, ._1),
     }
     if targets.scene == nil {
@@ -378,12 +382,20 @@ sdl_platform_refresh_target :: proc(platform: ^Sdl_Platform) -> bool {
 sdl_scene_color_target_info :: proc(
     platform: ^Sdl_Platform, clear_color: sdl.FColor) -> sdl.GPUColorTargetInfo {
     if platform^.multisample_target == nil {
-        return {texture = platform^.scene_target, clear_color = clear_color,
-            load_op = .CLEAR, store_op = .STORE}
+        return {
+            texture = platform^.scene_target,
+            clear_color = clear_color,
+            load_op = .CLEAR,
+            store_op = .STORE,
+        }
     }
-    return {texture = platform^.multisample_target,
-        clear_color = clear_color, load_op = .CLEAR, store_op = .RESOLVE,
-        resolve_texture = platform^.scene_target}
+    return {
+        texture = platform^.multisample_target,
+        clear_color = clear_color,
+        load_op = .CLEAR,
+        store_op = .RESOLVE,
+        resolve_texture = platform^.scene_target,
+    }
 }
 
 // sdl_swapchain_acquire acquires one command buffer and its presentation image.
@@ -474,7 +486,7 @@ sdl_capture_copy_rgba8 :: proc(
 // sdl_capture_wait waits for one submitted capture fence through SDL.
 sdl_capture_wait :: proc(
     _: rawptr, device: ^sdl.GPUDevice, fence: ^sdl.GPUFence) -> bool {
-    fences := [1]^sdl.GPUFence{fence}
+    fences: [1]^sdl.GPUFence = {fence}
     return sdl.WaitForGPUFences(device, true, raw_data(fences[:]), len(fences))
 }
 
@@ -510,7 +522,9 @@ sdl_capture_complete :: proc(
         operations.user_data, completion.device, completion.fence)
     wait_started_at := sdl_time_ticks()
     if !operations.wait(
-        operations.user_data, completion.device, completion.fence) {return false}
+        operations.user_data, completion.device, completion.fence) {
+        return false
+    }
     wait_finished_at := sdl_time_ticks()
     mapped := operations.map_transfer(
         operations.user_data, completion.device, completion.transfer)
@@ -542,10 +556,16 @@ sdl_capture_submit_scene :: proc(
         _ = sdl.CancelGPUCommandBuffer(command_buffer)
         return nil
     }
-    sdl.DownloadFromGPUTexture(copy_pass, {texture = platform^.scene_target,
-        w = platform^.scene_width, h = platform^.scene_height, d = 1}, {
-        transfer_buffer = transfer, pixels_per_row = u32(layout.pitch_bytes / 4),
-        rows_per_layer = platform^.scene_height})
+    sdl.DownloadFromGPUTexture(copy_pass, {
+        texture = platform^.scene_target,
+        w = platform^.scene_width,
+        h = platform^.scene_height,
+        d = 1,
+    }, {
+        transfer_buffer = transfer,
+        pixels_per_row = u32(layout.pitch_bytes / 4),
+        rows_per_layer = platform^.scene_height,
+    })
     sdl.EndGPUCopyPass(copy_pass)
     return sdl.SubmitGPUCommandBufferAndAcquireFence(command_buffer)
 }
@@ -567,7 +587,9 @@ sdl_platform_read_scene_rgba8 :: proc(
        return false
     }
     transfer := sdl.CreateGPUTransferBuffer(platform^.device, {
-        usage = .DOWNLOAD, size = u32(layout.transfer_bytes)})
+        usage = .DOWNLOAD,
+        size = u32(layout.transfer_bytes),
+    })
     if transfer == nil {
        return false
     }

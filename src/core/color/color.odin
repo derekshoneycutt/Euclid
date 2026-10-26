@@ -24,10 +24,14 @@ resolve_named_color :: proc(name: string) -> (Color_RGBA8, bool) {
         }
     }
     switch name {
-    case "julia_blue": return {64, 99, 216, 255}, true
-    case "julia_green": return {56, 152, 38, 255}, true
-    case "julia_purple": return {149, 88, 178, 255}, true
-    case "julia_red": return {203, 60, 51, 255}, true
+    case "julia_blue":
+        return {64, 99, 216, 255}, true
+    case "julia_green":
+        return {56, 152, 38, 255}, true
+    case "julia_purple":
+        return {149, 88, 178, 255}, true
+    case "julia_red":
+        return {203, 60, 51, 255}, true
     }
     return {}, false
 }

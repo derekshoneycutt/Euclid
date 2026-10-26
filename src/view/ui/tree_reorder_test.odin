@@ -304,8 +304,14 @@ tree_reorder_multiple_native_commands_keep_continuity :: proc(t: ^testing.T) {
     uilibrary.tree_reorder_capture(params, &before)
     target := uilibrary.tree_actions_semantic_id(params,
         state^.ui_runtime.library.tree.selected_item_id, uilibrary.TREE_ACTION_DOWN)
-    semantic^.commands[0] = {target = target, kind = .Activate}
-    semantic^.commands[1] = {target = target, kind = .Activate}
+    semantic^.commands[0] = {
+        target = target,
+        kind = .Activate,
+    }
+    semantic^.commands[1] = {
+        target = target,
+        kind = .Activate,
+    }
     semantic^.command_count = 2
     uilibrary.tree_actions_apply_commands(params)
     params.collections_revision = state^.preferences_runtime.collection_revision

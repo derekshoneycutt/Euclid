@@ -22,7 +22,10 @@ Presentation_Dust_Test_Draw :: struct {
 // Allocate one encoder with exactly the shared pane capacity and no native resources.
 presentation_test_dust_draw :: proc(t: ^testing.T) -> ^Presentation_Dust_Test_Draw {
     draw := new(Presentation_Dust_Test_Draw, context.allocator)
-    draw^.custom = {dust_instances = draw^.instances[:], dust_draws = draw^.draws[:]}
+    draw^.custom = {
+        dust_instances = draw^.instances[:],
+        dust_draws = draw^.draws[:],
+    }
     testing.expect(t, native.draw_encoder_begin(&draw^.encoder,
         {draw^.vertices[:], draw^.indices[:], draw^.batches[:], draw^.commands[:],
             &draw^.custom},
@@ -34,14 +37,22 @@ presentation_test_dust_draw :: proc(t: ^testing.T) -> ^Presentation_Dust_Test_Dr
 // Fill all phases and force hole reuse, transfer, and eviction before drawing.
 presentation_test_fill_mixed_dust :: proc(
     t: ^testing.T, dust: ^uidust.Ui_Dust_System) {
-    phases := [4]uidust.Ui_Dust_Phase{
+    phases: [4]uidust.Ui_Dust_Phase = {
         .Airborne_Departure, .Resting_Departure, .Fresh_Arrival, .Reclaimed_Arrival}
     for index in 0..<uidust.UI_DUST_TOTAL_PARTICLES {
         _ = uidust.ui_dust_slot_emit(dust, {
-            phase = phases[index % 4], pos_x = f32(index), pos_y = 50,
-            target_x = f32(index), target_y = 50, life = 1, size = 1,
-            target_size = 1, target_color = {20, 40, 60, 255},
-            captured = true, captured_alpha = 1, color = {20, 40, 60, 255},
+            phase = phases[index % 4],
+            pos_x = f32(index),
+            pos_y = 50,
+            target_x = f32(index),
+            target_y = 50,
+            life = 1,
+            size = 1,
+            target_size = 1,
+            target_color = {20, 40, 60, 255},
+            captured = true,
+            captured_alpha = 1,
+            color = {20, 40, 60, 255},
         })
     }
     testing.expect(t, uidust.ui_dust_slot_reassign(dust,
@@ -49,10 +60,16 @@ presentation_test_fill_mixed_dust :: proc(
     testing.expect(t, uidust.ui_dust_slot_retire(dust,
         {5, dust^.order[5].generation}))
     _ = uidust.ui_dust_slot_emit(dust, {
-        phase = .Airborne_Departure, pos_x = 5, size = 1, color = {20, 40, 60, 255},
+        phase = .Airborne_Departure,
+        pos_x = 5,
+        size = 1,
+        color = {20, 40, 60, 255},
     })
     _ = uidust.ui_dust_slot_emit(dust, {
-        phase = .Airborne_Departure, pos_x = 0, size = 1, color = {20, 40, 60, 255},
+        phase = .Airborne_Departure,
+        pos_x = 0,
+        size = 1,
+        color = {20, 40, 60, 255},
     })
 }
 
@@ -63,8 +80,11 @@ presentation_effects_draw_shared_pool_without_duplicates :: proc(t: ^testing.T) 
     defer free(draw, context.allocator)
     dust := new(uidust.Ui_Dust_System, context.allocator)
     defer free(dust, context.allocator)
-    viewport := geometry.Rectangle{0, 0, 5000, 100}
-    uidust.ui_dust_validate_context(dust, {visible = true, viewport = viewport})
+    viewport: geometry.Rectangle = {0, 0, 5000, 100}
+    uidust.ui_dust_validate_context(dust, {
+        visible = true,
+        viewport = viewport,
+    })
     uidust.ui_dust_begin_arrival(dust, 1, .Falling_Ink)
     uidust.ui_dust_begin_formation(dust)
     dust^.incoming_elapsed = (uidust.UI_DUST_ARRIVAL_HANDOFF_START +
@@ -92,8 +112,10 @@ presentation_effects_draw_clips_outgoing_and_incoming_dust :: proc(t: ^testing.T
     commands: [4]native.Draw_Command
     instances: [8]native.Dust_Instance
     draws: [2]native.Dust_Draw
-    custom := native.Draw_Custom_Storage{dust_instances = instances[:],
-        dust_draws = draws[:]}
+    custom: native.Draw_Custom_Storage = {
+        dust_instances = instances[:],
+        dust_draws = draws[:],
+    }
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], &custom},
@@ -101,8 +123,11 @@ presentation_effects_draw_clips_outgoing_and_incoming_dust :: proc(t: ^testing.T
     native.draw_encoder_enable_dust_instancing(&encoder, true)
     dust := new(uidust.Ui_Dust_System, context.allocator)
     defer free(dust, context.allocator)
-    viewport := geometry.Rectangle{10, 20, 50, 40}
-    uidust.ui_dust_validate_context(dust, {visible = true, viewport = viewport})
+    viewport: geometry.Rectangle = {10, 20, 50, 40}
+    uidust.ui_dust_validate_context(dust, {
+        visible = true,
+        viewport = viewport,
+    })
     uidust.ui_dust_begin_departure(dust, 1)
     testing.expect(t, uidust.ui_dust_emit(dust, {20, 30}, {1, 2, 3, 255}, 255, 1))
     uidust.ui_dust_begin_arrival(dust, 2, .Falling_Ink)
@@ -140,8 +165,11 @@ presentation_test_reveal_vertices :: proc(
 presentation_effects_draw_reveals_rows_behind_front :: proc(t: ^testing.T) {
     dust := new(uidust.Ui_Dust_System, context.allocator)
     defer free(dust, context.allocator)
-    viewport := geometry.Rectangle{10, 20, 50, 40}
-    uidust.ui_dust_validate_context(dust, {visible = true, viewport = viewport})
+    viewport: geometry.Rectangle = {10, 20, 50, 40}
+    uidust.ui_dust_validate_context(dust, {
+        visible = true,
+        viewport = viewport,
+    })
     uidust.ui_dust_begin_arrival(dust, 3, .Draw_In)
     uidust.ui_dust_reveal_include(dust, {20, 30})
     uidust.ui_dust_reveal_include(dust, {50, 30})

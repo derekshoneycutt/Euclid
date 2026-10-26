@@ -13,7 +13,9 @@ native_publication_scales_and_reuses_unchanged_updates :: proc(t: ^testing.T) {
     controls := make([]Adapter_Control_Input, 5000, context.allocator)
     defer delete(controls, context.allocator)
     native_publication_fill_large_tree(controls)
-    input := Adapter_Tree_Input{controls = controls}
+    input: Adapter_Tree_Input = {
+        controls = controls,
+    }
     testing.expect(t, adapter_publish_controls(owner, input))
     lease := portable.protected_control_acquire(&owner^.control_publication)
     testing.expect_value(t, lease^.value.control_count, 5000)
@@ -46,18 +48,35 @@ native_publication_scales_and_reuses_unchanged_updates :: proc(t: ^testing.T) {
 // Populate a large sibling set with an offscreen selected active descendant.
 native_publication_fill_large_tree :: proc(controls: []Adapter_Control_Input) {
     controls[0] = {
-        identity = {domain = .Ui, local_id = 1, generation = 1},
-        control = {role = .Tree, label = "Library", enabled = true},
+        identity = {
+            domain = .Ui,
+            local_id = 1,
+            generation = 1,
+        },
+        control = {
+            role = .Tree,
+            label = "Library",
+            enabled = true,
+        },
     }
     last := len(controls) - 1
     for index in 1..<len(controls) {
         controls[index] = {
-            identity = {domain = .Ui, local_id = u64(index + 1), generation = 1},
+            identity = {
+                domain = .Ui,
+                local_id = u64(index + 1),
+                generation = 1,
+            },
             parent_identity = controls[0].identity,
             control = {
-                role = .Tree_Item, label = "Committed Library item",
-                enabled = true, selected = index == last, actions = {.Select},
-                level = 2, position_in_set = u32(index), set_size = u32(last),
+                role = .Tree_Item,
+                label = "Committed Library item",
+                enabled = true,
+                selected = index == last,
+                actions = {.Select},
+                level = 2,
+                position_in_set = u32(index),
+                set_size = u32(last),
             },
         }
     }
@@ -86,13 +105,22 @@ native_publication_two_thousand_edits_reuse_live_pressure :: proc(t: ^testing.T)
 
 // Publish alternating labels at fixed live identity and text demand.
 native_publication_edit_batch :: proc(t: ^testing.T, owner: ^Adapter) {
-    control := [1]Adapter_Control_Input{{
-        identity = {domain = .Ui, local_id = 1, generation = 1},
-        control = {role = .Button, enabled = true},
+    control: [1]Adapter_Control_Input = {{
+        identity = {
+            domain = .Ui,
+            local_id = 1,
+            generation = 1,
+        },
+        control = {
+            role = .Button,
+            enabled = true,
+        },
     }}
     for index in 0..<1000 {
         control[0].control.label = "Edited one" if index % 2 == 0 else "Edited two"
-        testing.expect(t, adapter_publish_controls(owner, {controls = control[:]}))
+        testing.expect(t, adapter_publish_controls(owner, {
+            controls = control[:],
+        }))
     }
 }
 
@@ -102,13 +130,17 @@ native_publication_rename_and_move_keep_mapping_identity :: proc(t: ^testing.T) 
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
     controls := native_publication_sibling_controls()
-    testing.expect(t, adapter_publish_controls(owner, {controls = controls[:]}))
+    testing.expect(t, adapter_publish_controls(owner, {
+        controls = controls[:],
+    }))
     identity := owner^.control_native_ids[1]
     controls[1].control.label = "After"
     controls[1], controls[2] = controls[2], controls[1]
     controls[1].control.position_in_set = 1
     controls[2].control.position_in_set = 2
-    testing.expect(t, adapter_publish_controls(owner, {controls = controls[:]}))
+    testing.expect(t, adapter_publish_controls(owner, {
+        controls = controls[:],
+    }))
     testing.expect_value(t, owner^.control_native_ids[2], identity)
     lease := portable.protected_control_acquire(&owner^.control_publication)
     testing.expect_value(t, lease^.value.controls[2].native_id, identity)
@@ -125,23 +157,45 @@ native_publication_rename_and_move_keep_mapping_identity :: proc(t: ^testing.T) 
 native_publication_sibling_controls :: proc() -> [3]Adapter_Control_Input {
     return {
         {
-            identity = {domain = .Ui, local_id = 1},
-            control = {role = .Tree, label = "Library"},
-        },
-        {
-            identity = {domain = .Ui, local_id = 2},
-            parent_identity = {domain = .Ui, local_id = 1},
+            identity = {
+                domain = .Ui,
+                local_id = 1,
+            },
             control = {
-                role = .Tree_Item, label = "Before",
-                position_in_set = 1, set_size = 2,
+                role = .Tree,
+                label = "Library",
             },
         },
         {
-            identity = {domain = .Ui, local_id = 3},
-            parent_identity = {domain = .Ui, local_id = 1},
+            identity = {
+                domain = .Ui,
+                local_id = 2,
+            },
+            parent_identity = {
+                domain = .Ui,
+                local_id = 1,
+            },
             control = {
-                role = .Tree_Item, label = "Other",
-                position_in_set = 2, set_size = 2,
+                role = .Tree_Item,
+                label = "Before",
+                position_in_set = 1,
+                set_size = 2,
+            },
+        },
+        {
+            identity = {
+                domain = .Ui,
+                local_id = 3,
+            },
+            parent_identity = {
+                domain = .Ui,
+                local_id = 1,
+            },
+            control = {
+                role = .Tree_Item,
+                label = "Other",
+                position_in_set = 2,
+                set_size = 2,
             },
         },
     }
@@ -152,11 +206,22 @@ native_publication_sibling_controls :: proc() -> [3]Adapter_Control_Input {
 native_publication_mapping_churn_and_close_preserve_leases :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    controls := [1]Adapter_Control_Input{{
-        identity = {domain = .Ui, local_id = 1, generation = 1},
-        control = {role = .Button, label = "Item", enabled = true, actions = {.Activate}},
+    controls: [1]Adapter_Control_Input = {{
+        identity = {
+            domain = .Ui,
+            local_id = 1,
+            generation = 1,
+        },
+        control = {
+            role = .Button,
+            label = "Item",
+            enabled = true,
+            actions = {.Activate},
+        },
     }}
-    input := Adapter_Tree_Input{controls = controls[:]}
+    input: Adapter_Tree_Input = {
+        controls = controls[:],
+    }
     testing.expect(t, adapter_publish_controls(owner, input))
     old_id := owner^.control_native_ids[0]
     previous := old_id
@@ -167,9 +232,11 @@ native_publication_mapping_churn_and_close_preserve_leases :: proc(t: ^testing.T
         previous = owner^.control_native_ids[0]
     }
     testing.expect(t, owner^.native_ids.count <= 3)
-    request := portable.Queued_Action{kind = u16(accesskit.Action.Click),
+    request: portable.Queued_Action = {
+        kind = u16(accesskit.Action.Click),
         target_native_id = old_id,
-        publication_generation = owner^.control_publication.current.generation}
+        publication_generation = owner^.control_publication.current.generation,
+    }
     testing.expect_value(t, portable.action_queue_push(&owner^.actions, &request),
         portable.Action_Queue_Status.Ok)
     action: Adapter_Action

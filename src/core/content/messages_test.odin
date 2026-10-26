@@ -95,9 +95,12 @@ content_message_test_append :: proc(
 content_message_test_signature :: proc(
     id: Content_Message_Id) -> (string, Content_Argument_Kind) {
     #partial switch id {
-    case .Library_Suggestion_Action: return "query", .Text
-    case .Library_Actions_For: return "name", .Text
-    case .Library_Unicode_Completion: return "symbol", .Text
+    case .Library_Suggestion_Action:
+        return "query", .Text
+    case .Library_Actions_For:
+        return "name", .Text
+    case .Library_Unicode_Completion:
+        return "symbol", .Text
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
          .Gif_Cadence_Multiple:
         return "count", .Uint32
@@ -105,8 +108,10 @@ content_message_test_signature :: proc(
          .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,
          .Gif_Status_Recording:
         return "count", .Int64
-    case .Fps_Overlay: return "fps", .Float32_One_Decimal
-    case: return "", .Text
+    case .Fps_Overlay:
+        return "fps", .Float32_One_Decimal
+    case:
+        return "", .Text
     }
 }
 
@@ -134,7 +139,8 @@ content_message_test_expected :: proc(
                 return fmt.tprintf("%s42%s", template[:index], template[index + 7:])
             }
         }
-    case .Float32_One_Decimal: return "FPS 59.2"
+    case .Float32_One_Decimal:
+        return "FPS 59.2"
     }
     return template
 }
@@ -147,7 +153,9 @@ content_messages_preserve_every_shipped_output :: proc(t: ^testing.T) {
     templates := CONTENT_MESSAGE_TEST_TEMPLATES
     covered := 0
     for id in Content_Message_Id {
-        if id == .Invalid { continue }
+        if id == .Invalid {
+            continue
+        }
         identity, ordinal := content_message_identity(id)
         testing.expect(t, ordinal >= 0 && identity.native_id == u16(id))
         view, status := content_message_lookup(generation, id)
@@ -171,10 +179,14 @@ content_message_test_output :: proc(
     if len(name) > 0 {
         arguments[0].name = name
         switch kind {
-        case .Text: arguments[0].value = string("Elements")
-        case .Uint32: arguments[0].value = u32(42)
-        case .Int64: arguments[0].value = i64(42)
-        case .Float32_One_Decimal: arguments[0].value = f32(59.25)
+        case .Text:
+            arguments[0].value = string("Elements")
+        case .Uint32:
+            arguments[0].value = u32(42)
+        case .Int64:
+            arguments[0].value = i64(42)
+        case .Float32_One_Decimal:
+            arguments[0].value = f32(59.25)
         }
         count = 1
     }
@@ -215,7 +227,9 @@ content_message_test_reject :: proc(
     t: ^testing.T, generation: ^Content_Generation, id: Content_Message_Id,
     arguments: []Content_Format_Argument, expected: Content_Message_Status) {
     storage: [UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
-    for &byte in storage[:] { byte = 0xa5 }
+    for &byte in storage[:] {
+        byte = 0xa5
+    }
     baseline := storage
     text, status := content_message_format(generation, id, arguments, storage[:])
     testing.expect_value(t, status, expected)
@@ -273,8 +287,10 @@ content_messages_enforce_exact_output_capacity :: proc(t: ^testing.T) {
     generation := content_message_test_generation(t)
     defer content_message_test_destroy(generation)
     query: [UI_FORMAT_TEXT_BYTE_CAPACITY]u8
-    for &byte in query[:] { byte = 'q' }
-    arguments := []Content_Format_Argument{{"query", string(query[:])}}
+    for &byte in query[:] {
+        byte = 'q'
+    }
+    arguments: []Content_Format_Argument = {{"query", string(query[:])}}
     exact: [534]u8
     text, status := content_message_format(
         generation, .Library_Suggestion_Action, arguments, exact[:])
@@ -332,14 +348,14 @@ proc(t: ^testing.T) {
     defer content_message_test_destroy(generation)
     count_view, _ := content_message_lookup(generation, .Library_Status_Match_Count)
     query_view, _ := content_message_lookup(generation, .Library_Suggestion_Action)
-    message := Content_Message{
+    message: Content_Message = {
         argument_count = 2,
         arguments = {
             count_view.message.arguments[0],
             query_view.message.arguments[0],
         },
     }
-    arguments := []Content_Format_Argument{
+    arguments: []Content_Format_Argument = {
         {"query", string("Elements")},
         {"count", u32(42)},
     }

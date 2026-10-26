@@ -52,13 +52,20 @@ accessibility_tree_focus_owner :: proc(
 accessibility_primary_command_kind :: proc(
     kind: native.Sdl_Accessibility_Action_Kind) -> viewmodel.Ui_Focus_Command_Kind {
     #partial switch kind {
-    case .Focus: return .Focus
-    case .Activate: return .Activate
-    case .Toggle: return .Toggle
-    case .Increment: return .Increment
-    case .Decrement: return .Decrement
-    case .Set_Value: return .Set_Value
-    case: return .None
+    case .Focus:
+        return .Focus
+    case .Activate:
+        return .Activate
+    case .Toggle:
+        return .Toggle
+    case .Increment:
+        return .Increment
+    case .Decrement:
+        return .Decrement
+    case .Set_Value:
+        return .Set_Value
+    case:
+        return .None
     }
 }
 
@@ -66,15 +73,24 @@ accessibility_primary_command_kind :: proc(
 accessibility_extended_command_kind :: proc(
     kind: native.Sdl_Accessibility_Action_Kind) -> viewmodel.Ui_Focus_Command_Kind {
     #partial switch kind {
-    case .Replace_Selected_Text: return .Replace_Selected_Text
-    case .Replace_Text: return .Replace_Text
-    case .Set_Text_Selection: return .Set_Text_Selection
-    case .Select: return .Select
-    case .Expand: return .Expand
-    case .Collapse: return .Collapse
-    case .Scroll: return .Scroll_Page
-    case .Set_Scroll_Value: return .Set_Scroll_Value
-    case .Show_Context_Menu: return .Show_Context_Menu
+    case .Replace_Selected_Text:
+        return .Replace_Selected_Text
+    case .Replace_Text:
+        return .Replace_Text
+    case .Set_Text_Selection:
+        return .Set_Text_Selection
+    case .Select:
+        return .Select
+    case .Expand:
+        return .Expand
+    case .Collapse:
+        return .Collapse
+    case .Scroll:
+        return .Scroll_Page
+    case .Set_Scroll_Value:
+        return .Set_Scroll_Value
+    case .Show_Context_Menu:
+        return .Show_Context_Menu
     }
     return .None
 }
@@ -94,7 +110,7 @@ apply_accessibility_action :: proc(
     semantic: ^viewmodel.Ui_Semantic_Focus_State,
     action: ^native.Sdl_Accessibility_Action) {
     identity := action^.identity
-    target := viewmodel.Ui_Node_Id{
+    target: viewmodel.Ui_Node_Id = {
         domain = cast(viewmodel.Ui_Node_Domain)identity.owner_domain,
         local_id = identity.local_id,
         stable_id = cast(uuid.Identifier)identity.stable_uuid,
@@ -152,15 +168,24 @@ accessibility_button_bounds :: proc(
 accessibility_ordinary_publication_role :: proc(
     role: viewmodel.Ui_Node_Role) -> (accessibility.Publication_Role, bool) {
     #partial switch role {
-    case .Button: return .Button, true
-    case .Checkbox: return .Checkbox, true
-    case .Slider: return .Slider, true
-    case .Accordion_Header: return .Accordion_Header, true
-    case .Panel: return .Panel, true
-    case .Status: return .Status, true
-    case .Menu: return .Menu, true
-    case .Menu_Item: return .Menu_Item, true
-    case: return {}, false
+    case .Button:
+        return .Button, true
+    case .Checkbox:
+        return .Checkbox, true
+    case .Slider:
+        return .Slider, true
+    case .Accordion_Header:
+        return .Accordion_Header, true
+    case .Panel:
+        return .Panel, true
+    case .Status:
+        return .Status, true
+    case .Menu:
+        return .Menu, true
+    case .Menu_Item:
+        return .Menu_Item, true
+    case:
+        return {}, false
     }
 }
 
@@ -168,11 +193,16 @@ accessibility_ordinary_publication_role :: proc(
 accessibility_composite_publication_role :: proc(
     role: viewmodel.Ui_Node_Role) -> (accessibility.Publication_Role, bool) {
     #partial switch role {
-    case .Input: return .Search_Input, true
-    case .Text_Run: return .Text_Run, true
-    case .Tree: return .Tree, true
-    case .Tree_Item: return .Tree_Item, true
-    case .Document, .Terminal: return .Panel, true
+    case .Input:
+        return .Search_Input, true
+    case .Text_Run:
+        return .Text_Run, true
+    case .Tree:
+        return .Tree, true
+    case .Tree_Item:
+        return .Tree_Item, true
+    case .Document, .Terminal:
+        return .Panel, true
     case .Surface:
     }
     return {}, false
@@ -258,10 +288,12 @@ accessibility_pane_record :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     node: viewmodel.Ui_Semantic_Node) -> accessibility.Control_Publication_Input {
     return {
-        role = .Panel, bounds = accessibility_button_bounds(node),
+        role = .Panel,
+        bounds = accessibility_button_bounds(node),
         label = uisemantics.semantic_node_text(
             snapshot, node.label_offset, node.label_length),
-        enabled = .Enabled in node.states, focusable = .Focusable in node.states,
+        enabled = .Enabled in node.states,
+        focusable = .Focusable in node.states,
         focused = semantic^.logical_focus == node.id,
         actions = {.Focus, .Show_Context_Menu},
     }
@@ -276,7 +308,7 @@ accessibility_control_record :: proc(
     if node.role == .Document || node.role == .Terminal {
         return accessibility_pane_record(semantic, snapshot, node)
     }
-    record := accessibility.Control_Publication_Input{
+    record: accessibility.Control_Publication_Input = {
         role = role,
         bounds = accessibility_button_bounds(node),
         label = uisemantics.semantic_node_text(
@@ -367,9 +399,10 @@ publish_accessibility_controls :: proc(
         return
     }
     defer native_accessibility.adapter_projection_release(&platform^.accessibility)
-    root_bounds := accessibility.Bounds{0, 0,
+    root_bounds: accessibility.Bounds = {0, 0,
         f64(platform^.metrics.logical_width), f64(platform^.metrics.logical_height)}
-    if !native.sdl_platform_publish_accessibility_controls(platform, {
+    if !native.sdl_platform_publish_accessibility_controls(platform,
+        {
             root_bounds = root_bounds,
             bounds_scale = f64(platform^.metrics.display_scale),
             window_focused = semantic^.window_focused,

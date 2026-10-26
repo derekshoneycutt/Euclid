@@ -17,12 +17,32 @@ Macos_Test_Fixture :: struct {
 }
 
 MACOS_TEST_FAILURE_FIXTURES :: [5]Macos_Test_Fixture{
-    {has_content_view = true, has_window_class = true,
-        install_succeeds = true, create_succeeds = true},
-    {has_window_class = true, install_succeeds = true, create_succeeds = true},
-    {has_content_view = true, install_succeeds = true, create_succeeds = true},
-    {has_content_view = true, has_window_class = true, create_succeeds = true},
-    {has_content_view = true, has_window_class = true, install_succeeds = true},
+    {
+        has_content_view = true,
+        has_window_class = true,
+        install_succeeds = true,
+        create_succeeds = true,
+    },
+    {
+        has_window_class = true,
+        install_succeeds = true,
+        create_succeeds = true,
+    },
+    {
+        has_content_view = true,
+        install_succeeds = true,
+        create_succeeds = true,
+    },
+    {
+        has_content_view = true,
+        has_window_class = true,
+        create_succeeds = true,
+    },
+    {
+        has_content_view = true,
+        has_window_class = true,
+        install_succeeds = true,
+    },
 }
 
 MACOS_TEST_FAILURE_STAGES :: [5]Macos_Failure_Stage{
@@ -157,12 +177,19 @@ macos_test_expect_teardown :: proc(
 // Verify partial native admission failures close callbacks with typed stages.
 @(test)
 macos_adapter_partial_admission_failures_are_typed :: proc(t: ^testing.T) {
-    controls := [1]Adapter_Control_Input{{
-        identity = {domain = .Ui, owner_domain = 1, local_id = 2101},
+    controls: [1]Adapter_Control_Input = {{
+        identity = {
+            domain = .Ui,
+            owner_domain = 1,
+            local_id = 2101,
+        },
         control = {
-            role = .Button, bounds = {10, 10, 170, 42},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true,
+            role = .Button,
+            bounds = {10, 10, 170, 42},
+            label = "Restart animation",
+            actions = {.Focus, .Activate},
+            enabled = true,
+            focusable = true,
         },
     }}
     input := macos_test_tree_input(controls[:])
@@ -191,7 +218,7 @@ macos_adapter_partial_admission_failures_are_typed :: proc(t: ^testing.T) {
 @(test)
 macos_adapter_lifecycle_owns_updates_focus_events_and_teardown :: proc(
     t: ^testing.T) {
-    fixture := Macos_Test_Fixture{
+    fixture: Macos_Test_Fixture = {
         has_content_view = true,
         has_window_class = true,
         install_succeeds = true,
@@ -199,12 +226,20 @@ macos_adapter_lifecycle_owns_updates_focus_events_and_teardown :: proc(
         events_present = true,
     }
     operations := macos_test_operations(&fixture)
-    controls := [1]Adapter_Control_Input{{
-        identity = {domain = .Ui, owner_domain = 1, local_id = 2101},
+    controls: [1]Adapter_Control_Input = {{
+        identity = {
+            domain = .Ui,
+            owner_domain = 1,
+            local_id = 2101,
+        },
         control = {
-            role = .Button, bounds = {10, 10, 170, 42},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true, focused = true,
+            role = .Button,
+            bounds = {10, 10, 170, 42},
+            label = "Restart animation",
+            actions = {.Focus, .Activate},
+            enabled = true,
+            focusable = true,
+            focused = true,
         },
     }}
     input := macos_test_tree_input(controls[:])

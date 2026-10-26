@@ -17,12 +17,21 @@ document_vertical_style_scales_list_boundaries :: proc(t: ^testing.T) {
 // Verify tall/deep neighbors use fallback line skip and remain non-overlapping.
 @(test)
 document_vertical_lines_fall_back_without_overlap :: proc(t: ^testing.T) {
-    lines := [2]dynviewmodel.Dynview_Document_Layout_Line{
-        {ascent = 10, descent = 8},
-        {ascent = 18, descent = 7},
+    lines: [2]dynviewmodel.Dynview_Document_Layout_Line = {
+        {
+            ascent = 10,
+            descent = 8,
+        },
+        {
+            ascent = 18,
+            descent = 7,
+        },
     }
-    style := Document_Vertical_Style{
-        baseline_skip = 20, line_skip_limit = 0, line_skip = 2}
+    style: Document_Vertical_Style = {
+        baseline_skip = 20,
+        line_skip_limit = 0,
+        line_skip = 2,
+    }
 
     bottom, ok := document_place_block_lines(lines[:], 5, style)
 
@@ -50,13 +59,35 @@ document_vertical_block_reservation_contains_ink :: proc(t: ^testing.T) {
 // Verify first blocks have no leading glue and display adjacency uses display glue.
 @(test)
 document_vertical_block_spacing_respects_document_edges :: proc(t: ^testing.T) {
-    blocks := [4]dynviewmodel.Dynview_Document_Block{
-        {kind = .Display}, {kind = .Paragraph},
-        {kind = .Paragraph}, {kind = .Paragraph}}
-    documents := [2]dynviewmodel.Dynview_Document{
-        {block_start = 0, block_count = 3}, {block_start = 3, block_count = 1}}
-    style := Document_Vertical_Style{
-        paragraph_spacing = 8, display_spacing = 12, list_spacing = 16}
+    blocks: [4]dynviewmodel.Dynview_Document_Block = {
+        {
+            kind = .Display,
+        },
+        {
+            kind = .Paragraph,
+        },
+        {
+            kind = .Paragraph,
+        },
+        {
+            kind = .Paragraph,
+        },
+    }
+    documents: [2]dynviewmodel.Dynview_Document = {
+        {
+            block_start = 0,
+            block_count = 3,
+        },
+        {
+            block_start = 3,
+            block_count = 1,
+        },
+    }
+    style: Document_Vertical_Style = {
+        paragraph_spacing = 8,
+        display_spacing = 12,
+        list_spacing = 16,
+    }
 
     first, first_ok := document_block_spacing_before(
         documents[:], blocks[:], 0, style)
@@ -77,20 +108,49 @@ document_vertical_block_spacing_respects_document_edges :: proc(t: ^testing.T) {
 // Verify complete lists receive outer spacing without adding space between items.
 @(test)
 document_vertical_list_boundaries_use_list_spacing :: proc(t: ^testing.T) {
-    blocks := [6]dynviewmodel.Dynview_Document_Block{
-        {kind = .Paragraph},
-        {kind = .List_Item, list_kind = .Enumerate, list_id = 1, item_ordinal = 1},
-        {kind = .Paragraph, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 1, item_first_block = true},
-        {kind = .List_Item, list_kind = .Enumerate, list_id = 1, item_ordinal = 2},
-        {kind = .Paragraph, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 2, item_first_block = true},
-        {kind = .Paragraph},
+    blocks: [6]dynviewmodel.Dynview_Document_Block = {
+        {
+            kind = .Paragraph,
+        },
+        {
+            kind = .List_Item,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 1,
+        },
+        {
+            kind = .Paragraph,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 1,
+            item_first_block = true,
+        },
+        {
+            kind = .List_Item,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 2,
+        },
+        {
+            kind = .Paragraph,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 2,
+            item_first_block = true,
+        },
+        {
+            kind = .Paragraph,
+        },
     }
-    documents := [1]dynviewmodel.Dynview_Document{
-        {block_start = 0, block_count = len(blocks)}}
-    style := Document_Vertical_Style{
-        paragraph_spacing = 8, display_spacing = 12, list_spacing = 16}
+    documents: [1]dynviewmodel.Dynview_Document = {{
+        block_start = 0,
+        block_count = len(blocks),
+    }}
+    style: Document_Vertical_Style = {
+        paragraph_spacing = 8,
+        display_spacing = 12,
+        list_spacing = 16,
+    }
 
     before, before_ok := document_block_spacing_before(
         documents[:], blocks[:], 1, style)
@@ -108,20 +168,49 @@ document_vertical_list_boundaries_use_list_spacing :: proc(t: ^testing.T) {
 // Verify adjacent items stay compact while paragraphs within one item retain spacing.
 @(test)
 document_vertical_list_items_do_not_add_paragraph_spacing :: proc(t: ^testing.T) {
-    blocks := [5]dynviewmodel.Dynview_Document_Block{
-        {kind = .List_Item, list_kind = .Enumerate, list_id = 1, item_ordinal = 1},
-        {kind = .Paragraph, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 1, item_first_block = true},
-        {kind = .List_Item, list_kind = .Enumerate, list_id = 1, item_ordinal = 2},
-        {kind = .Paragraph, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 2, item_first_block = true},
-        {kind = .Paragraph, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 2},
+    blocks: [5]dynviewmodel.Dynview_Document_Block = {
+        {
+            kind = .List_Item,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 1,
+        },
+        {
+            kind = .Paragraph,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 1,
+            item_first_block = true,
+        },
+        {
+            kind = .List_Item,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 2,
+        },
+        {
+            kind = .Paragraph,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 2,
+            item_first_block = true,
+        },
+        {
+            kind = .Paragraph,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 2,
+        },
     }
-    documents := [1]dynviewmodel.Dynview_Document{
-        {block_start = 0, block_count = len(blocks)}}
-    style := Document_Vertical_Style{
-        paragraph_spacing = 8, display_spacing = 12, list_spacing = 16}
+    documents: [1]dynviewmodel.Dynview_Document = {{
+        block_start = 0,
+        block_count = len(blocks),
+    }}
+    style: Document_Vertical_Style = {
+        paragraph_spacing = 8,
+        display_spacing = 12,
+        list_spacing = 16,
+    }
 
     next_item, next_item_ok := document_block_spacing_before(
         documents[:], blocks[:], 2, style)
@@ -136,26 +225,55 @@ document_vertical_list_items_do_not_add_paragraph_spacing :: proc(t: ^testing.T)
 // Verify tall item ink does not force the following item onto another full grid row.
 @(test)
 document_vertical_list_rows_use_exact_interline_glue :: proc(t: ^testing.T) {
-    source_blocks := [2]dynviewmodel.Dynview_Document_Block{
-        {kind = .Paragraph, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 1, item_first_block = true},
-        {kind = .List_Item, list_kind = .Enumerate, list_id = 1,
-            item_ordinal = 2},
+    source_blocks: [2]dynviewmodel.Dynview_Document_Block = {
+        {
+            kind = .Paragraph,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 1,
+            item_first_block = true,
+        },
+        {
+            kind = .List_Item,
+            list_kind = .Enumerate,
+            list_id = 1,
+            item_ordinal = 2,
+        },
     }
-    layout_blocks := [2]dynviewmodel.Dynview_Document_Layout_Block{
-        {source_block_index = 0, line_start = 0, line_count = 1},
-        {source_block_index = 1, line_start = 1, line_count = 1},
+    layout_blocks: [2]dynviewmodel.Dynview_Document_Layout_Block = {
+        {
+            source_block_index = 0,
+            line_start = 0,
+            line_count = 1,
+        },
+        {
+            source_block_index = 1,
+            line_start = 1,
+            line_count = 1,
+        },
     }
-    lines := [2]dynviewmodel.Dynview_Document_Layout_Line{
-        {top = 0, baseline = 20, bottom = 24, ascent = 20, descent = 4},
-        {ascent = 10, descent = 3},
+    lines: [2]dynviewmodel.Dynview_Document_Layout_Line = {
+        {
+            top = 0,
+            baseline = 20,
+            bottom = 24,
+            ascent = 20,
+            descent = 4,
+        },
+        {
+            ascent = 10,
+            descent = 3,
+        },
     }
-    builders := Document_Layout_Builders{}
+    builders: Document_Layout_Builders = {}
     builders.blocks.storage = layout_blocks[:]
     builders.blocks.count = len(layout_blocks)
     builders.lines.storage = lines[:]
     builders.lines.count = len(lines)
-    style := Document_Vertical_Style{baseline_skip = 20, line_skip = 2}
+    style: Document_Vertical_Style = {
+        baseline_skip = 20,
+        line_skip = 2,
+    }
 
     top := document_list_block_top(
         &builders, source_blocks[:], style, 1, 40)
@@ -166,16 +284,32 @@ document_vertical_list_rows_use_exact_interline_glue :: proc(t: ^testing.T) {
 // Verify shapes share the prose visual center regardless of sibling shape height.
 @(test)
 document_vertical_shapes_use_stable_content_center :: proc(t: ^testing.T) {
-    items := [3]dynviewmodel.Dynview_Document_Layout_Item{
-        {box_kind = .Prose, ascent = 12, descent = 3},
-        {box_kind = .Shape, ascent = 2, descent = 2},
-        {box_kind = .Shape, ascent = 16, descent = 16},
+    items: [3]dynviewmodel.Dynview_Document_Layout_Item = {
+        {
+            box_kind = .Prose,
+            ascent = 12,
+            descent = 3,
+        },
+        {
+            box_kind = .Shape,
+            ascent = 2,
+            descent = 2,
+        },
+        {
+            box_kind = .Shape,
+            ascent = 16,
+            descent = 16,
+        },
     }
-    builders := Document_Layout_Builders{}
+    builders: Document_Layout_Builders = {}
     builders.items.storage = items[:]
     builders.items.count = len(items)
-    line := dynviewmodel.Dynview_Document_Layout_Line{
-        item_count = len(items), top = 13.5, baseline = 30, bottom = 46.5}
+    line: dynviewmodel.Dynview_Document_Layout_Line = {
+        item_count = len(items),
+        top = 13.5,
+        baseline = 30,
+        bottom = 46.5,
+    }
 
     testing.expect(t, document_place_line_contents(&builders, 0, line))
     testing.expect_value(t, items[0].top, f32(18))
@@ -186,8 +320,11 @@ document_vertical_shapes_use_stable_content_center :: proc(t: ^testing.T) {
 // Verify vertical placement rejects incomplete source and line ranges.
 @(test)
 document_vertical_block_ranges_reject_malformed_records :: proc(t: ^testing.T) {
-    valid := dynviewmodel.Dynview_Document_Layout_Block{
-        source_block_index = 1, line_start = 2, line_count = 3}
+    valid: dynviewmodel.Dynview_Document_Layout_Block = {
+        source_block_index = 1,
+        line_start = 2,
+        line_count = 3,
+    }
     missing_source := valid
     missing_source.source_block_index = 2
     negative_line := valid

@@ -682,7 +682,7 @@ windows_terminal_environment_value :: proc(
 //     discovery fails, or resource-unavailable when workspace capacity is exhausted.
 windows_terminal_resolve_executable :: proc(
     backend: ^Windows_Terminal_Backend, executable: string) -> Backend_Start_Status {
-    path_key := [4]windows.WCHAR{'P', 'A', 'T', 'H'}
+    path_key: [4]windows.WCHAR = {'P', 'A', 'T', 'H'}
     search_path := windows_terminal_environment_value(backend, path_key[:])
     if strings.index_byte(executable, '/') >= 0 ||
        strings.index_byte(executable, '\\') >= 0 {
@@ -695,7 +695,7 @@ windows_terminal_resolve_executable :: proc(
         raw_data(backend.workspace[backend.workspace_used:]))
     capacity := (len(backend.workspace) - backend.workspace_used) /
         size_of(windows.WCHAR)
-    extension := [5]windows.WCHAR{'.', 'e', 'x', 'e', 0}
+    extension: [5]windows.WCHAR = {'.', 'e', 'x', 'e', 0}
     count := windows_search_path(
         search_path, backend.application_name,
         windows.LPCWSTR(&extension[0]), windows.DWORD(capacity),
@@ -753,7 +753,7 @@ windows_terminal_create_pipes :: proc(
     backend: ^Windows_Terminal_Backend,
     pseudo_input: ^windows.HANDLE,
     pseudo_output: ^windows.HANDLE) -> bool {
-    attributes := windows.SECURITY_ATTRIBUTES {
+    attributes: windows.SECURITY_ATTRIBUTES = {
         nLength = windows.DWORD(size_of(windows.SECURITY_ATTRIBUTES)),
         bInheritHandle = true,
     }
@@ -804,8 +804,10 @@ windows_terminal_create_attribute_list :: proc(
 //   - Closes the initial process thread handle immediately after successful creation.
 windows_terminal_start_process :: proc(
     backend: ^Windows_Terminal_Backend) -> Backend_Start_Status {
-    startup := Windows_Startup_Info_Ex {
-        startup_info = {cb = windows.DWORD(size_of(Windows_Startup_Info_Ex))},
+    startup: Windows_Startup_Info_Ex = {
+        startup_info = {
+            cb = windows.DWORD(size_of(Windows_Startup_Info_Ex)),
+        },
         attribute_list = backend.attribute_list,
     }
     process_info: windows.PROCESS_INFORMATION
@@ -1051,7 +1053,7 @@ windows_terminal_poll_workers_stopped :: proc(
     if backend.writer_thread != nil {
         windows_cancel_synchronous_io(backend.writer_thread)
     }
-    handles := [3]windows.HANDLE{
+    handles: [3]windows.HANDLE = {
         backend.close_thread,
         backend.writer_thread,
         backend.reader_thread,
@@ -1081,7 +1083,7 @@ windows_terminal_poll_workers_stopped :: proc(
 windows_terminal_prepare_pseudo_console :: proc(
     backend: ^Windows_Terminal_Backend, dimensions: Terminal_Dimensions,
     pseudo_input, pseudo_output: windows.HANDLE) -> bool {
-    size := windows.COORD {
+    size: windows.COORD = {
         X = windows.SHORT(dimensions.columns),
         Y = windows.SHORT(dimensions.rows),
     }
@@ -1172,7 +1174,7 @@ windows_terminal_backend_resize :: proc(
         dimensions.rows == 0 {
         return false
     }
-    size := windows.COORD{
+    size: windows.COORD = {
         X = i16(dimensions.columns),
         Y = i16(dimensions.rows),
     }
@@ -1236,7 +1238,7 @@ windows_terminal_backend_write_input :: proc(
 // Returns:
 //   - The input queue's acceptance result for byte `0x03`.
 windows_terminal_backend_request_interrupt :: proc(user_data: rawptr) -> bool {
-    interrupt := [1]u8{3}
+    interrupt: [1]u8 = {3}
     return windows_terminal_backend_write_input(user_data, interrupt[:])
 }
 
@@ -1283,9 +1285,14 @@ windows_terminal_backend_poll_exit :: proc(
        windows.WaitForSingleObject(backend.process, 0) == windows.WAIT_OBJECT_0 {
         status: windows.DWORD
         if windows.GetExitCodeProcess(backend.process, &status) {
-            backend.exit = {kind = .Exited, status = i32(status)}
+            backend.exit = {
+                kind = .Exited,
+                status = i32(status),
+            }
         } else {
-            backend.exit = {kind = .Infrastructure_Failure}
+            backend.exit = {
+                kind = .Infrastructure_Failure,
+            }
         }
         backend.process_exited = true
         windows_terminal_request_pseudo_console_close(backend)

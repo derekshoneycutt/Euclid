@@ -52,7 +52,10 @@ clipboard_action_queue_init :: proc(
     if allocation_error != nil {
         return false
     }
-    queue^ = {allocator = allocator, actions = actions}
+    queue^ = {
+        allocator = allocator,
+        actions = actions,
+    }
     return true
 }
 

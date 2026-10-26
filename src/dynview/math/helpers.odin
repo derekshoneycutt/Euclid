@@ -93,7 +93,7 @@ stretch_delimiter_content_clearance :: #force_inline proc(font_size: f32) -> f32
 
 //   Return the minimum visual height requested by one TeX fixed delimiter family.
 delimiter_requested_height :: #force_inline proc(font_size: f32, policy: i32) -> f32 {
-    factors := [5]f32{0, 1.2, 1.8, 2.4, 3.0}
+    factors: [5]f32 = {0, 1.2, 1.8, 2.4, 3.0}
     if policy <= 0 || policy >= len(factors) {
         return 0
     }
@@ -115,10 +115,14 @@ math_table_default_row_gap :: #force_inline proc(
     spacing: dynviewmodel.Dynview_Math_Table_Row_Spacing, font_size: f32) -> f32 {
 
     switch spacing {
-    case .Matrix: return matrix_row_gap(font_size)
-    case .Tight: return max(0.6, font_size * 0.18)
-    case .Cases: return max(0.8, font_size * 0.32)
-    case .Alignment: return max(0.8, font_size * 0.34)
+    case .Matrix:
+        return matrix_row_gap(font_size)
+    case .Tight:
+        return max(0.6, font_size * 0.18)
+    case .Cases:
+        return max(0.8, font_size * 0.32)
+    case .Alignment:
+        return max(0.8, font_size * 0.34)
     }
     return matrix_row_gap(font_size)
 }
@@ -129,10 +133,14 @@ math_table_row_strut :: #force_inline proc(
     font_size: f32) -> (ascent, descent: f32) {
 
     switch spacing {
-    case .Tight: return font_size * 0.60, font_size * 0.20
-    case .Cases: return font_size * 0.75, font_size * 0.30
-    case .Alignment: return font_size * 0.80, font_size * 0.30
-    case .Matrix: return font_size * 0.70, font_size * 0.30
+    case .Tight:
+        return font_size * 0.60, font_size * 0.20
+    case .Cases:
+        return font_size * 0.75, font_size * 0.30
+    case .Alignment:
+        return font_size * 0.80, font_size * 0.30
+    case .Matrix:
+        return font_size * 0.70, font_size * 0.30
     }
     return font_size * 0.70, font_size * 0.30
 }
@@ -142,11 +150,16 @@ math_table_length_px :: #force_inline proc(
     length: dynviewmodel.Dynview_Math_Length, font_size, default_value: f32) -> f32 {
 
     switch length.unit {
-    case .Default: return default_value
-    case .Zero: return 0
-    case .Em: return length.value * font_size
-    case .Ex: return length.value * font_size * 0.5
-    case .Point: return length.value * 96.0 / 72.0
+    case .Default:
+        return default_value
+    case .Zero:
+        return 0
+    case .Em:
+        return length.value * font_size
+    case .Ex:
+        return length.value * font_size * 0.5
+    case .Point:
+        return length.value * 96.0 / 72.0
     }
     return 0
 }

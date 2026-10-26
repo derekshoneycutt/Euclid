@@ -127,7 +127,10 @@ scenario_runtime_load_file :: proc(
 scenario_runtime_init :: proc(
     runtime: ^Scenario_Runtime, state: ^core.Euclid_General_State,
     program: scenario.Program) {
-    runtime^ = {state = state, next_action_id = 1}
+    runtime^ = {
+        state = state,
+        next_action_id = 1,
+    }
     scenario.runner_init(&runtime.runner, program)
     log.infof("scenario_started command_count=%d", program.count)
     _ = evidence_session.session_record(
@@ -290,7 +293,10 @@ scenario_inject_text_events :: proc(
         if width == 0 || count >= len(events) {
             return false
         }
-        events[count] = {kind = .Text, codepoint = codepoint}
+        events[count] = {
+            kind = .Text,
+            codepoint = codepoint,
+        }
         count += 1
         offset += width
     }
@@ -314,8 +320,11 @@ scenario_issue_key :: proc(
     }
     for entry in SCENARIO_KEY_NAMES {
         if entry.name == name {
-            event := input.Input_Event{
-                kind = .Press, key = entry.key, modifiers = modifiers}
+            event: input.Input_Event = {
+                kind = .Press,
+                key = entry.key,
+                modifiers = modifiers,
+            }
             return input.input_runtime_inject_events(
                 runtime.input_runtime, []input.Input_Event{event})
         }
@@ -498,11 +507,16 @@ scenario_issue_viewport_action :: proc(
 scenario_issue_simulation_policy_action :: proc(
     state: ^core.Euclid_General_State, command: ^scenario.Command) -> (bool, bool) {
     #partial switch command.kind {
-    case .Pause_Simulation: state.ui_runtime.playback.simulation_paused = true
-    case .Resume_Simulation: state.ui_runtime.playback.simulation_paused = false
-    case .Pause_Animation: state.ui_runtime.playback.animation_policy_paused = true
-    case .Resume_Animation: state.ui_runtime.playback.animation_policy_paused = false
-    case: return false, false
+    case .Pause_Simulation:
+        state.ui_runtime.playback.simulation_paused = true
+    case .Resume_Simulation:
+        state.ui_runtime.playback.simulation_paused = false
+    case .Pause_Animation:
+        state.ui_runtime.playback.animation_policy_paused = true
+    case .Resume_Animation:
+        state.ui_runtime.playback.animation_policy_paused = false
+    case:
+        return false, false
     }
     return true, true
 }
@@ -557,7 +571,8 @@ scenario_issue_capture_action :: proc(
     case .Start_Gif, .Stop_Gif:
         runtime.state.gif_capture_status.save_gif_requested = true
         identity.kind = .Capture
-    case: return false, false
+    case:
+        return false, false
     }
     return true, true
 }
@@ -713,7 +728,10 @@ scenario_arena_domain_sample :: proc(
     if !valid || state == nil || state^.julia_runtime_service == nil {
         return {}, false
     }
-    return {kind = kind, snapshot = scenario_arena_snapshot(state, kind)}, true
+    return {
+        kind = kind,
+        snapshot = scenario_arena_snapshot(state, kind),
+    }, true
 }
 
 //   Evaluate one allocation-domain scenario command.
@@ -766,7 +784,11 @@ scenario_record_allocation_evidence :: proc(
             correlation = runtime.next_action_id - 1,
             generation = 1,
             flags = flags,
-            payload = {counts = {first = u32(domain_kind)}},
+            payload = {
+                counts = {
+                    first = u32(domain_kind),
+                },
+            },
         })
 }
 
@@ -787,9 +809,12 @@ scenario_queue_dust_emission :: proc(
     queue^.items[queue^.count] = {
         distribution = particlemodel.Dust_Emission_Distribution(
             command.dust_distribution),
-        count = command.dust_count, x = command.value,
-        y = command.secondary_value, radius = command.tertiary_value,
-        seed = command.dust_seed, correlation = identity.id,
+        count = command.dust_count,
+        x = command.value,
+        y = command.secondary_value,
+        radius = command.tertiary_value,
+        seed = command.dust_seed,
+        correlation = identity.id,
         generation = identity.generation,
     }
     queue^.count += 1
@@ -807,7 +832,8 @@ scenario_issue_particle_action :: proc(
         accepted := particles.queue_dust_tool_contact(
             particle_system, {
                 endpoint = {command.value, command.secondary_value, 0},
-                source = .Scenario})
+                source = .Scenario,
+            })
         return true, accepted
     case .Kick_Dust:
         if executor == nil ||
@@ -828,11 +854,14 @@ scenario_issue_input_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     text: string) -> (bool, bool) {
     #partial switch command.kind {
-    case .Type_Text: return true, scenario_issue_terminal_text(runtime, text)
+    case .Type_Text:
+        return true, scenario_issue_terminal_text(runtime, text)
     case .Type_Library_Name:
         return true, scenario_issue_library_name_text(runtime, text)
-    case .Key: return true, scenario_issue_key(runtime, command)
-    case: return false, false
+    case .Key:
+        return true, scenario_issue_key(runtime, command)
+    case:
+        return false, false
     }
 }
 
@@ -898,7 +927,11 @@ scenario_record_issued_action :: proc(
             correlation = identity.id,
             generation = identity.generation,
             flags = {.Required},
-            payload = {counts = {first = u32(command.kind)}},
+            payload = {
+                counts = {
+                    first = u32(command.kind),
+                },
+            },
         })
 }
 
@@ -909,7 +942,7 @@ scenario_runtime_issue :: proc(
     if runtime == nil || runtime.state == nil || command == nil {
         return {}
     }
-    identity := evidence_trace.Identity{
+    identity: evidence_trace.Identity = {
         kind = .Scenario_Action,
         id = runtime.next_action_id,
         generation = 1,
@@ -920,7 +953,10 @@ scenario_runtime_issue :: proc(
         return {}
     }
     scenario_record_issued_action(runtime, command, identity)
-    return {accepted = true, correlation = identity}
+    return {
+        accepted = true,
+        correlation = identity,
+    }
 }
 
 //   Materialize one requested screenshot after a complete frame presentation.

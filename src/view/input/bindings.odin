@@ -55,7 +55,10 @@ input_registry_action_pressed :: proc(
                 continue
             }
             if event.key == binding.key && event.modifiers == binding.modifiers {
-                return {action = binding.action, event_index = event_index}, true
+                return {
+                    action = binding.action,
+                    event_index = event_index,
+                }, true
             }
         }
     }

@@ -59,7 +59,9 @@ terminal_update_keyboard :: proc(
 
     update: Terminal_Keyboard_Update
     for event in frame.events {
-        event_frame := input.Input_Frame{events = []input.Input_Event{event}}
+        event_frame: input.Input_Frame = {
+            events = []input.Input_Event{event},
+        }
         clipboard_text := ""
         if terminal_clipboard_paste_requested(event_frame) {
             clipboard_text = input.input_get_clipboard_text()
@@ -82,6 +84,9 @@ terminal_update_keyboard_event :: proc(
     term: ^viewterminalmodel.Terminal_State, event: input.Input_Event,
     clipboard_text: string) -> Terminal_Keyboard_Update {
     defer terminal_report_edit_failure(term)
+    if !terminal_history_navigation_event(event) {
+        terminal_history_navigation_invalidate(term)
+    }
     composing := term.history != nil && term.history.preedit_active
     if input.input_event_composition_owns_key(event, &composing) {
         return {}
@@ -90,7 +95,9 @@ terminal_update_keyboard_event :: proc(
         return update
     }
     if event.kind == .Text {
-        return {cursor_moved = terminal_update_char_input_event(term, event)}
+        return {
+            cursor_moved = terminal_update_char_input_event(term, event),
+        }
     }
     if event.text_target.kind != .None &&
         event.text_target.kind != .Terminal {
@@ -100,9 +107,13 @@ terminal_update_keyboard_event :: proc(
         event.kind == .Text_Commit {
         return terminal_update_composition_event(term, event)
     }
-    event_frame := input.Input_Frame{events = []input.Input_Event{event}}
+    event_frame: input.Input_Frame = {
+        events = []input.Input_Event{event},
+    }
     if terminal_clipboard_paste_requested(event_frame) {
-        return {cursor_moved = terminal_insert_clipboard_text(term, clipboard_text)}
+        return {
+            cursor_moved = terminal_insert_clipboard_text(term, clipboard_text),
+        }
     }
     return terminal_update_navigation_keys(term, event_frame)
 }
@@ -129,8 +140,10 @@ terminal_update_composition_event :: proc(
     }
     if event.kind == .Text_Commit {
         payload := event
-        return {cursor_moved = terminal_update_text_commit(
-            term, input.input_event_text_payload(&payload))}
+        return {
+            cursor_moved = terminal_update_text_commit(
+                term, input.input_event_text_payload(&payload)),
+        }
     }
     return {}
 }
@@ -217,7 +230,9 @@ terminal_update_undo_key :: proc(
         terminal_clear_completion(term)
         term.draft_selection_dragging = false
     }
-    return {cursor_moved = changed}, true
+    return {
+        cursor_moved = changed,
+    }, true
 }
 
 //   Switch to the `help?>` prompt when `?` is typed at the start of a
@@ -700,14 +715,14 @@ terminal_input_chord :: proc(
     return false
 }
 
-//   Apply history and absolute cursor keys for one input frame.
+//   Apply absolute cursor keys for one input frame.
 //
 // Parameters:
-//   - term: Terminal state owning editable history and prompt mode.
+//   - term: Terminal state owning the editable draft.
 //   - frame: Polled input frame containing navigation key edges and repeats.
 //
 // Returns:
-//   - True when any supported history or absolute cursor action was attempted.
+//   - True when any supported absolute cursor action was attempted.
 //
 // Side effects:
 //   - May browse history, restore prompt metadata, or move to input start or end.
@@ -715,7 +730,7 @@ terminal_update_history_navigation :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
     handled := terminal_update_line_navigation(term, frame)
     handled = terminal_update_buffer_navigation(term, frame) || handled
-    return terminal_update_history_browse_keys(term, frame) || handled
+    return terminal_update_async_history_navigation(term, frame) || handled
 }
 
 // Apply Home/End and Ctrl+A/E logical-line movement.
@@ -762,23 +777,83 @@ terminal_update_buffer_navigation :: proc(
     return handled
 }
 
-// Apply Up/Down draft-row movement and history browsing at row boundaries.
-terminal_update_history_browse_keys :: proc(
+// Keep browsing history once active; otherwise preserve multiline editor movement.
+terminal_update_async_history_navigation :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
     handled := false
     if input.input_key_pressed_or_repeat(frame, .Up) {
-        if !terminal_hist_vertical_move(term, frame, -1) {
-            terminal_history_browse_prev(term)
+        if term.history_navigation_active ||
+           !terminal_hist_vertical_move(term, frame, -1) {
+            terminal_history_navigation_queue(term, -1)
+        } else {
+            terminal_history_navigation_invalidate(term)
         }
         handled = true
     }
     if input.input_key_pressed_or_repeat(frame, .Down) {
-        if !terminal_hist_vertical_move(term, frame, 1) {
-            terminal_history_browse_next(term)
+        if term.history_navigation_active ||
+           !terminal_hist_vertical_move(term, frame, 1) {
+            terminal_history_navigation_queue(term, 1)
+        } else {
+            terminal_history_navigation_invalidate(term)
         }
         handled = true
     }
     return handled
+}
+
+// Preserve navigation state across every Up/Down event, including key release.
+terminal_history_navigation_event :: proc(event: input.Input_Event) -> bool {
+    navigation_key := event.key == .Up || event.key == .Down
+    navigation_event := event.kind == .Press || event.kind == .Repeat ||
+        event.kind == .Release
+    return navigation_key && navigation_event
+}
+
+// Invalidate asynchronous recall before a user action can change its editor target.
+terminal_history_navigation_invalidate :: proc(
+    term: ^viewterminalmodel.Terminal_State) {
+    if term == nil {
+        return
+    }
+    term.history_navigation_epoch += 1
+    if term.history_navigation_epoch == 0 {
+        term.history_navigation_epoch = 1
+    }
+    term.history_navigation_intent_count = 0
+    term.history_navigation_pending_id = 0
+    term.history_navigation_admission_reported = false
+    term.history_navigation_active = false
+    term.history_navigation_anchor_id = 0
+}
+
+// Queue one ordered boundary-navigation intent and preserve the full unsent draft once.
+terminal_history_navigation_queue :: proc(
+    term: ^viewterminalmodel.Terminal_State, direction: int) {
+    if direction != -1 && direction != 1 {
+        return
+    }
+    if direction > 0 && !term.history_navigation_active {
+        return
+    }
+    if !term.history_navigation_active {
+        if !termhist.termhist_backup_current(term.history) {
+            log.warn("terminal_history_navigation_rejected reason=draft_capacity")
+            return
+        }
+        term.history_navigation_epoch += 1
+        term.history_navigation_active = true
+        term.history_navigation_anchor_id = max(u64)
+        term.history_navigation_draft_mode = term.input_mode
+        term.input_mode_backup = term.input_mode
+    }
+    if term.history_navigation_intent_count >=
+       len(term.history_navigation_intents) {
+        log.warn("terminal_history_navigation_rejected reason=intent_queue_full")
+        return
+    }
+    term.history_navigation_intents[term.history_navigation_intent_count] = direction
+    term.history_navigation_intent_count += 1
 }
 
 // Apply vertical movement, leaving unshifted boundary presses for history browsing.
@@ -789,12 +864,20 @@ terminal_hist_vertical_move :: proc(
     extend := terminal_input_chord(frame, key, {.Shift})
     columns := terminal_live_input_wrap_columns(
         term, termhist.termhist_current_text(term.history))
+    preferred := term.history.preferred_column
     if extend {
-        _ = termhist.termhist_move_vertical(
+        moved := termhist.termhist_move_vertical(
             term.history, direction, columns, true)
+        if !moved {
+            term.history.preferred_column = preferred
+        }
         return true
     }
-    return termhist.termhist_move_vertical(term.history, direction, columns)
+    moved := termhist.termhist_move_vertical(term.history, direction, columns)
+    if !moved {
+        term.history.preferred_column = preferred
+    }
+    return moved
 }
 
 //   Apply editing and cursor-navigation keys for one input frame.
@@ -807,7 +890,7 @@ terminal_hist_vertical_move :: proc(
 //   - True when any supported editing/navigation action was attempted.
 //
 // Side effects:
-//   - Mutates termhist, may accept a completion preview, browse history, or leave an
+//   - Mutates termhist, may accept a completion preview, or leave an
 //     empty non-normal mode.
 terminal_update_editing_keys :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
@@ -816,84 +899,6 @@ terminal_update_editing_keys :: proc(
     return horizontal || history
 }
 
-//   Step to the previous history entry, restoring its recorded prompt mode.
-//
-// Parameters:
-//   - term: Terminal state owning history position and prompt-mode metadata.
-//
-// Side effects:
-//   - Snapshots the live prompt mode as the draft's mode on first browse.
-terminal_history_browse_prev :: proc(term: ^viewterminalmodel.Terminal_State) {
-    if term.history.history_index == term.history.history_len {
-        term.input_mode_backup = term.input_mode
-    }
-    if !termhist.termhist_history_prev(term.history) {
-        return
-    }
-    entry := term.history.history[term.history.history_index]
-    term.input_mode = terminal_mode_for_history_tag(entry.tag)
-}
-
-//   Step to the next history entry, or restore the draft's prompt mode.
-//
-// Parameters:
-//   - term: Terminal state owning history position and prompt-mode metadata.
-//
-// Side effects:
-//   - Restores the pre-browse mode at the history tail; otherwise applies the selected
-//     entry's recorded prompt mode.
-terminal_history_browse_next :: proc(term: ^viewterminalmodel.Terminal_State) {
-    if !termhist.termhist_history_next(term.history) {
-        return
-    }
-    if term.history.history_index == term.history.history_len {
-        term.input_mode = term.input_mode_backup
-        return
-    }
-    entry := term.history.history[term.history.history_index]
-    term.input_mode = terminal_mode_for_history_tag(entry.tag)
-}
-
-//   Map a stored history-entry tag back to the prompt mode it recorded.
-//
-// Parameters:
-//   - tag: Integer metadata stored with one accepted history entry.
-//
-// Returns:
-//   - The corresponding prompt mode, defaulting to Normal for unknown tags.
-terminal_mode_for_history_tag :: proc(tag: int) -> protocol.Evaluation_Mode {
-    if tag == TERMINAL_HISTORY_TAG_PKG {
-        return .Pkg
-    }
-    if tag == TERMINAL_HISTORY_TAG_HELP {
-        return .Help
-    }
-    if tag == TERMINAL_HISTORY_TAG_SHELL {
-        return .Shell
-    }
-    return .Normal
-}
-
-//   Map the active prompt mode to its stored history-entry tag.
-//
-// Parameters:
-//   - mode: Evaluation mode to persist with one accepted history entry.
-//
-// Returns:
-//   - The stable history tag for the mode, defaulting to the Normal tag.
-terminal_history_tag_for_mode :: proc(mode: protocol.Evaluation_Mode) -> int {
-    switch mode {
-    case .Pkg:
-        return TERMINAL_HISTORY_TAG_PKG
-    case .Help:
-        return TERMINAL_HISTORY_TAG_HELP
-    case .Shell:
-        return TERMINAL_HISTORY_TAG_SHELL
-    case .Normal:
-        return TERMINAL_HISTORY_TAG_NORMAL
-    }
-    return TERMINAL_HISTORY_TAG_NORMAL
-}
 
 //   Report whether Ctrl+D on the live line should submit `exit()`, matching
 //   a shell's EOF-on-empty-line convention.
@@ -931,7 +936,9 @@ terminal_update_navigation_keys :: proc(
     }
     update, handled = terminal_update_submission_shortcuts(
         term, frame, cursor_moved)
-    return update if handled else {cursor_moved = cursor_moved}
+    return update if handled else {
+        cursor_moved = cursor_moved,
+    }
 }
 
 // Handle cancel, clear, focus-traversal, and completion shortcuts.
@@ -941,19 +948,27 @@ terminal_update_editor_shortcuts :: proc(
     if terminal_input_chord(frame, .C, {.Control}) &&
         !terminal_input_chord(frame, .C, {.Shift}) {
         terminal_cancel_draft(term)
-        return {cursor_moved = true}, true
+        return {
+            cursor_moved = true,
+        }, true
     }
     if terminal_input_chord(frame, .L, {.Control}) {
         terminal_clear_console(term)
         term.history.undo.sequence = false
-        return {cursor_moved = true}, true
+        return {
+            cursor_moved = true,
+        }, true
     }
     if terminal_input_chord(frame, .Tab, {.Control}) {
-        return {cursor_moved = cursor_moved}, true
+        return {
+            cursor_moved = cursor_moved,
+        }, true
     }
     if input.input_key_pressed(frame, .Tab) {
         if terminal_accept_completion_preview(term) {
-            return {cursor_moved = true}, true
+            return {
+                cursor_moved = true,
+            }, true
         }
         completion := terminal_request_completion(term, true)
         if completion.requested {
@@ -976,18 +991,30 @@ terminal_update_submission_shortcuts :: proc(
         termhist.termhist_insert_text(term.history, "exit()")
         submitted_text := terminal_submit(term)
         return {
-            submission = {text = submitted_text, submitted = true},
+            submission = {
+                text = submitted_text,
+                mode = term.input_mode,
+                continuation = term.collecting_continuation,
+                submitted = true,
+            },
             cursor_moved = true,
         }, true
     }
     if terminal_input_chord(frame, .Enter, {.Alt}) {
         termhist.termhist_insert_text(term.history, "\n")
-        return {cursor_moved = true}, true
+        return {
+            cursor_moved = true,
+        }, true
     }
     if terminal_input_chord(frame, .J, {.Control}) {
         submitted_text := terminal_submit(term)
         return {
-            submission = {text = submitted_text, submitted = true},
+            submission = {
+                text = submitted_text,
+                mode = term.input_mode,
+                continuation = term.collecting_continuation,
+                submitted = true,
+            },
             cursor_moved = true,
         }, true
     }
@@ -995,15 +1022,23 @@ terminal_update_submission_shortcuts :: proc(
         input.input_key_pressed(frame, .Keypad_Enter) {
         submitted_text := terminal_submit(term)
         return {
-            submission = {text = submitted_text, submitted = true},
+            submission = {
+                text = submitted_text,
+                mode = term.input_mode,
+                continuation = term.collecting_continuation,
+                submitted = true,
+            },
             cursor_moved = true,
         }, true
     }
-    return {cursor_moved = cursor_moved}, false
+    return {
+        cursor_moved = cursor_moved,
+    }, false
 }
 
 // Cancel draft work without interrupting an evaluation already owned by Julia.
 terminal_cancel_draft :: proc(term: ^viewterminalmodel.Terminal_State) {
+    terminal_history_navigation_invalidate(term)
     if term.collecting_continuation {
         terminal_restore_output_checkpoint(term)
         term.output_checkpoint.valid = false
@@ -1087,7 +1122,7 @@ terminal_update_mouse_selection :: proc(
     if terminal_update_draft_mouse_selection(term, frame, bounds) {
         return
     }
-    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse: geometry.Vector2 = {frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed {
         if term.shell_integration != nil {
             term.shell_integration.search_match_generation = 0
@@ -1124,12 +1159,12 @@ terminal_update_draft_mouse_selection :: proc(
         term.geometry.line_height <= 0 {
         return false
     }
-    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse: geometry.Vector2 = {frame.mouse_position.x, frame.mouse_position.y}
     padded := terminal_padded_bounds(bounds)
     prompt_y := padded.y - term.scroll_offset_y +
         f32(terminal_line_count(term)) * term.geometry.line_height
     rows := terminal_live_input_line_count(term)
-    prompt_bounds := geometry.Rectangle{
+    prompt_bounds: geometry.Rectangle = {
         padded.x, prompt_y, padded.width,
         f32(rows) * term.geometry.line_height,
     }

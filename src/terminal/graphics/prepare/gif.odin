@@ -323,11 +323,16 @@ gif_walk :: proc(
         height > limits.dimension_limit || width > limits.image_pixel_limit / height {
         return {}
     }
-    state := Gif_Walk_State{index = 13}
+    state: Gif_Walk_State = {
+        index = 13,
+    }
     if !gif_skip_color_table(bytes, &state.index, bytes[10]) {
         return {} 
     }
-    result := Gif_Animation_Inspection{width = width, height = height}
+    result: Gif_Animation_Inspection = {
+        width = width,
+        height = height,
+    }
     for state.index < len(bytes) {
         if taskpool.task_cancellation_requested(token) {
             return {} 
@@ -431,12 +436,14 @@ gif_walk_frame_table :: proc(
     bytes: []u8, request: Gif_Preflighted_Decode_Request,
     token: taskpool.Task_Cancellation_Token) -> Gif_Animation_Inspection {
     inspection := request.inspection
-    state := Gif_Walk_State{index = 13}
+    state: Gif_Walk_State = {
+        index = 13,
+    }
     if !gif_walk_request_valid(bytes, request.limits, token) ||
        !gif_skip_color_table(bytes, &state.index, bytes[10]) {
         return {}
     }
-    result := Gif_Animation_Inspection{
+    result: Gif_Animation_Inspection = {
         width = inspection.width,
         height = inspection.height,
     }

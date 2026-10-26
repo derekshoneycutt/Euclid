@@ -14,7 +14,11 @@ terminal_test_undo_key :: proc(
     term: ^viewterminalmodel.Terminal_State, key: input.Input_Key,
     modifiers: input.Input_Modifiers) -> Terminal_Keyboard_Update {
     return terminal_update_keyboard(term, {
-        events = []input.Input_Event{{kind = .Press, key = key, modifiers = modifiers}},
+        events = []input.Input_Event{{
+            kind = .Press,
+            key = key,
+            modifiers = modifiers,
+        }},
     })
 }
 
@@ -47,7 +51,9 @@ terminal_test_undo_bindings :: proc(t: ^testing.T) {
         testing.expect_value(t, termhist.termhist_current_text(term.history), "")
         testing.expect_value(t, term.pending_completion_request_id, 0)
         testing.expect(t, !terminal_set_completion_preview(&term, {
-            request_id = request.request_id, found = true, insertion = "stale",
+            request_id = request.request_id,
+            found = true,
+            insertion = "stale",
         }))
         redo_modifiers := input.Input_Modifiers{.Control, .Shift} if index == 0 else
             input.Input_Modifiers{.Super, .Shift}
@@ -67,14 +73,37 @@ terminal_test_undo_order_and_repeat :: proc(t: ^testing.T) {
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     events := [?]input.Input_Event{
-        {kind = .Text, codepoint = 'a'},
-        {kind = .Text, codepoint = 'b'},
-        {kind = .Press, key = .Z, modifiers = {.Control}},
-        {kind = .Repeat, key = .Z, modifiers = {.Control}},
-        {kind = .Press, key = .Z, modifiers = {.Control, .Shift}},
-        {kind = .Text, codepoint = 'x'},
+        {
+            kind = .Text,
+            codepoint = 'a',
+        },
+        {
+            kind = .Text,
+            codepoint = 'b',
+        },
+        {
+            kind = .Press,
+            key = .Z,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Repeat,
+            key = .Z,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Press,
+            key = .Z,
+            modifiers = {.Control, .Shift},
+        },
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
     }
-    _ = terminal_update_keyboard(&term, {events = events[:]})
+    _ = terminal_update_keyboard(&term, {
+        events = events[:],
+    })
     testing.expect_value(t, termhist.termhist_current_text(term.history), "ax")
     testing.expect(t,
         !terminal_test_undo_key(&term, .Z, {.Control, .Shift}).cursor_moved)
@@ -94,7 +123,10 @@ terminal_test_undo_ime_and_input_gates :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_update_preedit(term.history, "仮", 0, 1))
     testing.expect(t, !terminal_test_undo_key(&term, .Z, {.Control}).cursor_moved)
     testing.expect_value(t, termhist.termhist_current_text(term.history), "base")
-    commit := input.Input_Event{kind = .Text_Commit, text_length = 6}
+    commit: input.Input_Event = {
+        kind = .Text_Commit,
+        text_length = 6,
+    }
     copy(commit.text[:], "日本")
     _ = terminal_update_keyboard_event(&term, commit, "")
     testing.expect(t, terminal_test_undo_key(&term, .Z, {.Control}).cursor_moved)
@@ -103,7 +135,11 @@ terminal_test_undo_ime_and_input_gates :: proc(t: ^testing.T) {
     testing.expect(t, !terminal_test_undo_key(&term, .Z, {.Control}).cursor_moved)
     term.awaiting_eval = false
     _ = terminal_update_keyboard(&term, {
-        events = []input.Input_Event{{kind = .Press, key = .Z, modifiers = {.Control}}},
+        events = []input.Input_Event{{
+            kind = .Press,
+            key = .Z,
+            modifiers = {.Control},
+        }},
     }, false)
     testing.expect_value(t, termhist.termhist_current_text(term.history), "base")
 }
@@ -120,11 +156,19 @@ terminal_test_undo_exact_modifiers :: proc(t: ^testing.T) {
     }
     for modifiers in modifier_sets {
         _, handled := terminal_update_undo_key(
-            &term, {kind = .Press, key = .Z, modifiers = modifiers})
+            &term, {
+                kind = .Press,
+                key = .Z,
+                modifiers = modifiers,
+            })
         testing.expect(t, !handled)
     }
     _, handled := terminal_update_undo_key(
-        &term, {kind = .Release, key = .Z, modifiers = {.Control}})
+        &term, {
+            kind = .Release,
+            key = .Z,
+            modifiers = {.Control},
+        })
     testing.expect(t, !handled)
     testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
 }
@@ -139,8 +183,10 @@ terminal_test_undo_existing_completion :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_insert_text(term.history, "pri"))
     request := terminal_request_completion(&term)
     testing.expect(t, terminal_set_completion_preview(&term, {
-        request_id = request.request_id, found = true,
-        replacement_end = 3, insertion = "println",
+        request_id = request.request_id,
+        found = true,
+        replacement_end = 3,
+        insertion = "println",
     }))
     testing.expect_value(t, term.history.undo.position, 1)
     testing.expect(t, terminal_accept_completion_preview(&term))
@@ -165,8 +211,10 @@ terminal_test_undo_action_boundaries :: proc(t: ^testing.T) {
     _ = terminal_test_undo_key(&term, .Z, {.Control})
     request := terminal_request_completion(&term, false)
     testing.expect(t, terminal_set_completion_preview(&term, {
-        request_id = request.request_id, found = true,
-        replacement_end = 3, insertion = "other",
+        request_id = request.request_id,
+        found = true,
+        replacement_end = 3,
+        insertion = "other",
     }))
     testing.expect(t, term.history.undo.sequence)
     _ = terminal_test_undo_key(&term, .Left, {})
@@ -234,14 +282,17 @@ terminal_test_undo_cancel_and_mode :: proc(t: ^testing.T) {
 terminal_test_undo_failure_is_reported :: proc(t: ^testing.T) {
     errors := 0
     previous_logger := context.logger
-    context.logger = {procedure = terminal_test_undo_log, data = &errors}
+    context.logger = {
+        procedure = terminal_test_undo_log,
+        data = &errors,
+    }
     defer context.logger = previous_logger
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     termhist.termhist_destroy(term.history)
     testing.expect(t, termhist.termhist_init_with_allocator(
-        term.history, 8, 1, context.allocator))
+        term.history, 8, context.allocator))
     testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
     term.banner_ready = true
     storage: [1]u8
@@ -265,14 +316,17 @@ terminal_test_undo_failure_is_reported :: proc(t: ^testing.T) {
 terminal_test_undo_continuation_failure_recovers :: proc(t: ^testing.T) {
     errors := 0
     previous_logger := context.logger
-    context.logger = {procedure = terminal_test_undo_log, data = &errors}
+    context.logger = {
+        procedure = terminal_test_undo_log,
+        data = &errors,
+    }
     defer context.logger = previous_logger
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     termhist.termhist_destroy(term.history)
     testing.expect(t, termhist.termhist_init_with_allocator(
-        term.history, 32, 1, context.allocator))
+        term.history, 32, context.allocator))
     testing.expect(t, termhist.termhist_insert_text(term.history, "begin"))
     testing.expect(t, terminal_begin_eval(&term, terminal_submit(&term)))
     storage: [1]u8

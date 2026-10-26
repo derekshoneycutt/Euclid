@@ -109,15 +109,15 @@ Tree_List_Preparation :: struct {
 Tree_List_Params :: struct {
     label: string,
     general_state: ^core.Euclid_General_State,
-    ji : ^bridgemodel.Euclid_Julia_Interface,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
     collections: ^collectionmodel.Set,
     collections_revision: u64,
-    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
-    list_panel : geometry.Rectangle,
-    mouse_input : input.Input_Frame,
-    scroll_y : ^f32,
-    font : view_font.Font_Face,
-    font_resolver : view_font.Font_Resolver,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    list_panel: geometry.Rectangle,
+    mouse_input: input.Input_Frame,
+    scroll_y: ^f32,
+    font: view_font.Font_Face,
+    font_resolver: view_font.Font_Resolver,
     visibility: Tree_Visibility_Policy,
     reduce_motion: bool,
 }
@@ -230,11 +230,15 @@ tree_projection_add :: proc(
         retained_expanded = previous^.items[retained].expanded
     }
     index := viewmodel.ui_tree_projection_add_node(projection, {
-        key = request.key, target_animation_id = request.target_id,
-        kind = request.kind, parent = request.parent,
+        key = request.key,
+        target_animation_id = request.target_id,
+        kind = request.kind,
+        parent = request.parent,
         first_child = TREE_NO_ITEM,
-        last_child = TREE_NO_ITEM, next_sibling = TREE_NO_ITEM,
-        expanded = retained_expanded, selectable = request.selectable,
+        last_child = TREE_NO_ITEM,
+        next_sibling = TREE_NO_ITEM,
+        expanded = retained_expanded,
+        selectable = request.selectable,
         terminal = request.terminal,
     }, request.canonical_name)
     if index == TREE_NO_ITEM {
@@ -252,7 +256,9 @@ tree_projection_add_favorites :: proc(
     snapshot: ^collectionmodel.Set) -> bool {
     collections_index := tree_projection_add(projection, previous, {
         key = viewmodel.TREE_COLLECTIONS_ROOT_ID,
-        kind = .Collections, parent = TREE_NO_ITEM, selectable = true,
+        kind = .Collections,
+        parent = TREE_NO_ITEM,
+        selectable = true,
         expanded = previous^.collections_expanded,
     })
     if collections_index == TREE_NO_ITEM {
@@ -271,7 +277,9 @@ tree_projection_add_favorites :: proc(
     }
     favorites_index := tree_projection_add(projection, previous, {
         key = collectionmodel.FAVORITES_COLLECTION_ID,
-        kind = .Collection, parent = collections_index, selectable = true,
+        kind = .Collection,
+        parent = collections_index,
+        selectable = true,
         expanded = previous^.favorites_expanded,
     })
     if favorites_index == TREE_NO_ITEM {
@@ -302,8 +310,11 @@ tree_projection_add_favorite_entries :: proc(
         target := tree_find_stable_id(ji, entry.animation_id)
         canonical_name := target^.name if target != nil else ""
         if tree_projection_add(projection, previous, {
-            key = entry.id, target_id = entry.animation_id,
-            kind = .Placement, parent = favorites_index, selectable = true,
+            key = entry.id,
+            target_id = entry.animation_id,
+            kind = .Placement,
+            parent = favorites_index,
+            selectable = true,
             canonical_name = canonical_name,
         }) == TREE_NO_ITEM {
             return false
@@ -841,9 +852,13 @@ tree_projection_add_animation :: proc(
         expanded = previous^.items[prior].expanded
     }
     return tree_projection_add(staged, previous, {
-        key = node^.stable_id, target_id = node^.stable_id,
-        kind = .Animation, parent = parent, expanded = expanded,
-        selectable = true, terminal = node^.node_kind == .Terminal,
+        key = node^.stable_id,
+        target_id = node^.stable_id,
+        kind = .Animation,
+        parent = parent,
+        expanded = expanded,
+        selectable = true,
+        terminal = node^.node_kind == .Terminal,
         canonical_name = node^.name,
     }) != TREE_NO_ITEM
 }
@@ -976,7 +991,10 @@ tree_placement_semantic_id :: #force_inline proc(
     if item == nil {
         return {}
     }
-    return {domain = .Animation_Tree, stable_id = item^.key}
+    return {
+        domain = .Animation_Tree,
+        stable_id = item^.key,
+    }
 }
 
 // tree_item_semantic_id preserves canonical animation identity for existing callers.
@@ -985,7 +1003,10 @@ tree_item_semantic_id :: #force_inline proc(
     if node == nil {
         return {}
     }
-    return {domain = .Animation_Tree, stable_id = node^.stable_id}
+    return {
+        domain = .Animation_Tree,
+        stable_id = node^.stable_id,
+    }
 }
 
 // tree_find_stable_id resolves one permanent animation identity.
@@ -1117,7 +1138,7 @@ draw_encoded_tree_row :: proc(
     ctx: Encoded_Tree_Walk_Context,
     item: ^viewmodel.Ui_Tree_Item,
     depth: int, row_y: f32, expanded: bool = false) {
-    row := geometry.Rectangle{
+    row: geometry.Rectangle = {
         ctx.panel.x, row_y, ctx.panel.width, ctx.row_height}
     selected := ctx.state^.ui_runtime.library.tree.selected_item_id == item^.key
     if row.y + row.height >= ctx.panel.y &&
@@ -1137,7 +1158,7 @@ draw_encoded_tree_row :: proc(
         }
         if item^.first_child != TREE_NO_ITEM {
             scale := ctx.row_height / f32(theme.TREE_ROW_HEIGHT)
-            icon := geometry.Rectangle{row.x + f32(depth) * theme.TREE_INDENT * scale +
+            icon: geometry.Rectangle = {row.x + f32(depth) * theme.TREE_INDENT * scale +
                 theme.TREE_ROW_ICON_OFFSET_X * scale,
                 row.y + theme.TREE_ROW_ICON_OFFSET_Y * scale,
                 theme.TREE_ROW_ICON_SIZE * scale, theme.TREE_ROW_ICON_SIZE * scale}
@@ -1292,7 +1313,7 @@ tree_visible_row :: proc(
     if ji == nil || target == nil {
         return 0, false
     }
-    ctx := Tree_Visible_Row_Context{ji, target, policy}
+    ctx: Tree_Visible_Row_Context = {ji, target, policy}
     row := 0
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent != nil {
@@ -1317,7 +1338,7 @@ tree_projection_visible_row :: proc(
     }
     policy := policy_input
     policy.projection = projection
-    ctx := Tree_Projection_Walk_Context{projection, policy}
+    ctx: Tree_Projection_Walk_Context = {projection, policy}
     row: int
     for root, steps := projection^.first_root, 0;
         root != TREE_NO_ITEM && steps < projection^.count;
@@ -1374,7 +1395,7 @@ tree_projection_item_at_row :: proc(
     }
     policy := policy_input
     policy.projection = projection
-    ctx := Tree_Projection_Walk_Context{projection, policy}
+    ctx: Tree_Projection_Walk_Context = {projection, policy}
     row: int
     for root, steps := projection^.first_root, 0;
         root != TREE_NO_ITEM && steps < projection^.count;
@@ -1470,7 +1491,7 @@ tree_projection_visible_count_limited :: proc(
 tree_resolve_active_node :: proc(
     params: Tree_List_Params) -> ^viewmodel.Ui_Tree_Item {
     projection := &params.ui_runtime^.library.tree.projection
-    active_key := uuid.Identifier{}
+    active_key: uuid.Identifier = {}
     if params.ui_runtime^.semantic_focus != nil {
         active_key = params.ui_runtime^.semantic_focus^.active_tree_item
     }
@@ -1595,8 +1616,10 @@ tree_apply_structure_command :: proc(
     kind: viewmodel.Ui_Focus_Command_Kind) -> ^viewmodel.Ui_Tree_Item {
     tree_motion_anchor_action(params, active, kind)
     #partial switch kind {
-    case .Tree_Parent: return tree_apply_parent_command(params, active)
-    case .Tree_Child: return tree_apply_child_command(params, active)
+    case .Tree_Parent:
+        return tree_apply_parent_command(params, active)
+    case .Tree_Child:
+        return tree_apply_child_command(params, active)
     case .Toggle:
         active^.expanded = !active^.expanded
     case .Expand:
@@ -1770,13 +1793,19 @@ tree_publish_item_semantics :: proc(
         actions = {}
     }
     _ = uisemantics.semantic_register_control(ctx.semantic_focus, {
-        id = publication.item_id, parent = publication.parent_id,
-        role = .Tree_Item, states = states,
-        actions = actions, region = .Accordion_Content,
-        traversal_order = u32(ctx.row^), bounds = geometry.bounds,
-        clip_bounds = geometry.clip_bounds, label = publication.label,
+        id = publication.item_id,
+        parent = publication.parent_id,
+        role = .Tree_Item,
+        states = states,
+        actions = actions,
+        region = .Accordion_Content,
+        traversal_order = u32(ctx.row^),
+        bounds = geometry.bounds,
+        clip_bounds = geometry.clip_bounds,
+        label = publication.label,
         level = u32(publication.depth + 1),
-        position_in_set = publication.position, set_size = publication.size,
+        position_in_set = publication.position,
+        set_size = publication.size,
     })
 }
 
@@ -1788,7 +1817,7 @@ tree_item_semantic_publication :: proc(
     depth: int,
     policy: Tree_Visibility_Policy) -> Tree_Item_Semantic_Publication {
     item_id := tree_placement_semantic_id(item)
-    states := viewmodel.Ui_Node_State{.Visible, .Focusable}
+    states: viewmodel.Ui_Node_State = {.Visible, .Focusable}
     if item^.selectable || item^.first_child != TREE_NO_ITEM {
         states += {.Enabled}
     }
@@ -1798,7 +1827,7 @@ tree_item_semantic_publication :: proc(
     if tree_item_is_effectively_expanded(policy, item^) {
         states += {.Expanded}
     }
-    actions := viewmodel.Ui_Node_Action_Set{.Focus}
+    actions: viewmodel.Ui_Node_Action_Set = {.Focus}
     if item^.selectable {
         actions += {.Select}
     }
@@ -1810,10 +1839,15 @@ tree_item_semantic_publication :: proc(
         parent_id = tree_placement_semantic_id(projection^.items[item^.parent])
     }
     return {
-        item = item, label = tree_item_label(ctx.ji, item, ctx.collections),
-        depth = depth, item_id = item_id, parent_id = parent_id,
-        states = states, actions = actions,
-        position = item.semantic_position, size = item.semantic_set_size,
+        item = item,
+        label = tree_item_label(ctx.ji, item, ctx.collections),
+        depth = depth,
+        item_id = item_id,
+        parent_id = parent_id,
+        states = states,
+        actions = actions,
+        position = item.semantic_position,
+        size = item.semantic_set_size,
     }
 }
 
@@ -1849,7 +1883,7 @@ register_tree_semantics :: proc(
     tree_register_semantic_control(params, scroll, tree_id, active_id)
     row := 0
     panel := geometry.Rectangle(scroll.control_geometry.bounds)
-    ctx := Tree_Semantic_Context{
+    ctx: Tree_Semantic_Context = {
         tree = &params.ui_runtime^.library.tree,
         reorder = &params.ui_runtime^.library.actions.reorder,
         semantic_focus = params.ui_runtime^.semantic_focus,
@@ -1886,14 +1920,23 @@ tree_register_semantic_control :: proc(
     scroll: uiwidgets.Scroll_Container_Update_Result,
     tree_id, active_id: viewmodel.Ui_Node_Id) {
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
-        id = tree_id, active_descendant = active_id, role = .Tree,
+        id = tree_id,
+        active_descendant = active_id,
+        role = .Tree,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Select, .Expand, .Collapse, .Scroll},
-        region = .Accordion_Content, traversal_order = 3,
+        region = .Accordion_Content,
+        traversal_order = 3,
         bounds = scroll.control_geometry.bounds,
         clip_bounds = scroll.control_geometry.clip_bounds,
-        numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
-            f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
+        numeric_range = {
+            f64(scroll.minimum),
+            f64(scroll.maximum),
+            f64(scroll.scroll_y_out),
+            f64(scroll.step),
+            scroll.orientation,
+            true,
+        },
         label = params.label,
     })
 }
@@ -2031,7 +2074,7 @@ update_tree_node_row :: proc(
 
     scale := row_rect.height / f32(theme.TREE_ROW_HEIGHT)
     indent_x := row_rect.x + f32(depth) * theme.TREE_INDENT * scale
-    icon_rect := geometry.Rectangle{
+    icon_rect: geometry.Rectangle = {
         indent_x + theme.TREE_ROW_ICON_OFFSET_X * scale,
         row_rect.y + theme.TREE_ROW_ICON_OFFSET_Y * scale,
         theme.TREE_ROW_ICON_SIZE * scale,

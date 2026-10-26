@@ -133,9 +133,13 @@ document_greedy_break :: proc(
             return .Invalid_Argument
         }
         next, status := document_greedy_append_line(nodes, {
-            start = start, end = end, block_index = block_index,
+            start = start,
+            end = end,
+            block_index = block_index,
             available_width = line_width,
-        }, {lines})
+        }, {
+            lines,
+        })
         if status != .Ok {
             return status
         }

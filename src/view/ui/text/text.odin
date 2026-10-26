@@ -13,23 +13,23 @@ import theme "../theme"
 //   coherent value.
 Wrapped_Text_Content_Params :: struct {
     encoder: ^native.Draw_Encoder,
-    panel : geometry.Rectangle,
-    scroll_y : f32,
-    font : view_font.Font_Face,
-    text_padding : f32,
-    text_row_height : f32,
-    text_color : color.Color_RGBA8,
-    wrap_advance : f32,
-    font_size : f32,
-    font_cache : ^view_font.Font_Cache,
-    font_key : view_font.Font_Key,
+    panel: geometry.Rectangle,
+    scroll_y: f32,
+    font: view_font.Font_Face,
+    text_padding: f32,
+    text_row_height: f32,
+    text_color: color.Color_RGBA8,
+    wrap_advance: f32,
+    font_size: f32,
+    font_cache: ^view_font.Font_Cache,
+    font_key: view_font.Font_Key,
 }
 
 
 //   Font and size pair for UI text draw calls.
 Ui_Text_Font :: struct {
-    font : view_font.Font_Face,
-    font_size : f32,
+    font: view_font.Font_Face,
+    font_size: f32,
 }
 
 //   Complete inputs for one atomic shaped-or-unshaped text draw.
@@ -153,8 +153,8 @@ Shaped_Run_Preflight :: struct {
 // Bind logical font size and actual encoder scale to the cache's face generation.
 ui_text_raster_request :: proc(
     resolver: view_font.Font_Resolver, key: view_font.Font_Key,
-    font_size: f32, encoder: ^native.Draw_Encoder) ->
-    (view_font.Font_Raster_Request, bool) {
+    font_size: f32,
+    encoder: ^native.Draw_Encoder) -> (view_font.Font_Raster_Request, bool) {
 
     if font_size <= 0 {
         return {}, false
@@ -167,8 +167,11 @@ ui_text_raster_request :: proc(
             f32(encoder.physical_extent[1])/encoder.logical_extent.y)
     }
     if resolver.request_raster == nil {
-        return {key = key, logical_size = font_size,
-            scene_pixels_per_logical_unit = scene_scale}, true
+        return {
+            key = key,
+            logical_size = font_size,
+            scene_pixels_per_logical_unit = scene_scale,
+        }, true
     }
     return resolver.request_raster(
         resolver.user_data, key, font_size, scene_scale)
@@ -178,7 +181,8 @@ ui_text_raster_request :: proc(
 ui_text_font :: #force_inline proc(
     font: view_font.Font_Face, text_size_percent := 100) -> Ui_Text_Font {
     return Ui_Text_Font{
-        font = font, font_size = theme.ui_font_size(text_size_percent),
+        font = font,
+        font_size = theme.ui_font_size(text_size_percent),
     }
 }
 
@@ -265,8 +269,10 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
     }
     resolved := draw.resolved
     if !native.draw_encoder_texture_quad(draw.encoder,
-        quad.destination, quad.uv, draw.color,
-        {texture = resolved.texture.handle, sampler = .Linear}) {
+        quad.destination, quad.uv, draw.color, {
+            texture = resolved.texture.handle,
+            sampler = .Linear,
+        }) {
         return
     }
     scale, scale_valid := ui_text_resolved_raster_scale(draw)
@@ -334,7 +340,7 @@ ui_text_resolved_glyph_destination :: proc(draw: Resolved_Glyph_Draw) -> (
     if !valid_top {
         return {}, false
     }
-    destination := geometry.Rectangle{
+    destination: geometry.Rectangle = {
         x = draw.position.x + f32(resolved.offset_x)*scale +
             f32(draw.x_offset)*offset_scale,
         y = bitmap_top + f32(draw.y_offset)*offset_scale,
@@ -508,12 +514,18 @@ ui_text_resolve_codepoint :: proc(
     raster_request: view_font.Font_Raster_Request) -> Codepoint_Resolution {
 
     if resolver.resolve_codepoint == nil {
-        return {status = .Unsupported}
+        return {
+            status = .Unsupported,
+        }
     }
     resolved, status := resolver.resolve_codepoint(
         resolver.user_data, key, codepoint, raster_request)
     if status == .Resident {
-        return {glyph = resolved, status = status, drawable = true}
+        return {
+            glyph = resolved,
+            status = status,
+            drawable = true,
+        }
     }
     replacement, replacement_status := resolver.resolve_codepoint(
         resolver.user_data, key, rune(0xfffd), raster_request)
@@ -765,7 +777,9 @@ ui_text_shaped_geometry_preflight :: proc(
     request: Shaped_Text_Draw) -> Shaped_Run_Preflight {
 
     resolver := request.resolver
-    result := Shaped_Run_Preflight{reason = .Invalid_Result}
+    result: Shaped_Run_Preflight = {
+        reason = .Invalid_Result,
+    }
     if len(request.text) > len(resolver.workspace) {
         result.reason = .Workspace_Overflow
         return result
@@ -927,7 +941,7 @@ ui_text_glyph_ink_placement :: proc(
     if !valid {
         return {}
     }
-    draw := Resolved_Glyph_Draw{
+    draw: Resolved_Glyph_Draw = {
         encoder = request.encoder,
         resolved = resolved,
         position = {
@@ -950,8 +964,8 @@ ui_text_glyph_ink_placement :: proc(
 draw_wrapped_text_row :: proc(
     text: string, row_y: f32, params: Wrapped_Text_Content_Params) {
 
-    text_font := Ui_Text_Font{params.font, params.font_size}
-    position := geometry.Vector2{params.panel.x + params.text_padding, row_y}
+    text_font: Ui_Text_Font = {params.font, params.font_size}
+    position: geometry.Vector2 = {params.panel.x + params.text_padding, row_y}
     if params.font_cache == nil {
         return
     }

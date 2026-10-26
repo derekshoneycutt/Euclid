@@ -10,7 +10,7 @@ collections_create_empty_duplicates_replay_independently :: proc(t: ^testing.T) 
     defer collections_test_destroy(set)
     replay := collections_test_set()
     defer collections_test_destroy(replay)
-    source := [4]u8{'N', 'a', 'm', 'e'}
+    source: [4]u8 = {'N', 'a', 'm', 'e'}
     first, failure := make_collection_create_mutation(
         set, collections_test_id(101), string(source[:]))
     testing.expect_value(t, failure, Policy_Error.None)

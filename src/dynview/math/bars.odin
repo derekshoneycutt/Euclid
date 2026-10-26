@@ -63,7 +63,7 @@ math_bar_geometry :: proc(input: Math_Bar_Geometry_Input) -> Math_Bar_Geometry {
     }
     rule_thickness := max(1.0, thickness)
     half := rule_thickness * 0.5
-    result := Math_Bar_Geometry{
+    result: Math_Bar_Geometry = {
         valid = true,
         rule_thickness = rule_thickness,
         width = input.child_width,

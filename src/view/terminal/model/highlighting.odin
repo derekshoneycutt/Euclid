@@ -17,10 +17,11 @@ Terminal_Highlight_Line :: struct {
     source_end: int,
 }
 
-// One retained hard-line anchor; source remains authoritative in identified termhist storage.
+// One retained hard-line anchor tied to a stable SQLite history revision.
 Terminal_Highlight_History :: struct {
     id: u64,
-    history_index: int,
+    source_revision: u64,
+    terminal_generation: u64,
     line: Terminal_Highlight_Line,
     visible_epoch: u64,
 }
@@ -35,6 +36,7 @@ Terminal_Highlight_Slot :: struct {
     run_count: int,
     due: f64,
     visible_epoch: u64,
+    source_fetch_request_id: u64,
     source: [protocol.TERMINAL_HIGHLIGHT_SOURCE_MAX_BYTES]u8,
     runs: [protocol.TERMINAL_HIGHLIGHT_RUN_CAPACITY]protocol.Highlight_Run,
 }

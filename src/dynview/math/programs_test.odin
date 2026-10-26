@@ -8,7 +8,10 @@ import "core:testing"
 //   Verify table lengths and rule records resolve once into boundary spans.
 @(test)
 math_table_boundaries_resolve_typed_lengths_and_rules :: proc(t: ^testing.T) {
-    descriptor := dynviewmodel.Dynview_Math_Table_Descriptor{rows = 2, columns = 2}
+    descriptor: dynviewmodel.Dynview_Math_Table_Descriptor = {
+        rows = 2,
+        columns = 2,
+    }
     descriptor.column_boundary_gaps[0] = {0, .Zero}
     descriptor.column_boundary_gaps[1] = {0.5, .Em}
     descriptor.vertical_rule_counts[0] = 2
@@ -52,11 +55,17 @@ stretch_delimiter_clearance_is_tight_and_scale_aware :: proc(t: ^testing.T) {
 @(test)
 stretch_delimiter_clearance_follows_atom_role :: proc(t: ^testing.T) {
     open_left, open_right := stretch_delimiter_clearances({
-        math_atom_class = .Open, accent_mode = DELIMITER_KIND_LEFT_PAREN}, 20)
+        math_atom_class = .Open,
+        accent_mode = DELIMITER_KIND_LEFT_PAREN,
+    }, 20)
     close_left, close_right := stretch_delimiter_clearances({
-        math_atom_class = .Close, radical_mode = DELIMITER_KIND_RIGHT_PAREN}, 20)
+        math_atom_class = .Close,
+        radical_mode = DELIMITER_KIND_RIGHT_PAREN,
+    }, 20)
     middle_left, middle_right := stretch_delimiter_clearances({
-        math_atom_class = .Rel, accent_mode = DELIMITER_KIND_VERT}, 20)
+        math_atom_class = .Rel,
+        accent_mode = DELIMITER_KIND_VERT,
+    }, 20)
     testing.expect(t, open_left > 0 && open_right == 0)
     testing.expect(t, close_left == 0 && close_right > 0)
     testing.expect(t, middle_left == 0 && middle_right == 0)
@@ -79,7 +88,9 @@ math_atom_spacing_uses_tex_display_table :: proc(t: ^testing.T) {
 math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
     cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
-    program := dynviewmodel.Dynview_Math_Program{command_count = 3}
+    program: dynviewmodel.Dynview_Math_Program = {
+        command_count = 3,
+    }
     cache^.math_commands[0].math_atom_class = .Ord
     cache^.math_commands[1].math_atom_class = .Bin
     cache^.math_commands[2].math_atom_class = .Ord
@@ -111,7 +122,9 @@ math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
 math_explicit_glue_uses_semantic_width :: proc(t: ^testing.T) {
     cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
-    program := dynviewmodel.Dynview_Math_Program{command_count = 3}
+    program: dynviewmodel.Dynview_Math_Program = {
+        command_count = 3,
+    }
     cache^.math_commands[0].math_atom_class = .Ord
     cache^.math_commands[1].math_glue_kind = .Thick
     cache^.math_commands[2].math_atom_class = .Ord

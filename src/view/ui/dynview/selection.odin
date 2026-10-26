@@ -201,7 +201,9 @@ dynview_document_hit_boundary :: proc(
     if point.x >= rect.x+rect.width*0.5 {
         boundary += 1
     }
-    return {unit_index = boundary}
+    return {
+        unit_index = boundary,
+    }
 }
 
 // Return the byte boundary after a requested number of UTF-8 codepoints.
@@ -242,12 +244,16 @@ dynview_wrapped_hit_boundary :: proc(
             for _ in 0..<math.clamp(column, 0, row_units) {
                 byte_offset += max(1, dyncore.text_utf8_sequence_len(text, byte_offset))
             }
-            return {unit_index = dyncore.text_codepoint_count_span(
-                text, 0, byte_offset)}
+            return {
+                unit_index = dyncore.text_codepoint_count_span(
+                    text, 0, byte_offset),
+            }
         }
         start, row = span.next_start, row+1
     }
-    return {unit_index = dyncore.text_codepoint_count_span(text, 0, len(text))}
+    return {
+        unit_index = dyncore.text_codepoint_count_span(text, 0, len(text)),
+    }
 }
 
 // Resolve one pointer to the current presentation mode's nearest logical boundary.
@@ -266,7 +272,9 @@ dynview_selection_hit_boundary :: proc(
         if !ok {
             return {}
         }
-        return {unit_index = point.x >= rect.x+rect.width*0.5 ? 1 : 0}
+        return {
+            unit_index = point.x >= rect.x+rect.width * 0.5 ? 1 : 0,
+        }
     case .Wrapped_Text:
         return dynview_wrapped_hit_boundary(view.fallback_text, view, point)
     case .None:
@@ -288,13 +296,17 @@ dynview_selection_update_mouse :: proc(
     runtime, selection := update.runtime, update.selection
     owner, content := update.press_owner, update.content
     view, frame := update.view, update.frame
-    point := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    point: geometry.Vector2 = {frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed && !owner^.active && content.unit_count > 0 &&
         geometry.rectangle_contains(view.panel, point) {
         position := dynview_selection_hit_boundary(runtime, content, view, point)
         selection^.anchor, selection^.head = position, position
         selection^.active, selection^.dragging = false, true
-        owner^ = {active = true, kind = .Dynview_Selection, id = 1001}
+        owner^ = {
+            active = true,
+            kind = .Dynview_Selection,
+            id = 1001,
+        }
     }
     if !dynview_selection_owns_press(owner) {
         return
@@ -303,7 +315,9 @@ dynview_selection_update_mouse :: proc(
     selection^.active = selection^.anchor != selection^.head
     if .Left in frame.mouse_released || .Left not_in frame.mouse_down {
         selection^.dragging = false
-        owner^ = {id = -1}
+        owner^ = {
+            id = -1,
+        }
     }
 }
 
@@ -387,8 +401,12 @@ dynview_selection_copy :: proc(
 dynview_selection_select_all :: proc(
     selection: ^dynviewmodel.Dynview_Selection_State, unit_count: int) {
     if unit_count > 0 {
-        selection^.anchor = {unit_index = 0}
-        selection^.head = {unit_index = unit_count}
+        selection^.anchor = {
+            unit_index = 0,
+        }
+        selection^.head = {
+            unit_index = unit_count,
+        }
         selection^.active = true
     }
 }

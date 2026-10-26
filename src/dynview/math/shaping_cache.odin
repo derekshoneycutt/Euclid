@@ -215,7 +215,7 @@ shape_all_math_command_sites :: proc(
     cache := &runtime^.compile_cache
     for command_index in 0..<cache^.math_command_count {
         command := cache^.math_commands[command_index]
-        ctx := Shape_Command_Site_Context{
+        ctx: Shape_Command_Site_Context = {
             builder, runtime, service, command_index, command}
         for site in dynviewmodel.Dynview_Shaped_Site {
             status := shape_math_command_site(ctx, site)
@@ -287,7 +287,9 @@ cache_math_kern_record :: proc(
     record: ^fontmodel.Font_Math_Kern_Table) -> bool {
 
     result := service.glyph_kern_table(service.user_data, {
-        generation = service.generation, glyph_id = glyph_id, corner = corner,
+        generation = service.generation,
+        glyph_id = glyph_id,
+        corner = corner,
         output = record^.entries[:],
     })
     if !result.ok || result.count < 0 || result.count > len(record^.entries) {
@@ -321,7 +323,7 @@ cache_math_kern_records :: proc(
         if !ok {
             return .Invalid_Argument
         }
-        edge_glyphs := [4]u32{
+        edge_glyphs: [4]u32 = {
             glyphs[len(glyphs)-1].glyph_id, glyphs[0].glyph_id,
             glyphs[len(glyphs)-1].glyph_id, glyphs[0].glyph_id}
         for corner in u8(0)..=u8(3) {
@@ -424,7 +426,8 @@ cache_math_stretch_source :: proc(
 
     source^.raster_ascent = service.raster_ascent
     variant_result := service.glyph_variants(service.user_data, {
-        generation = service.generation, glyph_id = glyph_id,
+        generation = service.generation,
+        glyph_id = glyph_id,
         output = source^.variants.values[:],
     })
     if variant_result.ok && variant_result.count > 0 {
@@ -435,7 +438,8 @@ cache_math_stretch_source :: proc(
         source^.variants.count = variant_result.count
     }
     assembly_result := service.glyph_assembly(service.user_data, {
-        generation = service.generation, glyph_id = glyph_id,
+        generation = service.generation,
+        glyph_id = glyph_id,
         output = source^.assembly.values[:],
     })
     if assembly_result.ok && assembly_result.count > 0 {
@@ -456,7 +460,8 @@ math_stretch_base_glyph :: proc(
     flattened_accent: bool = false) -> (u32, bool) {
 
     result := service.shape(service.user_data, {
-        generation = service.generation, text = text,
+        generation = service.generation,
+        text = text,
         flattened_accent = flattened_accent,
         projection_workspace = service.projection_workspace,
         glyph_output = service.glyph_workspace,
@@ -489,7 +494,8 @@ cache_math_accent_source :: proc(
     source^.variants.count = 1
     source^.variants.values[0] = base
     variant_result := service.horizontal_glyph_variants(service.user_data, {
-        generation = service.generation, glyph_id = base.glyph_id,
+        generation = service.generation,
+        glyph_id = base.glyph_id,
         output = source^.variants.values[:],
     })
     if variant_result.ok && variant_result.count > 0 {
@@ -499,7 +505,8 @@ cache_math_accent_source :: proc(
         source^.variants.count = variant_result.count
     }
     assembly_result := service.horizontal_glyph_assembly(service.user_data, {
-        generation = service.generation, glyph_id = base.glyph_id,
+        generation = service.generation,
+        glyph_id = base.glyph_id,
         output = source^.assembly.values[:],
     })
     if assembly_result.ok && assembly_result.count > 0 {
@@ -520,7 +527,8 @@ math_accent_base_variant :: proc(
     flattened: bool) -> (fontmodel.Font_Math_Glyph_Variant, bool) {
 
     result := service.shape(service.user_data, {
-        generation = service.generation, text = text,
+        generation = service.generation,
+        text = text,
         standalone_accent = true,
         flattened_accent = flattened,
         projection_workspace = service.projection_workspace,
@@ -536,7 +544,8 @@ math_accent_base_variant :: proc(
         return {}, false
     }
     return {
-        glyph_id = glyph.glyph_id, advance = max(1, glyph.x_advance),
+        glyph_id = glyph.glyph_id,
+        advance = max(1, glyph.x_advance),
         extents = metrics.extents,
         italic_correction = metrics.italic_correction,
         top_accent_attachment = metrics.top_accent_attachment,
@@ -585,7 +594,7 @@ cache_math_stretch_source_records :: proc(
     cache := &runtime^.compile_cache
     for command_index in 0..<cache^.math_command_count {
         command := cache^.math_commands[command_index]
-        texts := [2]string{}
+        texts: [2]string = {}
         if command.kind == .Radical_Bar {
             texts[0] = "√"
         } else if command.kind == .Stretch_Delimiter {

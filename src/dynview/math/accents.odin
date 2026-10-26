@@ -56,14 +56,18 @@ math_accent_intrinsic_construction :: proc(
         return {}
     }
     variant := variants.values[0]
-    construction := fontmodel.Font_Math_Stretch_Construction{
-        valid = true, generation = generation,
+    construction: fontmodel.Font_Math_Stretch_Construction = {
+        valid = true,
+        generation = generation,
         base_glyph_id = variants.base_glyph_id,
-        advance = f32(max(1, variant.advance)), count = 1,
+        advance = f32(max(1, variant.advance)),
+        count = 1,
         top_accent_attachment = f32(variant.top_accent_attachment),
     }
     construction.parts[0] = {
-        glyph_id = variant.glyph_id, extents = variant.extents}
+        glyph_id = variant.glyph_id,
+        extents = variant.extents,
+    }
     return construction
 }
 

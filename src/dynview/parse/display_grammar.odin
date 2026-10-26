@@ -205,8 +205,12 @@ tex_display_scan_row :: proc(
     row_start, body_end: int,
     kind: Tex_Document_Display_Kind) -> Tex_Display_Scan_Result {
 
-    result := Tex_Document_Display_Row_Source{
-        start = row_start, end = body_end, alignment = -1, notag = -1}
+    result: Tex_Document_Display_Row_Source = {
+        start = row_start,
+        end = body_end,
+        alignment = -1,
+        notag = -1,
+    }
     brace_depth := 0
     environment_depth := 0
     offset := row_start
@@ -277,10 +281,14 @@ tex_display_append_inline :: proc(
     }
     if !tex_semantic_append_document_inline(parser.output, block_index, {
         kind = .Math,
-        source = {segment.source_start, segment.source_end-segment.source_start},
-        text = span, color = segment.color, root_style = .Display,
+        source = {segment.source_start, segment.source_end - segment.source_start},
+        text = span,
+        color = segment.color,
+        root_style = .Display,
         math_program = segment.program,
-    }) {return .Work_Limit}
+    }) {
+        return .Work_Limit
+    }
     return .Ok
 }
 
@@ -299,8 +307,11 @@ tex_display_commit_segment :: proc(
         return -1, status
     }
     status = tex_display_append_inline(parser, input.block_index, {
-        source_start = input.start, source_end = input.end,
-        program = program, text = text, color = input.color,
+        source_start = input.start,
+        source_end = input.end,
+        program = program,
+        text = text,
+        color = input.color,
     })
     return program, status
 }
@@ -318,8 +329,11 @@ tex_display_commit_row :: proc(
     }
     split := row.alignment if row.alignment >= 0 else row.end
     primary, status := tex_display_commit_segment(parser, {
-        block_index = block_index, row = row, start = row.start,
-        end = split, color = color,
+        block_index = block_index,
+        row = row,
+        start = row.start,
+        end = split,
+        color = color,
     })
     if status != .Ok {
         return status
@@ -327,17 +341,22 @@ tex_display_commit_row :: proc(
     secondary := -1
     if row.alignment >= 0 {
         secondary, status = tex_display_commit_segment(parser, {
-            block_index = block_index, row = row, start = row.alignment+1,
-            end = row.end, color = color,
+            block_index = block_index,
+            row = row,
+            start = row.alignment+1,
+            end = row.end,
+            color = color,
         })
         if status != .Ok {
             return status
         }
     }
     row_index := tex_semantic_append_document_display_row(parser.output, {
-        source = {row.start, row.end-row.start},
-        primary_program = primary, secondary_program = secondary,
-        alignment = .Center, suppress_number = row.notag >= 0,
+        source = {row.start, row.end - row.start},
+        primary_program = primary,
+        secondary_program = secondary,
+        alignment = .Center,
+        suppress_number = row.notag >= 0,
     })
     return .Ok if row_index >= 0 else .Work_Limit
 }
@@ -404,24 +423,33 @@ tex_document_parse_display_environment :: proc(
     tex_document_close_paragraph(parser)
     row_start := parser.output.document_display_row_count
     block_index := tex_semantic_append_document_block(parser.output, {
-        kind = .Display, inline_start = parser.output.document_inline_count,
-        source = {source_start, body_end+len(info.closer)-source_start},
-        format = tex_document_block_format(parser, .Center), display_kind = info.kind,
-        display_row_start = row_start, display_numbered = info.numbered,
+        kind = .Display,
+        inline_start = parser.output.document_inline_count,
+        source = {source_start, body_end + len(info.closer) - source_start},
+        format = tex_document_block_format(parser, .Center),
+        display_kind = info.kind,
+        display_row_start = row_start,
+        display_numbered = info.numbered,
     })
     if block_index < 0 {
         return .Work_Limit
     }
     status := tex_document_parse_display_rows(Tex_Display_Rows_Input{
-        parser = parser, block_index = block_index,
-        body_start = body_start, body_end = body_end,
-        info = info, color = color,
+        parser = parser,
+        block_index = block_index,
+        body_start = body_start,
+        body_end = body_end,
+        info = info,
+        color = color,
     })
     if status != .Ok {
         return status
     }
     return tex_display_finish_environment(parser, {
-        block_index = block_index, row_start = row_start,
-        source_start = source_start, body_end = body_end, info = info,
+        block_index = block_index,
+        row_start = row_start,
+        source_start = source_start,
+        body_end = body_end,
+        info = info,
     })
 }

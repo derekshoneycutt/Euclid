@@ -69,8 +69,7 @@ sdl_windows_admission_test_show :: proc(
 
 // sdl_windows_admission_test_operations binds one deterministic fixture.
 sdl_windows_admission_test_operations :: proc(
-    state: ^Sdl_Windows_Admission_Test_State) ->
-    Sdl_Windows_Accessibility_Operations {
+    state: ^Sdl_Windows_Admission_Test_State) -> Sdl_Windows_Accessibility_Operations {
     return {
         user_data = state,
         hwnd = sdl_windows_admission_test_hwnd,
@@ -82,7 +81,9 @@ sdl_windows_admission_test_operations :: proc(
 // Verify only Windows starts SDL's application window hidden.
 @(test)
 sdl_windows_window_flags_start_hidden :: proc(t: ^testing.T) {
-    flags := sdl_platform_window_flags({resizable = true})
+    flags := sdl_platform_window_flags({
+        resizable = true,
+    })
     testing.expect(t, .HIGH_PIXEL_DENSITY in flags)
     testing.expect(t, .RESIZABLE in flags)
     when ODIN_OS == .Windows {
@@ -95,7 +96,9 @@ sdl_windows_window_flags_start_hidden :: proc(t: ^testing.T) {
 // Verify HWND lookup and publication precede one show attempt.
 @(test)
 sdl_windows_accessibility_admission_precedes_one_shot_show :: proc(t: ^testing.T) {
-    state := Sdl_Windows_Admission_Test_State{publish_succeeds = true}
+    state: Sdl_Windows_Admission_Test_State = {
+        publish_succeeds = true,
+    }
     platform := new(Sdl_Platform, context.allocator)
     defer free(platform, context.allocator)
     platform^.window = cast(^sdl.Window)&state
@@ -237,7 +240,7 @@ sdl_capture_transfer_layout_aligns_rows :: proc(t: ^testing.T) {
 // Verify padded transfer rows normalize to tight top-left RGBA8 storage.
 @(test)
 sdl_capture_copy_rgba8_removes_row_padding :: proc(t: ^testing.T) {
-    source := [24]u8{
+    source: [24]u8 = {
         1, 2, 3, 4, 5, 6, 7, 8, 90, 91, 92, 93,
         9, 10, 11, 12, 13, 14, 15, 16, 94, 95, 96, 97,
     }
@@ -255,11 +258,14 @@ sdl_capture_copy_rgba8_removes_row_padding :: proc(t: ^testing.T) {
 // Verify wait failure releases the fence without mapping the transfer.
 @(test)
 sdl_capture_completion_releases_after_wait_failure :: proc(t: ^testing.T) {
-    state := Sdl_Capture_Completion_Test_State{}
+    state: Sdl_Capture_Completion_Test_State = {}
     destination: [4]u8
     testing.expect(t, !sdl_capture_complete({
         fence = cast(^sdl.GPUFence)(uintptr(1)),
-        destination = destination[:], width = 1, height = 1, source_pitch = 4,
+        destination = destination[:],
+        width = 1,
+        height = 1,
+        source_pitch = 4,
     }, sdl_capture_test_operations(&state)))
     testing.expect_value(t, state.wait_count, 1)
     testing.expect_value(t, state.map_count, 0)
@@ -270,11 +276,16 @@ sdl_capture_completion_releases_after_wait_failure :: proc(t: ^testing.T) {
 // Verify map failure releases the fence without unmapping absent storage.
 @(test)
 sdl_capture_completion_releases_after_map_failure :: proc(t: ^testing.T) {
-    state := Sdl_Capture_Completion_Test_State{wait_succeeds = true}
+    state: Sdl_Capture_Completion_Test_State = {
+        wait_succeeds = true,
+    }
     destination: [4]u8
     testing.expect(t, !sdl_capture_complete({
         fence = cast(^sdl.GPUFence)(uintptr(1)),
-        destination = destination[:], width = 1, height = 1, source_pitch = 4,
+        destination = destination[:],
+        width = 1,
+        height = 1,
+        source_pitch = 4,
     }, sdl_capture_test_operations(&state)))
     testing.expect_value(t, state.wait_count, 1)
     testing.expect_value(t, state.map_count, 1)
@@ -285,13 +296,19 @@ sdl_capture_completion_releases_after_map_failure :: proc(t: ^testing.T) {
 // Verify successful completion unmaps and releases exactly once.
 @(test)
 sdl_capture_completion_unmaps_and_releases_once :: proc(t: ^testing.T) {
-    source := [4]u8{1, 2, 3, 4}
-    state := Sdl_Capture_Completion_Test_State{
-        pixels = rawptr(&source[0]), wait_succeeds = true, map_succeeds = true}
+    source: [4]u8 = {1, 2, 3, 4}
+    state: Sdl_Capture_Completion_Test_State = {
+        pixels = rawptr(&source[0]),
+        wait_succeeds = true,
+        map_succeeds = true,
+    }
     destination: [4]u8
     testing.expect(t, sdl_capture_complete({
         fence = cast(^sdl.GPUFence)(uintptr(1)),
-        destination = destination[:], width = 1, height = 1, source_pitch = 4,
+        destination = destination[:],
+        width = 1,
+        height = 1,
+        source_pitch = 4,
     }, sdl_capture_test_operations(&state)))
     testing.expect_value(t, destination, source)
     testing.expect_value(t, state.unmap_count, 1)
@@ -304,7 +321,7 @@ sdl_capture_png_preserves_padded_rgba_rows :: proc(t: ^testing.T) {
     path := ".build/test-artifacts/sdl-capture-padded.png"
     os.make_directory_all(".build/test-artifacts")
     defer os.remove(path)
-    pixels := [24]u8{
+    pixels: [24]u8 = {
         255, 0, 0, 255, 0, 255, 0, 128, 90, 91, 92, 93,
         0, 0, 255, 64, 255, 255, 255, 0, 94, 95, 96, 97,
     }
@@ -325,7 +342,7 @@ sdl_capture_png_preserves_padded_rgba_rows :: proc(t: ^testing.T) {
     testing.expect(t, sdl.ConvertPixels(
         surface.w, surface.h, surface.format, surface.pixels, surface.pitch,
         .RGBA32, raw_data(decoded[:]), 8))
-    expected := [16]u8{
+    expected: [16]u8 = {
         255, 0, 0, 255, 0, 255, 0, 128,
         0, 0, 255, 64, 255, 255, 255, 0,
     }
@@ -338,7 +355,7 @@ sdl_capture_png_reports_validation_and_persistence_failures :: proc(t: ^testing.
     previous_logger := context.logger
     context.logger = log.nil_logger()
     defer context.logger = previous_logger
-    pixels := [4]u8{1, 2, 3, 4}
+    pixels: [4]u8 = {1, 2, 3, 4}
     testing.expect(t, !sdl_platform_save_png(
         pixels[:], 1, 1, 3, "capture.png"))
     testing.expect(t, !sdl_platform_save_png(

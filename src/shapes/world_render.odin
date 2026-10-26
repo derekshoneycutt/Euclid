@@ -155,7 +155,11 @@ world_draw_source :: proc(
     if found {
         active_child = int(feature.index)
     }
-    return {entity = entity, style = style, active_child = active_child}
+    return {
+        entity = entity,
+        style = style,
+        active_child = active_child,
+    }
 }
 
 // Push one visible label with immutable canonical source metadata.
@@ -188,8 +192,12 @@ shape_world_draw_label_source :: proc(
     if world == nil || draw.mime != .Text_Plain || draw.source_revision == 0 {
         return "", false
     }
-    label := shapemodel.Shape_Label{mime = draw.mime, byte_offset = draw.source_offset,
-        byte_count = draw.source_count, revision = draw.source_revision}
+    label: shapemodel.Shape_Label = {
+        mime = draw.mime,
+        byte_offset = draw.source_offset,
+        byte_count = draw.source_count,
+        revision = draw.source_revision,
+    }
     return shapemodel.shape_label_source(&world.label_store, label)
 }
 
@@ -236,7 +244,7 @@ world_lerped_arc :: proc(
     if !center_ok || !arc_ok {
         return {}, false
     }
-    interpolated := shapemodel.Shape_Arc{
+    interpolated: shapemodel.Shape_Arc = {
         radius = math.lerp(arc.previous_radius, arc.radius, alpha),
         start_theta = math.lerp(arc.previous_start_theta, arc.start_theta, alpha),
         sweep_theta = math.lerp(arc.previous_sweep_theta, arc.sweep_theta, alpha),
@@ -398,7 +406,8 @@ world_lerped_trochoid :: proc(
     if !center_ok || !value_ok {
         return {}, false
     }
-    value := shapemodel.Shape_Trochoid{mode = current.mode,
+    value: shapemodel.Shape_Trochoid = {
+        mode = current.mode,
         fixed_radius = math.lerp(
             current.previous_fixed_radius, current.fixed_radius, alpha),
         rolling_radius = math.lerp(
@@ -413,7 +422,8 @@ world_lerped_trochoid :: proc(
         parameter_finish = math.lerp(
             current.previous_parameter_finish, current.parameter_finish, alpha),
         draw_parameter = math.lerp(
-            current.previous_draw_parameter, current.draw_parameter, alpha)}
+            current.previous_draw_parameter, current.draw_parameter, alpha),
+    }
     return {center, value}, shapemodel.shape_trochoid_is_valid(value)
 }
 
@@ -450,10 +460,13 @@ world_cache_push_trochoid :: proc(
             &world.draw_cache, first, result.vertex_count)
         return
     }
-    slot^ = Shapes_Curve_Draw{base = world_make_draw_base(source, .Curve),
-        first_vertex = first, vertex_count = result.vertex_count,
+    slot^ = Shapes_Curve_Draw{
+        base = world_make_draw_base(source, .Curve),
+        first_vertex = first,
+        vertex_count = result.vertex_count,
         capacity_limited = result.status == .Capacity_Limited,
-        topology = result.topology}
+        topology = result.topology,
+    }
 }
 
 // Resolve and interpolate the permanent trochoid guide description.
@@ -467,7 +480,8 @@ world_lerped_trochoid_tool :: proc(
     if !center_ok || !value_ok {
         return {}, false
     }
-    value := shapemodel.Shape_Trochoid_Tool{mode = current.mode,
+    value: shapemodel.Shape_Trochoid_Tool = {
+        mode = current.mode,
         fixed_radius = math.lerp(
             current.previous_fixed_radius, current.fixed_radius, alpha),
         rolling_radius = math.lerp(
@@ -475,7 +489,8 @@ world_lerped_trochoid_tool :: proc(
         parameter = math.lerp(current.previous_parameter, current.parameter, alpha),
         rotation = math.lerp(current.previous_rotation, current.rotation, alpha),
         orientation_phase = math.lerp(current.previous_orientation_phase,
-            current.orientation_phase, alpha)}
+            current.orientation_phase, alpha),
+    }
     return {center, value}, shapemodel.shape_trochoid_tool_is_valid(value)
 }
 
@@ -489,11 +504,11 @@ world_cache_push_trochoid_tool :: proc(
         return
     }
     pose := curve.trochoid_tool_pose(lerped.center, lerped.value)
-    handle_direction := Vector3{math.cos(pose.rolling_orientation),
+    handle_direction: Vector3 = {math.cos(pose.rolling_orientation),
         math.sin(pose.rolling_orientation), 0}
     handle_start := pose.rolling_center + handle_direction * lerped.value.rolling_radius
     handle_finish := handle_start - handle_direction * lerped.value.rolling_radius * 0.30
-    draw := Shapes_Trochoid_Tool_Draw{world_make_draw_base(source, .Trochoid_Tool),
+    draw: Shapes_Trochoid_Tool_Draw = {world_make_draw_base(source, .Trochoid_Tool),
         pose.fixed_center, pose.rolling_center, lerped.value.fixed_radius,
         lerped.value.rolling_radius, handle_start, handle_finish}
     world.draw_cache.trochoid_tool = draw
@@ -516,7 +531,7 @@ world_lerped_cycloid :: proc(world: ^shapemodel.Shape_World,
     if !first_ok || !second_ok || !value_ok {
         return {}, false
     }
-    value := shapemodel.Shape_Cycloid{
+    value: shapemodel.Shape_Cycloid = {
         rolling_radius = math.lerp(current.previous_rolling_radius,
             current.rolling_radius, alpha),
         tracer_distance = math.lerp(current.previous_tracer_distance,
@@ -528,7 +543,8 @@ world_lerped_cycloid :: proc(world: ^shapemodel.Shape_World,
         parameter_finish = math.lerp(current.previous_parameter_finish,
             current.parameter_finish, alpha),
         draw_parameter = math.lerp(current.previous_draw_parameter,
-            current.draw_parameter, alpha)}
+            current.draw_parameter, alpha),
+    }
     valid := shapemodel.shape_cycloid_is_valid(value) &&
         shapemodel.shape_cycloid_line_is_valid(first, second,
             value.rolling_radius, value.parameter_start, value.parameter_finish)
@@ -567,10 +583,13 @@ world_cache_push_cycloid :: proc(world: ^shapemodel.Shape_World,
             &world.draw_cache, first_vertex, result.vertex_count)
         return
     }
-    slot^ = Shapes_Curve_Draw{base = world_make_draw_base(source, .Curve),
-        first_vertex = first_vertex, vertex_count = result.vertex_count,
+    slot^ = Shapes_Curve_Draw{
+        base = world_make_draw_base(source, .Curve),
+        first_vertex = first_vertex,
+        vertex_count = result.vertex_count,
         capacity_limited = result.status == .Capacity_Limited,
-        topology = result.topology}
+        topology = result.topology,
+    }
 }
 
 // Resolve and interpolate the permanent literal-line cycloid guide.
@@ -585,7 +604,7 @@ world_lerped_cycloid_tool :: proc(world: ^shapemodel.Shape_World,
     if !first_ok || !second_ok || !value_ok {
         return {}, false
     }
-    value := shapemodel.Shape_Cycloid_Tool{
+    value: shapemodel.Shape_Cycloid_Tool = {
         rolling_radius = math.lerp(current.previous_rolling_radius,
             current.rolling_radius, alpha),
         parameter_start = math.lerp(current.previous_parameter_start,
@@ -594,7 +613,8 @@ world_lerped_cycloid_tool :: proc(world: ^shapemodel.Shape_World,
             current.parameter_finish, alpha),
         parameter = math.lerp(current.previous_parameter, current.parameter, alpha),
         orientation_phase = math.lerp(current.previous_orientation_phase,
-            current.orientation_phase, alpha)}
+            current.orientation_phase, alpha),
+    }
     valid := shapemodel.shape_cycloid_tool_is_valid(value) &&
         shapemodel.shape_cycloid_line_is_valid(first, second,
             value.rolling_radius, value.parameter_start, value.parameter_finish)
@@ -611,13 +631,13 @@ world_cache_push_cycloid_tool :: proc(world: ^shapemodel.Shape_World,
         return
     }
     pose := curve.cycloid_tool_pose(lerped.first, lerped.second, lerped.value)
-    handle_direction := Vector3{math.cos(pose.rolling_orientation),
+    handle_direction: Vector3 = {math.cos(pose.rolling_orientation),
         math.sin(pose.rolling_orientation), 0}
     handle_start := pose.rolling_center +
         handle_direction * lerped.value.rolling_radius
     handle_finish := handle_start -
         handle_direction * lerped.value.rolling_radius * 0.30
-    draw := Shapes_Cycloid_Tool_Draw{world_make_draw_base(source, .Cycloid_Tool),
+    draw: Shapes_Cycloid_Tool_Draw = {world_make_draw_base(source, .Cycloid_Tool),
         pose.baseline_start, pose.baseline_finish, pose.rolling_center,
         lerped.value.rolling_radius, handle_start, handle_finish}
     world.draw_cache.cycloid_tool = draw
@@ -695,7 +715,7 @@ world_cache_push_pen :: proc(
     if !first_ok || !second_ok {
         return
     }
-    draw := Shapes_Pen_Draw{
+    draw: Shapes_Pen_Draw = {
         world_make_draw_base(source, .Pen), first, second}
     world.draw_cache.pen = draw
     world.draw_cache.draw_pen = true
@@ -717,7 +737,7 @@ world_cache_push_compass :: proc(
     if !first_ok || !pivot_ok || !second_ok {
         return
     }
-    draw := Shapes_Compass_Draw{
+    draw: Shapes_Compass_Draw = {
         world_make_draw_base(source, .Compass), joint1, pivot, joint2}
     world.draw_cache.compass = draw
     world.draw_cache.draw_compass = true
@@ -760,14 +780,17 @@ world_cache_push_geometry :: proc(
        return
     }
     switch geometry.kind {
-    case .Point: world_cache_push_point(world, source, alpha)
-    case .Line: world_cache_push_line(world, source, geometry.payload.line, alpha)
+    case .Point:
+        world_cache_push_point(world, source, alpha)
+    case .Line:
+        world_cache_push_line(world, source, geometry.payload.line, alpha)
     case .Arc, .Filled_Arc:
         world_cache_push_arc(world, source, geometry.payload.arc, geometry.kind, alpha)
     case .Circle_Region:
         world_cache_push_circle_region(
             world, source, geometry.payload.circle_region, alpha)
-    case .Trochoid: world_cache_push_trochoid(world, source, alpha)
+    case .Trochoid:
+        world_cache_push_trochoid(world, source, alpha)
     case .Cycloid:
         world_cache_push_cycloid(world, source, geometry.payload.cycloid, alpha)
     case .Polygon:

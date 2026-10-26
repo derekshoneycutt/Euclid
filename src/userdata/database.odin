@@ -33,20 +33,28 @@ store_open_internal :: proc(
     fail_migration_after_schema: bool,
     force_read_only: bool) -> Store_Error {
     if !store_can_open(store) {
-        return {kind = .Invalid_State}
+        return {
+            kind = .Invalid_State,
+        }
     }
     absolute_path, path_error := resolve_database_path(path, context.temp_allocator)
     if path_error != .None {
-        return {kind = .Invalid_Path}
+        return {
+            kind = .Invalid_Path,
+        }
     }
     defer delete(absolute_path, context.temp_allocator)
     if !collections.initialize(&store^.collection_replay_workspace) {
-        return {kind = .Allocation}
+        return {
+            kind = .Allocation,
+        }
     }
     copy(store^.path[:len(absolute_path)], transmute([]u8)absolute_path)
     store^.path_length = len(absolute_path)
     if !sqlite.threading_supported() {
-        return store_abort_open(store, {kind = .Sqlite_Threading})
+        return store_abort_open(store, {
+            kind = .Sqlite_Threading,
+        })
     }
     open_error, read_only := store_open_connection(
         store, absolute_path, force_read_only)
@@ -90,16 +98,26 @@ store_can_open :: proc(store: ^Store) -> bool {
         !store^.collection_replay_workspace.initialized
 }
 
+// Open an explicitly read-only connection and retain the native failure details.
+store_open_read_only_connection :: proc(
+    store: ^Store, path: string) -> (Store_Error, bool) {
+    failure := sqlite.connection_open(
+        &store^.connection, path, .Readonly, context.temp_allocator)
+    if store_sqlite_error_is_clear(failure) {
+        return {}, true
+    }
+    return {
+        kind = .Open,
+        sqlite_error = failure,
+    }, false
+}
+
 // Select read/write access, falling back to read-only only for an existing file.
 store_open_connection :: proc(
-    store: ^Store, path: string, force_read_only: bool) -> (Store_Error, bool) {
+    store: ^Store, path: string,
+    force_read_only: bool) -> (Store_Error, bool) {
     if force_read_only {
-        failure := sqlite.connection_open(
-            &store^.connection, path, .Readonly, context.temp_allocator)
-        if store_sqlite_error_is_clear(failure) {
-            return {}, true
-        }
-        return {kind = .Open, sqlite_error = failure}, false
+        return store_open_read_only_connection(store, path)
     }
     failure := sqlite.connection_open(
         &store^.connection, path, .Readwrite, context.temp_allocator)
@@ -107,23 +125,26 @@ store_open_connection :: proc(
         return {}, false
     }
     if store^.connection.handle != nil {
-        return {kind = .Open, sqlite_error = failure}, false
+        return {
+            kind = .Open,
+            sqlite_error = failure,
+        }, false
     }
     if os.exists(path) {
-        failure = sqlite.connection_open(
-            &store^.connection, path, .Readonly, context.temp_allocator)
-        if store_sqlite_error_is_clear(failure) {
-            return {}, true
-        }
-        return {kind = .Open, sqlite_error = failure}, false
+        return store_open_read_only_connection(store, path)
     }
     if !store_ensure_parent_directory(path) {
-        return {kind = .Directory}, false
+        return {
+            kind = .Directory,
+        }, false
     }
     failure = sqlite.connection_open(
         &store^.connection, path, .Readwrite_Create, context.temp_allocator)
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Open, sqlite_error = failure}, false
+        return {
+            kind = .Open,
+            sqlite_error = failure,
+        }, false
     }
     return {}, false
 }
@@ -140,11 +161,17 @@ store_admit_database :: proc(
     store: ^Store, read_only, fail_migration_after_schema: bool) -> Store_Error {
     failure := store_set_busy_timeout(store)
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Open, sqlite_error = failure}
+        return {
+            kind = .Open,
+            sqlite_error = failure,
+        }
     }
     failure = store_enable_foreign_keys(store)
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Open, sqlite_error = failure}
+        return {
+            kind = .Open,
+            sqlite_error = failure,
+        }
     }
     header := store_read_header(store)
     if !store_error_is_clear(header.failure) {
@@ -172,7 +199,10 @@ store_admit_existing_database :: proc(
     if !read_only {
         pragma_error := store_configure_writable(store)
         if !store_sqlite_error_is_clear(pragma_error) {
-            return {kind = .Open, sqlite_error = pragma_error}
+            return {
+                kind = .Open,
+                sqlite_error = pragma_error,
+            }
         }
     }
     if final_header.schema_version == 1 {
@@ -245,7 +275,10 @@ store_initialize_empty_database :: proc(
     }
     pragma_error := store_configure_writable(store)
     if !store_sqlite_error_is_clear(pragma_error) {
-        return {kind = .Migration, sqlite_error = pragma_error}
+        return {
+            kind = .Migration,
+            sqlite_error = pragma_error,
+        }
     }
     return store_initialize_schema(store, fail_migration_after_schema)
 }
@@ -298,18 +331,33 @@ store_read_header :: proc(store: ^Store) -> Store_Header {
     application_id, application_error := store_read_integer_query(
         &store^.connection, "PRAGMA application_id")
     if !store_sqlite_error_is_clear(application_error) {
-        return {failure = {kind = .Invalid_Schema, sqlite_error = application_error}}
+        return {
+            failure = {
+                kind = .Invalid_Schema,
+                sqlite_error = application_error,
+            },
+        }
     }
     schema_version, version_error := store_read_integer_query(
         &store^.connection, "PRAGMA user_version")
     if !store_sqlite_error_is_clear(version_error) {
-        return {failure = {kind = .Invalid_Schema, sqlite_error = version_error}}
+        return {
+            failure = {
+                kind = .Invalid_Schema,
+                sqlite_error = version_error,
+            },
+        }
     }
     object_count, count_error := store_read_integer_query(
         &store^.connection,
         "SELECT COUNT(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'")
     if !store_sqlite_error_is_clear(count_error) {
-        return {failure = {kind = .Invalid_Schema, sqlite_error = count_error}}
+        return {
+            failure = {
+                kind = .Invalid_Schema,
+                sqlite_error = count_error,
+            },
+        }
     }
     return {
         application_id = application_id,
@@ -368,7 +416,10 @@ store_initialize_schema :: proc(
     store: ^Store, fail_after_schema: bool) -> Store_Error {
     begin_error := store_exec(store, "BEGIN IMMEDIATE")
     if !store_sqlite_error_is_clear(begin_error) {
-        return {kind = .Migration, sqlite_error = begin_error}
+        return {
+            kind = .Migration,
+            sqlite_error = begin_error,
+        }
     }
     failure := sqlite.connection_exec(
         &store^.connection,
@@ -402,7 +453,10 @@ store_migrate_v1_to_v2 :: proc(
     store: ^Store, fail_after_schema: bool) -> Store_Error {
     begin_error := store_exec(store, "BEGIN IMMEDIATE")
     if !store_sqlite_error_is_clear(begin_error) {
-        return {kind = .Migration, sqlite_error = begin_error}
+        return {
+            kind = .Migration,
+            sqlite_error = begin_error,
+        }
     }
     failure := sqlite.connection_exec(
         &store^.connection,
@@ -488,7 +542,10 @@ store_prepare_statement :: proc(
         &store^.connection, statement,
         strings.clone_to_cstring(sql, context.temp_allocator))
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Invalid_Schema, sqlite_error = failure}
+        return {
+            kind = .Invalid_Schema,
+            sqlite_error = failure,
+        }
     }
     return {}
 }
@@ -502,11 +559,20 @@ store_load_settings :: proc(
         if store != nil && store^.status == .Unusable {
             failure_kind = .Unusable
         }
-        return {failure = {kind = failure_kind}}
+        return {
+            failure = {
+                kind = failure_kind,
+            },
+        }
     }
     begin_error := store_exec(store, "BEGIN")
     if !store_sqlite_error_is_clear(begin_error) {
-        return {failure = {kind = .Read, sqlite_error = begin_error}}
+        return {
+            failure = {
+                kind = .Read,
+                sqlite_error = begin_error,
+            },
+        }
     }
     staged := preferences^
     result := store_collect_known_settings(store, &staged)
@@ -531,7 +597,10 @@ store_collect_known_settings :: proc(
     for id in settings.ALL_SETTING_IDS {
         read := store_read_known_setting(store, id)
         if !store_sqlite_error_is_clear(read.failure) {
-            result.failure = {kind = .Read, sqlite_error = read.failure}
+            result.failure = {
+                kind = .Read,
+                sqlite_error = read.failure,
+            }
             return result
         }
         if !read.found {
@@ -590,25 +659,39 @@ store_fetch_known_row :: proc(
     id: settings.Setting_Id) -> Setting_Read_Result {
     status, failure := sqlite.statement_step(statement)
     if !store_sqlite_error_is_clear(failure) {
-        return {reason = .Storage_Type, failure = failure}
+        return {
+            reason = .Storage_Type,
+            failure = failure,
+        }
     }
     if status == .Done {
-        return {reason = .Storage_Type}
+        return {
+            reason = .Storage_Type,
+        }
     }
     if status != .Row {
         failure = sqlite.sqlite_make_validation_error(.Step, .Invalid_State)
-        return {reason = .Storage_Type, failure = failure}
+        return {
+            reason = .Storage_Type,
+            failure = failure,
+        }
     }
     decoded := store_decode_setting_row(statement, id)
     if !store_sqlite_error_is_clear(decoded.failure) {
-        return {reason = decoded.reason, failure = decoded.failure}
+        return {
+            reason = decoded.reason,
+            failure = decoded.failure,
+        }
     }
     status, failure = sqlite.statement_step(statement)
     if !store_sqlite_error_is_clear(failure) || status != .Done {
         if store_sqlite_error_is_clear(failure) {
             failure = sqlite.sqlite_make_validation_error(.Step, .Invalid_State)
         }
-        return {reason = decoded.reason, failure = failure}
+        return {
+            reason = decoded.reason,
+            failure = failure,
+        }
     }
     return {
         value = decoded.value,
@@ -630,13 +713,20 @@ store_decode_setting_row :: proc(
     }
     stored_type := store_read_type_name(statement)
     if !store_sqlite_error_is_clear(stored_type.failure) {
-        return {reason = stored_type.reason, failure = stored_type.failure}
+        return {
+            reason = stored_type.reason,
+            failure = stored_type.failure,
+        }
     }
     if stored_type.reason != .None {
-        return {reason = stored_type.reason}
+        return {
+            reason = stored_type.reason,
+        }
     }
     if stored_type.kind != definition.storage_kind {
-        return {reason = .Storage_Type}
+        return {
+            reason = .Storage_Type,
+        }
     }
     result := store_read_stored_value(
         statement, id, definition.storage_kind)
@@ -655,33 +745,55 @@ store_read_type_name :: proc(
         }
     }
     if column_kind != .Text {
-        return {kind = .Boolean, reason = .Column_Type}
+        return {
+            kind = .Boolean,
+            reason = .Column_Type,
+        }
     }
     buffer: [8]u8
     count, failure := sqlite.column_text_copy(statement, 0, buffer[:])
     if !store_sqlite_error_is_clear(failure) {
         if failure.validation == .Capacity {
-            return {kind = .Boolean, reason = .Text_Capacity}
+            return {
+                kind = .Boolean,
+                reason = .Text_Capacity,
+            }
         }
-        return {kind = .Boolean, reason = .Column_Type, failure = failure}
+        return {
+            kind = .Boolean,
+            reason = .Column_Type,
+            failure = failure,
+        }
     }
     switch string(buffer[:count]) {
     case "boolean":
-        return {kind = .Boolean}
+        return {
+            kind = .Boolean,
+        }
     case "integer":
-        return {kind = .Integer}
+        return {
+            kind = .Integer,
+        }
     case "text":
-        return {kind = .Text}
+        return {
+            kind = .Text,
+        }
     }
-    return {kind = .Boolean, reason = .Storage_Type}
+    return {
+        kind = .Boolean,
+        reason = .Storage_Type,
+    }
 }
 
 // Map one storage discriminator to its canonical database spelling.
 store_value_type_name :: proc(kind: settings.Setting_Storage_Kind) -> string {
     switch kind {
-    case .Boolean: return "boolean"
-    case .Integer: return "integer"
-    case .Text: return "text"
+    case .Boolean:
+        return "boolean"
+    case .Integer:
+        return "integer"
+    case .Text:
+        return "text"
     }
     return ""
 }
@@ -716,16 +828,22 @@ store_read_boolean :: proc(
         }
     }
     if text_column != .Null {
-        return {reason = .Null_Column}
+        return {
+            reason = .Null_Column,
+        }
     }
     value, failure := sqlite.column_i64(statement, 1)
     if !store_sqlite_error_is_clear(failure) {
         return store_column_read_failure(failure)
     }
     if value != 0 && value != 1 {
-        return {reason = .Value_Range}
+        return {
+            reason = .Value_Range,
+        }
     }
-    return {value = settings.boolean_value(value == 1)}
+    return {
+        value = settings.boolean_value(value == 1),
+    }
 }
 
 // Require an exact integer value and a NULL text column.
@@ -739,7 +857,9 @@ store_read_integer :: proc(
         }
     }
     if text_column != .Null {
-        return {reason = .Null_Column}
+        return {
+            reason = .Null_Column,
+        }
     }
     value, failure := sqlite.column_i64(statement, 1)
     if !store_sqlite_error_is_clear(failure) {
@@ -747,14 +867,20 @@ store_read_integer :: proc(
     }
     converted := int(value)
     if i64(converted) != value {
-        return {reason = .Value_Range}
+        return {
+            reason = .Value_Range,
+        }
     }
-    return {value = settings.integer_value(converted)}
+    return {
+        value = settings.integer_value(converted),
+    }
 }
 
 // Treat stored-class mismatches as corrupt values and propagate SQLite failures.
 store_column_read_failure :: proc(failure: sqlite.Error) -> Setting_Value_Read_Result {
-    result := Setting_Value_Read_Result{reason = .Column_Type}
+    result: Setting_Value_Read_Result = {
+        reason = .Column_Type,
+    }
     if failure.validation != .Type_Mismatch {
         result.failure = failure
     }
@@ -774,15 +900,22 @@ store_read_enum_text :: proc(
         }
     }
     if integer_column != .Null || text_column != .Text {
-        return {reason = .Null_Column}
+        return {
+            reason = .Null_Column,
+        }
     }
     buffer: [DATABASE_TEXT_MAX_BYTES]u8
     count, failure := sqlite.column_text_copy(statement, 2, buffer[:])
     if !store_sqlite_error_is_clear(failure) {
         if failure.validation == .Capacity {
-            return {reason = .Text_Capacity}
+            return {
+                reason = .Text_Capacity,
+            }
         }
-        return {reason = .Column_Type, failure = failure}
+        return {
+            reason = .Column_Type,
+            failure = failure,
+        }
     }
     return store_decode_enum_text(id, string(buffer[:count]))
 }
@@ -794,21 +927,33 @@ store_decode_enum_text :: proc(
     case .Window_Mode:
         switch value {
         case "fixed":
-            return {value = settings.window_mode_value(.Fixed)}
+            return {
+                value = settings.window_mode_value(.Fixed),
+            }
         case "resizable":
-            return {value = settings.window_mode_value(.Resizable)}
+            return {
+                value = settings.window_mode_value(.Resizable),
+            }
         }
     case .Window_Layout:
         switch value {
         case "auto":
-            return {value = settings.layout_preference_value(.Auto)}
+            return {
+                value = settings.layout_preference_value(.Auto),
+            }
         case "landscape":
-            return {value = settings.layout_preference_value(.Landscape)}
+            return {
+                value = settings.layout_preference_value(.Landscape),
+            }
         case "portrait":
-            return {value = settings.layout_preference_value(.Portrait)}
+            return {
+                value = settings.layout_preference_value(.Portrait),
+            }
         }
     }
-    return {reason = .Unknown_Enum}
+    return {
+        reason = .Unknown_Enum,
+    }
 }
 
 // Commit a coalesced settings batch in one transaction.
@@ -840,22 +985,49 @@ store_commit_user_data_internal :: proc(
     mutations: []collections.Mutation,
     fail_after_changes: int) -> Commit_Result {
     if store == nil || store^.status == .Closed {
-        return {outcome = .Not_Committed, failure = {kind = .Closed}}
+        return {
+            outcome = .Not_Committed,
+            failure = {
+                kind = .Closed,
+            },
+        }
     }
     if store^.status == .Unusable {
-        return {outcome = .Store_Unusable, failure = {kind = .Unusable}}
+        return {
+            outcome = .Store_Unusable,
+            failure = {
+                kind = .Unusable,
+            },
+        }
     }
     if !settings.valid_change_set(changes) {
-        return {outcome = .Not_Committed, failure = {kind = .Invalid_Batch}}
+        return {
+            outcome = .Not_Committed,
+            failure = {
+                kind = .Invalid_Batch,
+            },
+        }
     }
     if len(mutations) > collections.MUTATION_CAPACITY {
-        return {outcome = .Not_Committed, failure = {kind = .Invalid_Batch}}
+        return {
+            outcome = .Not_Committed,
+            failure = {
+                kind = .Invalid_Batch,
+            },
+        }
     }
     if store^.status == .Read_Only {
-        return {outcome = .Not_Committed, failure = {kind = .Not_Writable}}
+        return {
+            outcome = .Not_Committed,
+            failure = {
+                kind = .Not_Writable,
+            },
+        }
     }
     if changes.count == 0 && len(mutations) == 0 {
-        return {outcome = .Committed}
+        return {
+            outcome = .Committed,
+        }
     }
     return store_commit_transaction(store, changes, mutations, fail_after_changes)
 }
@@ -870,14 +1042,20 @@ store_commit_transaction :: proc(
     if !store_sqlite_error_is_clear(begin_error) {
         return {
             outcome = .Not_Committed,
-            failure = {kind = .Write, sqlite_error = begin_error},
+            failure = {
+                kind = .Write,
+                sqlite_error = begin_error,
+            },
         }
     }
     applied := store_apply_batch_changes(
         store, changes, fail_after_changes)
     if !store_sqlite_error_is_clear(applied.failure) {
         return store_commit_rollback_result(
-            store, {kind = .Write, sqlite_error = applied.failure},
+            store, {
+                kind = .Write,
+                sqlite_error = applied.failure,
+            },
             applied.failed_id, applied.has_failed_id)
     }
     collection_error := store_apply_collection_mutations(store, mutations)
@@ -887,9 +1065,14 @@ store_commit_transaction :: proc(
     commit_error := store_exec(store, "COMMIT")
     if !store_sqlite_error_is_clear(commit_error) {
         return store_commit_rollback_result(
-            store, {kind = .Write, sqlite_error = commit_error}, {}, false)
+            store, {
+                kind = .Write,
+                sqlite_error = commit_error,
+            }, {}, false)
     }
-    return {outcome = .Committed}
+    return {
+        outcome = .Committed,
+    }
 }
 
 // Apply each bounded change and preserve the first failing setting identity.
@@ -907,7 +1090,11 @@ store_apply_batch_changes :: proc(
                 "INSERT INTO user_setting VALUES ('', '', 'boolean', 0, NULL)")
         }
         if !store_sqlite_error_is_clear(failure) {
-            return {failure = failure, failed_id = change.id, has_failed_id = true}
+            return {
+                failure = failure,
+                failed_id = change.id,
+                has_failed_id = true,
+            }
         }
     }
     return {}
@@ -1027,9 +1214,12 @@ store_enum_text :: proc(value: settings.Setting_Value) -> string {
         }
     case .Layout_Preference:
         switch value.layout {
-        case .Auto: return "auto"
-        case .Landscape: return "landscape"
-        case .Portrait: return "portrait"
+        case .Auto:
+            return "auto"
+        case .Landscape:
+            return "landscape"
+        case .Portrait:
+            return "portrait"
         }
     }
     return ""
@@ -1094,13 +1284,18 @@ store_rollback_failure :: proc(
             cleanup_error = rollback_error,
         }
     }
-    return {kind = kind, sqlite_error = failure}
+    return {
+        kind = kind,
+        sqlite_error = failure,
+    }
 }
 
 // Close all prepared statements and the connection, preserving first cleanup error.
 store_close :: proc(store: ^Store) -> Store_Error {
     if store == nil {
-        return {kind = .Closed}
+        return {
+            kind = .Closed,
+        }
     }
     failure: Store_Error
     store_finalize_owned(store, &store^.delete_collections, &failure)
@@ -1115,7 +1310,10 @@ store_close :: proc(store: ^Store) -> Store_Error {
     if store^.connection.handle != nil {
         close_error := sqlite.connection_close(&store^.connection)
         if !store_sqlite_error_is_clear(close_error) && store_error_is_clear(failure) {
-            failure = {kind = .Close, sqlite_error = close_error}
+            failure = {
+                kind = .Close,
+                sqlite_error = close_error,
+            }
         }
     }
     if store^.connection.handle == nil {
@@ -1135,7 +1333,10 @@ store_finalize_owned :: proc(
     }
     finalize_error := sqlite.statement_finalize(statement)
     if !store_sqlite_error_is_clear(finalize_error) && store_error_is_clear(failure^) {
-        failure^ = {kind = .Finalize, sqlite_error = finalize_error}
+        failure^ = {
+            kind = .Finalize,
+            sqlite_error = finalize_error,
+        }
     }
 }
 

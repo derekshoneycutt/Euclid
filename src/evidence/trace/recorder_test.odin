@@ -12,7 +12,11 @@ trace_test_ring_pressure_and_gap :: proc(t: ^testing.T) {
     for index in 0..<TRACE_RING_CAPACITY {
         testing.expect(t, ring_record(&ring, Event{
             kind = .Point_Position_Committed,
-            payload = {point = {point_index = u32(index)}},
+            payload = {
+                point = {
+                    point_index = u32(index),
+                },
+            },
         }))
     }
     testing.expect(t, !ring_record(&ring, Event{
@@ -28,7 +32,9 @@ trace_test_ring_pressure_and_gap :: proc(t: ^testing.T) {
     testing.expect_value(t, first[0].sequence, u64(1))
     testing.expect_value(t, first[1].sequence, u64(2))
 
-    testing.expect(t, ring_record(&ring, Event{kind = .Runtime_Ready}))
+    testing.expect(t, ring_record(&ring, Event{
+        kind = .Runtime_Ready,
+    }))
     remainder: [TRACE_RING_CAPACITY]Event
     count := ring_drain(&ring, remainder[:])
     testing.expect_value(t, count, TRACE_RING_CAPACITY)
@@ -45,12 +51,16 @@ trace_test_ring_wraparound :: proc(t: ^testing.T) {
     ring: Ring
     ring_init(&ring, .Julia_Host)
     for _ in 0..<TRACE_RING_CAPACITY {
-        testing.expect(t, ring_record(&ring, Event{kind = .Dynview_Published}))
+        testing.expect(t, ring_record(&ring, Event{
+            kind = .Dynview_Published,
+        }))
     }
     drained: [128]Event
     testing.expect_value(t, ring_drain(&ring, drained[:]), len(drained))
     for _ in 0..<len(drained) {
-        testing.expect(t, ring_record(&ring, Event{kind = .Dynview_Published}))
+        testing.expect(t, ring_record(&ring, Event{
+            kind = .Dynview_Published,
+        }))
     }
     remaining: [TRACE_RING_CAPACITY]Event
     count := ring_drain(&ring, remaining[:])
@@ -62,13 +72,29 @@ trace_test_ring_wraparound :: proc(t: ^testing.T) {
 // Verify deterministic merge preserves each producer's local sequence order.
 @(test)
 trace_test_deterministic_merge :: proc(t: ^testing.T) {
-    left := [2]Event{
-        {sequence = 1, timestamp_ns = 20, producer = .Display},
-        {sequence = 2, timestamp_ns = 40, producer = .Display},
+    left: [2]Event = {
+        {
+            sequence = 1,
+            timestamp_ns = 20,
+            producer = .Display,
+        },
+        {
+            sequence = 2,
+            timestamp_ns = 40,
+            producer = .Display,
+        },
     }
-    right := [2]Event{
-        {sequence = 1, timestamp_ns = 10, producer = .Julia_Host},
-        {sequence = 2, timestamp_ns = 30, producer = .Julia_Host},
+    right: [2]Event = {
+        {
+            sequence = 1,
+            timestamp_ns = 10,
+            producer = .Julia_Host,
+        },
+        {
+            sequence = 2,
+            timestamp_ns = 30,
+            producer = .Julia_Host,
+        },
     }
     merged: [4]Event
     count := merge_events(merged[:], left[:], right[:])
@@ -86,7 +112,7 @@ trace_test_session_completeness_across_producers :: proc(t: ^testing.T) {
     display, julia_host: Ring
     ring_init(&display, .Display)
     ring_init(&julia_host, .Julia_Host)
-    rings := [2]^Ring{&display, &julia_host}
+    rings: [2]^Ring = {&display, &julia_host}
     testing.expect(t, session_evidence_complete(rings[:]))
 
     julia_host.required_evidence_lost = true
@@ -106,8 +132,12 @@ trace_test_record_drain_merge_allocate_nothing :: proc(t: ^testing.T) {
     display, julia_host: Ring
     ring_init(&display, .Display)
     ring_init(&julia_host, .Julia_Host)
-    testing.expect(t, ring_record(&display, Event{kind = .Frame_Presented}))
-    testing.expect(t, ring_record(&julia_host, Event{kind = .Runtime_Ready}))
+    testing.expect(t, ring_record(&display, Event{
+        kind = .Frame_Presented,
+    }))
+    testing.expect(t, ring_record(&julia_host, Event{
+        kind = .Runtime_Ready,
+    }))
     display_events, julia_events: [1]Event
     testing.expect_value(t, ring_drain(&display, display_events[:]), 1)
     testing.expect_value(t, ring_drain(&julia_host, julia_events[:]), 1)

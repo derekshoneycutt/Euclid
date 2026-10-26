@@ -46,7 +46,9 @@ prepare_window_scenario :: proc(
     framebuffer_operations: capturemodel.Framebuffer_Capture_Operations) ->
         Window_Scenario_Preparation {
     if len(settings^.scenario_input) == 0 {
-        return {loaded = true}
+        return {
+            loaded = true,
+        }
     }
     if !viewscenario.scenario_runtime_load_file(
         runtime, state, settings^.scenario_input) {

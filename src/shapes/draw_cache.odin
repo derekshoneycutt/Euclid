@@ -37,21 +37,21 @@ Draw_Cache_Depth_Classification :: struct {
 }
 
 Polygon_Cache_Range_Reservation :: struct {
-    first_vertex : int,
-    first_triangle : int,
-    max_triangle_count : int,
-    ok : bool,
+    first_vertex: int,
+    first_triangle: int,
+    max_triangle_count: int,
+    ok: bool,
 }
 
 Polygon_Triangulation :: struct {
-    cache : ^shapemodel.Shapes_Draw_Cache,
-    ring : []Shapes_Polygon_Ring_Node,
-    vertices : []Vector3,
-    count : int,
-    want_ccw : bool,
-    triangle_start : int,
-    triangle_count : ^int,
-    base_vertex : int,
+    cache: ^shapemodel.Shapes_Draw_Cache,
+    ring: []Shapes_Polygon_Ring_Node,
+    vertices: []Vector3,
+    count: int,
+    want_ccw: bool,
+    triangle_start: int,
+    triangle_count: ^int,
+    base_vertex: int,
 }
 
 //   Reset one derived packet before rebuilding it from any canonical source.
@@ -94,7 +94,7 @@ draw_cache_polygon_centroid_and_flatness :: proc(
 
     vertices := cache.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
-    sum := Vector3{}
+    sum: Vector3 = {}
     flat := true
 
     for vertex in vertices {
@@ -117,7 +117,7 @@ draw_cache_curve_centroid_and_flatness :: proc(
     }
     vertices := cache.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    sum := Vector3{}
+    sum: Vector3 = {}
     flat := true
     for vertex in vertices {
         sum += vertex
@@ -229,8 +229,10 @@ draw_cache_item_depth_and_flatness :: proc(
     case Shapes_Point_Draw:
         return draw_cache_visual_depth(typed.point1),
             draw_cache_point_is_flat(typed.point1)
-    case Shapes_Line_Draw: return draw_cache_line_depth_and_flatness(typed)
-    case Shapes_Circle_Draw: return draw_cache_circle_depth_and_flatness(typed)
+    case Shapes_Line_Draw:
+        return draw_cache_line_depth_and_flatness(typed)
+    case Shapes_Circle_Draw:
+        return draw_cache_circle_depth_and_flatness(typed)
     case Shapes_Filled_Circle_Draw:
         return draw_cache_filledcircle_depth_and_flatness(typed)
     case Shapes_Curve_Draw:
@@ -596,7 +598,7 @@ triangulate_polygon_ear_clip_storage :: proc(
     area := polygon_signed_area_xy(vertices)
     want_ccw := area >= 0
     triangle_count := 0
-    triangulation := Polygon_Triangulation{
+    triangulation: Polygon_Triangulation = {
         cache, ring, vertices, count, want_ccw, triangle_start,
         &triangle_count, base_vertex,
     }

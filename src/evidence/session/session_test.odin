@@ -73,7 +73,7 @@ session_test_required_loss_is_sticky :: proc(t: ^testing.T) {
     display, julia_host: trace.Ring
     trace.ring_init(&display, .Display)
     trace.ring_init(&julia_host, .Julia_Host)
-    rings := [2]^trace.Ring{&display, &julia_host}
+    rings: [2]^trace.Ring = {&display, &julia_host}
 
     julia_host.required_evidence_lost = true
     session_merge_ring_completeness(session, rings[:])
@@ -101,7 +101,9 @@ session_test_optional_pressure_preserves_required_reserve :: proc(t: ^testing.T)
     }
     testing.expect_value(t, session.event_count, SESSION_OPTIONAL_EVENT_CAPACITY)
 
-    required := trace.Event{flags = {.Required}}
+    required: trace.Event = {
+        flags = {.Required},
+    }
     for _ in 0..<SESSION_EVENT_CAPACITY - SESSION_OPTIONAL_EVENT_CAPACITY {
         testing.expect(t, session_accept_event(session, required))
     }

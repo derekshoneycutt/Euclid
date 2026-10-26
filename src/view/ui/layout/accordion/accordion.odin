@@ -58,13 +58,19 @@ Accordion_Context :: struct {
 // accordion_semantic_id returns the stable identity for one section header.
 accordion_semantic_id :: #force_inline proc(
     section: viewmodel.Ui_Accordion_Section) -> viewmodel.Ui_Node_Id {
-    return {domain = .Accordion, local_id = u64(section) + 1}
+    return {
+        domain = .Accordion,
+        local_id = u64(section) + 1,
+    }
 }
 
 // accordion_panel_semantic_id returns the stable identity for one section panel.
 accordion_panel_semantic_id :: #force_inline proc(
     section: viewmodel.Ui_Accordion_Section) -> viewmodel.Ui_Node_Id {
-    return {domain = .Accordion, local_id = u64(section) + 101}
+    return {
+        domain = .Accordion,
+        local_id = u64(section) + 101,
+    }
 }
 
 // register_accordion_header publishes one operable header in visual order.
@@ -76,7 +82,7 @@ register_accordion_header :: proc(
     order: int) -> viewmodel.Ui_Node_Id {
     id := accordion_semantic_id(descriptor.section)
     controls: viewmodel.Ui_Node_Id
-    states := viewmodel.Ui_Node_State{
+    states: viewmodel.Ui_Node_State = {
         .Visible, .Enabled, .Focusable, .Tab_Stop}
     if descriptor.section == active {
         states += {.Selected, .Expanded}
@@ -108,9 +114,13 @@ register_accordion_panel :: proc(
         clip = geometry.Rectangle(ctx.transition^.clips[int(descriptor.section)])
     }
     _ = uisemantics.semantic_register_control(ctx.semantic_focus, {
-        id = id, role = .Panel, states = {.Visible, .Enabled},
-        region = .Accordion_Content, bounds = geometry.Rectangle(rect),
-        clip_bounds = geometry.Rectangle(clip), label = descriptor.label,
+        id = id,
+        role = .Panel,
+        states = {.Visible, .Enabled},
+        region = .Accordion_Content,
+        bounds = geometry.Rectangle(rect),
+        clip_bounds = geometry.Rectangle(clip),
+        label = descriptor.label,
     })
     if ctx.semantic_focus != nil {
         ctx.semantic_focus^.staging_accordion_parent = id
@@ -124,9 +134,18 @@ accordion_landscape_sections :: proc(
     labels: [3]string = {}) -> Accordion_Section_Set {
     return {
         items = {
-            {section = .Library, label = labels[0]},
-            {section = .Save_Gif, label = labels[1]},
-            {section = .Settings, label = labels[2]},
+            {
+                section = .Library,
+                label = labels[0],
+            },
+            {
+                section = .Save_Gif,
+                label = labels[1],
+            },
+            {
+                section = .Settings,
+                label = labels[2],
+            },
             {},
         },
         count = 3,
@@ -139,7 +158,10 @@ accordion_portrait_sections :: proc(
     utilities := accordion_landscape_sections(labels)
     return {
         items = {
-            {section = .View, label = title},
+            {
+                section = .View,
+                label = title,
+            },
             utilities.items[0],
             utilities.items[1],
             utilities.items[2],
@@ -183,7 +205,7 @@ accordion_layout :: proc(
     inner.height = max(f32(0), inner.height - theme.ACCORDION_PANEL_INSET * 2)
     content_height := max(
         inner.height - theme.ACCORDION_HEADER_HEIGHT * f32(sections.count), 0)
-    result := Accordion_Layout{}
+    result: Accordion_Layout = {}
     cursor_y := inner.y
     active_index := accordion_section_index(sections, active)
     for section_index in 0..<sections.count {
@@ -246,8 +268,10 @@ accordion_transition_settle :: proc(
     transition: ^viewmodel.Ui_Accordion_Transition, panel: geometry.Rectangle,
     sections: Accordion_Section_Set, selected: viewmodel.Ui_Accordion_Section) {
     transition^ = {
-        initialized = true, panel = geometry.Rectangle(panel),
-        section_count = sections.count, selected = selected,
+        initialized = true,
+        panel = geometry.Rectangle(panel),
+        section_count = sections.count,
+        selected = selected,
     }
     transition^.heights[int(selected)] = max(f32(0),
         panel.height - theme.ACCORDION_PANEL_INSET * 2 -
@@ -258,7 +282,7 @@ accordion_transition_settle :: proc(
 accordion_visual_layout :: proc(
     panel: geometry.Rectangle, sections: Accordion_Section_Set,
     transition: ^viewmodel.Ui_Accordion_Transition) -> Accordion_Layout {
-    inner := geometry.Rectangle{panel.x + theme.ACCORDION_PANEL_INSET,
+    inner: geometry.Rectangle = {panel.x + theme.ACCORDION_PANEL_INSET,
         panel.y + theme.ACCORDION_PANEL_INSET,
         max(f32(0), panel.width - theme.ACCORDION_PANEL_INSET * 2),
         max(f32(0), panel.height - theme.ACCORDION_PANEL_INSET * 2)}
@@ -357,7 +381,8 @@ accordion_header_params :: proc(
             region = .Accordion_Headers,
             traversal_order = order,
             clip_bounds = geometry.Rectangle(ctx.panel),
-            label = descriptor.label, value = descriptor.accessible_value,
+            label = descriptor.label,
+            value = descriptor.accessible_value,
         },
     }
 }
@@ -416,7 +441,7 @@ prepare_accordion :: proc(
     active: ^viewmodel.Ui_Accordion_Section) -> Accordion_Preparation {
     active_index := accordion_section_index(sections, active^)
     active^ = sections.items[active_index].section
-    result := Accordion_Preparation{
+    result: Accordion_Preparation = {
         sections = sections,
         layout = accordion_transition_layout(ctx, sections, active^),
     }

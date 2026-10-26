@@ -69,8 +69,10 @@ termhist_capture_undo :: proc(state: ^Termhist_State, advance: bool) {
     undo := &state.undo
     offset := termhist_undo_prefix(state)
     undo.snapshots[undo.position] = {
-        offset = offset, length = state.text_len,
-        cursor = state.cursor, anchor = state.anchor,
+        offset = offset,
+        length = state.text_len,
+        cursor = state.cursor,
+        anchor = state.anchor,
         preferred_column = state.preferred_column,
     }
     copy(undo.bytes[offset:offset + state.text_len], state.text[:state.text_len])
@@ -95,7 +97,7 @@ termhist_restore_undo :: proc(state: ^Termhist_State, position: int) {
     state.content_revision += 1
     state.reset_revision += 1
     termhist_clear_preedit(state)
-    termhist_end_history_browse(state)
+
     undo.position = position
     undo.sequence = true
 }

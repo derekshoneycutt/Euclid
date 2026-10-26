@@ -10,7 +10,10 @@ make_collection_delete_mutation :: proc(
     if failure != .None {
         return {}, failure
     }
-    return {kind = .Delete_Collection, collection_id = id}, .None
+    return {
+        kind = .Delete_Collection,
+        collection_id = id,
+    }, .None
 }
 
 // Retire every owned placement and label before compacting the head; no allocation occurs.

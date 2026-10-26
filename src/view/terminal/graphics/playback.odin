@@ -68,7 +68,10 @@ playback_plan :: proc(
     entry: Playback_Entry, animation: termattachment.Animation_View,
     now_ns: u64) -> Playback_Plan {
     if !playback_entry_valid(entry, animation) {
-        return {candidate = entry, valid = entry.active}
+        return {
+            candidate = entry,
+            valid = entry.active,
+        }
     }
     candidate := entry
     original_frame := entry.frame_index

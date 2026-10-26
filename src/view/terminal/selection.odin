@@ -9,20 +9,20 @@ import "core:strings"
 // One line's selected byte span and optional trailing virtual-space highlight.
 Terminal_Line_Selection :: struct {
     // Half-open UTF-8 byte range clamped by the drawing/composition caller.
-    start : int,
-    end : int,
-    has_selection : bool,
+    start: int,
+    end: int,
+    has_selection: bool,
 
     // Multi-line continuation highlight extending through the viewport's right edge.
-    covers_trailing_gap : bool,
-    right_edge_x : f32,
+    covers_trailing_gap: bool,
+    right_edge_x: f32,
 }
 
 // Ordered multi-line selection endpoints plus the viewport edge used for full-line spans.
 Terminal_Selection_Bounds :: struct {
-    start : viewterminalmodel.Terminal_View_Position,
-    end : viewterminalmodel.Terminal_View_Position,
-    right_edge_x : f32,
+    start: viewterminalmodel.Terminal_View_Position,
+    end: viewterminalmodel.Terminal_View_Position,
+    right_edge_x: f32,
 }
 
 //   Normalize a view-selection anchor/head pair into ordered start/end positions.

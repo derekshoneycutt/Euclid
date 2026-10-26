@@ -107,7 +107,7 @@ draw_encoded_accordion_headers :: proc(
         _ = native.draw_encoder_rectangle_outline(
             encoder, geometry.Rectangle(header), 1, theme.UI_BORDER_COLOR)
         icon_size := min(theme.ACCORDION_DISCLOSURE_SIZE, header.height)
-        icon := geometry.Rectangle{header.x + theme.ACCORDION_HEADER_PADDING,
+        icon: geometry.Rectangle = {header.x + theme.ACCORDION_HEADER_PADDING,
             header.y + (header.height - icon_size) * 0.5, icon_size, icon_size}
         uiwidgets.draw_encoded_disclosure(encoder, geometry.Rectangle(icon), expanded)
     }
@@ -208,7 +208,9 @@ draw_encoded_focus_outline :: proc(
     encoder: ^native.Draw_Encoder) {
     semantic := runtime^.semantic_focus
     if semantic == nil || !semantic^.window_focused ||
-        semantic^.focus_origin != .Keyboard {return}
+        semantic^.focus_origin != .Keyboard {
+        return
+    }
     snapshot := uisemantics.semantic_snapshot(semantic)
     index := uisemantics.semantic_node_index(snapshot, semantic^.logical_focus)
     if index < 0 || .Focus_Visible not_in snapshot^.nodes[index].states {

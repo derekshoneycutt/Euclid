@@ -146,10 +146,14 @@ grid_selective_erase_line :: proc(grid: ^Grid, mode: int) -> bool {
     }
     column := grid.cursor.column
     switch mode {
-    case 0: grid_erase_range(grid, grid.cursor.row, column, grid.columns, true)
-    case 1: grid_erase_range(grid, grid.cursor.row, 0, column + 1, true)
-    case 2: grid_erase_range(grid, grid.cursor.row, 0, grid.columns, true)
-    case: return false
+    case 0:
+        grid_erase_range(grid, grid.cursor.row, column, grid.columns, true)
+    case 1:
+        grid_erase_range(grid, grid.cursor.row, 0, column + 1, true)
+    case 2:
+        grid_erase_range(grid, grid.cursor.row, 0, grid.columns, true)
+    case:
+        return false
     }
     return true
 }

@@ -19,6 +19,8 @@ Color :: color.Color_RGBA8
 // Caller-visible evaluation submission produced by one keyboard update.
 Terminal_Submission :: struct {
     text: string,
+    mode: protocol.Evaluation_Mode,
+    continuation: bool,
     submitted: bool,
 }
 

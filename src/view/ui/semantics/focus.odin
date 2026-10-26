@@ -45,7 +45,10 @@ External_Text_Action_Input :: struct {
 // semantic_control_id qualifies one existing widget identity by owning domain.
 semantic_control_id :: #force_inline proc(
     domain: viewmodel.Ui_Node_Domain, local_id: int) -> viewmodel.Ui_Node_Id {
-    return {domain = domain, local_id = u64(local_id)}
+    return {
+        domain = domain,
+        local_id = u64(local_id),
+    }
 }
 
 // semantic_snapshot returns the immutable snapshot used for current routing.
@@ -129,7 +132,7 @@ semantic_registration_status :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     registration: viewmodel.Ui_Semantic_Node_Registration) ->
     viewmodel.Ui_Semantic_Status {
-    empty_id := viewmodel.Ui_Node_Id{}
+    empty_id: viewmodel.Ui_Node_Id = {}
     if registration.node.id == empty_id {
         return .Invalid_Id
     }
@@ -278,7 +281,7 @@ semantic_register_control :: proc(
 
 // semantic_node_is_focus_candidate reports whether a published node admits focus.
 semantic_node_is_focus_candidate :: proc(node: viewmodel.Ui_Semantic_Node) -> bool {
-    required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
+    required: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable}
     return node.states & required == required
 }
 
@@ -295,7 +298,7 @@ semantic_validate_snapshot :: proc(
     if snapshot == nil {
         return .Invalid_Argument, {}
     }
-    root_parent := viewmodel.Ui_Node_Id{}
+    root_parent: viewmodel.Ui_Node_Id = {}
     for &slot in snapshot^.traversal_index {
         slot = 0
     }
@@ -326,7 +329,7 @@ semantic_validate_parent_chains :: proc(
     for &mark in marks {
         mark = 0
     }
-    empty_id := viewmodel.Ui_Node_Id{}
+    empty_id: viewmodel.Ui_Node_Id = {}
     for start in 0..<snapshot^.node_count {
         index := start
         for index >= 0 && marks[index] == 0 {
@@ -357,8 +360,10 @@ semantic_validate_parent_chains :: proc(
 semantic_index_traversal :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot, index: int) -> bool {
     node := snapshot^.nodes[index]
-    key := viewmodel.Ui_Node_Id{
-        local_id = u64(node.traversal_order), generation = u64(node.region)}
+    key: viewmodel.Ui_Node_Id = {
+        local_id = u64(node.traversal_order),
+        generation = u64(node.region),
+    }
     mask := len(snapshot^.traversal_index) - 1
     slot := int(viewmodel.ui_semantic_identity_hash(key) & u64(mask))
     for snapshot^.traversal_index[slot] != 0 {
@@ -475,14 +480,22 @@ semantic_command_requested :: proc(
 semantic_simple_action_capability :: proc(
     kind: viewmodel.Ui_Focus_Command_Kind) -> viewmodel.Ui_Node_Action {
     #partial switch kind {
-    case .Activate: return .Activate
-    case .Toggle: return .Toggle
-    case .Increment: return .Increment
-    case .Decrement: return .Decrement
-    case .Select: return .Select
-    case .Expand: return .Expand
-    case .Collapse: return .Collapse
-    case .Show_Context_Menu: return .Show_Context_Menu
+    case .Activate:
+        return .Activate
+    case .Toggle:
+        return .Toggle
+    case .Increment:
+        return .Increment
+    case .Decrement:
+        return .Decrement
+    case .Select:
+        return .Select
+    case .Expand:
+        return .Expand
+    case .Collapse:
+        return .Collapse
+    case .Show_Context_Menu:
+        return .Show_Context_Menu
     }
     return .Focus
 }
@@ -493,7 +506,10 @@ semantic_simple_external_action :: proc(
     target: viewmodel.Ui_Node_Id, kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
     required_action := semantic_simple_action_capability(kind)
     if required_action != .Focus && required_action in node.actions {
-        return semantic_append_command(state, {target = target, kind = kind})
+        return semantic_append_command(state, {
+            target = target,
+            kind = kind,
+        })
     }
     return false
 }
@@ -509,11 +525,17 @@ semantic_external_scroll_action :: proc(
             amount = -1
         }
         return semantic_append_command(state, {
-            target = target, kind = kind, amount = amount})
+            target = target,
+            kind = kind,
+            amount = amount,
+        })
     }
     if kind == .Set_Scroll_Value && .Scroll in node.actions {
         return semantic_append_command(state, {
-            target = target, kind = kind, numeric_value = numeric_value})
+            target = target,
+            kind = kind,
+            numeric_value = numeric_value,
+        })
     }
     return false
 }
@@ -533,7 +555,7 @@ semantic_apply_external_action :: proc(
         return false
     }
     node := snapshot^.nodes[index]
-    required_states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
+    required_states: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable}
     if node.states & required_states != required_states {
         return false
     }
@@ -546,7 +568,10 @@ semantic_apply_external_action :: proc(
     }
     if kind == .Set_Value && .Set_Value in node.actions {
         return semantic_append_command(state, {
-            target = target, kind = kind, numeric_value = numeric_value})
+            target = target,
+            kind = kind,
+            numeric_value = numeric_value,
+        })
     }
     if semantic_external_scroll_action(state, node, target, kind, numeric_value) {
         return true
@@ -568,13 +593,17 @@ semantic_apply_external_text_action :: proc(
         return false
     }
     node := snapshot^.nodes[index]
-    required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
+    required: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable}
     if node.states & required != required {
         return false
     }
-    command := viewmodel.Ui_Focus_Command{target = input.target, kind = input.kind,
-        payload_length = u16(len(input.payload)), selection_anchor = input.anchor,
-        selection_focus = input.focus}
+    command: viewmodel.Ui_Focus_Command = {
+        target = input.target,
+        kind = input.kind,
+        payload_length = u16(len(input.payload)),
+        selection_anchor = input.anchor,
+        selection_focus = input.focus,
+    }
     if input.kind == .Replace_Selected_Text &&
        .Replace_Selected_Text in node.actions {
         copy(command.payload[:len(input.payload)], transmute([]u8)input.payload)
@@ -710,11 +739,16 @@ semantic_tree_command :: proc(
         return .None
     }
     #partial switch key {
-    case .Up: return .Tree_Previous
-    case .Down: return .Tree_Next
-    case .Home: return .Tree_First
-    case .End: return .Tree_Last
-    case .Enter: return .Select
+    case .Up:
+        return .Tree_Previous
+    case .Down:
+        return .Tree_Next
+    case .Home:
+        return .Tree_First
+    case .End:
+        return .Tree_Last
+    case .Enter:
+        return .Select
     }
     return .None
 }
@@ -779,7 +813,10 @@ semantic_route_traversal :: proc(
     state^.last_region = node.region
     state^.last_traversal_order = node.traversal_order
     return semantic_append_command(state, {
-        target = node.id, kind = .Focus, event_index = u16(event_index)})
+        target = node.id,
+        kind = .Focus,
+        event_index = u16(event_index),
+    })
 }
 
 // semantic_route_focused_command routes one non-traversal event to current focus.
@@ -798,8 +835,11 @@ semantic_route_focused_command :: proc(
         return
     }
     _ = semantic_append_command(state, {
-        target = state^.logical_focus, kind = kind, amount = amount,
-        event_index = u16(event_index)})
+        target = state^.logical_focus,
+        kind = kind,
+        amount = amount,
+        event_index = u16(event_index),
+    })
 }
 
 // semantic_route_keyboard claims traversal and emits bounded role commands in order.
@@ -855,18 +895,27 @@ semantic_legacy_focus :: proc(
         return {}, true
     }
     if node.role == .Terminal || node.id.domain == .Terminal {
-        return {kind = .Terminal}, true
+        return {
+            kind = .Terminal,
+        }, true
     }
     if node.role == .Document || node.id.domain == .Presentation {
-        return {kind = .Presentation}, true
+        return {
+            kind = .Presentation,
+        }, true
     }
     if node.role == .Input {
-        return {kind = .Input_Box, id = int(node.id.local_id)}, true
+        return {
+            kind = .Input_Box,
+            id = int(node.id.local_id),
+        }, true
     }
     if node.id.domain == .Animation_Control {
         return {}, true
     }
-    return {kind = .Accordion}, true
+    return {
+        kind = .Accordion,
+    }, true
 }
 
 // semantic_nearest_candidate finds the next, then prior, candidate in one local order.
@@ -946,7 +995,7 @@ semantic_find_repair_candidate :: proc(
         return replacement
     }
     previous_node := previous^.nodes[previous_index]
-    empty_id := viewmodel.Ui_Node_Id{}
+    empty_id: viewmodel.Ui_Node_Id = {}
     if previous_node.parent != empty_id {
         sibling := semantic_nearest_candidate(current, previous_node, true)
         if sibling >= 0 {
@@ -969,7 +1018,7 @@ semantic_find_repair_candidate :: proc(
 semantic_reconcile_focus :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     current, previous: ^viewmodel.Ui_Semantic_Snapshot) {
-    empty_id := viewmodel.Ui_Node_Id{}
+    empty_id: viewmodel.Ui_Node_Id = {}
     if state^.logical_focus == empty_id {
         return
     }

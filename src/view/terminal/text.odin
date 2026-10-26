@@ -115,8 +115,10 @@ terminal_output_hit_position :: proc(
     if column_width > 0 {
         column = int((mouse.x - padded_bounds.x) / column_width + 0.5)
     }
-    return {line = line,
-        byte_offset = terminal_output_row_byte_offset(cells, column)}
+    return {
+        line = line,
+        byte_offset = terminal_output_row_byte_offset(cells, column),
+    }
 }
 
 // Map a screen-space mouse position to a terminal line and byte offset.
@@ -247,7 +249,9 @@ terminal_selection_span_for_line :: proc(
     }
 
     return Terminal_Line_Selection{
-        start = span_start, end = span_end, has_selection = true,
+        start = span_start,
+        end = span_end,
+        has_selection = true,
         covers_trailing_gap = !is_last_line,
     }
 }

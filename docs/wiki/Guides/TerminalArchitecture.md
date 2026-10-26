@@ -462,6 +462,19 @@ text-input area follows the eligible editor's prepared caret in logical coordina
 Super-based aliases avoid consuming Option/AltGr text entry. Native composition takes
 precedence over these editor commands, except explicit Ctrl+Tab focus traversal.
 
+Submitted history is retained in the launch-owned SQLite TEMP store. Up/Down at a
+draft-row boundary queues an ordered asynchronous recall keyed by submission ID; the
+display applies a result only while its Terminal generation and editor-navigation epoch
+still match. The unsent draft keeps its source, cursor, selection anchor, preferred
+column, and prompt mode while recall is active. Recording or recall failure is reported
+without blocking prompt acceptance or evaluation. SQLite is the only retained command
+authority; the editor owns no submitted-command array. Highlight anchors carry submission
+IDs and source revisions. A bounded source cache is seeded from newly submitted source,
+and visible cache misses share one speculative keyed SQLite read per identity. The
+display copies completed source into its generation-owned cache before Julia
+classification; drawing never queries SQLite. Stale revisions, Terminal generations,
+and font generations cannot publish.
+
 Draft undo follows Julia REPL's whole-buffer, operation-level snapshots, not timed
 typing groups. Each character event or deletion is separate; a whole paste, native
 IME commit, selection replacement, or existing completion acceptance is one edit.
@@ -469,20 +482,20 @@ Preedit and asynchronous completion previews do not create snapshots. Restoring 
 edit restores text, cursor, selection anchor, and preferred vertical column, while
 content/reset revisions advance monotonically and old completion state is retired.
 
-`termhist` owns a reusable descriptor array and packed text bytes through its existing
-borrowed animation-generation allocator. Storage grows geometrically without a fixed
-history cap; branch truncation and prompt resets reuse retained capacity rather than
-allocating individual snapshot strings. Old backing blocks may remain in the arena
-until generation teardown. Whole-buffer snapshots trade memory for simple semantics.
-Storage admission failure rejects the edit/undo without changing draft or timeline,
-logs the failure, and prints an explicit Terminal error.
+`termhist` owns the editable draft, its backup for asynchronous recall, and a reusable
+descriptor array with packed undo bytes through the borrowed animation-generation
+allocator. Editor storage grows geometrically; branch truncation and prompt resets reuse
+retained capacity rather than allocating individual snapshot strings. Old backing
+blocks may remain in the arena until generation teardown. Whole-buffer snapshots trade
+memory for simple semantics. Storage admission failure rejects the edit/undo without
+changing draft or timeline, logs the failure, and prints an explicit Terminal error.
 
 Redo ends after a successful intervening editor command, including cursor/selection
 movement. Failed edits and unavailable undo/redo do not change the timeline. Successful
-command-history recall (including returning to the saved draft), cancellation, completed
-evaluation, and generation replacement clear edit history. Incomplete evaluation
-preserves prior edits and adds the continuation newline/indentation as one undoable
-operation. Prompt-mode changes and executed Julia effects are not undoable.
+database-history recall (including returning to the saved draft), cancellation,
+completed evaluation, and generation replacement clear edit history. Incomplete
+evaluation preserves prior edits and adds the continuation newline/indentation as one
+undoable operation. Prompt-mode changes and executed Julia effects are not undoable.
 
 Some Julia operations request terminal input while evaluation is active. The evaluator
 publishes an explicit lease:
@@ -512,10 +525,12 @@ output. Julia 1.13 owns syntax classification and standard `faces.toml` resoluti
 the display owns source text, retained styles, and native drawing.
 
 The display debounces live edits and requests visible history through an independent
-session actor. Results carry bounded UTF-8 style runs and are accepted only when the
-request, session, source revision, face generation, and exact source still match.
-Stale replies cannot overwrite newer input or reused history entries. Failure or
-capacity exhaustion never blocks editing or evaluation.
+Julia session actor. Uncached history source is fetched asynchronously by stable
+submission ID from the launch-owned SQLite TEMP store, then copied into the existing
+bounded source cache before classification. Results carry bounded UTF-8 style runs
+and are accepted only when the request, session, source revision, face generation, and
+exact source still match. Stale replies cannot overwrite newer input or reused history
+entries. Failure or capacity exhaustion never blocks editing or evaluation.
 
 Live prompt presentation is separate from the exact-source request slot. An ordinary
 edit keeps the last displayed styles on a UTF-8-aligned common prefix and suffix,

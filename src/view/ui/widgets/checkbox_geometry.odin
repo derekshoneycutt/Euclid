@@ -12,9 +12,9 @@ draw_encoded_checkbox_geometry :: proc(
     if !checked {
         return
     }
-    first := geometry.Vector2{rectangle.x + 3, rectangle.y + rectangle.height * 0.55}
-    second := geometry.Vector2{rectangle.x + 6, rectangle.y + rectangle.height - 3}
-    third := geometry.Vector2{rectangle.x + rectangle.width - 3, rectangle.y + 3}
+    first: geometry.Vector2 = {rectangle.x + 3, rectangle.y + rectangle.height * 0.55}
+    second: geometry.Vector2 = {rectangle.x + 6, rectangle.y + rectangle.height - 3}
+    third: geometry.Vector2 = {rectangle.x + rectangle.width - 3, rectangle.y + 3}
     _ = native.draw_encoder_line(
         encoder, first, second, 1.6, theme.draw_color(encoder, .Text))
     _ = native.draw_encoder_line(

@@ -95,10 +95,19 @@ membership_checkbox :: proc(
         set, head.id, menu.animation_id)
     row := membership_row(menu, index)
     return {
-        id = index + 1, rect = {row.x + 2, row.y + (row.height - 18)*0.5, 18, 18},
-        checked = policy == .None, enabled = failure == .None,
-        mouse = frame, interaction_space_rect = menu.clip,
-        interaction_enabled = true, semantic_clip = menu.clip,
+        id = index + 1,
+        rect = {
+            row.x + 2,
+            row.y + (row.height - 18) * 0.5,
+            18,
+            18,
+        },
+        checked = policy == .None,
+        enabled = failure == .None,
+        mouse = frame,
+        interaction_space_rect = menu.clip,
+        interaction_enabled = true,
+        semantic_clip = menu.clip,
     }
 }
 
@@ -107,10 +116,14 @@ membership_scroll :: proc(state: ^core.Euclid_General_State,
     frame: input.Input_Frame) -> uiwidgets.Scroll_Container_Update_Result {
     menu := &state.ui_runtime.membership
     result := uiwidgets.scroll_container_update({
-        id = -2104, rect = menu.clip, scroll_y_in = menu.scroll_y,
-        content_height = f32(menu.count)*menu.row_height,
-        mouse_input = frame, interaction_space_rect = menu.clip,
-        wheel_step = menu.row_height * 3, press_owner = &menu.press_owner,
+        id = -2104,
+        rect = menu.clip,
+        scroll_y_in = menu.scroll_y,
+        content_height = f32(menu.count) * menu.row_height,
+        mouse_input = frame,
+        interaction_space_rect = menu.clip,
+        wheel_step = menu.row_height * 3,
+        press_owner = &menu.press_owner,
         state_in = {menu.dragging, menu.drag_offset},
     })
     menu.scroll_y = result.scroll_y_out

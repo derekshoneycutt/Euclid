@@ -19,10 +19,14 @@ splitter_draw_preserves_hover_only_blue :: proc(t: ^testing.T) {
             {100, 100}, {100, 100}))
         draw_encoded_splitters(&encoder, {
             vertical = {
-                present = true, opacity = opacity, visible_rect = {20, 0, 3, 100},
+                present = true,
+                opacity = opacity,
+                visible_rect = {20, 0, 3, 100},
             },
             horizontal = {
-                present = true, opacity = opacity, visible_rect = {0, 40, 100, 3},
+                present = true,
+                opacity = opacity,
+                visible_rect = {0, 40, 100, 3},
             },
         })
         testing.expect_value(t, encoder.vertex_count, 0 if opacity == 0 else 8)

@@ -20,7 +20,7 @@ expect_vec2_close :: proc(
 
 //   Build an Iso_Scale with the given scale and offsets, precomputing coefficients.
 make_iso_scale :: proc(scale, x_offset, y_offset: f32) -> worldmodel.Iso_Scale {
-    iso := worldmodel.Iso_Scale{
+    iso: worldmodel.Iso_Scale = {
         scale = scale,
         x_offset = x_offset,
         y_offset = y_offset,
@@ -73,7 +73,9 @@ screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
 //   Verify recompute_iso_scale_precompute sets the cached half/quarter coefficients.
 @(test)
 recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {
-    iso := worldmodel.Iso_Scale{scale = 800}
+    iso: worldmodel.Iso_Scale = {
+        scale = 800,
+    }
 
     recompute_iso_scale_precompute(&iso)
 
@@ -84,7 +86,7 @@ recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {
 //   Verify viewport fitting preserves baseline projection values.
 @(test)
 fit_iso_scale_to_viewport_preserves_baseline :: proc(t: ^testing.T) {
-    iso := worldmodel.Iso_Scale{}
+    iso: worldmodel.Iso_Scale
 
     fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT)
 
@@ -98,7 +100,7 @@ fit_iso_scale_to_viewport_preserves_baseline :: proc(t: ^testing.T) {
 //   Verify viewport fitting uses the limiting axis and proportional anchors.
 @(test)
 fit_iso_scale_to_viewport_uses_limiting_axis :: proc(t: ^testing.T) {
-    iso := worldmodel.Iso_Scale{}
+    iso: worldmodel.Iso_Scale
 
     fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH * 0.5, worldmodel.VIEW_HEIGHT)
     testing.expect_value(t, iso.scale, f32(worldmodel.ISO_SCALE_VALUE) * 0.5)
@@ -126,7 +128,7 @@ iso_to_cartesian_components_inline_matches_projection_formula :: proc(t: ^testin
 @(test)
 iso_to_cartesian_variants_match_each_other :: proc(t: ^testing.T) {
     iso := make_iso_scale(640, 320, 240)
-    input := geometry.Vector3{3, 1, -2}
+    input: geometry.Vector3 = {3, 1, -2}
 
     via_coord := iso_to_cartesian(input, iso)
     via_inline := iso_to_cartesian_inline(input, iso)
@@ -144,9 +146,9 @@ iso_to_cartesian_variants_match_each_other :: proc(t: ^testing.T) {
 iso_to_cartesian_components_batch_respects_shortest_input_length :: proc(t: ^testing.T) {
     iso := make_iso_scale(800, 450, 450)
 
-    xs := []f32{0, 1, 2, 3}
-    ys := []f32{0, 1}
-    zs := []f32{0, 0, 0}
+    xs: []f32 = {0, 1, 2, 3}
+    ys: []f32 = {0, 1}
+    zs: []f32 = {0, 0, 0}
     out: [4]geometry.Vector2
 
     count := iso_to_cartesian_components_batch(xs, ys, zs, out[:], iso)
@@ -166,9 +168,9 @@ iso_to_cartesian_components_batch_selected_scalar_path_matches_batch :: proc(
     t: ^testing.T) {
     iso := make_iso_scale(500, 100, -50)
 
-    xs := []f32{1, 2, 3, 4}
-    ys := []f32{2, 3, 4, 5}
-    zs := []f32{0, 1, 2, 3}
+    xs: []f32 = {1, 2, 3, 4}
+    ys: []f32 = {2, 3, 4, 5}
+    zs: []f32 = {0, 1, 2, 3}
 
     out_batch: [4]geometry.Vector2
     out_selected: [4]geometry.Vector2

@@ -19,17 +19,17 @@ Backend :: enum u8 {
 // states and output streams.
 State :: struct {
     // Active facade implementation; None makes every recording operation a no-op.
-    backend : Backend,
+    backend: Backend,
 
     // Spall file context and buffered writer initialized together for one stream.
-    spall_context : spall.Context,
-    spall_buffer : spall.Buffer,
+    spall_context: spall.Context,
+    spall_buffer: spall.Buffer,
 
     // Fixed producer-local storage that keeps event buffering off general allocators.
-    buffer_storage : [PROFILE_BUFFER_BYTES]byte,
+    buffer_storage: [PROFILE_BUFFER_BYTES]byte,
 
     // Number of begun zones not yet ended by this producer.
-    zone_depth : int,
+    zone_depth: int,
 }
 
 //   Reset profiling to the disabled no-op backend.

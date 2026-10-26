@@ -18,17 +18,49 @@ terminal_highlight_test_init :: proc(t: ^testing.T, term: ^model.Terminal_State)
 // Publish one default-style run through the production atomic publication path.
 terminal_highlight_test_publish :: proc(
     term: ^model.Terminal_State, request: protocol.Highlight_Requested) -> bool {
-    runs := [1]protocol.Highlight_Run{{end_byte = u32(len(request.source))}}
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = u32(len(request.source)),
+    }}
     return terminal_highlight_publish(term, {
-        identity = request.identity, source = request.source, runs = runs[:],
+        identity = request.identity,
+        source = request.source,
+        runs = runs[:],
     })
+}
+
+// Build a keyed identity for a simulated joined source-read completion.
+terminal_highlight_test_source_identity :: proc(
+    term: ^model.Terminal_State, id, revision, request_id: u64,
+    face_generation := u64(0)) -> protocol.Highlight_Identity {
+    face := face_generation
+    if face == 0 {
+        face = term.highlighting.face_generation
+    }
+    return {
+        request_id = protocol.Request_Id(request_id),
+        animation_generation = term.animation_generation,
+        target_kind = .History_Entry,
+        target_id = id,
+        source_revision = revision,
+        face_generation = face,
+        mode = i32(protocol.Evaluation_Mode.Normal),
+    }
 }
 
 // Commit source through ordinary grid/history ownership without starting evaluation.
 terminal_highlight_test_submit :: proc(
     t: ^testing.T, term: ^model.Terminal_State, source: string) {
+    termhist.termhist_clear(term.history)
     testing.expect(t, termhist.termhist_insert_text(term.history, source))
     testing.expect_value(t, terminal_submit(term), source)
+    if term.collecting_continuation {
+        term.provisional_desired_revision += 1
+    } else {
+        term.provisional_submission_id += 1
+        term.provisional_desired_revision = 1
+    }
+    terminal_highlight_end_submission(term, term.provisional_submission_id,
+        term.provisional_desired_revision, source)
 }
 
 // Only quiet Normal-mode source schedules, and cursor-only edits do not reschedule.
@@ -86,13 +118,19 @@ terminal_test_highlight_atomic_rejection :: proc(t: ^testing.T) {
         terminal_highlight_observe_live(&term, 0)
         request, ready := terminal_highlight_take_request(&term, 1)
         testing.expect(t, ready)
-        runs := [1]protocol.Highlight_Run{{end_byte = 3}}
+        runs: [1]protocol.Highlight_Run = {{
+            end_byte = 3,
+        }}
         source := request.source
         switch kind {
-        case 0: runs[0].end_byte = 1
-        case 1: runs[0].italic = 2
-        case 2: source = "xxx"
-        case 3: runs[0].foreground_kind = .Ansi; runs[0].foreground = 16
+        case 0:
+            runs[0].end_byte = 1
+        case 1:
+            runs[0].italic = 2
+        case 2:
+            source = "xxx"
+        case 3:
+            runs[0].foreground_kind = .Ansi; runs[0].foreground = 16
         }
         testing.expect(t, !terminal_highlight_publish(&term,
             {request.identity, source, runs[:]}))
@@ -173,7 +211,8 @@ terminal_test_highlight_visible_history :: proc(t: ^testing.T) {
     terminal_highlight_observe_history(&term, 0, 2)
     _, duplicate := terminal_highlight_take_request(&term, 2)
     testing.expect(t, !duplicate)
-    entry := terminal_highlight_history_find(&term, request.identity.target_id)
+    entry := terminal_highlight_history_find(
+        &term, request.identity.target_id, request.identity.source_revision)
     testing.expect(t,
         entry != nil && terminal_history_highlight_slot(&term, entry) != nil)
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
@@ -192,15 +231,87 @@ terminal_test_highlight_history_eviction_and_revisit :: proc(t: ^testing.T) {
         testing.expect(t, ready)
         testing.expect(t, terminal_highlight_test_publish(&term, request))
     }
-    testing.expect(t, term.highlighting.eviction_count > 0)
-    terminal_highlight_observe_history(&term, 0, 1)
-    old, ready := terminal_highlight_take_request(&term, 1)
-    testing.expect(t, ready)
-    testing.expect_value(t, old.identity.target_id, term.history.history[0].id)
-    testing.expect(t, terminal_highlight_test_publish(&term, old))
+    terminal_highlight_test_revisit_evicted_source(t, &term)
 }
 
-// Replacing provisional history assigns a new identity even if the bytes are unchanged.
+// Refetch an evicted visible source and classify it from its bounded cache slot.
+terminal_highlight_test_revisit_evicted_source :: proc(
+    t: ^testing.T, term: ^model.Terminal_State) {
+    testing.expect(t, term.highlighting.eviction_count > 0)
+    testing.expect(t, !terminal_highlight_test_has_cached_id(term, 1))
+    entry := terminal_highlight_history_find(term, 1, 1)
+    visible_line := terminal_highlight_test_visible_line(term, entry)
+    testing.expect(t, visible_line >= 0)
+    terminal_highlight_observe_history(term, visible_line, visible_line + 1)
+    source_request, missing := terminal_highlight_source_request_next(term)
+    id := source_request.submission_id
+    revision := source_request.source_revision
+    testing.expect(t, missing)
+    testing.expect_value(t, id, u64(1))
+    testing.expect_value(t, revision, u64(1))
+    testing.expect(t, terminal_highlight_source_fetch_begin(term, id, revision, 100))
+    terminal_highlight_test_publish_source_fetch(term, id, revision, 100)
+    terminal_highlight_observe_history(term, visible_line, visible_line + 1)
+    old, ready := terminal_highlight_take_request(term, 1)
+    testing.expect(t, ready)
+    testing.expect_value(t, old.identity.target_id, u64(1))
+    terminal_highlight_test_expect_pending_source(t, term, old)
+    testing.expect(t, terminal_highlight_test_publish(term, old))
+}
+
+// Check whether any bounded slot still owns a submission identity.
+terminal_highlight_test_has_cached_id :: proc(
+    term: ^model.Terminal_State, id: u64) -> bool {
+    for &slot in term^.highlighting.cache {
+        if slot.identity.target_id == id {
+            return true
+        }
+    }
+    return false
+}
+
+// Resolve one anchored visible line for a retained submission.
+terminal_highlight_test_visible_line :: proc(
+    term: ^model.Terminal_State,
+    entry: ^model.Terminal_Highlight_History) -> int {
+    if entry == nil {
+        return -1
+    }
+    for line in 0..<terminal_line_count(term) {
+        if terminal_highlight_line_for_row(
+            entry, terminal_output_semantic_row(term, line)) != nil {
+            return line
+        }
+    }
+    return -1
+}
+
+// Simulate copying fetched source into its matched bounded cache slot.
+terminal_highlight_test_publish_source_fetch :: proc(
+    term: ^model.Terminal_State, id, revision, request_id: u64) {
+    slot := terminal_highlight_source_fetch_slot(term, request_id)
+    if slot == nil {
+        return
+    }
+    slot.source[0] = 'x'
+    identity := terminal_highlight_test_source_identity(
+        term, id, revision, request_id)
+    terminal_highlight_source_fetch_publish(term, identity, true, 1)
+}
+
+// Assert that a scheduled cached source remains current and exact.
+terminal_highlight_test_expect_pending_source :: proc(
+    t: ^testing.T, term: ^model.Terminal_State,
+    request: protocol.Highlight_Requested) {
+    slot := terminal_highlight_pending_slot(term, request.identity)
+    testing.expect(t, slot != nil)
+    if slot != nil {
+        testing.expect(t, terminal_highlight_slot_current(term, slot))
+        testing.expect_value(t, string(slot.source[:slot.source_length]), "x")
+    }
+}
+
+// Continuation history keeps its submission identity and advances source revision.
 @(test)
 terminal_test_highlight_history_replacement :: proc(t: ^testing.T) {
     term: model.Terminal_State
@@ -209,14 +320,19 @@ terminal_test_highlight_history_replacement :: proc(t: ^testing.T) {
     terminal_highlight_test_submit(t, &term, "begin")
     terminal_highlight_observe_history(&term, 0, 1)
     first, _ := terminal_highlight_take_request(&term, 1)
-    termhist.termhist_insert_text(term.history, "begin")
-    testing.expect(t, termhist.termhist_accept_current(term.history, 0, true))
+    testing.expect(t, terminal_begin_eval(&term, "begin"))
+    terminal_continue_eval(&term)
+    terminal_highlight_test_submit(t, &term, "begin")
     testing.expect(t, !terminal_highlight_test_publish(&term, first))
     testing.expect(t,
-        terminal_highlight_history_find(&term, first.identity.target_id) == nil)
+        terminal_highlight_history_find(&term, first.identity.target_id,
+            first.identity.source_revision) == nil)
     terminal_highlight_observe_history(&term, 0, 1)
-    _, retry := terminal_highlight_take_request(&term, 1)
-    testing.expect(t, !retry)
+    retry, ready := terminal_highlight_take_request(&term, 1)
+    testing.expect(t, ready)
+    testing.expect_value(t, retry.identity.target_id, first.identity.target_id)
+    testing.expect_value(t, retry.identity.source_revision,
+        first.identity.source_revision + 1)
 }
 
 // Session/source mismatches do not consume pending identities or publish borrowed runs.
@@ -228,8 +344,15 @@ terminal_test_highlight_identity_and_copy :: proc(t: ^testing.T) {
     termhist.termhist_insert_text(term.history, "x")
     terminal_highlight_observe_live(&term, 0)
     request, _ := terminal_highlight_take_request(&term, 1)
-    runs := [1]protocol.Highlight_Run{{end_byte = 1, weight = .Bold}}
-    result := protocol.Highlight_Result{request.identity, request.source, runs[:]}
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = 1,
+        weight = .Bold,
+    }}
+    result: protocol.Highlight_Result = {
+        request.identity,
+        request.source,
+        runs[:],
+    }
     result.identity.animation_generation += 1
     testing.expect(t, !terminal_highlight_publish(&term, result))
     result.identity = request.identity
@@ -260,6 +383,44 @@ terminal_test_highlight_wrapped_history :: proc(t: ^testing.T) {
     request, ready := terminal_highlight_take_request(&term, 1)
     testing.expect(t, ready && request.source == string(source[:]))
     testing.expect(t, terminal_highlight_test_publish(&term, request))
+}
+
+// Several visible hard lines from one submission share one source lookup.
+@(test)
+terminal_test_highlight_source_fetch_coalesces_lines :: proc(t: ^testing.T) {
+    term: model.Terminal_State
+    terminal_highlight_test_init(t, &term)
+    defer terminal_destroy(&term, context.allocator)
+    terminal_highlight_test_submit(t, &term, "first\nsecond")
+    terminal_highlight_observe_history(&term, 0, 2)
+    slot := terminal_highlight_cache_slot(
+        &term, term.provisional_submission_id, term.provisional_desired_revision)
+    testing.expect(t, slot != nil)
+    if slot == nil {
+        return
+    }
+    slot.source_length = 0
+    slot.phase = .Empty
+    source_request, ready := terminal_highlight_source_request_next(&term)
+    id := source_request.submission_id
+    revision := source_request.source_revision
+    testing.expect(t, ready)
+    testing.expect(t, terminal_highlight_source_fetch_begin(
+        &term, id, revision, 100))
+    _, duplicate := terminal_highlight_source_request_next(&term)
+    testing.expect(t, !duplicate)
+    old_face := term.highlighting.face_generation
+    testing.expect(t, terminal_highlight_set_face_generation(&term, old_face + 1))
+    slot = terminal_highlight_source_fetch_slot(&term, 100)
+    if slot != nil {
+        slot.source[0] = 'f'
+        identity := terminal_highlight_test_source_identity(
+            &term, id, revision, 100, old_face)
+        terminal_highlight_source_fetch_publish(
+            &term, identity, true, 1)
+    }
+    _, retry := terminal_highlight_source_request_next(&term)
+    testing.expect(t, retry)
 }
 
 // Live work wins over visible history and remains independent of completion/evaluation IDs.
@@ -366,13 +527,14 @@ terminal_test_highlight_continuation_replacement :: proc(t: ^testing.T) {
     testing.expect(t, ready)
     terminal_continue_eval(&term)
     testing.expect(t, !terminal_highlight_test_publish(&term, first))
-    termhist.termhist_insert_text(term.history, "end")
-    _ = terminal_submit(&term)
+    terminal_highlight_test_submit(t, &term, "begin\nend")
     terminal_highlight_observe_history(&term, 0, 2)
     second, new_ready := terminal_highlight_take_request(&term, 1)
-    testing.expect(t, new_ready && second.identity.target_id != first.identity.target_id)
+    testing.expect(t, new_ready && second.identity.target_id == first.identity.target_id)
+    testing.expect_value(t, second.identity.source_revision,
+        first.identity.source_revision + 1)
     testing.expect_value(t, second.source, "begin\nend")
-    testing.expect_value(t, term.history.history_len, 1)
+    testing.expect_value(t, term.provisional_desired_revision, u64(2))
 }
 
 // Mode-specific submissions never enter Julia highlighting, and evicted anchors go stale.
@@ -395,7 +557,7 @@ terminal_test_highlight_non_julia_and_history_eviction :: proc(t: ^testing.T) {
         entry.id = 0
     }
     testing.expect(t, !terminal_highlight_test_publish(&term, request))
-    testing.expect_value(t, term.history.history_len, 2)
+    testing.expect(t, term.provisional_submission_id == 2)
     testing.expect(t, strings.contains(
         terminal_line_text(&term, 1), "x"))
 }

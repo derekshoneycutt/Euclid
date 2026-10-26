@@ -37,22 +37,43 @@ unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [3]portable.Control_Publication_Input{
-        {native_id = 2, role = .Button, bounds = {10, 10, 50, 34},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true, focused = true},
-        {native_id = 3, role = .Checkbox, bounds = {10, 40, 160, 64},
-            label = "Limit frame rate", actions = {.Focus, .Toggle},
-            enabled = true, focusable = true, checked = true},
-        {native_id = 4, role = .Slider, bounds = {10, 70, 180, 94},
-            label = "Maximum dust", value = "50000",
+    controls: [3]portable.Control_Publication_Input = {
+        {
+            native_id = 2,
+            role = .Button,
+            bounds = {10, 10, 50, 34},
+            label = "Restart animation",
+            actions = {.Focus, .Activate},
+            enabled = true,
+            focusable = true,
+            focused = true,
+        },
+        {
+            native_id = 3,
+            role = .Checkbox,
+            bounds = {10, 40, 160, 64},
+            label = "Limit frame rate",
+            actions = {.Focus, .Toggle},
+            enabled = true,
+            focusable = true,
+            checked = true,
+        },
+        {
+            native_id = 4,
+            role = .Slider,
+            bounds = {10, 70, 180, 94},
+            label = "Maximum dust",
+            value = "50000",
             actions = {.Focus, .Increment, .Decrement},
             range = {0, 100000, 50000, 1000, false, true},
-            enabled = true, focusable = true},
+            enabled = true,
+            focusable = true,
+        },
     }
     publication: portable.Control_Tree_Publication
     testing.expect_value(t, portable.control_tree_build(&publication, {
-        root_bounds = {0, 0, 800, 600}, window_focused = true,
+        root_bounds = {0, 0, 800, 600},
+        window_focused = true,
         controls = controls[:],
     }, &memory), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
@@ -70,21 +91,46 @@ unix_control_tree_update_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [4]portable.Control_Publication_Input{
-        {native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
-            label = "Search animations", enabled = true, focusable = true},
-        {native_id = 3, role = .Tree, bounds = {10, 48, 280, 400},
-            label = "Animation library", active_descendant_native_id = 5,
-            enabled = true, focusable = true},
-        {native_id = 4, parent_native_id = 3, role = .Tree_Item,
-            bounds = {10, 48, 280, 72}, label = "Elements", enabled = true},
-        {native_id = 5, parent_native_id = 4, role = .Tree_Item,
-            bounds = {26, 72, 280, 96}, label = "Proposition I",
-            enabled = true, selected = true},
+    controls: [4]portable.Control_Publication_Input = {
+        {
+            native_id = 2,
+            role = .Search_Input,
+            bounds = {10, 10, 220, 40},
+            label = "Search animations",
+            enabled = true,
+            focusable = true,
+        },
+        {
+            native_id = 3,
+            role = .Tree,
+            bounds = {10, 48, 280, 400},
+            label = "Animation library",
+            active_descendant_native_id = 5,
+            enabled = true,
+            focusable = true,
+        },
+        {
+            native_id = 4,
+            parent_native_id = 3,
+            role = .Tree_Item,
+            bounds = {10, 48, 280, 72},
+            label = "Elements",
+            enabled = true,
+        },
+        {
+            native_id = 5,
+            parent_native_id = 4,
+            role = .Tree_Item,
+            bounds = {26, 72, 280, 96},
+            label = "Proposition I",
+            enabled = true,
+            selected = true,
+        },
     }
     publication: portable.Control_Tree_Publication
     testing.expect_value(t, portable.control_tree_build(&publication, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
@@ -96,16 +142,30 @@ unix_control_tree_update_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
 // unix_toggle_test_controls returns one button and checkbox fixture pair.
 unix_toggle_test_controls :: proc(
     button_identity, checkbox_identity: portable.Qualified_Identity) ->
-    [2]Adapter_Control_Input {
+        [2]Adapter_Control_Input {
     return {
-        {identity = button_identity, control = {
-            role = .Button, bounds = {10, 10, 50, 34},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true}},
-        {identity = checkbox_identity, control = {
-            role = .Checkbox, bounds = {10, 40, 160, 64},
-            label = "Limit frame rate", actions = {.Focus, .Toggle},
-            enabled = true, focusable = true}},
+        {
+            identity = button_identity,
+            control = {
+                role = .Button,
+                bounds = {10, 10, 50, 34},
+                label = "Restart animation",
+                actions = {.Focus, .Activate},
+                enabled = true,
+                focusable = true,
+            },
+        },
+        {
+            identity = checkbox_identity,
+            control = {
+                role = .Checkbox,
+                bounds = {10, 40, 160, 64},
+                label = "Limit frame rate",
+                actions = {.Focus, .Toggle},
+                enabled = true,
+                focusable = true,
+            },
+        },
     }
 }
 
@@ -114,20 +174,25 @@ unix_toggle_test_controls :: proc(
 unix_control_publication_routes_toggle :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    button_identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 1, local_id = 2101,
+    button_identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 1,
+        local_id = 2101,
     }
-    checkbox_identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 6, local_id = 6202,
+    checkbox_identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 6,
+        local_id = 6202,
     }
     controls := unix_toggle_test_controls(button_identity, checkbox_identity)
-    input := Adapter_Tree_Input{
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    input: Adapter_Tree_Input = {
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }
     testing.expect(t, unix_adapter_publish_controls(owner, input))
     defer unix_adapter_destroy(owner)
     checkbox_native_id := owner^.control_native_ids[1]
-    request := portable.Queued_Action{
+    request: portable.Queued_Action = {
         kind = u16(accesskit.Action.Click),
         target_native_id = checkbox_native_id,
         publication_generation = owner^.control_publication.current.generation,
@@ -146,20 +211,42 @@ unix_control_publication_routes_toggle :: proc(t: ^testing.T) {
 unix_control_publication_resolves_tree_hierarchy :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    tree_identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 8, local_id = 1}
-    item_identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 8, local_id = 2}
-    controls := [2]Adapter_Control_Input{
-        {identity = tree_identity, active_descendant_identity = item_identity,
-            control = {role = .Tree, bounds = {10, 10, 280, 400},
-                label = "Animation library", enabled = true, focusable = true}},
-        {identity = item_identity, parent_identity = tree_identity,
-            control = {role = .Tree_Item, bounds = {10, 10, 280, 34},
-                label = "Elements", enabled = true}},
+    tree_identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 8,
+        local_id = 1,
+    }
+    item_identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 8,
+        local_id = 2,
+    }
+    controls: [2]Adapter_Control_Input = {
+        {
+            identity = tree_identity,
+            active_descendant_identity = item_identity,
+            control = {
+                role = .Tree,
+                bounds = {10, 10, 280, 400},
+                label = "Animation library",
+                enabled = true,
+                focusable = true,
+            },
+        },
+        {
+            identity = item_identity,
+            parent_identity = tree_identity,
+            control = {
+                role = .Tree_Item,
+                bounds = {10, 10, 280, 34},
+                label = "Elements",
+                enabled = true,
+            },
+        },
     }
     testing.expect(t, unix_adapter_publish_controls(owner, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }))
     defer unix_adapter_destroy(owner)
     publication := &owner^.control_publication.current
@@ -174,17 +261,27 @@ unix_control_publication_resolves_tree_hierarchy :: proc(t: ^testing.T) {
 unix_control_publication_reappearance_allocates_fresh_id :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    checkbox_identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 6, local_id = 6202,
+    checkbox_identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 6,
+        local_id = 6202,
     }
-    controls := [1]Adapter_Control_Input{{
-        identity = checkbox_identity,
-        control = {role = .Checkbox, bounds = {10, 40, 160, 64},
-            label = "Limit frame rate", actions = {.Focus, .Toggle},
-            enabled = true, focusable = true},
-    }}
-    input := Adapter_Tree_Input{
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    controls: [1]Adapter_Control_Input = {
+        {
+            identity = checkbox_identity,
+            control = {
+                role = .Checkbox,
+                bounds = {10, 40, 160, 64},
+                label = "Limit frame rate",
+                actions = {.Focus, .Toggle},
+                enabled = true,
+                focusable = true,
+            },
+        },
+    }
+    input: Adapter_Tree_Input = {
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }
     testing.expect(t, unix_adapter_publish_controls(owner, input))
     defer unix_adapter_destroy(owner)
@@ -203,21 +300,31 @@ unix_control_publication_reappearance_allocates_fresh_id :: proc(t: ^testing.T) 
 unix_control_publication_routes_numeric_value :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 6, local_id = 6101,
+    identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 6,
+        local_id = 6101,
     }
-    controls := [1]Adapter_Control_Input{{
-        identity = identity,
-        control = {role = .Slider, bounds = {10, 10, 180, 34},
-            label = "Maximum Dust particles", actions = {.Focus, .Set_Value},
-            range = {0, 100, 25, 1, false, true},
-            enabled = true, focusable = true},
-    }}
+    controls: [1]Adapter_Control_Input = {
+        {
+            identity = identity,
+            control = {
+                role = .Slider,
+                bounds = {10, 10, 180, 34},
+                label = "Maximum Dust particles",
+                actions = {.Focus, .Set_Value},
+                range = {0, 100, 25, 1, false, true},
+                enabled = true,
+                focusable = true,
+            },
+        },
+    }
     testing.expect(t, unix_adapter_publish_controls(owner, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }))
     defer unix_adapter_destroy(owner)
-    request := portable.Queued_Action{
+    request: portable.Queued_Action = {
         kind = u16(accesskit.Action.Set_Value),
         target_native_id = owner^.control_native_ids[0],
         publication_generation = owner^.control_publication.current.generation,
@@ -240,22 +347,47 @@ unix_control_publication_routes_numeric_value :: proc(t: ^testing.T) {
 
 // unix_text_action_fixture publishes one editable owner with its TextRun child.
 unix_text_action_fixture :: proc(owner: ^Adapter) -> Unix_Text_Action_Fixture {
-    identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 7, local_id = 6401}
-    text_identity := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 7, local_id = 6410}
-    controls := [2]Adapter_Control_Input{
-        {identity = identity, control = {
-        role = .Search_Input, bounds = {10, 10, 220, 40}, value = "aβc",
-        actions = {.Replace_Selected_Text, .Set_Text_Selection},
-        enabled = true, focusable = true, text_present = true,
-        text_cursor_byte = 4, text_anchor_byte = 4}},
-        {identity = text_identity, parent_identity = identity, control = {
-            role = .Text_Run, bounds = {14, 14, 216, 36}, value = "aβc",
-            enabled = true, text_present = true}},
+    identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 7,
+        local_id = 6401,
+    }
+    text_identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 7,
+        local_id = 6410,
+    }
+    controls: [2]Adapter_Control_Input = {
+        {
+            identity = identity,
+            control = {
+                role = .Search_Input,
+                bounds = {10, 10, 220, 40},
+                value = "aβc",
+                actions = {.Replace_Selected_Text, .Set_Text_Selection},
+                enabled = true,
+                focusable = true,
+                text_present = true,
+                text_cursor_byte = 4,
+                text_anchor_byte = 4,
+            },
+        },
+        {
+            identity = text_identity,
+            parent_identity = identity,
+            control = {
+                role = .Text_Run,
+                bounds = {14, 14, 216, 36},
+                value = "aβc",
+                enabled = true,
+                text_present = true,
+            },
+        },
     }
     ok := unix_adapter_publish_controls(owner, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:]})
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
+    })
     return {owner^.control_native_ids[0], owner^.control_native_ids[1], ok}
 }
 
@@ -268,9 +400,16 @@ unix_control_publication_routes_selected_text :: proc(t: ^testing.T) {
     testing.expect(t, fixture.ok)
     defer unix_adapter_destroy(owner)
     replacement := "x"
-    request := accesskit.Action_Request{action = .Replace_Selected_Text,
-        target_node = accesskit.Node_Id(fixture.owner_id), data = {has_value = true,
-            value = {tag = .Value}}}
+    request: accesskit.Action_Request = {
+        action = .Replace_Selected_Text,
+        target_node = accesskit.Node_Id(fixture.owner_id),
+        data = {
+            has_value = true,
+            value = {
+                tag = .Value,
+            },
+        },
+    }
     request.data.value.payload.value = cast(cstring)raw_data(replacement)
     testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
@@ -290,9 +429,16 @@ unix_control_publication_routes_full_text :: proc(t: ^testing.T) {
     testing.expect(t, fixture.ok)
     defer unix_adapter_destroy(owner)
     replacement := "Elements"
-    request := accesskit.Action_Request{action = .Set_Value,
-        target_node = accesskit.Node_Id(fixture.owner_id), data = {has_value = true,
-            value = {tag = .Value}}}
+    request: accesskit.Action_Request = {
+        action = .Set_Value,
+        target_node = accesskit.Node_Id(fixture.owner_id),
+        data = {
+            has_value = true,
+            value = {
+                tag = .Value,
+            },
+        },
+    }
     request.data.value.payload.value = cast(cstring)raw_data(replacement)
     testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
@@ -312,12 +458,20 @@ unix_control_publication_routes_text_selection :: proc(t: ^testing.T) {
     fixture := unix_text_action_fixture(owner)
     testing.expect(t, fixture.ok)
     defer unix_adapter_destroy(owner)
-    request := accesskit.Action_Request{action = .Set_Text_Selection,
-        target_node = accesskit.Node_Id(fixture.owner_id), data = {has_value = true,
-            value = {tag = .Set_Text_Selection}}}
+    request: accesskit.Action_Request = {
+        action = .Set_Text_Selection,
+        target_node = accesskit.Node_Id(fixture.owner_id),
+        data = {
+            has_value = true,
+            value = {
+                tag = .Set_Text_Selection,
+            },
+        },
+    }
     request.data.value.payload.set_text_selection = {
         anchor = {accesskit.Node_Id(fixture.text_run_id), 1},
-        focus = {accesskit.Node_Id(fixture.text_run_id), 2}}
+        focus = {accesskit.Node_Id(fixture.text_run_id), 2},
+    }
     testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
     action: Adapter_Action
@@ -331,19 +485,31 @@ unix_control_publication_routes_text_selection :: proc(t: ^testing.T) {
 // Verify TreeItem clicks toggle branches, select leaves, and retain explicit actions.
 @(test)
 unix_control_publication_routes_tree_item_actions :: proc(t: ^testing.T) {
-    branch := portable.Control_Publication{role = .Tree_Item, enabled = true,
-        actions = {.Select, .Expand, .Collapse, .Toggle}}
+    branch: portable.Control_Publication = {
+        role = .Tree_Item,
+        enabled = true,
+        actions = {.Select, .Expand, .Collapse, .Toggle},
+    }
     action: Adapter_Action
     testing.expect_value(t, adapter_map_control_action(&branch,
-        {kind = u16(accesskit.Action.Click)}, &action), Adapter_Action_Status.Ok)
+        {
+            kind = u16(accesskit.Action.Click),
+        }, &action), Adapter_Action_Status.Ok)
     testing.expect_value(t, action.kind, Adapter_Action_Kind.Toggle)
     testing.expect_value(t, adapter_map_control_action(&branch,
-        {kind = u16(accesskit.Action.Expand)}, &action), Adapter_Action_Status.Ok)
+        {
+            kind = u16(accesskit.Action.Expand),
+        }, &action), Adapter_Action_Status.Ok)
     testing.expect_value(t, action.kind, Adapter_Action_Kind.Expand)
-    leaf := portable.Control_Publication{role = .Tree_Item, enabled = true,
-        actions = {.Select}}
+    leaf: portable.Control_Publication = {
+        role = .Tree_Item,
+        enabled = true,
+        actions = {.Select},
+    }
     testing.expect_value(t, adapter_map_control_action(&leaf,
-        {kind = u16(accesskit.Action.Click)}, &action), Adapter_Action_Status.Ok)
+        {
+            kind = u16(accesskit.Action.Click),
+        }, &action), Adapter_Action_Status.Ok)
     testing.expect_value(t, action.kind, Adapter_Action_Kind.Select)
 }
 
@@ -355,12 +521,16 @@ unix_action_request_copies_into_bounded_queue :: proc(t: ^testing.T) {
     defer adapter_close_admission(owner)
     testing.expect_value(t, portable.publication_build_button(
         &owner^.publication.current, {
-            present = true, child_id = 2, root_bounds = {0, 0, 800, 600},
-            child_bounds = {16, 520, 48, 552}, label = "Restart animation",
-            window_focused = true, child_enabled = true,
+            present = true,
+            child_id = 2,
+            root_bounds = {0, 0, 800, 600},
+            child_bounds = {16, 520, 48, 552},
+            label = "Restart animation",
+            window_focused = true,
+            child_enabled = true,
         }),
         portable.Publication_Status.Ok)
-    request := accesskit.Action_Request{
+    request: accesskit.Action_Request = {
         action = .Click,
         target_node = accesskit.Node_Id(2),
     }
@@ -378,19 +548,29 @@ unix_action_request_copies_into_bounded_queue :: proc(t: ^testing.T) {
 unix_action_drain_validates_publication_generation :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    identity := portable.Qualified_Identity{
-        domain = .Ui, local_id = 2101, generation = 4,
+    identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        local_id = 2101,
+        generation = 4,
     }
-    input := portable.Button_Publication_Input{
-        present = true, root_bounds = {0, 0, 800, 600},
-        child_bounds = {16, 520, 48, 552}, label = "Restart animation",
-        window_focused = true, child_enabled = true, child_focusable = true,
-        child_supports_focus = true, child_supports_activate = true,
+    input: portable.Button_Publication_Input = {
+        present = true,
+        root_bounds = {0, 0, 800, 600},
+        child_bounds = {16, 520, 48, 552},
+        label = "Restart animation",
+        window_focused = true,
+        child_enabled = true,
+        child_focusable = true,
+        child_supports_focus = true,
+        child_supports_activate = true,
     }
     testing.expect(t, unix_adapter_create_button(owner, input, identity))
     defer unix_adapter_destroy(owner)
-    stale := portable.Queued_Action{kind = u16(accesskit.Action.Click),
-        target_native_id = owner^.child_native_id, publication_generation = 0}
+    stale: portable.Queued_Action = {
+        kind = u16(accesskit.Action.Click),
+        target_native_id = owner^.child_native_id,
+        publication_generation = 0,
+    }
     testing.expect_value(t, portable.action_queue_push(&owner^.actions, &stale),
         portable.Action_Queue_Status.Ok)
     action: Adapter_Action
@@ -411,12 +591,19 @@ unix_action_drain_validates_publication_generation :: proc(t: ^testing.T) {
 unix_button_removal_retires_identity :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
-    identity := portable.Qualified_Identity{domain = .Ui, local_id = 2101}
-    input := portable.Button_Publication_Input{
-        present = true, root_bounds = {0, 0, 800, 600},
-        child_bounds = {16, 520, 48, 552}, label = "Restart animation",
-        child_enabled = true, child_focusable = true,
-        child_supports_focus = true, child_supports_activate = true,
+    identity: portable.Qualified_Identity = {
+        domain = .Ui,
+        local_id = 2101,
+    }
+    input: portable.Button_Publication_Input = {
+        present = true,
+        root_bounds = {0, 0, 800, 600},
+        child_bounds = {16, 520, 48, 552},
+        label = "Restart animation",
+        child_enabled = true,
+        child_focusable = true,
+        child_supports_focus = true,
+        child_supports_activate = true,
     }
     testing.expect(t, unix_adapter_create_button(owner, input, identity))
     defer unix_adapter_destroy(owner)
@@ -458,7 +645,9 @@ unix_adapter_unwinds_injected_construction_failure :: proc(t: ^testing.T) {
         owner, 800, 600, true, .After_Publication))
     testing.expect(t, owner^.native == nil)
     testing.expect(t, accesskit_activation_callback(owner) == nil)
-    request := portable.Queued_Action{target_native_id = 2}
+    request: portable.Queued_Action = {
+        target_native_id = 2,
+    }
     testing.expect_value(t,
         portable.action_queue_push(&owner^.actions, &request),
         portable.Action_Queue_Status.Closing)

@@ -160,10 +160,14 @@ graphics_parse_i32 :: proc(bytes: []u8) -> (i32, bool) {
 graphics_parse_kitty_animation_action :: proc(
     controls: ^gfxprotocol.Kitty_Controls, value: u8) -> bool {
     switch value {
-    case 'f': controls.action = .Frame
-    case 'a': controls.action = .Animate
-    case 'c': controls.action = .Compose
-    case: return false
+    case 'f':
+        controls.action = .Frame
+    case 'a':
+        controls.action = .Animate
+    case 'c':
+        controls.action = .Compose
+    case:
+        return false
     }
     return true
 }
@@ -182,12 +186,18 @@ graphics_parse_kitty_action :: proc(
         return false 
     }
     switch value[0] {
-    case 't': controls.action = .Transmit
-    case 'T': controls.action = .Transmit_And_Place
-    case 'p': controls.action = .Place
-    case 'd': controls.action = .Delete
-    case 'q': controls.action = .Query
-    case: return graphics_parse_kitty_animation_action(controls, value[0])
+    case 't':
+        controls.action = .Transmit
+    case 'T':
+        controls.action = .Transmit_And_Place
+    case 'p':
+        controls.action = .Place
+    case 'd':
+        controls.action = .Delete
+    case 'q':
+        controls.action = .Query
+    case:
+        return graphics_parse_kitty_animation_action(controls, value[0])
     }
     return true
 }
@@ -204,12 +214,18 @@ graphics_parse_kitty_action :: proc(
 graphics_parse_kitty_extent_number :: proc(
     controls: ^gfxprotocol.Kitty_Controls, key: u8, value: int) -> bool {
     switch key {
-    case 'f': controls.format = value
-    case 's': controls.width = value
-    case 'v': controls.height = value
-    case 'c': controls.columns = value
-    case 'r': controls.rows = value
-    case: return false
+    case 'f':
+        controls.format = value
+    case 's':
+        controls.width = value
+    case 'v':
+        controls.height = value
+    case 'c':
+        controls.columns = value
+    case 'r':
+        controls.rows = value
+    case:
+        return false
     }
     return true
 }
@@ -218,13 +234,20 @@ graphics_parse_kitty_extent_number :: proc(
 graphics_parse_kitty_crop_number :: proc(
     controls: ^gfxprotocol.Kitty_Controls, key: u8, value: int) -> bool {
     switch key {
-    case 'x': controls.source_x = value
-    case 'y': controls.source_y = value
-    case 'w': controls.source_width = value
-    case 'h': controls.source_height = value
-    case 'X': controls.offset_x = value
-    case 'Y': controls.offset_y = value
-    case: return false
+    case 'x':
+        controls.source_x = value
+    case 'y':
+        controls.source_y = value
+    case 'w':
+        controls.source_width = value
+    case 'h':
+        controls.source_height = value
+    case 'X':
+        controls.offset_x = value
+    case 'Y':
+        controls.offset_y = value
+    case:
+        return false
     }
     return true
 }
@@ -252,10 +275,14 @@ graphics_parse_kitty_u32_number :: proc(
         return false 
     }
     switch key {
-    case 'i': controls.image_id = u32(value)
-    case 'I': controls.image_number = u32(value)
-    case 'p': controls.placement_id = u32(value)
-    case: return false
+    case 'i':
+        controls.image_id = u32(value)
+    case 'I':
+        controls.image_number = u32(value)
+    case 'p':
+        controls.placement_id = u32(value)
+    case:
+        return false
     }
     return true
 }
@@ -279,7 +306,8 @@ graphics_parse_kitty_mode_number :: proc(
             return false 
         }
         controls.preserve_cursor = value == 1
-    case: return false
+    case:
+        return false
     }
     return true
 }
@@ -381,10 +409,14 @@ graphics_kitty_mutation_status :: proc(
     outcome: termattachment.Animation_Mutation_Outcome) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     switch outcome {
-    case .Found: return .Ok
-    case .Stale, .Not_Found: return .Not_Found
-    case .Invalid: return .Invalid
-    case .Capacity_Exceeded, .Allocation_Failed: return .Capacity_Exceeded
+    case .Found:
+        return .Ok
+    case .Stale, .Not_Found:
+        return .Not_Found
+    case .Invalid:
+        return .Invalid
+    case .Capacity_Exceeded, .Allocation_Failed:
+        return .Capacity_Exceeded
     }
     return .Invalid
 }
@@ -487,7 +519,8 @@ graphics_kitty_apply_frame_payload :: proc(
         return status 
     }
     return graphics_kitty_queue_animation_command(state, {
-        attachment_id = id, kind = .Refresh,
+        attachment_id = id,
+        kind = .Refresh,
     })
 }
 
@@ -600,11 +633,15 @@ graphics_kitty_execute_mutation_request :: proc(
             return graphics_kitty_apply_frame_payload(
                 state, prepared_payload.bytes, controls)
         }
-        return graphics_kitty_apply_frame(
-            state, {transfer_id = request.transfer_id}, controls)
-    case .Compose: return graphics_kitty_apply_composition(state, controls)
-    case .Control: return graphics_kitty_apply_animation_control(state, controls)
-    case .Delete: return graphics_kitty_delete_animation_frames(state, controls)
+        return graphics_kitty_apply_frame(state, {
+            transfer_id = request.transfer_id,
+        }, controls)
+    case .Compose:
+        return graphics_kitty_apply_composition(state, controls)
+    case .Control:
+        return graphics_kitty_apply_animation_control(state, controls)
+    case .Delete:
+        return graphics_kitty_delete_animation_frames(state, controls)
     }
     return .Invalid
 }
@@ -671,7 +708,8 @@ graphics_kitty_apply_composition :: proc(
         return status 
     }
     return graphics_kitty_queue_animation_command(state, {
-        attachment_id = id, kind = .Refresh,
+        attachment_id = id,
+        kind = .Refresh,
     })
 }
 
@@ -725,7 +763,8 @@ graphics_kitty_delete_animation_frames :: proc(
         return status 
     }
     return graphics_kitty_queue_animation_command(state, {
-        attachment_id = id, kind = .Refresh,
+        attachment_id = id,
+        kind = .Refresh,
     })
 }
 
@@ -739,7 +778,9 @@ graphics_kitty_delete_animation_frames :: proc(
 //     unsupported or malformed token. Omitted format defaults to RGBA (`f=32`).
 graphics_parse_kitty_raw_controls :: proc(
     header: []u8) -> gfxprotocol.Kitty_Controls {
-    controls := gfxprotocol.Kitty_Controls{format = 32}
+    controls: gfxprotocol.Kitty_Controls = {
+        format = 32,
+    }
     start := 0
     for index in 0..=len(header) {
         if index != len(header) && header[index] != ',' {
@@ -907,8 +948,10 @@ graphics_kitty_admission_status :: proc(
     case .Capacity_Exceeded, .Byte_Limit_Exceeded, .Pixel_Limit_Exceeded,
          .Allocation_Failed, .No_Evictable_Entry:
         return .Capacity_Exceeded
-    case .Invalid: return .Invalid
-    case .Admitted: return .Ok
+    case .Invalid:
+        return .Invalid
+    case .Admitted:
+        return .Ok
     }
     return .Invalid
 }
@@ -1048,7 +1091,10 @@ graphics_reserve_pending_attachment :: proc(
         metadata = {
             kind = .Raster,
             origin = origin,
-            metrics = {width = width, height = height},
+            metrics = {
+                width = width,
+                height = height,
+            },
         },
         payload_byte_count = width * height * 4,
         payload_format = .Rgba8,
@@ -1088,15 +1134,20 @@ graphics_kitty_decode_dimensions :: proc(
     kind: gfxprotocol.Graphics_Decode_Kind) -> (
         termattachment.Intrinsic_Metrics, bool) {
     if kind != .Kitty_Png {
-        return {width = controls.width, height = controls.height},
-            controls.width > 0 && controls.height > 0
+        return {
+            width = controls.width,
+            height = controls.height,
+        }, controls.width > 0 && controls.height > 0
     }
     payload, found := termattachment.transfer_bytes(state.store, frame.transfer_id)
     inspection := termgraphicsprepare.inspect_image(payload, state.store.limits)
     if !found || !inspection.valid || inspection.format != .Png {
         return {}, false
     }
-    return {width = inspection.width, height = inspection.height}, true
+    return {
+        width = inspection.width,
+        height = inspection.height,
+    }, true
 }
 
 // Reserve and optionally identify and place one pending Kitty decode target.
@@ -1138,12 +1189,18 @@ graphics_kitty_decode_request :: proc(
     controls: gfxprotocol.Kitty_Controls,
     target: Kitty_Decode_Target) -> gfxprotocol.Graphics_Decode_Request {
     return {
-        kind = target.kind, producer = frame.producer, transfer_id = frame.transfer_id,
-        attachment_id = target.attachment_id, width = target.dimensions.width,
-        height = target.dimensions.height, place = target.place,
+        kind = target.kind,
+        producer = frame.producer,
+        transfer_id = frame.transfer_id,
+        attachment_id = target.attachment_id,
+        width = target.dimensions.width,
+        height = target.dimensions.height,
+        place = target.place,
         geometry = graphics_kitty_geometry(semantics_context, controls),
-        preserve_aspect_ratio = true, image_id = controls.image_id,
-        image_number = controls.image_number, placement_id = controls.placement_id,
+        preserve_aspect_ratio = true,
+        image_id = controls.image_id,
+        image_number = controls.image_number,
+        placement_id = controls.placement_id,
     }
 }
 
@@ -1180,7 +1237,10 @@ graphics_queue_kitty_decode :: proc(
         return .Invalid 
     }
     target := graphics_prepare_kitty_decode_target(
-        semantics_context, state, controls, {kind = kind, dimensions = dimensions})
+        semantics_context, state, controls, {
+            kind = kind,
+            dimensions = dimensions,
+        })
     if target.status != .Ok {
         return target.status 
     }
@@ -1227,7 +1287,8 @@ graphics_kitty_delete_identity :: proc(
         for index in 0..<len(state.kitty_images) {
             graphics_kitty_remove_image(state, index)
         }
-    case: return .Unsupported
+    case:
+        return .Unsupported
     }
     return .Ok
 }
@@ -1253,7 +1314,8 @@ graphics_kitty_delete_position :: proc(
     case 'z', 'Z':
         termattachment.placements_remove_z_index(
             state.store, screen, controls.z_index)
-    case: return false
+    case:
+        return false
     }
     return true
 }
@@ -1350,7 +1412,10 @@ graphics_admit_kitty_raw :: proc(
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = controls.width, height = controls.height},
+            metrics = {
+                width = controls.width,
+                height = controls.height,
+            },
         },
         payload = payload,
         payload_format = .Rgb8 if controls.format == 24 else .Rgba8,
@@ -1469,43 +1534,65 @@ graphics_apply_kitty_timeline_controls :: proc(
         kind == .Control else graphics_kitty_apply_composition(state, controls)
 }
 
+// Place one retained Kitty image only when no transfer payload accompanies it.
+graphics_apply_kitty_place_controls :: proc(
+    semantics_context: ^Context, state: ^gfxprotocol.Graphics_Parser_State,
+    frame: gfxprotocol.Graphics_Frame,
+    controls: gfxprotocol.Kitty_Controls) -> gfxprotocol.Kitty_Graphics_Response_Status {
+    index := graphics_kitty_find_image(state, controls)
+    if index < 0 || frame.transfer_id.generation != 0 {
+        return .Invalid
+    }
+    id := state.kitty_images[index].attachment_id
+    dimensions, found := termattachment.attachment_metrics(state.store, id)
+    if !found {
+        return .Invalid
+    }
+    return graphics_kitty_place(semantics_context, state, controls, id, dimensions)
+}
+
 //   Dispatch one parsed Kitty command and commit its synchronous semantic effects.
 graphics_apply_kitty_non_transmit :: proc(
     semantics_context: ^Context, state: ^gfxprotocol.Graphics_Parser_State,
     frame: gfxprotocol.Graphics_Frame,
     controls: gfxprotocol.Kitty_Controls) -> Kitty_Non_Transmit_Result {
     if controls.action == .Delete {
-        return {status = graphics_apply_kitty_delete_controls(
-            semantics_context, state, controls), handled = true}
+        return {
+            status = graphics_apply_kitty_delete_controls(
+                semantics_context, state, controls),
+            handled = true,
+        }
     }
     if controls.action == .Frame {
         status, retained := graphics_apply_kitty_frame_controls(state, frame, controls)
-        return {status = status, retained = retained, handled = true}
+        return {
+            status = status,
+            retained = retained,
+            handled = true,
+        }
     }
     if controls.action == .Animate || controls.action == .Compose {
         kind: gfxprotocol.Kitty_Mutation_Kind = .Control
         if controls.action == .Compose {
             kind = .Compose 
         }
-        return {status = graphics_apply_kitty_timeline_controls(
-            state, controls, kind), handled = true}
+        return {
+            status = graphics_apply_kitty_timeline_controls(
+                state, controls, kind),
+            handled = true,
+        }
     }
     if controls.action == .Place {
-        index := graphics_kitty_find_image(state, controls)
-        if index < 0 || frame.transfer_id.generation != 0 {
-            return {status = .Invalid, handled = true}
+        return {
+            status = graphics_apply_kitty_place_controls(
+                semantics_context, state, frame, controls),
+            handled = true,
         }
-        dimensions, found := termattachment.attachment_metrics(
-            state.store, state.kitty_images[index].attachment_id)
-        if !found {
-            return {status = .Invalid, handled = true} 
-        }
-        status := graphics_kitty_place(
-            semantics_context, state, controls,
-            state.kitty_images[index].attachment_id, dimensions)
-        return {status = status, handled = true}
     }
-    return {status = .Ok, handled = controls.action == .Query}
+    return {
+        status = .Ok,
+        handled = controls.action == .Query,
+    }
 }
 
 //   Dispatch one parsed Kitty command and commit its synchronous semantic effects.
@@ -1677,9 +1764,11 @@ graphics_semantics_apply_frame :: proc(
         status, retained := graphics_apply_kitty_frame(semantics_context, state, frame)
         if !controls.more && graphics_kitty_response_allowed(controls, status) {
             gfxprotocol.graphics_parser_queue_kitty_response(state, {
-                producer = frame.producer, image_id = controls.image_id,
+                producer = frame.producer,
+                image_id = controls.image_id,
                 image_number = controls.image_number,
-                placement_id = controls.placement_id, status = status,
+                placement_id = controls.placement_id,
+                status = status,
             })
         }
         return retained

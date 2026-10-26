@@ -97,7 +97,8 @@ prepare_ui_accordion_geometry :: proc(
         runtime^.layout.current_layout_mode, "")
     _ = uiaccordion.accordion_transition_layout({
         panel = geometry.Rectangle(runtime^.layout.ui_regions.accordion_rect),
-        mouse_input = frame, transition = &runtime^.layout.accordion_transition,
+        mouse_input = frame,
+        transition = &runtime^.layout.accordion_transition,
         reduce_motion = uiaccordion.ui_reduced_motion(
             runtime^.preferences.values.interface.reduce_motion,
             runtime^.platform_reduce_motion),

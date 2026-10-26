@@ -224,7 +224,8 @@ dynview_native_import_document_semantics :: proc(
         return status
     }
     status = dynview_native_import_document_blocks(cache, document, {
-        source = source_offset, inline_start = inline_start,
+        source = source_offset,
+        inline_start = inline_start,
         display_row = display_row_start,
     })
     if status != BRIDGE_STATUS_OK {
@@ -236,8 +237,11 @@ dynview_native_import_document_semantics :: proc(
         return status
     }
     dynview_native_publish_document(cache, document, {
-        source = source_offset, text = text_offset, block = block_start,
-        inline_start = inline_start, display_row = display_row_start,
+        source = source_offset,
+        text = text_offset,
+        block = block_start,
+        inline_start = inline_start,
+        display_row = display_row_start,
     })
     return BRIDGE_STATUS_OK
 }
@@ -436,7 +440,7 @@ dynview_native_document_inline :: proc(
     if item.math_program >= 0 {
         program_id = program_base + item.math_program
     }
-    result := dynviewmodel.Dynview_Document_Inline{
+    result: dynviewmodel.Dynview_Document_Inline = {
         kind = dynviewmodel.Dynview_Document_Inline_Kind(item.kind),
         source_offset = source_base + item.source.offset,
         source_count = item.source.length,
@@ -457,7 +461,7 @@ dynview_native_document_inline :: proc(
 dynview_native_document_shape :: proc(
     shape: dynparse.Tex_Document_Shape) -> dynviewmodel.Dynview_Document_Shape {
 
-    result := dynviewmodel.Dynview_Document_Shape{
+    result: dynviewmodel.Dynview_Document_Shape = {
         present = shape.present,
         kind = dynviewmodel.Dynview_Document_Shape_Kind(shape.kind),
         color = dynview_native_document_color(shape.color),
@@ -589,7 +593,7 @@ dynview_native_import_math_records :: proc(
     document: ^dyncore.Dynview_Document,
     styles: Dynview_Native_Math_Styles,
     blob_offset: int) -> i32 {
-    import_ctx := Dynview_Native_Math_Import{
+    import_ctx: Dynview_Native_Math_Import = {
         runtime = runtime,
         document = document,
         styles = styles,
@@ -629,7 +633,7 @@ dynview_native_import_table_descriptors :: proc(
 //   Convert one parser table descriptor to native layout-independent metadata.
 dynview_native_table_descriptor :: proc(
     source: dynparse.Tex_Table_Descriptor) -> dynviewmodel.Dynview_Math_Table_Descriptor {
-    result := dynviewmodel.Dynview_Math_Table_Descriptor{
+    result: dynviewmodel.Dynview_Math_Table_Descriptor = {
         rows = source.rows,
         columns = source.columns,
         cell_style = dynviewmodel.Dynview_Math_Style_Level(source.cell_style),
@@ -655,12 +659,19 @@ dynview_native_table_length :: proc(
     source: dynparse.Tex_Table_Length) -> dynviewmodel.Dynview_Math_Length {
     unit: dynviewmodel.Dynview_Math_Length_Unit
     switch source.unit {
-    case .Default: unit = .Default
-    case .Zero: unit = .Zero
-    case .Em: unit = .Em
-    case .Pt: unit = .Point
+    case .Default:
+        unit = .Default
+    case .Zero:
+        unit = .Zero
+    case .Em:
+        unit = .Em
+    case .Pt:
+        unit = .Point
     }
-    return {value = source.value, unit = unit}
+    return {
+        value = source.value,
+        unit = unit,
+    }
 }
 
 //   Import one linked native program into one contiguous cache command range.
@@ -703,7 +714,7 @@ dynview_native_command :: proc(
     if !valid || !dynview_native_op_references_valid(ctx.document, op) {
         return {}, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    command := dynviewmodel.Dynview_Command{
+    command: dynviewmodel.Dynview_Command = {
         kind = kind,
         math_atom_class = dynviewmodel.Dynview_Math_Atom_Class(op.atom_class),
         math_glue_kind = dynviewmodel.Dynview_Math_Glue_Kind(op.glue_kind),
@@ -854,7 +865,7 @@ dynview_native_table_id :: proc(
 dynview_native_default_table :: proc(
     document: ^dyncore.Dynview_Document,
     op: ^dynparse.Tex_Math_Op) -> dynviewmodel.Dynview_Math_Table_Descriptor {
-    result := dynviewmodel.Dynview_Math_Table_Descriptor{
+    result: dynviewmodel.Dynview_Math_Table_Descriptor = {
         rows = dynview_native_small_integer(document, op.radical_index_text),
         columns = dynview_native_small_integer(document, op.superscript_text),
         cell_style = .Text,

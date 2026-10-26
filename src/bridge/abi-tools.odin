@@ -40,21 +40,27 @@ bridge_trochoid_tool_value :: proc(
         geometry.mode > i32(shapemodel.Shape_Trochoid_Mode.Internal) {
         return {}
     }
-    return {mode = shapemodel.Shape_Trochoid_Mode(geometry.mode),
-        fixed_radius = geometry.fixed_radius, rolling_radius = geometry.rolling_radius,
-        parameter = geometry.parameter, rotation = geometry.rotation,
-        orientation_phase = geometry.orientation_phase}
+    return {
+        mode = shapemodel.Shape_Trochoid_Mode(geometry.mode),
+        fixed_radius = geometry.fixed_radius,
+        rolling_radius = geometry.rolling_radius,
+        parameter = geometry.parameter,
+        rotation = geometry.rotation,
+        orientation_phase = geometry.orientation_phase,
+    }
 }
 
 // Convert one bridge description into canonical literal-line guide state.
 bridge_cycloid_tool_value :: proc(
     geometry: shapemodel.Bridge_Cycloid_Tool_Geometry) ->
         shapemodel.Shape_Cycloid_Tool {
-    return {rolling_radius = geometry.rolling_radius,
+    return {
+        rolling_radius = geometry.rolling_radius,
         parameter_start = geometry.parameter_start,
         parameter_finish = geometry.parameter_finish,
         parameter = geometry.parameter,
-        orientation_phase = geometry.orientation_phase}
+        orientation_phase = geometry.orientation_phase,
+    }
 }
 
 // Resolve the permanent Cycloid tool's endpoint positions from one query source.

@@ -9,7 +9,7 @@ ui_semantic_identity_hash :: proc(id: Ui_Node_Id) -> u64 {
     for value in id.stable_id {
         hash = (hash ~ u64(value)) * 1099511628211
     }
-    components := [3]u64{u64(id.domain), id.local_id, id.generation}
+    components: [3]u64 = {u64(id.domain), id.local_id, id.generation}
     for value in components {
         for shift in 0..<8 {
             hash = (hash ~ ((value >> uint(shift * 8)) & 0xff)) * 1099511628211
@@ -56,7 +56,9 @@ ui_semantic_snapshot_init :: proc(snapshot: ^Ui_Semantic_Snapshot) -> bool {
     if snapshot.allocator.initialized {
         return true
     }
-    heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+    heap_allocator: runtime.Allocator = {
+        procedure = runtime.heap_allocator_proc,
+    }
     return storage.tlsf_owner_init(
         &snapshot.allocator, heap_allocator) == .Ok
 }

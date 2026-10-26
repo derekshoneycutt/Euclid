@@ -12,7 +12,7 @@ ui_dust_departure_deadline_is_height_independent :: proc(t: ^testing.T) {
         ui_dust_begin_departure(system, 1)
         testing.expect(t, ui_dust_emit(
             system, {50, 10}, {20, 40, 60, 255}, 255, 1))
-        reference := Ui_Dust_Slot_Ref{0, system^.order[0].generation}
+        reference: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
         testing.expect(t, ui_dust_reclaim_eligible(system, reference))
         ui_dust_advance(system, UI_DUST_DEPARTURE_DURATION)
         particle := system^.particles[0]
@@ -142,7 +142,7 @@ ui_dust_arrival_target_wait_and_coarse_retirement :: proc(t: ^testing.T) {
 ui_dust_test_velocity_derivative :: proc(
     t: ^testing.T, system: ^Ui_Dust_System, arrival: bool) {
     epsilon := f32(0.0001)
-    reference := Ui_Dust_Slot_Ref{0, system^.order[0].generation}
+    reference: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
     center, valid := ui_dust_evaluate(system, reference)
     testing.expect(t, valid)
     before, after := geometry.Vector2{}, geometry.Vector2{}

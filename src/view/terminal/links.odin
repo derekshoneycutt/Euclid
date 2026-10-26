@@ -49,10 +49,14 @@ terminal_link_trailing_punctuation :: proc(byte: u8) -> bool {
 terminal_link_unmatched_closer :: proc(bytes: []u8, closer: u8) -> bool {
     opener: u8
     switch closer {
-    case ')': opener = '('
-    case ']': opener = '['
-    case '}': opener = '{'
-    case: return false
+    case ')':
+        opener = '('
+    case ']':
+        opener = '['
+    case '}':
+        opener = '{'
+    case:
+        return false
     }
     balance := 0
     for byte in bytes {
@@ -148,9 +152,11 @@ terminal_detect_link_at :: proc(
         !terminal_link_cell_is_boundary(&cells[end]) {
         end += max(int(cells[end].width), 1)
     }
-    hit := Terminal_Link_Hit{
-        kind = .Detected, line = line,
-        column_start = start, column_end = end,
+    hit: Terminal_Link_Hit = {
+        kind = .Detected,
+        line = line,
+        column_start = start,
+        column_end = end,
     }
     if !terminal_link_copy_candidate(cells, start, end, &hit) {
         return {}
@@ -243,8 +249,13 @@ terminal_hit_test_link :: proc(
         for end < len(cells) && terminal_output_hyperlink_at(term, line, end) == handle {
             end += 1
         }
-        return {kind = .Osc8, handle = handle, line = line,
-            column_start = start, column_end = end}
+        return {
+            kind = .Osc8,
+            handle = handle,
+            line = line,
+            column_start = start,
+            column_end = end,
+        }
     }
     cells, ok := terminal_output_row(term, line)
     if !ok {
@@ -261,7 +272,7 @@ terminal_update_hyperlink_click :: proc(
         terminal_clear_hyperlink_press(term)
         return {}
     }
-    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse: geometry.Vector2 = {frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed {
         terminal_store_hyperlink_press(
             term, terminal_hit_test_link(term, bounds, mouse))
@@ -272,8 +283,10 @@ terminal_update_hyperlink_click :: proc(
     released := terminal_hit_test_link(term, bounds, mouse)
     requested := terminal_hyperlink_release_matches(term, released)
     terminal_clear_hyperlink_press(term)
-    activation := Terminal_Hyperlink_Activation{
-        kind = released.kind, handle = released.handle, requested = requested,
+    activation: Terminal_Hyperlink_Activation = {
+        kind = released.kind,
+        handle = released.handle,
+        requested = requested,
     }
     if requested && released.kind == .Detected {
         copy(activation.uri[:], released.uri[:released.uri_byte_count])
@@ -299,7 +312,7 @@ terminal_hyperlink_hover_hit :: proc(
     if !terminal_hyperlink_interaction_allowed(term, frame.mouse_modifiers) {
         return {}
     }
-    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse: geometry.Vector2 = {frame.mouse_position.x, frame.mouse_position.y}
     return terminal_hit_test_link(term, bounds, mouse)
 }
 

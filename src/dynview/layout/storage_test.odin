@@ -21,15 +21,25 @@ layout_storage_publishes_ordered_records :: proc(t: ^testing.T) {
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 20
-    state := Dynview_Layout_State{active_block_id = 7, line_index = 0, col = 1}
-    acc := Dynview_Layout_Line_Accumulator{}
+    state: Dynview_Layout_State = {
+        active_block_id = 7,
+        line_index = 0,
+        col = 1,
+    }
+    acc: Dynview_Layout_Line_Accumulator = {}
     layout_seed_line_accumulator(&acc, 0, 12, 4)
 
     first_status := layout_push_item(cache, &state, &acc, {
-        kind = .Text_Run, col_span = 2, draw_height = 16, ascent = 12, descent = 4,
+        kind = .Text_Run,
+        col_span = 2,
+        draw_height = 16,
+        ascent = 12,
+        descent = 4,
     })
     second_status := layout_push_item(cache, &state, &acc, {
-        kind = .Inline_Box, col_span = 1, draw_height = 20,
+        kind = .Inline_Box,
+        col_span = 1,
+        draw_height = 20,
     })
     line_status := layout_finalize_line(cache, &state, &acc, 12, 4)
     seal_status := layout_builders_seal(cache)
@@ -82,8 +92,8 @@ layout_storage_reset_clears_partial_aliases :: proc(t: ^testing.T) {
     defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
-    state := Dynview_Layout_State{}
-    acc := Dynview_Layout_Line_Accumulator{}
+    state: Dynview_Layout_State = {}
+    acc: Dynview_Layout_Line_Accumulator = {}
     testing.expect_value(t, layout_push_item(cache, &state, &acc, {}),
         dyncore.DYNVIEW_STATUS_OK)
 

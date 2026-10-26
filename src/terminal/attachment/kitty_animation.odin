@@ -77,7 +77,12 @@ kitty_animation_allocate :: proc(
         delete(pixels, store.payload_allocator)
         return {}
     }
-    return {pixels = pixels, frames = frames, byte_count = byte_count, valid = true}
+    return {
+        pixels = pixels,
+        frames = frames,
+        byte_count = byte_count,
+        valid = true,
+    }
 }
 
 // Copy one static RGB/RGBA root into a full-canvas RGBA destination.
@@ -119,7 +124,10 @@ kitty_animation_copy_existing :: proc(
             return false
         }
         allocation.frames[0] = {
-            pixels = {offset = 0, count = canvas_byte_count},
+            pixels = {
+                offset = 0,
+                count = canvas_byte_count,
+            },
             duration_ns = KITTY_DEFAULT_FRAME_DURATION_NS,
         }
         return true
@@ -184,7 +192,7 @@ kitty_animation_apply_patch :: proc(
             source_offset := (row * mutation.width + column) * bytes_per_pixel
             target_offset := ((mutation.destination_y + row) * canvas_width +
                 mutation.destination_x + column) * 4
-            source := [4]u8{
+            source: [4]u8 = {
                 mutation.pixels[source_offset + 0],
                 mutation.pixels[source_offset + 1],
                 mutation.pixels[source_offset + 2],

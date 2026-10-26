@@ -89,9 +89,15 @@ world_create_constraint :: proc(
 world_create_floor_constraint :: proc(
     world: ^shapemodel.Shape_World,
     input: World_Floor_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
-    constraint := shapemodel.Shape_Constraint{kind = .Floor, enabled = input.enabled}
+    constraint: shapemodel.Shape_Constraint = {
+        kind = .Floor,
+        enabled = input.enabled,
+    }
     constraint.payload.floor = {
-        point = input.point, height = input.height, bounce = input.bounce}
+        point = input.point,
+        height = input.height,
+        bounce = input.bounce,
+    }
     return world_create_constraint(world, constraint)
 }
 
@@ -99,12 +105,15 @@ world_create_floor_constraint :: proc(
 world_create_snap_to_floor_constraint :: proc(
     world: ^shapemodel.Shape_World,
     input: World_Snap_To_Floor_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
-    constraint := shapemodel.Shape_Constraint{
+    constraint: shapemodel.Shape_Constraint = {
         kind = .Snap_To_Floor,
         enabled = input.enabled,
     }
-    constraint.payload.snap_to_floor = {point = input.point,
-        height = input.height, allowance = input.allowance}
+    constraint.payload.snap_to_floor = {
+        point = input.point,
+        height = input.height,
+        allowance = input.allowance,
+    }
     return world_create_constraint(world, constraint)
 }
 
@@ -112,8 +121,14 @@ world_create_snap_to_floor_constraint :: proc(
 world_create_snap_point_constraint :: proc(
     world: ^shapemodel.Shape_World,
     input: World_Snap_Point_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
-    constraint := shapemodel.Shape_Constraint{kind = .Snap_Point, enabled = input.enabled}
-    constraint.payload.snap_point = {point = input.point, position = input.position}
+    constraint: shapemodel.Shape_Constraint = {
+        kind = .Snap_Point,
+        enabled = input.enabled,
+    }
+    constraint.payload.snap_point = {
+        point = input.point,
+        position = input.position,
+    }
     return world_create_constraint(world, constraint)
 }
 
@@ -121,9 +136,16 @@ world_create_snap_point_constraint :: proc(
 world_create_distance_constraint :: proc(
     world: ^shapemodel.Shape_World,
     input: World_Distance_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
-    constraint := shapemodel.Shape_Constraint{kind = .Distance, enabled = input.enabled}
-    constraint.payload.distance = {first = input.first, second = input.second,
-        length = input.length, movement = input.movement}
+    constraint: shapemodel.Shape_Constraint = {
+        kind = .Distance,
+        enabled = input.enabled,
+    }
+    constraint.payload.distance = {
+        first = input.first,
+        second = input.second,
+        length = input.length,
+        movement = input.movement,
+    }
     return world_create_constraint(world, constraint)
 }
 
@@ -135,9 +157,17 @@ world_create_angle_constraint :: proc(
     if kind != .Max_Angle && kind != .Min_Angle {
         return 0, .Invalid_Argument
     }
-    constraint := shapemodel.Shape_Constraint{kind = kind, enabled = input.enabled}
-    constraint.payload.angle = {first = input.first, pivot = input.pivot,
-        second = input.second, limit = input.limit, movement = input.movement}
+    constraint: shapemodel.Shape_Constraint = {
+        kind = kind,
+        enabled = input.enabled,
+    }
+    constraint.payload.angle = {
+        first = input.first,
+        pivot = input.pivot,
+        second = input.second,
+        limit = input.limit,
+        movement = input.movement,
+    }
     return world_create_constraint(world, constraint)
 }
 
@@ -145,13 +175,16 @@ world_create_angle_constraint :: proc(
 world_create_center_pivot_constraint :: proc(
     world: ^shapemodel.Shape_World,
     input: World_Center_Pivot_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
-    constraint := shapemodel.Shape_Constraint{
+    constraint: shapemodel.Shape_Constraint = {
         kind = .Center_Pivot,
         enabled = input.enabled,
     }
     constraint.payload.center_pivot = {
-        first = input.first, pivot = input.pivot, second = input.second,
-        limb_length = input.limb_length}
+        first = input.first,
+        pivot = input.pivot,
+        second = input.second,
+        limb_length = input.limb_length,
+    }
     return world_create_constraint(world, constraint)
 }
 

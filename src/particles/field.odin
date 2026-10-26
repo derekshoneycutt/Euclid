@@ -397,7 +397,7 @@ dust_field_pressure_acceleration :: #force_inline proc(
     field: ^Dust_Field_State,
     density: f32, neighbors: Dust_Field_Neighbors) -> Vector2 {
     scale := f32(0.5) / DUST_FIELD_SPACING
-    gradient := Vector2{
+    gradient: Vector2 = {
         (dust_field_pressure(field^.density[neighbors.right]) -
             dust_field_pressure(field^.density[neighbors.left])) * scale,
         (dust_field_pressure(field^.density[neighbors.up]) -
@@ -454,7 +454,7 @@ dust_field_evolve_row :: proc(
     up_row := row + DUST_FIELD_DIM * int(y + 1 < DUST_FIELD_DIM)
     for x in int(bounds.min_x)..=int(bounds.max_x) {
         node := row + x
-        neighbors := Dust_Field_Neighbors{
+        neighbors: Dust_Field_Neighbors = {
             node - int(x > 0), node + int(x + 1 < DUST_FIELD_DIM),
             down_row + x, up_row + x}
         next := dust_field_evolve_node(
@@ -487,9 +487,9 @@ dust_field_begin_deposit :: proc(ps: ^Particle_System) {
 // Cache and deposit one grounded particle after its local transition update.
 dust_field_deposit_grounded_index :: proc(
     ps: ^Particle_System, index: int) {
-    position := Vector2{ps^.low_particles.pos_x[index],
+    position: Vector2 = {ps^.low_particles.pos_x[index],
         ps^.low_particles.pos_y[index]}
-    velocity := Vector2{ps^.low_particles.vel_x[index],
+    velocity: Vector2 = {ps^.low_particles.vel_x[index],
         ps^.low_particles.vel_y[index]}
     transfer := dust_field_transfer(position, index)
     ps^.dust_transfers[ps^.dust_transfer_count] = transfer

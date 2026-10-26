@@ -50,17 +50,8 @@ TERMINAL_SHELL_PROMPT_COLOR :: color.Color_RGBA8{0xDD, 0x80, 0x7A, 0xFF}
 // Muted foreground used for noncommitted inline completion insertion.
 TERMINAL_COMPLETION_PREVIEW_COLOR :: color.Color_RGBA8{0x84, 0x84, 0x84, 0xFF}
 
-// Termhist history-entry tags recording which prompt mode submitted a line.
-TERMINAL_HISTORY_TAG_NORMAL :: 0
-TERMINAL_HISTORY_TAG_HELP :: 1
-TERMINAL_HISTORY_TAG_PKG :: 2
-TERMINAL_HISTORY_TAG_SHELL :: 3
-
 // Initial byte capacity of termhist's recyclable editable text storage.
 TERMINAL_INITIAL_TEXT_CAPACITY :: 128
-
-// Initial command-entry capacity of termhist history storage.
-TERMINAL_INITIAL_HISTORY_CAPACITY :: 64
 
 // Initial primary and alternate terminal viewport width in character cells.
 TERMINAL_GRID_COLUMNS :: 128
@@ -70,8 +61,14 @@ TERMINAL_GRID_ROWS :: 34
 
 // Inclusive terminal geometry policy used for viewport-derived candidates.
 TERMINAL_DIMENSION_LIMITS :: protocol.Terminal_Dimension_Limits{
-    minimum = {columns = 20, rows = 4},
-    maximum = {columns = 256, rows = 128},
+    minimum = {
+        columns = 20,
+        rows = 4,
+    },
+    maximum = {
+        columns = 256,
+        rows = 128,
+    },
 }
 
 TERMINAL_SYNCHRONIZED_OUTPUT_DEADLINE_SECONDS :: 0.250

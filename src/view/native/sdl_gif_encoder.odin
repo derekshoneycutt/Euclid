@@ -51,8 +51,12 @@ sdl_gif_encoder_begin :: proc(
         _ = image.CloseAnimationEncoder(handle)
         return false
     }
-    encoder^ = {handle = handle, width = width, height = height,
-        staged_pixels = staged_pixels}
+    encoder^ = {
+        handle = handle,
+        width = width,
+        height = height,
+        staged_pixels = staged_pixels,
+    }
     return true
 }
 

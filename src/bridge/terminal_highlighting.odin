@@ -70,7 +70,9 @@ allocate_highlight_result :: proc(
     copy(source, transmute([]u8)result.source)
     copy(runs, result.runs)
     message^ = protocol.Highlight_Result{
-        identity = result.identity, source = string(source), runs = runs,
+        identity = result.identity,
+        source = string(source),
+        runs = runs,
     }
     return message
 }
@@ -104,8 +106,9 @@ julia_terminal_ingest_highlight :: proc(
     if host == nil || host.runtime == nil || gc_stack == nil {
         return false
     }
-    frame := Julia_Terminal_Request_Gc_Frame{
-        encoded_root_count = 3 << 2, previous = gc_stack^,
+    frame: Julia_Terminal_Request_Gc_Frame = {
+        encoded_root_count = 3 << 2,
+        previous = gc_stack^,
     }
     gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
     defer gc_stack^ = frame.previous
@@ -160,13 +163,15 @@ julia_terminal_send_highlight :: proc(
         reason := protocol.Highlight_Failure_Reason(julialib.jl_unbox_int32(
             julialib.jl_get_nth_field(command, 5)))
         return send_terminal_value_until_sent(service, protocol.Highlight_Failed{
-            identity = identity, reason = reason,
+            identity = identity,
+            reason = reason,
         })
     }
     result := decode_highlight_result(command)
     if !protocol.highlight_result_valid(result) {
         return send_terminal_value_until_sent(service, protocol.Highlight_Failed{
-            identity = identity, reason = .Internal_Failure,
+            identity = identity,
+            reason = .Internal_Failure,
         })
     }
     for {
@@ -176,7 +181,8 @@ julia_terminal_send_highlight :: proc(
         }
         if outcome == .Allocation_Failed {
             return send_terminal_value_until_sent(service, protocol.Highlight_Failed{
-                identity = identity, reason = .Transport_Capacity,
+                identity = identity,
+                reason = .Transport_Capacity,
             })
         }
         if outcome != .Queue_Full {
@@ -199,8 +205,10 @@ julia_terminal_emit_highlights :: proc(
         if gc_stack == nil {
             return false
         }
-        frame := Julia_Terminal_Command_Gc_Frame{
-            encoded_root_count = 1 << 2, previous = gc_stack^, command = command,
+        frame: Julia_Terminal_Command_Gc_Frame = {
+            encoded_root_count = 1 << 2,
+            previous = gc_stack^,
+            command = command,
         }
         gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
         kind := julialib.jl_unbox_int32(julialib.jl_get_nth_field(command, 0))

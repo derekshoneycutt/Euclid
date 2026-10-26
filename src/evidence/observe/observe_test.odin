@@ -64,10 +64,13 @@ observe_test_display_fixture_destroy :: proc(fixture: ^Observe_Display_Fixture) 
 // Completion readiness reflects a useful retained response, never just an idle prompt.
 @(test)
 observe_test_terminal_completion_readiness :: proc(t: ^testing.T) {
-    terminal := viewterminalmodel.Terminal_State{
-        initialized = true, julia_session_ready = true,
+    terminal: viewterminalmodel.Terminal_State = {
+        initialized = true,
+        julia_session_ready = true,
     }
-    source := Display_Source{terminal = &terminal}
+    source: Display_Source = {
+        terminal = &terminal,
+    }
     testing.expect(t, !display(&source).terminal_completion_ready)
     terminal.completion_result_received = true
     testing.expect(t, !display(&source).terminal_completion_ready)
@@ -83,16 +86,20 @@ observe_test_terminal_completion_readiness :: proc(t: ^testing.T) {
 // Verify capture evidence survives an absent UI and never borrows policy storage.
 @(test)
 observe_test_independent_capture_owner :: proc(t: ^testing.T) {
-    status := capturemodel.Gif_Capture_Status{
-        gif_capture_phase = .Recording, gif_captured_frames = 7}
-    source := Display_Source{gif_capture_status = &status}
+    status: capturemodel.Gif_Capture_Status = {
+        gif_capture_phase = .Recording,
+        gif_captured_frames = 7,
+    }
+    source: Display_Source = {
+        gif_capture_status = &status,
+    }
     result := display(&source)
     status.gif_capture_phase = .Saved
     status.gif_captured_frames = 8
     testing.expect_value(t,
         result.gif_capture_phase, capturemodel.Gif_Capture_Phase.Recording)
     testing.expect_value(t, result.gif_captured_frames, 7)
-    empty_source := Display_Source{}
+    empty_source: Display_Source = {}
     empty := display(&empty_source)
     testing.expect_value(t, empty.gif_capture_phase, capturemodel.Gif_Capture_Phase.Idle)
     testing.expect_value(t, empty.gif_captured_frames, 0)
@@ -104,13 +111,17 @@ observe_test_independent_persistence_owner :: proc(t: ^testing.T) {
     runtime := new(preferencesmodel.Settings_Save_Runtime, context.allocator)
     defer free(runtime, context.allocator)
     runtime^ = preferencesmodel.Settings_Save_Runtime{
-        settings_pending = {count = 2},
+        settings_pending = {
+            count = 2,
+        },
         settings_save_active = true,
         settings_save_commit_count = 3,
         settings_save_failure_count = 4,
         settings_save_owner_execution_count = 5,
     }
-    source := Display_Source{preferences_runtime = runtime}
+    source: Display_Source = {
+        preferences_runtime = runtime,
+    }
     result := display(&source)
     testing.expect(t, result.settings_save_active)
     testing.expect_value(t, result.settings_pending_count, 2)
@@ -178,7 +189,12 @@ observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.particle_system^.dust_peak_speed_sq = 0.03125
     source^.particle_system^.dust_kinetic_measure = 0.0625
     source^.particle_system^.dust_field.previous_solve_bounds = {
-        min_x = 2, min_y = 3, max_x = 5, max_y = 7, valid = true}
+        min_x = 2,
+        min_y = 3,
+        max_x = 5,
+        max_y = 7,
+        valid = true,
+    }
     source^.particle_system^.dust_tool_contact_overflow_count = 1
     source^.particle_system^.dust_tool_contact_coalesced_count = 4
     source^.particle_system^.dust_tool_contact_sample_count = 5
@@ -262,7 +278,7 @@ observe_test_simulation_owner_rings :: proc(t: ^testing.T) {
     evidence_trace.ring_init(&rings[1], .Constraint_Worker)
     evidence_trace.ring_init(&rings[2], .Shape_Cache_Worker)
     evidence_trace.ring_init(&rings[3], .Dynview_Worker)
-    source := Simulation_Source{
+    source: Simulation_Source = {
         particle = &rings[0],
         constraint = &rings[1],
         shape_cache = &rings[2],

@@ -388,7 +388,7 @@ invoke_actor_animation_lifecycle :: proc(
     uuid_buffer: [36]u8
     stable_id := uuid.to_string(animation^.stable_id, uuid_buffer[:])
     payload := make_animation_lifecycle_payload(service, request, operation)
-    frame := Julia_Animation_Lifecycle_Gc_Frame{
+    frame: Julia_Animation_Lifecycle_Gc_Frame = {
         encoded_root_count = 3 << 2,
         previous = gc_stack^,
     }
@@ -414,7 +414,7 @@ acknowledge_actor_animation_reset :: proc(
     if gc_stack == nil || host^.animation_lifecycle_acknowledge_reset == nil {
         return false
     }
-    frame := Julia_Animation_Lifecycle_Gc_Frame{
+    frame: Julia_Animation_Lifecycle_Gc_Frame = {
         encoded_root_count = 3 << 2,
         previous = gc_stack^,
     }
@@ -501,7 +501,7 @@ invoke_actor_animation_tick :: proc(
     uuid_buffer: [36]u8
     stable_id := uuid.to_string(animation^.stable_id, uuid_buffer[:])
     payload := make_animation_tick_payload(service, request, slot)
-    frame := Julia_Animation_Tick_Gc_Frame{
+    frame: Julia_Animation_Tick_Gc_Frame = {
         encoded_root_count = 3 << 2,
         previous = gc_stack^,
     }
@@ -1139,7 +1139,7 @@ stage_julia_interface_reload :: proc(
         return false
     }
     candidate: ^julialib.jl_value_t
-    candidate_frame := Julia_Runtime_Gc_Frame{
+    candidate_frame: Julia_Runtime_Gc_Frame = {
         encoded_root_count = (1 << 2) | 1,
         previous = gc_stack^,
         root = rawptr(&candidate),
@@ -1150,7 +1150,7 @@ stage_julia_interface_reload :: proc(
     if candidate == nil {
         return false
     }
-    transaction := Julia_Interface_Reload_Transaction{
+    transaction: Julia_Interface_Reload_Transaction = {
         state = state,
         host = host,
         request = request,

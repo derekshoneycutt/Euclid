@@ -17,8 +17,11 @@ import contentdata "../core/content"
 // Verify routing receives copied facts rather than borrowing capture policy storage.
 @(test)
 gif_capture_view_is_an_independent_snapshot :: proc(t: ^testing.T) {
-    status := capturemodel.Gif_Capture_Status{
-        gif_capture_phase = .Saved, save_gif_requested = true, last_gif_path_len = 4}
+    status: capturemodel.Gif_Capture_Status = {
+        gif_capture_phase = .Saved,
+        save_gif_requested = true,
+        last_gif_path_len = 4,
+    }
     snapshot := capturemodel.gif_capture_view(&status)
     status.gif_capture_phase = .Idle
     status.save_gif_requested = false
@@ -58,7 +61,10 @@ clear_and_set_gif_status_note_rejects_overflow :: proc(t: ^testing.T) {
         "x", len(gif_capture_status^.gif_status_note) + 20, context.temp_allocator)
     logged := 0
     prior_logger := context.logger
-    context.logger = log.Logger{procedure = gif_note_test_log, data = &logged}
+    context.logger = log.Logger{
+        procedure = gif_note_test_log,
+        data = &logged,
+    }
     viewcapture.set_gif_status_note(gif_capture_status, long_note)
     context.logger = prior_logger
     testing.expect_value(t, logged, 1)
@@ -171,7 +177,7 @@ gif_capture_source_dimensions_follow_world_extent :: proc(t: ^testing.T) {
 //   Verify one GIF session freezes and clears its framebuffer crop dimensions.
 @(test)
 gif_capture_session_dimensions_are_stable_until_teardown :: proc(t: ^testing.T) {
-    session := capturemodel.Gif_Capture_Session{}
+    session: capturemodel.Gif_Capture_Session = {}
 
     viewcapture.gif_capture_freeze_source_dimensions(&session, 900, 500)
     testing.expect_value(t, session.source_width, 900)
@@ -215,7 +221,7 @@ gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^test
 //   Verify aborting an inactive GIF capture session is a safe no-op.
 @(test)
 gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
-    session := capturemodel.Gif_Capture_Session{
+    session: capturemodel.Gif_Capture_Session = {
         source_width = 900,
         source_height = 500,
         output_width = 450,
@@ -258,11 +264,14 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
 // Verify a logical resize aborts every protected GIF phase before geometry changes.
 @(test)
 gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
-    phases := [3]capturemodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    phases: [3]capturemodel.Gif_Capture_Phase = {.Armed, .Recording, .Finalizing}
     generation := contentdata.content_message_test_generation(t)
     defer contentdata.content_message_test_destroy(generation)
-    service := contentdata.Content_Service{active_generation = generation,
-        running = true, index_generation = generation.generation}
+    service: contentdata.Content_Service = {
+        active_generation = generation,
+        running = true,
+        index_generation = generation.generation,
+    }
     for phase in phases {
         state := new(app_core.Euclid_General_State, context.allocator)
         state.content_service = &service
@@ -271,7 +280,9 @@ gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
         state^.gif_capture.source_width = 900
         state^.gif_capture.source_height = 500
         testing.expect(t, evidence_session.session_init(&state^.evidence_session, {
-            enabled = true, output_mode = .Sink, lanes = {.Presentation},
+            enabled = true,
+            output_mode = .Sink,
+            lanes = {.Presentation},
         }))
         evidence_trace.ring_init(&state^.evidence_ring, .Display)
 

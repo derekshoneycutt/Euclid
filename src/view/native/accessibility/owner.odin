@@ -229,12 +229,18 @@ adapter_record_diagnostic :: proc(
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     switch event {
-    case .Activation: owner^.diagnostics.activations += 1
-    case .Rejected_Callback: owner^.diagnostics.rejected_callbacks += 1
-    case .Action: owner^.diagnostics.actions += 1
-    case .Deactivation: owner^.diagnostics.deactivations += 1
-    case .Update: owner^.diagnostics.updates += 1
-    case .Destroy: owner^.diagnostics.destroys += 1
+    case .Activation:
+        owner^.diagnostics.activations += 1
+    case .Rejected_Callback:
+        owner^.diagnostics.rejected_callbacks += 1
+    case .Action:
+        owner^.diagnostics.actions += 1
+    case .Deactivation:
+        owner^.diagnostics.deactivations += 1
+    case .Update:
+        owner^.diagnostics.updates += 1
+    case .Destroy:
+        owner^.diagnostics.destroys += 1
     }
 }
 

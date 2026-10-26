@@ -159,7 +159,10 @@ tree_collection_delete_input_origins_share_guard :: proc(t: ^testing.T) {
     params.mouse_input.sample_time_seconds += 0.501
     tree_actions_test_key(t, &params, .Space)
     testing.expect_value(t, params.collections.collection_count, 1)
-    uilibrary.tree_actions_apply_command(params, {target = target, kind = .Activate})
+    uilibrary.tree_actions_apply_command(params, {
+        target = target,
+        kind = .Activate,
+    })
     testing.expect_value(t, params.collections.collection_count, 1)
 }
 
@@ -286,13 +289,20 @@ tree_collection_delete_subtree_retires_all_borrowers :: proc(t: ^testing.T) {
     descendant: uuid.Identifier
     descendant[0] = 211
     child := uilibrary.tree_projection_add(projection, projection, {
-        key = descendant, kind = .Placement, parent = head, selectable = true})
+        key = descendant,
+        kind = .Placement,
+        parent = head,
+        selectable = true,
+    })
     testing.expect(t, child >= 0)
     favorite := projection.items[uilibrary.tree_projection_find(
         projection, collections.FAVORITES_COLLECTION_ID)]
     state.ui_runtime.library.tree.selected_item_id = descendant
     state.semantic_focus.logical_focus = {
-        domain = .Library_Action, stable_id = descendant, local_id = 5}
+        domain = .Library_Action,
+        stable_id = descendant,
+        local_id = 5,
+    }
     state.semantic_focus.active_tree_item = descendant
     state.ui_runtime.library.entry_name.entry_id = descendant
     state.ui_runtime.library.entry_name.active = true

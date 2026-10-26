@@ -124,7 +124,10 @@ input_runtime_set_text_target :: proc(
     }
     runtime.text_target_generation += 1
     runtime.text_target = {
-        kind = kind, id = id, generation = runtime.text_target_generation}
+        kind = kind,
+        id = id,
+        generation = runtime.text_target_generation,
+    }
     return true
 }
 
@@ -149,11 +152,15 @@ input_runtime_append_text_event :: proc(
         runtime.oversized_text_payload_count += 1
         return false
     }
-    event := Input_Event{
-        kind = kind, text_target = runtime.text_target,
-        text_length = u8(len(text)), preedit_start = metadata.preedit_start,
-        preedit_length = metadata.preedit_length, modifiers = metadata.modifiers,
-        origin = .Device}
+    event: Input_Event = {
+        kind = kind,
+        text_target = runtime.text_target,
+        text_length = u8(len(text)),
+        preedit_start = metadata.preedit_start,
+        preedit_length = metadata.preedit_length,
+        modifiers = metadata.modifiers,
+        origin = .Device,
+    }
     copy(event.text[:len(text)], transmute([]u8)text)
     if input_runtime_append_event(runtime, event) {
         return true
@@ -421,7 +428,7 @@ input_event_is_text_candidate :: proc(event: Input_Event) -> bool {
 // Collect device-originated physical and text candidates from current frame storage.
 input_runtime_correlation_candidates :: proc(
     runtime: ^Input_Runtime) -> Input_Event_Correlation_Candidates {
-    candidates := Input_Event_Correlation_Candidates{
+    candidates: Input_Event_Correlation_Candidates = {
         physical_index = -1,
         text_start = -1,
     }
@@ -805,8 +812,10 @@ input_registry_binding :: proc(command: protocol.Hotkey_Registry_Entry) ->
         return {}, .Builtin_Conflict
     }
     return {
-        action = command.action, key = key,
-        modifiers = modifiers, scope = command.scope,
+        action = command.action,
+        key = key,
+        modifiers = modifiers,
+        scope = command.scope,
     }, .None
 }
 
@@ -871,7 +880,7 @@ input_runtime_commit_registry :: proc(
     } else if runtime.staging_binding_count != runtime.staging_expected_count {
         input_runtime_reject_registry(runtime, .Incomplete, -1)
     }
-    result := protocol.Hotkey_Registry_Result{
+    result: protocol.Hotkey_Registry_Result = {
         generation = command.generation,
         reason = runtime.staging_reason,
         offending_index = runtime.staging_offending_index,

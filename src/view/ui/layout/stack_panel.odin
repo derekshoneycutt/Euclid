@@ -105,7 +105,7 @@ stack_panel_segment_rect_y :: proc(
     direction: f32,
     segment_size: f32) -> geometry.Rectangle {
 
-    segment_rect := geometry.Rectangle{}
+    segment_rect: geometry.Rectangle = {}
     segment_rect.x = params.origin_x
     segment_rect.width = bounds.width
     segment_rect.height = segment_size
@@ -129,7 +129,7 @@ stack_panel_segment_rect_x :: proc(
     direction: f32,
     segment_size: f32) -> geometry.Rectangle {
 
-    segment_rect := geometry.Rectangle{}
+    segment_rect: geometry.Rectangle = {}
     segment_rect.y = params.origin_y
     segment_rect.height = bounds.height
     segment_rect.width = segment_size
@@ -152,7 +152,7 @@ stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Res
     direction := stack_panel_direction_sign(params.direction_sign)
     segment_size := stack_panel_segment_size(params)
 
-    segment_rect := geometry.Rectangle{}
+    segment_rect: geometry.Rectangle = {}
     switch params.axis {
     case .Y:
         segment_rect = stack_panel_segment_rect_y(params, bounds, direction,
@@ -166,7 +166,7 @@ stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Res
     has_used_rect, used_rect :=
         stack_panel_accumulate_used_rect(params.cursor_in, segment_rect)
 
-    cursor_out := Stack_Panel_Cursor{
+    cursor_out: Stack_Panel_Cursor = {
         offset = params.cursor_in.offset + segment_size,
         segment_index = params.cursor_in.segment_index + 1,
         has_used_rect = has_used_rect,

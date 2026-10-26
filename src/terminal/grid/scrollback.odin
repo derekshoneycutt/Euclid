@@ -319,7 +319,9 @@ display_checkpoint_init :: proc(
         len(checkpoint.grid_cells) != 0 {
         return false
     }
-    candidate := Display_Checkpoint{allocator = allocator}
+    candidate: Display_Checkpoint = {
+        allocator = allocator,
+    }
     candidate.grid_cells, _ = make([]Cell, len(grid.cells), allocator)
     candidate.grid_rows, _ = make([]Snapshot_Row, len(grid.rows), allocator)
     candidate.scrollback_cells, _ = make([]Cell, len(scrollback.cells), allocator)

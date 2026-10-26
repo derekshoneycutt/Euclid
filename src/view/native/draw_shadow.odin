@@ -64,7 +64,7 @@ draw_shadow_mesh_write_ring :: proc(
     ring_index: int, mesh: ^Draw_Shadow_Mesh) -> bool {
     ring := draw_shadow_ring_bounds(
         bounds, ring_style.offset, ring_style.expansion)
-    corners := [4]geometry.Vector2{}
+    corners: [4]geometry.Vector2 = {}
     corners = {
         {ring.x, ring.y},
         {ring.x + ring.width, ring.y},
@@ -87,13 +87,30 @@ draw_shadow_mesh_write_rings :: proc(
     bounds: geometry.Rectangle, style: Draw_Shadow_Style,
     mesh: ^Draw_Shadow_Mesh) -> bool {
     base_expansion := min(style.contact_offset.x, style.contact_offset.y) * 0.25
-    rings := [DRAW_SHADOW_RING_COUNT]Draw_Shadow_Ring{
-        {opacity = 0},
-        {style.contact_offset, base_expansion, style.contact_opacity},
-        {style.cast_offset, base_expansion * 2, style.cast_opacity},
-        {style.cast_offset, base_expansion * 2 + style.feather * 0.5,
-            style.cast_opacity * 0.5},
-        {style.cast_offset, base_expansion * 2 + style.feather, 0},
+    rings: [DRAW_SHADOW_RING_COUNT]Draw_Shadow_Ring = {
+        {
+            opacity = 0,
+        },
+        {
+            offset = style.contact_offset,
+            expansion = base_expansion,
+            opacity = style.contact_opacity,
+        },
+        {
+            offset = style.cast_offset,
+            expansion = base_expansion * 2,
+            opacity = style.cast_opacity,
+        },
+        {
+            offset = style.cast_offset,
+            expansion = base_expansion * 2 + style.feather * 0.5,
+            opacity = style.cast_opacity * 0.5,
+        },
+        {
+            offset = style.cast_offset,
+            expansion = base_expansion * 2 + style.feather,
+            opacity = 0,
+        },
     }
     for ring_index in 0..<DRAW_SHADOW_RING_COUNT {
         if !draw_shadow_mesh_write_ring(
@@ -165,8 +182,9 @@ draw_encoder_shadow :: proc(
         return false
     }
     batch, ready := draw_encoder_prepare(
-        encoder, DRAW_SHADOW_VERTEX_COUNT, DRAW_SHADOW_INDEX_COUNT,
-        {pipeline = .Colored})
+        encoder, DRAW_SHADOW_VERTEX_COUNT, DRAW_SHADOW_INDEX_COUNT, {
+            pipeline = .Colored,
+        })
     if !ready {
         return false
     }
@@ -177,7 +195,9 @@ draw_encoder_shadow :: proc(
         vertex_color[3] = u8(clamp(int(math.round(
             f64(style.tint[3]) * f64(mesh.opacities[offset]))), 0, 255))
         encoder^.vertices[encoder^.vertex_count + offset] = {
-            position = position, color = vertex_color}
+            position = position,
+            color = vertex_color,
+        }
     }
     for relative_index, offset in mesh.indices {
         encoder^.indices[encoder^.index_count + offset] =

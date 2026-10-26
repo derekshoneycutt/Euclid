@@ -1345,7 +1345,7 @@ math_shaping_replace :: proc(
         return false
     }
     defer delete(source, context.temp_allocator)
-    candidate := Font_Math_Shaping_Capability{
+    candidate: Font_Math_Shaping_Capability = {
         generation = entry.generation,
         raster_ascent = entry.raster_ascent,
     }
@@ -1601,7 +1601,7 @@ cache_raster_select_closest_complete :: proc(
     cache: ^Font_Cache, entry: ^Font_Cache_Entry, glyph_ids: []u32,
     request: fontmodel.Font_Raster_Request) -> Font_Raster_Selection {
 
-    selected := Font_Raster_Selection{}
+    selected: Font_Raster_Selection = {}
     best_distance := max(u32)
     best_height := u32(0)
     canonical := &entry.canonical_raster
@@ -1649,7 +1649,7 @@ cache_terminal_select_glyph_raster :: proc(
     for glyph_id in glyph_ids {
         _ = cache_request_raster_glyph(cache, entry, request, glyph_id)
     }
-    selected := Font_Raster_Selection{}
+    selected: Font_Raster_Selection = {}
     if cache_raster_contains_glyphs(entry, target, glyph_ids) {
         selected = font_raster_selection(target, target_index)
     } else {
@@ -1794,7 +1794,7 @@ cache_raster_fallback :: proc(
     if cache == nil || entry == nil {
         return {}
     }
-    best := Resolved_Glyph{}
+    best: Resolved_Glyph = {}
     best_distance := max(u32)
     best_height := u32(0)
     canonical, canonical_ready := font_generation_resolve_glyph(
@@ -1805,7 +1805,7 @@ cache_raster_fallback :: proc(
         best_distance = font_raster_height_distance(height, request.pixel_height)
         best_height = height
     }
-    fallback := Font_Raster_Fallback_Candidate{best, best_distance, best_height}
+    fallback: Font_Raster_Fallback_Candidate = {best, best_distance, best_height}
     return cache_raster_fallback_optional(
         cache, entry, request, glyph_id, &fallback).glyph
 }
@@ -1912,8 +1912,10 @@ cache_publish_glyph_records :: proc(
         rectangle := prepared.rectangles[index]
         raster.glyphs[glyph.glyph_id] = {
             rectangle = {
-                x = f32(rectangle.x), y = f32(rectangle.y),
-                width = f32(rectangle.width), height = f32(rectangle.height),
+                x = f32(rectangle.x),
+                y = f32(rectangle.y),
+                width = f32(rectangle.width),
+                height = f32(rectangle.height),
             },
             offset_x = glyph.offset_x,
             offset_y = glyph.offset_y,
@@ -2106,8 +2108,8 @@ cache_ink_capture_sample :: proc(
         }
     }
     if slot >= 0 {
-        cache.visible_ink_samples[
-            capture_index*FONT_VISIBLE_INK_SAMPLE_CAPACITY+slot] = {
+        slot_index := capture_index * FONT_VISIBLE_INK_SAMPLE_CAPACITY + slot
+        cache.visible_ink_samples[slot_index] = {
             position = position,
             color = cast([4]u8)tint,
             coverage = coverage,
@@ -2279,7 +2281,7 @@ cache_publish_texture_commit :: proc(
     }
     candidate^.canonical_raster.charged_rgba_bytes = rgba_bytes
     previous := entry^
-    published := Font_Cache_Entry{
+    published: Font_Cache_Entry = {
         font = candidate^.font,
         shaping = candidate^.shaping,
         raster_ascent = candidate^.raster_ascent,
@@ -2366,7 +2368,10 @@ font_raster_height_select :: proc(
     if f32(pixel_height) < requested {
         pixel_height += 1
     }
-    return {pixel_height = pixel_height, valid = true}
+    return {
+        pixel_height = pixel_height,
+        valid = true,
+    }
 }
 
 // Convert one raster-pixel metric to logical units using that raster's height.

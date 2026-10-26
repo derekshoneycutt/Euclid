@@ -18,34 +18,34 @@ UI_TEXT_COLOR :: theme.UI_TEXT_COLOR
 //   Fallback wrapped-text layout metrics, grouped so the styled-or-fallback
 //   entry point passes typography settings as one coherent value.
 Wrapped_Text_Metrics :: struct {
-    padding : f32,
-    row_height : f32,
-    wrap_advance : f32,
-    font_size : f32,
+    padding: f32,
+    row_height: f32,
+    wrap_advance: f32,
+    font_size: f32,
 }
 
 //   Fallback plain-text payload for the styled-or-fallback draw path.
 Fallback_Text_Content :: struct {
-    text : string,
-    color : color.Color_RGBA8,
+    text: string,
+    color: color.Color_RGBA8,
 }
 
 //   Panel, font, and metrics for one presentation draw pass.
 Presentation_Draw_Params :: struct {
     encoder: ^native.Draw_Encoder,
-    panel : geometry.Rectangle,
-    scroll_y : f32,
-    font : view_font.Font_Face,
-    font_cache : ^view_font.Font_Cache,
-    metrics : Wrapped_Text_Metrics,
+    panel: geometry.Rectangle,
+    scroll_y: f32,
+    font: view_font.Font_Face,
+    font_cache: ^view_font.Font_Cache,
+    metrics: Wrapped_Text_Metrics,
     selected_text: bool,
     selection_clip: geometry.Rectangle,
 }
 
 //   Baseline draw position for one child math program.
 Program_Draw_Position :: struct {
-    draw_x : f32,
-    baseline_y : f32,
+    draw_x: f32,
+    baseline_y: f32,
     font_size: f32,
     math_style: dynmath.Math_Style,
     delimiter_target_height: f32,
@@ -106,11 +106,15 @@ draw_presentation_dynview :: proc(
         !runtime^.compile_cache.layout_is_valid) {
         return false
     }
-    ctx := Layout_Draw_Context{
+    ctx: Layout_Draw_Context = {
         encoder = params.encoder,
-        state = state, runtime = runtime, panel = params.panel,
-        font = params.font, font_size = params.metrics.font_size,
-        selected_text = params.selected_text, selection_clip = params.selection_clip,
+        state = state,
+        runtime = runtime,
+        panel = params.panel,
+        font = params.font,
+        font_size = params.metrics.font_size,
+        selected_text = params.selected_text,
+        selection_clip = params.selection_clip,
     }
     if !params.selected_text {
         native.draw_encoder_set_ink_sink(params.encoder, {

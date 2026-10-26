@@ -24,19 +24,34 @@ bridge_shape_test_state :: proc() -> ^core.Euclid_General_State {
 // Return standard visible-test construction values.
 bridge_shape_test_input :: proc(
     position: geometry.Vector3) -> Bridge_Positioned_Shape_Input {
-    return {position = position,
-        style = {color = {10, 20, 30, 255}, brush_size = 4}}
+    return {
+        position = position,
+        style = {
+            color = {10, 20, 30, 255},
+            brush_size = 4,
+        },
+    }
 }
 
 // Verify copied label coverage remains weighted and attached at its world height.
 @(test)
 bridge_label_departure_samples_follow_projected_ink :: proc(t: ^testing.T) {
-    anchor := geometry.Vector3{0.4, 0.6, 0.3}
-    scale := worldmodel.Iso_Scale{scale = 800, half_scale = 100, quarter_scale = 50}
+    anchor: geometry.Vector3 = {0.4, 0.6, 0.3}
+    scale: worldmodel.Iso_Scale = {
+        scale = 800,
+        half_scale = 100,
+        quarter_scale = 50,
+    }
     anchor_screen := projection.iso_to_cartesian(anchor, scale)
-    ink := [2]viewtext.Ui_Text_Ink_Sample{
-        {position = {anchor_screen.x + 10, anchor_screen.y - 10}, coverage = 128},
-        {position = {anchor_screen.x + 20, anchor_screen.y - 20}, coverage = 255},
+    ink: [2]viewtext.Ui_Text_Ink_Sample = {
+        {
+            position = {anchor_screen.x + 10, anchor_screen.y - 10},
+            coverage = 128,
+        },
+        {
+            position = {anchor_screen.x + 20, anchor_screen.y - 20},
+            coverage = 255,
+        },
     }
     output: [2]particles.Departure_Material_Sample
 
@@ -378,7 +393,11 @@ bridge_label_hide_reports_missing_departure_material :: proc(t: ^testing.T) {
     state := bridge_shape_test_state()
     defer free(state)
     state^.particle_system.use_max_dust_particles = 16
-    state^.iso_scale = {scale = 800, half_scale = 400, quarter_scale = 200}
+    state^.iso_scale = {
+        scale = 800,
+        half_scale = 400,
+        quarter_scale = 200,
+    }
     label := shape_create_label(state, cstring("A′"),
         i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
     testing.expect_value(t, shape_set_visible(state, label.entity, 1),
@@ -400,7 +419,11 @@ bridge_clear_departures_reports_unprepared_label :: proc(t: ^testing.T) {
     state := bridge_shape_test_state()
     defer free(state)
     state^.particle_system.use_max_dust_particles = 16
-    state^.iso_scale = {scale = 800, half_scale = 400, quarter_scale = 200}
+    state^.iso_scale = {
+        scale = 800,
+        half_scale = 400,
+        quarter_scale = 200,
+    }
     label := shape_create_label(state, cstring("A"),
         i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
     state^.shape_world.render_styles.values[0].visible = true
@@ -477,7 +500,7 @@ bridge_shape_abi_copies_cstring_unicode_labels :: proc(t: ^testing.T) {
     testing.expect(t, source_found)
     testing.expect_value(t, stored, "∠A′")
 
-    malformed := [2]u8{0xff, 0}
+    malformed: [2]u8 = {0xff, 0}
     rejected := shape_create_label(state, cstring(&malformed[0]),
         i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
     testing.expect_value(t, rejected.status, i32(BRIDGE_STATUS_INVALID_UTF8))
@@ -626,8 +649,12 @@ bridge_constraint_abi_creates_direct_distance_target :: proc(t: ^testing.T) {
     second := shape_create_point(state, bridge_shape_test_input({3, 0, 0}))
 
     status := create_distance_constraint(state, {
-        first = first.entity, second = second.entity, length = 2,
-        movement = 0, enabled = 1})
+        first = first.entity,
+        second = second.entity,
+        length = 2,
+        movement = 0,
+        enabled = 1,
+    })
 
     testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
     testing.expect_value(t, world.constraints.count, u16(1))
@@ -650,7 +677,10 @@ bridge_tool_unlock_is_deferred_until_scene_commit :: proc(t: ^testing.T) {
     animation := &state^.julia_interface^.null_animation
     state^.julia_interface^.current_animation = animation
     state^.world_pen, _ = shapes.world_create_pen(world, {
-        joint1 = {1, 0, 0}, joint2 = {2, 0, 0}, length = 1})
+        joint1 = {1, 0, 0},
+        joint2 = {2, 0, 0},
+        length = 1,
+    })
     constraint := &world.constraints.values[state^.world_pen.joint1_lock_constraint]
     constraint^.enabled = true
     batch: Scene_Command_Batch
@@ -686,8 +716,11 @@ bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
     world := &state^.shape_world
     particle_system := &state^.particle_system
     state^.world_compass, _ = shapes.world_create_compass(world, {
-        joint1 = {0.1, 0.2, 0}, pivot = {0.25, 0.3, 0.01},
-        joint2 = {0.4, 0.2, 0}, limb_length = 0.2})
+        joint1 = {0.1, 0.2, 0},
+        pivot = {0.25, 0.3, 0.01},
+        joint2 = {0.4, 0.2, 0},
+        limb_length = 0.2,
+    })
 
     move_compass_joint1(state, {0.15, 0.2, 0}, true)
     move_compass_joint2(state, {0.45, 0.2, 0}, true)
@@ -723,7 +756,10 @@ bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing
     particle_system := &state^.particle_system
     particle_system^.dust_tool_contact_count = particlemodel.DUST_TOOL_CONTACT_CAP
     state^.world_pen, _ = shapes.world_create_pen(world, {
-        joint1 = {0.1, 0.2, 0}, joint2 = {0.2, 0.2, 0}, length = 0.1})
+        joint1 = {0.1, 0.2, 0},
+        joint2 = {0.2, 0.2, 0},
+        length = 0.1,
+    })
     state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(state^.julia_interface, context.allocator)
     state^.julia_interface^.current_animation =
@@ -793,8 +829,12 @@ bridge_interrupted_formation_hide_scales_departure :: proc(t: ^testing.T) {
     testing.expect(t, particles.formation_advance_progress(
         &state^.particle_system, 5, 0))
     testing.expect(t, particles.formation_start_reveal(&state^.particle_system, {
-        kind = .Region, owner_entity = line.shape, animation_generation = 5,
-        progress = 0, duration = 1, seed = 3,
+        kind = .Region,
+        owner_entity = line.shape,
+        animation_generation = 5,
+        progress = 0,
+        duration = 1,
+        seed = 3,
     }))
 
     testing.expect_value(t,
@@ -829,16 +869,30 @@ bridge_label_formation_adds_no_dust_contact :: proc(t: ^testing.T) {
     testing.expect(t, particles.formation_advance_progress(
         &state^.particle_system, 5, 0))
     testing.expect(t, particles.formation_start_reveal(&state^.particle_system, {
-        kind = .Label, owner_entity = label.entity, animation_generation = 5,
-        progress = 0, duration = 1, seed = 3,
+        kind = .Label,
+        owner_entity = label.entity,
+        animation_generation = 5,
+        progress = 0,
+        duration = 1,
+        seed = 3,
     }))
     slot := particles.formation_find_reveal(
         &state^.particle_system.formation, .Label, label.entity, 5)
-    ink := [2]particlemodel.Formation_Label_Ink_Sample{
-        {offset = {0, -4}, coverage = 255}, {offset = {3, -4}, coverage = 255},
+    ink: [2]particlemodel.Formation_Label_Ink_Sample = {
+        {
+            offset = {0, -4},
+            coverage = 255,
+        },
+        {
+            offset = {3, -4},
+            coverage = 255,
+        },
     }
     testing.expect(t, particles.formation_store_label_targets(
-        &state^.particle_system, slot, {font_size = 16, signature = 1}, ink[:]) > 0)
+        &state^.particle_system, slot, {
+            font_size = 16,
+            signature = 1,
+        }, ink[:]) > 0)
     testing.expect(t, particles.formation_advance_progress(
         &state^.particle_system, 5, 1))
     testing.expect_value(t, state^.particle_system.dust_tool_contact_count, 1)

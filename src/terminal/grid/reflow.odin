@@ -218,23 +218,32 @@ reflow_measure_source_line_id :: proc(
 reflow_measure :: proc(
     source: []Reflow_Source_Row, columns: int) -> Reflow_Measure {
     if len(source) == 0 || columns < 1 {
-        return {result = .Invalid_Input}
+        return {
+            result = .Invalid_Input,
+        }
     }
-    result := Reflow_Measure{row_count = 1, result = .Prepared}
+    result: Reflow_Measure = {
+        row_count = 1,
+        result = .Prepared,
+    }
     column := 0
     current_line_id: termmodel.Terminal_Logical_Line_Id
     for source_row, source_index in source {
         line_id, identity_valid := reflow_measure_source_line_id(
             source, source_index, current_line_id)
         if !identity_valid || !reflow_source_cells_valid(source_row.cells) {
-            return {result = .Invalid_Input}
+            return {
+                result = .Invalid_Input,
+            }
         }
         current_line_id = line_id
         result.old_boundary_count += len(source_row.cells) + 1
         measure_result := reflow_measure_cells(
             &result, &column, source_row.cells, columns)
         if measure_result != .Prepared {
-            return {result = measure_result} 
+            return {
+                result = measure_result,
+            }
         }
         if !source_row.wrapped && source_index + 1 < len(source) {
             result.row_count += 1
@@ -335,7 +344,7 @@ reflow_start_row :: proc(
     row := &prepared.rows[state.retained_row]
     row.logical_line_id = state.logical_line_id
     row.grapheme_offset = state.line_offset
-    entry := Reflow_Semantic_To_New{
+    entry: Reflow_Semantic_To_New = {
         semantic = {state.logical_line_id, state.line_offset},
         new = {state.retained_row, 0},
     }
@@ -402,7 +411,7 @@ reflow_emit :: proc(
     first_line_id := source[0].logical_line_id if
         source[0].logical_line_id != 0 else
         termmodel.Terminal_Logical_Line_Id(source[0].logical_row_id)
-    state := Reflow_Emit_State{
+    state: Reflow_Emit_State = {
         retained_start = retained_start,
         logical_line_id = first_line_id,
         line_offset = source[0].grapheme_offset,
@@ -505,7 +514,7 @@ reflow_prepare :: proc(
     }
     retained_rows := min(measure.row_count, row_capacity)
     prepared: Prepared_Reflow
-    shape := Reflow_Allocation_Shape{
+    shape: Reflow_Allocation_Shape = {
         rows = retained_rows,
         columns = columns,
         old_boundaries = measure.old_boundary_count,
@@ -622,11 +631,11 @@ primary_reflow_initialize_destinations :: proc(
         }
     if !grid_init(&prepared.grid, request.columns, request.rows,
         request.allocator, {
-        scrollback = {},
-        ambiguous_width = old_grid.editing.ambiguous_width,
-        attachment_store = old_grid.editing.attachment_store,
-        screen = .Primary,
-    }) {
+            scrollback = {},
+            ambiguous_width = old_grid.editing.ambiguous_width,
+            attachment_store = old_grid.editing.attachment_store,
+            screen = .Primary,
+        }) {
         return false
     }
     return true
@@ -922,7 +931,7 @@ reflow_checkpoint_placements :: proc(
         &destination.placements, &source.placements) {
         return false
     }
-    ctx := Reflow_Checkpoint_Placement_Context{reflow, first_logical_row_id}
+    ctx: Reflow_Checkpoint_Placement_Context = {reflow, first_logical_row_id}
     return termattachment.placement_checkpoint_relocate(
         &destination.placements, .Primary, &ctx,
         reflow_checkpoint_placement)

@@ -120,14 +120,19 @@ document_layout_append_atomic_copy_target :: proc(
     if item.source_count <= 0 {
         return .Ok
     }
-    target := dynviewmodel.Dynview_Document_Layout_Copy_Target{
-        line_index = item.line_index, item_index = builders^.items.count,
-        offset = item.source_offset, count = item.source_count,
-        x = item.x, width = item.width,
+    target: dynviewmodel.Dynview_Document_Layout_Copy_Target = {
+        line_index = item.line_index,
+        item_index = builders^.items.count,
+        offset = item.source_offset,
+        count = item.source_count,
+        x = item.x,
+        width = item.width,
     }
     return storage.bounded_element_builder_append(
         &builders^.copy_targets,
-        []dynviewmodel.Dynview_Document_Layout_Copy_Target{target})
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{
+            target,
+        })
 }
 
 // Resolve and validate the sealed shaping span used by one prose layout item.
@@ -157,7 +162,10 @@ document_layout_copy_cluster :: proc(
     glyphs: []fontmodel.Shaped_Glyph,
     start: int) -> Document_Copy_Cluster {
 
-    result := Document_Copy_Cluster{end = start+1, advance = glyphs[start].x_advance}
+    result: Document_Copy_Cluster = {
+        end = start+1,
+        advance = glyphs[start].x_advance,
+    }
     for result.end < len(glyphs) &&
         glyphs[result.end].cluster == glyphs[start].cluster {
         result.advance += glyphs[result.end].x_advance
@@ -183,16 +191,20 @@ document_layout_append_prose_copy_targets :: proc(
         if cluster.end < len(shaped.glyphs) {
             span_end = int(shaped.glyphs[cluster.end].cluster)
         }
-        target := dynviewmodel.Dynview_Document_Layout_Copy_Target{
-            line_index = item.line_index, item_index = builders^.items.count,
-            offset = shaped.run.text_offset+int(shaped.glyphs[start].cluster),
-            count = span_end-int(shaped.glyphs[start].cluster),
-            x = pen_x, width = f32(cluster.advance)*shaped.scale,
+        target: dynviewmodel.Dynview_Document_Layout_Copy_Target = {
+            line_index = item.line_index,
+            item_index = builders^.items.count,
+            offset = shaped.run.text_offset + int(shaped.glyphs[start].cluster),
+            count = span_end - int(shaped.glyphs[start].cluster),
+            x = pen_x,
+            width = f32(cluster.advance) * shaped.scale,
             canonical_text = true,
         }
         status := storage.bounded_element_builder_append(
             &builders^.copy_targets,
-            []dynviewmodel.Dynview_Document_Layout_Copy_Target{target})
+            []dynviewmodel.Dynview_Document_Layout_Copy_Target{
+                target,
+            })
         if status != .Ok {
             return status
         }
@@ -308,13 +320,19 @@ document_layout_place_line :: proc(
         line^.node_start:line^.node_start+line^.node_count] {
         node_width := document_layout_node_width(node, line^.adjustment_ratio)
         if node.kind == .Box || node.kind == .Glue {
-            item := dynviewmodel.Dynview_Document_Layout_Item{
-                box_kind = node.box_kind, inline_index = node.inline_index,
-                shaped_run_index = node.shaped_run_index, line_index = line_index,
-                source_offset = node.source_offset, source_count = node.source_count,
-                text_offset = node.text_offset, text_count = node.text_count,
-                x = x, width = node_width,
-                ascent = node.ascent, descent = node.descent,
+            item: dynviewmodel.Dynview_Document_Layout_Item = {
+                box_kind = node.box_kind,
+                inline_index = node.inline_index,
+                shaped_run_index = node.shaped_run_index,
+                line_index = line_index,
+                source_offset = node.source_offset,
+                source_count = node.source_count,
+                text_offset = node.text_offset,
+                text_count = node.text_count,
+                x = x,
+                width = node_width,
+                ascent = node.ascent,
+                descent = node.descent,
             }
             status := document_layout_append_copy_targets(cache, builders, item)
             if status != .Ok {
@@ -408,14 +426,18 @@ document_layout_measure_display :: proc(
         source.display_row_count > len(ctx.rows)-source.display_row_start {
         return {}, .Invalid_Argument
     }
-    result := Document_Display_Measurement{rows = ctx.rows[
-        source.display_row_start:source.display_row_start+source.display_row_count]}
+    result_end := source.display_row_start + source.display_row_count
+    result: Document_Display_Measurement = {
+        rows = ctx.rows[source.display_row_start:result_end],
+    }
     cursor := block.node_start
     number_column: f32
     for row in result.rows {
         node_count := 3 if row.secondary_program_id >= 0 else 1
         if cursor < block.node_start || node_count >
-            block.node_start+block.node_count-cursor {return {}, .Invalid_Argument}
+            block.node_start+block.node_count-cursor {
+            return {}, .Invalid_Argument
+        }
         result.max_primary = max(
             result.max_primary, ctx.builders^.nodes.storage[cursor].width)
         if node_count == 3 {
@@ -429,13 +451,21 @@ document_layout_measure_display :: proc(
     if cursor != block.node_start+block.node_count {
         return {}, .Invalid_Argument
     }
-    result.numbered_width = max(
-        1, ctx.available_width-number_column-ctx.cache^.last_font_size)
-    result.alignment_gap = ctx.cache^.last_font_size*0.5
-    result.aligned_width = result.max_primary+result.alignment_gap+result.max_secondary
-    result.align_numbers_below = source.display_kind == .Align &&
-        number_column > 0 && result.aligned_width > result.numbered_width
+    document_layout_finalize_display_measurement(ctx, &result, number_column)
     return result, .Ok
+}
+
+// Derive final display widths and number placement after the row scan succeeds.
+document_layout_finalize_display_measurement :: proc(
+    ctx: Document_Display_Compose_Context, result: ^Document_Display_Measurement,
+    number_column: f32) {
+    result^.numbered_width = max(
+        1, ctx.available_width-number_column-ctx.cache^.last_font_size)
+    result^.alignment_gap = ctx.cache^.last_font_size*0.5
+    result^.aligned_width = result^.max_primary+
+        result^.alignment_gap+result^.max_secondary
+    result^.align_numbers_below = ctx.source.display_kind == .Align &&
+        number_column > 0 && result^.aligned_width > result^.numbered_width
 }
 
 // Emit one measured technical-display row and return its next node cursor.
@@ -461,16 +491,19 @@ document_layout_append_display_row :: proc(
         ctx.source.display_kind != .Align && row.number > 0 && !number_below {
         content_width = measured.numbered_width
     }
-    line := dynviewmodel.Dynview_Document_Layout_Line{
-        node_start = cursor-ctx.block.node_start, node_count = node_count,
-        block_index = ctx.block_index, natural_width = width, width = width,
+    line: dynviewmodel.Dynview_Document_Layout_Line = {
+        node_start = cursor - ctx.block.node_start,
+        node_count = node_count,
+        block_index = ctx.block_index,
+        natural_width = width,
+        width = width,
         overfull = width > content_width || number_below,
-        display_row_index = ctx.source.display_row_start+relative_index,
+        display_row_index = ctx.source.display_row_start + relative_index,
         display_number = row.number,
-        display_number_x = ctx.available_width-number_width,
+        display_number_x = ctx.available_width - number_width,
         display_number_width = number_width,
         display_number_baseline_offset =
-            ctx.cache^.last_font_size*1.2 if number_below else 0,
+            ctx.cache^.last_font_size * 1.2 if number_below else 0,
         display_content_width = content_width,
     }
     status := storage.bounded_element_builder_append(
@@ -508,10 +541,15 @@ document_layout_compose_blocks :: proc(
     label_columns: [dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS+1]f32
     if !document_layout_measure_list_columns(
         builders, source_blocks, available_width, cache^.last_font_size,
-        label_columns[:]) {return .Invalid_Argument}
-    ctx := Document_Block_Compose_Context{
-        cache = cache, builders = builders, source_blocks = source_blocks,
-        display_rows = display_rows, available_width = available_width,
+        label_columns[:]) {
+        return .Invalid_Argument
+    }
+    ctx: Document_Block_Compose_Context = {
+        cache = cache,
+        builders = builders,
+        source_blocks = source_blocks,
+        display_rows = display_rows,
+        available_width = available_width,
         label_columns = label_columns[:],
     }
     for _, block_index in builders^.blocks.storage[:builders^.blocks.count] {
@@ -532,7 +570,9 @@ document_layout_measure_list_columns :: proc(
 
     for block in builders^.blocks.storage[:builders^.blocks.count] {
         if block.source_block_index < 0 ||
-            block.source_block_index >= len(source_blocks) {return false}
+            block.source_block_index >= len(source_blocks) {
+            return false
+        }
         source := source_blocks[block.source_block_index]
         if source.kind != .List_Item {
             continue
@@ -543,7 +583,9 @@ document_layout_measure_list_columns :: proc(
         }
         width: f32
         for node in builders^.nodes.storage[
-            block.node_start:block.node_start+block.node_count] {width += node.width}
+            block.node_start:block.node_start+block.node_count] {
+            width += node.width
+        }
         if source.list_kind == .Description {
             list_origin := f32(max(0, int(source.left_margin_levels)-1))*font_size*2
             list_measure := max(1, available_width-list_origin-
@@ -590,8 +632,12 @@ document_layout_compose_block_lines :: proc(
 
     if source.kind == .Display && source.display_kind != .Plain {
         return document_layout_compose_display({
-            cache = ctx.cache, builders = ctx.builders, block = block,
-            source = source, rows = ctx.display_rows, block_index = block_index,
+            cache = ctx.cache,
+            builders = ctx.builders,
+            block = block,
+            source = source,
+            rows = ctx.display_rows,
+            block_index = block_index,
             available_width = content_width,
         })
     }
@@ -610,7 +656,9 @@ document_layout_compose_block :: proc(
 
     block := ctx.builders^.blocks.storage[block_index]
     if block.source_block_index < 0 ||
-        block.source_block_index >= len(ctx.source_blocks) {return .Invalid_Argument}
+        block.source_block_index >= len(ctx.source_blocks) {
+        return .Invalid_Argument
+    }
     source := ctx.source_blocks[block.source_block_index]
     measure, measure_ok := document_layout_resolve_block_measure(ctx, block, source)
     if !measure_ok {

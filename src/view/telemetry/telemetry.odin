@@ -19,7 +19,7 @@ Deferred_Visual_Capabilities :: struct {
 // deferred_visual_capabilities reports explicit later rendering boundaries.
 deferred_visual_capabilities :: proc(
     state: ^core.Euclid_General_State) -> Deferred_Visual_Capabilities {
-    result := Deferred_Visual_Capabilities{
+    result: Deferred_Visual_Capabilities = {
         gif_readback = state^.gif_capture_status.gif_capture_phase != .Idle,
     }
     when core.SCENARIOS_ENABLED {

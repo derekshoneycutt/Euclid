@@ -29,26 +29,67 @@ accesskit_context_menu_validates_owner_requests :: proc(t: ^testing.T) {
     owner := new(Adapter, context.allocator)
     defer free(owner, context.allocator)
     defer adapter_close_admission(owner)
-    pane := portable.Qualified_Identity{domain = .Ui, owner_domain = 9, generation = 1}
-    menu := portable.Qualified_Identity{domain = .Ui, owner_domain = 11, generation = 1}
-    item := portable.Qualified_Identity{
-        domain = .Ui, owner_domain = 11, local_id = 1, generation = 1}
-    controls := [3]Adapter_Control_Input{
-        {identity = pane, control = {role = .Panel, bounds = {0, 0, 600, 400},
-            label = "Presentation", enabled = true, focusable = true,
-            actions = {.Focus, .Show_Context_Menu}}},
-        {identity = menu, parent_identity = pane, control = {
-            role = .Menu, bounds = {20, 20, 180, 100},
-            label = "Context menu", enabled = true}},
-        {identity = item, parent_identity = menu, control = {
-            role = .Menu_Item, bounds = {28, 28, 172, 56}, label = "Copy",
-            actions = {.Focus, .Activate}, enabled = false, focusable = true}}}
+    pane: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 9,
+        generation = 1,
+    }
+    menu: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 11,
+        generation = 1,
+    }
+    item: portable.Qualified_Identity = {
+        domain = .Ui,
+        owner_domain = 11,
+        local_id = 1,
+        generation = 1,
+    }
+    controls: [3]Adapter_Control_Input = {
+        {
+            identity = pane,
+            control = {
+                role = .Panel,
+                bounds = {0, 0, 600, 400},
+                label = "Presentation",
+                enabled = true,
+                focusable = true,
+                actions = {.Focus, .Show_Context_Menu},
+            },
+        },
+        {
+            identity = menu,
+            parent_identity = pane,
+            control = {
+                role = .Menu,
+                bounds = {20, 20, 180, 100},
+                label = "Context menu",
+                enabled = true,
+            },
+        },
+        {
+            identity = item,
+            parent_identity = menu,
+            control = {
+                role = .Menu_Item,
+                bounds = {28, 28, 172, 56},
+                label = "Copy",
+                actions = {.Focus, .Activate},
+                enabled = false,
+                focusable = true,
+            },
+        },
+    }
     testing.expect(t, adapter_publish_controls(owner, {
-        root_bounds = {0, 0, 600, 400}, controls = controls[:]}))
+        root_bounds = {0, 0, 600, 400},
+        controls = controls[:],
+    }))
     publication := &owner^.control_publication.current
-    request := portable.Queued_Action{kind = u16(accesskit.Action.Show_Context_Menu),
+    request: portable.Queued_Action = {
+        kind = u16(accesskit.Action.Show_Context_Menu),
         target_native_id = owner^.control_native_ids[0],
-        publication_generation = publication^.generation}
+        publication_generation = publication^.generation,
+    }
     action: Adapter_Action
     testing.expect_value(t,
         adapter_validate_control_action(owner, request, publication, &action),

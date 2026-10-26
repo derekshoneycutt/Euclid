@@ -104,7 +104,7 @@ apply_harness_arg :: proc(options: ^Harness_Options, arg: string) -> bool {
 
 //   Parse harness arguments into a validated options block.
 parse_args :: proc() -> (Harness_Options, bool) {
-    options := Harness_Options{}
+    options: Harness_Options = {}
     for index in 1..<len(os.args) {
         if !apply_harness_arg(&options, os.args[index]) {
             return {}, false

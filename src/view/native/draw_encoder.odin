@@ -354,7 +354,7 @@ draw_encoder_record_ink_sample :: #force_inline proc(
         pixel_y >= f64(scissor.y)+f64(scissor.height) {
         return
     }
-    snapped := geometry.Vector2{
+    snapped: geometry.Vector2 = {
         f32((math.floor(pixel_x)+0.5)/scale_x),
         f32((math.floor(pixel_y)+0.5)/scale_y),
     }
@@ -527,11 +527,17 @@ draw_encoder_prepare :: proc(
     }
     if needs_batch {
         batch := &encoder^.batches[encoder^.batch_count]
-        batch^ = {pipeline = state.pipeline, texture = state.texture,
+        batch^ = {
+            pipeline = state.pipeline,
+            texture = state.texture,
             sampler = state.sampler,
-            scissor = scissor, first_index = u32(encoder^.index_count)}
+            scissor = scissor,
+            first_index = u32(encoder^.index_count),
+        }
         encoder^.commands[encoder^.command_count] = {
-            kind = .Batch, index = u32(encoder^.batch_count)}
+            kind = .Batch,
+            index = u32(encoder^.batch_count),
+        }
         encoder^.batch_count += 1
         encoder^.command_count += 1
         encoder^.statistics.batches = u32(encoder^.batch_count)
@@ -550,7 +556,10 @@ draw_encoder_append_custom_command :: proc(
         }
         return false
     }
-    encoder^.commands[encoder^.command_count] = {kind = kind, index = index}
+    encoder^.commands[encoder^.command_count] = {
+        kind = kind,
+        index = index,
+    }
     encoder^.command_count += 1
     encoder^.statistics.commands = u32(encoder^.command_count)
     return true
@@ -580,7 +589,9 @@ draw_encoder_append_stroke :: proc(
         fragment_uniforms = fragment_uniforms,
     }
     encoder^.commands[encoder^.command_count] = {
-        kind = .Tool, index = u32(draw_index)}
+        kind = .Tool,
+        index = u32(draw_index),
+    }
     encoder^.stroke_vertex_count += len(vertices)
     encoder^.stroke_draw_count += 1
     encoder^.command_count += 1
@@ -643,12 +654,19 @@ draw_encoder_commit_instanced_dust :: proc(
     }
     draw_index := encoder^.dust_draw_count
     encoder^.dust_draws[draw_index] = {
-        first = u32(encoder^.dust_instance_count), count = u32(count),
-        texture = texture, scissor = draw_encoder_physical_scissor(encoder),
-        viewport_extent = {encoder^.logical_extent.x,
-            encoder^.logical_extent.y}}
+        first = u32(encoder^.dust_instance_count),
+        count = u32(count),
+        texture = texture,
+        scissor = draw_encoder_physical_scissor(encoder),
+        viewport_extent = {
+            encoder^.logical_extent.x,
+            encoder^.logical_extent.y,
+        },
+    }
     encoder^.commands[encoder^.command_count] = {
-        kind = .Dust_Instanced, index = u32(draw_index)}
+        kind = .Dust_Instanced,
+        index = u32(draw_index),
+    }
     encoder^.dust_instance_count += count
     encoder^.dust_draw_count += 1
     return true
@@ -671,11 +689,16 @@ draw_encoder_commit_expanded_dust :: proc(
             first:first + DUST_EXPANDED_VERTICES_PER_INSTANCE], staging[index])
     }
     draw_index := encoder^.dust_expanded_draw_count
-    encoder^.dust_expanded_draws[draw_index] = {first = u32(first_vertex),
-        count = u32(vertex_count), texture = texture,
-        scissor = draw_encoder_physical_scissor(encoder)}
+    encoder^.dust_expanded_draws[draw_index] = {
+        first = u32(first_vertex),
+        count = u32(vertex_count),
+        texture = texture,
+        scissor = draw_encoder_physical_scissor(encoder),
+    }
     encoder^.commands[encoder^.command_count] = {
-        kind = .Dust_Expanded, index = u32(draw_index)}
+        kind = .Dust_Expanded,
+        index = u32(draw_index),
+    }
     encoder^.dust_expanded_vertex_count += vertex_count
     encoder^.dust_expanded_draw_count += 1
     return true
@@ -702,12 +725,19 @@ draw_encoder_commit_light :: proc(encoder: ^Draw_Encoder, count: int) -> bool {
     }
     draw_index := encoder^.dust_draw_count
     encoder^.dust_draws[draw_index] = {
-        first = u32(encoder^.dust_instance_count), count = u32(count),
+        first = u32(encoder^.dust_instance_count),
+        count = u32(count),
         scissor = draw_encoder_physical_scissor(encoder),
-        viewport_extent = {encoder^.logical_extent.x,
-            encoder^.logical_extent.y}, light = true}
+        viewport_extent = {
+            encoder^.logical_extent.x,
+            encoder^.logical_extent.y,
+        },
+        light = true,
+    }
     encoder^.commands[encoder^.command_count] = {
-        kind = .Dust_Instanced, index = u32(draw_index)}
+        kind = .Dust_Instanced,
+        index = u32(draw_index),
+    }
     encoder^.dust_instance_count += count
     encoder^.dust_draw_count += 1
     return draw_encoder_finish_dust(encoder, count)
@@ -752,7 +782,9 @@ draw_encoder_commit :: proc(
     base_vertex := u32(encoder^.vertex_count)
     for position, offset in positions {
         encoder^.vertices[encoder^.vertex_count + offset] = {
-            position = position, color = draw_color}
+            position = position,
+            color = draw_color,
+        }
     }
     for relative_index, offset in relative_indices {
         encoder^.indices[encoder^.index_count + offset] = base_vertex + relative_index
@@ -789,8 +821,10 @@ draw_encoder_commit_textured :: proc(
     base_vertex := u32(encoder^.vertex_count)
     for position, offset in vertices.positions {
         encoder^.vertices[encoder^.vertex_count + offset] = {
-            position = position, texcoord = vertices.texcoords[offset],
-            color = draw_color}
+            position = position,
+            texcoord = vertices.texcoords[offset],
+            color = draw_color,
+        }
     }
     for relative_index, offset in relative_indices {
         encoder^.indices[encoder^.index_count + offset] = base_vertex + relative_index
@@ -808,10 +842,11 @@ draw_encoder_triangle :: proc(
     encoder: ^Draw_Encoder,
     first, second, third: geometry.Vector2,
     draw_color: color.Color_RGBA8) -> bool {
-    positions := [3]geometry.Vector2{first, second, third}
-    relative_indices := [3]u32{0, 1, 2}
-    return draw_encoder_commit(encoder, positions[:], relative_indices[:],
-        draw_color, {pipeline = .Colored})
+    positions: [3]geometry.Vector2 = {first, second, third}
+    relative_indices: [3]u32 = {0, 1, 2}
+    return draw_encoder_commit(encoder, positions[:], relative_indices[:], draw_color, {
+        pipeline = .Colored,
+    })
 }
 
 // draw_encoder_rectangle appends one atomic colored rectangle.
@@ -822,15 +857,16 @@ draw_encoder_rectangle :: proc(
     if rectangle.width <= 0 || rectangle.height <= 0 {
        return false
     }
-    positions := [4]geometry.Vector2{
+    positions: [4]geometry.Vector2 = {
         {rectangle.x, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y + rectangle.height},
         {rectangle.x, rectangle.y + rectangle.height},
     }
-    relative_indices := [6]u32{0, 1, 2, 0, 2, 3}
-    return draw_encoder_commit(encoder, positions[:], relative_indices[:],
-        draw_color, {pipeline = .Colored})
+    relative_indices: [6]u32 = {0, 1, 2, 0, 2, 3}
+    return draw_encoder_commit(encoder, positions[:], relative_indices[:], draw_color, {
+        pipeline = .Colored,
+    })
 }
 
 // draw_encoder_rectangle_outline appends one atomic inset rectangle border.
@@ -843,13 +879,14 @@ draw_encoder_rectangle_outline :: proc(
     inset := min(thickness, min(rectangle.width, rectangle.height) * 0.5)
     left, top := rectangle.x, rectangle.y
     right, bottom := left + rectangle.width, top + rectangle.height
-    positions := [8]geometry.Vector2{{left, top}, {right, top}, {right, bottom},
+    positions: [8]geometry.Vector2 = {{left, top}, {right, top}, {right, bottom},
         {left, bottom}, {left + inset, top + inset}, {right - inset, top + inset},
         {right - inset, bottom - inset}, {left + inset, bottom - inset}}
-    indices := [24]u32{0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5,
+    indices: [24]u32 = {0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5,
         2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7}
-    return draw_encoder_commit(encoder, positions[:], indices[:],
-        draw_color, {pipeline = .Colored})
+    return draw_encoder_commit(encoder, positions[:], indices[:], draw_color, {
+        pipeline = .Colored,
+    })
 }
 
 // draw_encoder_line appends one atomic thick line with square ends.
@@ -863,14 +900,15 @@ draw_encoder_line :: proc(
     }
     half_width := width * 0.5
     along := delta / length * half_width
-    normal := geometry.Vector2{-along.y, along.x}
-    positions := [4]geometry.Vector2{
+    normal: geometry.Vector2 = {-along.y, along.x}
+    positions: [4]geometry.Vector2 = {
         first - along - normal, second + along - normal,
         second + along + normal, first - along + normal,
     }
-    relative_indices := [6]u32{0, 1, 2, 0, 2, 3}
-    return draw_encoder_commit(encoder, positions[:], relative_indices[:],
-        draw_color, {pipeline = .Colored})
+    relative_indices: [6]u32 = {0, 1, 2, 0, 2, 3}
+    return draw_encoder_commit(encoder, positions[:], relative_indices[:], draw_color, {
+        pipeline = .Colored,
+    })
 }
 
 // draw_polyline_finite_point reports whether one projected point is usable.
@@ -910,8 +948,11 @@ draw_polyline_next_group :: proc(
     if raw_start >= raw_end {
         return {}, false
     }
-    group := Draw_Polyline_Group{point = points[raw_start],
-        kind = draw_polyline_kind_at(kinds, raw_start), next = raw_start + 1}
+    group: Draw_Polyline_Group = {
+        point = points[raw_start],
+        kind = draw_polyline_kind_at(kinds, raw_start),
+        next = raw_start + 1,
+    }
     epsilon_squared := f32(DRAW_POLYLINE_POINT_EPSILON * DRAW_POLYLINE_POINT_EPSILON)
     for group.next < raw_end && draw_polyline_distance_squared(
         group.point, points[group.next]) <= epsilon_squared {
@@ -932,13 +973,15 @@ draw_polyline_join :: proc(
     }
     incoming := draw_polyline_unit(previous, current)
     outgoing := draw_polyline_unit(current, next)
-    normal_sum := geometry.Vector2{-incoming.y - outgoing.y,
+    normal_sum: geometry.Vector2 = {-incoming.y - outgoing.y,
         incoming.x + outgoing.x}
     length_squared := draw_polyline_distance_squared({}, normal_sum)
     if length_squared <= DRAW_POLYLINE_MITER_EPSILON *
-        DRAW_POLYLINE_MITER_EPSILON {return .Bevel}
+        DRAW_POLYLINE_MITER_EPSILON {
+        return .Bevel
+    }
     bisector := normal_sum / f32(math.sqrt(f64(length_squared)))
-    outgoing_normal := geometry.Vector2{-outgoing.y, outgoing.x}
+    outgoing_normal: geometry.Vector2 = {-outgoing.y, outgoing.x}
     denominator := math.abs(bisector.x * outgoing_normal.x +
         bisector.y * outgoing_normal.y)
     if denominator <= DRAW_POLYLINE_MITER_EPSILON || 1 / denominator > miter_limit {
@@ -970,22 +1013,34 @@ draw_polyline_endpoint_cost :: #force_inline proc(
     return 2, 0
 }
 
+// Validate compacting input cardinality and reject nonfinite points before grouping.
+draw_polyline_valid_points :: proc(
+    points: []geometry.Vector2, kinds: []Draw_Polyline_Point_Kind) -> bool {
+    if len(points) < 2 || (len(kinds) != 0 && len(kinds) != len(points)) {
+        return false
+    }
+    for point in points {
+        if !draw_polyline_finite_point(point) {
+            return false
+        }
+    }
+    return true
+}
+
 // draw_polyline_compact_summary validates and counts retained points.
 draw_polyline_compact_summary :: proc(
     points: []geometry.Vector2,
     kinds: []Draw_Polyline_Point_Kind,
     topology: Draw_Polyline_Topology) -> (Draw_Polyline_Summary, bool) {
 
-    if len(points) < 2 || (len(kinds) != 0 && len(kinds) != len(points)) {
+    if !draw_polyline_valid_points(points, kinds) {
         return {}, false
     }
-    for point in points {
-        if !draw_polyline_finite_point(point) {
-            return {}, false
-        }
-    }
     first, _ := draw_polyline_next_group(points, kinds, 0, len(points))
-    summary := Draw_Polyline_Summary{raw_end = len(points), first_kind = first.kind}
+    summary: Draw_Polyline_Summary = {
+        raw_end = len(points),
+        first_kind = first.kind,
+    }
     cursor, last_start := 0, 0
     last := first
     for cursor < len(points) {
@@ -1079,7 +1134,10 @@ draw_polyline_emit_vertex :: #force_inline proc(
     builder: ^Draw_Polyline_Builder, point: geometry.Vector2) -> u32 {
     relative := u32(builder^.vertex_count)
     destination := int(builder^.base_vertex) + builder^.vertex_count
-    builder^.encoder^.vertices[destination] = {position = point, color = builder^.color}
+    builder^.encoder^.vertices[destination] = {
+        position = point,
+        color = builder^.color,
+    }
     builder^.vertex_count += 1
     return relative
 }
@@ -1142,33 +1200,39 @@ draw_polyline_emit_endpoint :: proc(
         }
         draw_polyline_emit_fan(builder, point, outward, radius)
     }
-    return {incoming = pair, outgoing = pair}
+    return {
+        incoming = pair,
+        outgoing = pair,
+    }
 }
 
 // draw_polyline_emit_miter appends one shared offset-line intersection pair.
 draw_polyline_emit_miter :: proc(
     builder: ^Draw_Polyline_Builder, point, incoming, outgoing: geometry.Vector2,
     radius: f32) -> Draw_Polyline_Node {
-    normal_sum := geometry.Vector2{-incoming.y - outgoing.y,
+    normal_sum: geometry.Vector2 = {-incoming.y - outgoing.y,
         incoming.x + outgoing.x}
     bisector := normal_sum /
         f32(math.sqrt(f64(draw_polyline_distance_squared({}, normal_sum))))
-    outgoing_normal := geometry.Vector2{-outgoing.y, outgoing.x}
+    outgoing_normal: geometry.Vector2 = {-outgoing.y, outgoing.x}
     denominator := bisector.x * outgoing_normal.x + bisector.y * outgoing_normal.y
     offset := bisector * (radius / denominator)
-    pair := Draw_Polyline_Pair{
+    pair: Draw_Polyline_Pair = {
         draw_polyline_emit_vertex(builder, point + offset),
         draw_polyline_emit_vertex(builder, point - offset),
     }
-    return {incoming = pair, outgoing = pair}
+    return {
+        incoming = pair,
+        outgoing = pair,
+    }
 }
 
 // draw_polyline_emit_bevel appends separate outside corners and one filled wedge.
 draw_polyline_emit_bevel :: proc(
     builder: ^Draw_Polyline_Builder, point, incoming, outgoing: geometry.Vector2,
     radius: f32) -> Draw_Polyline_Node {
-    incoming_normal := geometry.Vector2{-incoming.y, incoming.x}
-    outgoing_normal := geometry.Vector2{-outgoing.y, outgoing.x}
+    incoming_normal: geometry.Vector2 = {-incoming.y, incoming.x}
+    outgoing_normal: geometry.Vector2 = {-outgoing.y, outgoing.x}
     normal_sum := incoming_normal + outgoing_normal
     inside := point
     length_squared := draw_polyline_distance_squared({}, normal_sum)
@@ -1307,13 +1371,18 @@ draw_encoder_polyline :: proc(
     if !valid {
        return false
     }
-    batch, ready := draw_encoder_prepare(encoder, summary.vertices,
-        summary.indices, {pipeline = .Colored})
+    batch, ready := draw_encoder_prepare(encoder, summary.vertices, summary.indices, {
+        pipeline = .Colored,
+    })
     if !ready {
        return false
     }
-    builder := Draw_Polyline_Builder{encoder = encoder, batch = batch,
-        base_vertex = u32(encoder^.vertex_count), color = style.color}
+    builder: Draw_Polyline_Builder = {
+        encoder = encoder,
+        batch = batch,
+        base_vertex = u32(encoder^.vertex_count),
+        color = style.color,
+    }
     if style.topology == .Open {
         draw_polyline_emit_open(&builder, points, kinds, summary, style)
     } else {
@@ -1343,8 +1412,9 @@ draw_encoder_circle :: proc(
         indices[index * 3 + 1] = u32(index + 1)
         indices[index * 3 + 2] = u32(next + 1)
     }
-    return draw_encoder_commit(encoder, positions[:], indices[:],
-        draw_color, {pipeline = .Colored})
+    return draw_encoder_commit(encoder, positions[:], indices[:], draw_color, {
+        pipeline = .Colored,
+    })
 }
 
 // draw_encoder_ring appends one atomic ring between positive ordered radii.
@@ -1358,7 +1428,7 @@ draw_encoder_ring :: proc(
     indices: [DRAW_CIRCLE_SEGMENTS * 6]u32
     for index in 0..<DRAW_CIRCLE_SEGMENTS {
         angle := f64(index) * 2 * math.PI / DRAW_CIRCLE_SEGMENTS
-        direction := geometry.Vector2{f32(math.cos(angle)), f32(math.sin(angle))}
+        direction: geometry.Vector2 = {f32(math.cos(angle)), f32(math.sin(angle))}
         positions[index * 2] = center + direction * inner_radius
         positions[index * 2 + 1] = center + direction * outer_radius
         next := (index + 1) % DRAW_CIRCLE_SEGMENTS
@@ -1370,8 +1440,9 @@ draw_encoder_ring :: proc(
         indices[base + 4] = u32(next * 2 + 1)
         indices[base + 5] = u32(next * 2)
     }
-    return draw_encoder_commit(encoder, positions[:], indices[:],
-        draw_color, {pipeline = .Colored})
+    return draw_encoder_commit(encoder, positions[:], indices[:], draw_color, {
+        pipeline = .Colored,
+    })
 }
 
 // draw_encoder_texture_quad appends one atomic tinted textured rectangle.
@@ -1382,15 +1453,15 @@ draw_encoder_texture_quad :: proc(
     if rectangle.width <= 0 || rectangle.height <= 0 {
         return false
     }
-    positions := [4]geometry.Vector2{{rectangle.x, rectangle.y},
+    positions: [4]geometry.Vector2 = {{rectangle.x, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y + rectangle.height},
         {rectangle.x, rectangle.y + rectangle.height}}
-    texcoords := [4]geometry.Vector2{{uv_rectangle.x, uv_rectangle.y},
+    texcoords: [4]geometry.Vector2 = {{uv_rectangle.x, uv_rectangle.y},
         {uv_rectangle.x + uv_rectangle.width, uv_rectangle.y},
         {uv_rectangle.x + uv_rectangle.width, uv_rectangle.y + uv_rectangle.height},
         {uv_rectangle.x, uv_rectangle.y + uv_rectangle.height}}
-    indices := [6]u32{0, 1, 2, 0, 2, 3}
+    indices: [6]u32 = {0, 1, 2, 0, 2, 3}
     return draw_encoder_commit_textured(encoder, {positions[:], texcoords[:]},
         indices[:], tint, binding)
 }

@@ -103,7 +103,7 @@ content_service_init_storage :: proc(service: ^Content_Service) -> bool {
     return true
 }
 
-// Start the owner thread with the service allocator inherited in its context.
+// Allocate the thread handle from service storage; the worker gets a default context.
 content_service_start_worker :: proc(service: ^Content_Service) -> bool {
     saved_context := context
     context.allocator = mem.mutex_allocator(&service.synchronized_allocator)
@@ -178,7 +178,10 @@ content_service_create :: proc(
 content_service_try_submit :: proc(
     service: ^Content_Service, request: Search_Query_Request) -> bool {
     return service != nil && service.running && chan.try_send(
-        service.requests, Content_Worker_Request{kind = .Query, query = request})
+        service.requests, Content_Worker_Request{
+            kind = .Query,
+            query = request,
+        })
 }
 
 // Try to receive one worker result without blocking the display owner.
@@ -197,7 +200,7 @@ content_stage_request_make :: proc(
        len(expected_fingerprint) != SEARCH_FINGERPRINT_BYTE_COUNT {
         return {}, false
     }
-    request := Content_Worker_Request{
+    request: Content_Worker_Request = {
         kind = .Stage,
         database_path_length = u16(len(database_path)),
     }
@@ -244,7 +247,10 @@ content_service_commit :: proc(service: ^Content_Service) -> bool {
     if service == nil || !service.running || service.candidate_state != .Staged ||
        service.staged_generation == nil || service.staged_generation^.generation == 0 ||
        !service.staged_generation^.sealed || !service.staged_generation^.data.complete ||
-       !chan.send(service.requests, Content_Worker_Request{kind = .Commit}) {
+       !chan.send(service.requests,
+            Content_Worker_Request{
+                kind = .Commit,
+            }) {
         return false
     }
     result, received := chan.recv(service.control_results)
@@ -262,7 +268,10 @@ content_service_commit :: proc(service: ^Content_Service) -> bool {
 // Discard or reverse one candidate while preserving the prior active generation.
 content_service_discard :: proc(service: ^Content_Service) -> bool {
     if service == nil || !service.running ||
-       !chan.send(service.requests, Content_Worker_Request{kind = .Discard}) {
+       !chan.send(service.requests,
+            Content_Worker_Request{
+                kind = .Discard,
+            }) {
         return false
     }
     result, received := chan.recv(service.control_results)
@@ -286,7 +295,10 @@ content_service_discard :: proc(service: ^Content_Service) -> bool {
 content_service_finalize :: proc(service: ^Content_Service) -> bool {
     if service == nil || !service.running ||
        service.candidate_state != .Committed ||
-       !chan.send(service.requests, Content_Worker_Request{kind = .Finalize}) {
+       !chan.send(service.requests,
+            Content_Worker_Request{
+                kind = .Finalize,
+            }) {
         return false
     }
     result, received := chan.recv(service.control_results)
@@ -324,7 +336,9 @@ content_service_destroy :: proc(service: ^Content_Service) {
         return
     }
     if service.running {
-        _ = chan.send(service.requests, Content_Worker_Request{kind = .Shutdown})
+        _ = chan.send(service.requests, Content_Worker_Request{
+            kind = .Shutdown,
+        })
         for {
             result, received := chan.recv(service.results)
             if !received || result.status == .Stopped {
@@ -360,8 +374,11 @@ search_query_request_make :: proc(
     if len(source) > SEARCH_QUERY_BYTE_CAPACITY {
         return {}, false
     }
-    request := Search_Query_Request{generation = generation, result_offset = offset,
-        query_length = u16(len(source))}
+    request: Search_Query_Request = {
+        generation = generation,
+        result_offset = offset,
+        query_length = u16(len(source)),
+    }
     copy(request.query_bytes[:], transmute([]u8)source)
     return request, true
 }

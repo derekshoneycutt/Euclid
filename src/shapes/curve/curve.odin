@@ -139,7 +139,7 @@ trochoid_point :: proc(
         value.rotation)
     tracer_angle := trochoid_rolling_orientation(value.mode, orbit_radius,
         value.rolling_radius, parameter, value.rotation + value.tracer_phase)
-    tracer := Vector3{value.tracer_distance * math.cos(tracer_angle),
+    tracer: Vector3 = {value.tracer_distance * math.cos(tracer_angle),
         value.tracer_distance * math.sin(tracer_angle), 0}
     return center + orbit + tracer
 }
@@ -154,15 +154,18 @@ trochoid_tool_pose :: proc(
     orientation := trochoid_rolling_orientation(value.mode, orbit_radius,
         value.rolling_radius, value.parameter,
         value.rotation + value.orientation_phase)
-    return {fixed_center = center, rolling_center = center + orbit,
-        rolling_orientation = orientation}
+    return {
+        fixed_center = center,
+        rolling_center = center + orbit,
+        rolling_orientation = orientation,
+    }
 }
 
 // Resolve one literal cycloid rail's unit tangent and upward planar normal.
 cycloid_line_basis :: proc(first, second: Vector3) -> (Vector3, Vector3) {
     delta := second - first
     inverse_length := 1 / math.sqrt(delta.x * delta.x + delta.y * delta.y)
-    tangent := Vector3{delta.x * inverse_length, delta.y * inverse_length, 0}
+    tangent: Vector3 = {delta.x * inverse_length, delta.y * inverse_length, 0}
     return tangent, {-tangent.y, tangent.x, 0}
 }
 
@@ -383,7 +386,7 @@ cycloid_full_domain_parameters :: proc(first, second: Vector3,
        return count, true
     }
     base_limited: bool
-    buffer := Curve_Parameter_Buffer{
+    buffer: Curve_Parameter_Buffer = {
         parameters[:], kinds[:], value.parameter_start}
     count, base_limited = curve_insert_base_parameters(
         buffer, count, value.parameter_finish, CYCLOID_BASE_SEGMENTS)
@@ -467,7 +470,9 @@ cycloid_explicate_internal :: proc(first, second: Vector3,
     vertices: []Vector3, output_kinds: []Curve_Point_Kind) -> Curve_Explication_Result {
     if !cycloid_explication_is_valid(
         first, second, value, vertices, output_kinds) {
-        return {status = .Invalid_Input}
+        return {
+            status = .Invalid_Input,
+        }
     }
     parameters: [CYCLOID_MAX_VERTICES]f32
     kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
@@ -551,7 +556,7 @@ trochoid_full_domain_parameters :: proc(
        return count, true
     }
     base_limited: bool
-    buffer := Curve_Parameter_Buffer{
+    buffer: Curve_Parameter_Buffer = {
         parameters[:], kinds[:], value.parameter_start}
     count, base_limited = curve_insert_base_parameters(
         buffer, count, value.parameter_finish, TROCHOID_BASE_SEGMENTS)
@@ -614,7 +619,9 @@ trochoid_explicate_internal :: proc(
     if !shapemodel.shape_trochoid_is_valid(value) ||
         len(vertices) < TROCHOID_MAX_VERTICES ||
         (output_kinds != nil && len(output_kinds) < TROCHOID_MAX_VERTICES) {
-        return {status = .Invalid_Input}
+        return {
+            status = .Invalid_Input,
+        }
     }
     parameters: [TROCHOID_MAX_VERTICES]f32
     kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind

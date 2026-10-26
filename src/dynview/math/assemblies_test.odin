@@ -11,24 +11,52 @@ math_stretch_test_records :: proc() -> (
     fontmodel.Font_Math_Glyph_Variants,
     fontmodel.Font_Math_Glyph_Assembly) {
 
-    variants := fontmodel.Font_Math_Glyph_Variants{
-        valid = true, generation = 9, base_glyph_id = 1, count = 2}
+    variants: fontmodel.Font_Math_Glyph_Variants = {
+        valid = true,
+        generation = 9,
+        base_glyph_id = 1,
+        count = 2,
+    }
     variants.values[0] = {
-        glyph_id = 10, advance = 800,
-        extents = {y_bearing = 700, height = -800}}
+        glyph_id = 10,
+        advance = 800,
+        extents = {
+            y_bearing = 700,
+            height = -800,
+        },
+    }
     variants.values[1] = {
-        glyph_id = 11, advance = 1200,
-        extents = {y_bearing = 900, height = -1000}}
-    assembly := fontmodel.Font_Math_Glyph_Assembly{
-        valid = true, generation = 9, base_glyph_id = 1,
-        min_connector_overlap = 100, count = 3}
+        glyph_id = 11,
+        advance = 1200,
+        extents = {
+            y_bearing = 900,
+            height = -1000,
+        },
+    }
+    assembly: fontmodel.Font_Math_Glyph_Assembly = {
+        valid = true,
+        generation = 9,
+        base_glyph_id = 1,
+        min_connector_overlap = 100,
+        count = 3,
+    }
     assembly.values[0] = {
-        glyph_id = 20, end_connector_length = 200, full_advance = 500}
+        glyph_id = 20,
+        end_connector_length = 200,
+        full_advance = 500,
+    }
     assembly.values[1] = {
-        glyph_id = 21, start_connector_length = 200,
-        end_connector_length = 200, full_advance = 400, extender = true}
+        glyph_id = 21,
+        start_connector_length = 200,
+        end_connector_length = 200,
+        full_advance = 400,
+        extender = true,
+    }
     assembly.values[2] = {
-        glyph_id = 22, start_connector_length = 200, full_advance = 500}
+        glyph_id = 22,
+        start_connector_length = 200,
+        full_advance = 500,
+    }
     return variants, assembly
 }
 
@@ -73,10 +101,14 @@ math_stretch_preserves_invisible_delimiter :: proc(t: ^testing.T) {
     sources: [2]fontmodel.Font_Math_Stretch_Source
     variants, assembly := math_stretch_test_records()
     sources[0] = {
-        raster_ascent = 24, variants = variants, assembly = assembly}
-    selected := math_stretch_select_delimiters(
-        sources, {accent_mode = DELIMITER_KIND_LEFT_PAREN,
-            radical_mode = DELIMITER_KIND_NONE}, 9, 0.01, 1000)
+        raster_ascent = 24,
+        variants = variants,
+        assembly = assembly,
+    }
+    selected := math_stretch_select_delimiters(sources, {
+        accent_mode = DELIMITER_KIND_LEFT_PAREN,
+        radical_mode = DELIMITER_KIND_NONE,
+    }, 9, 0.01, 1000)
     testing.expect(t, selected.ok)
     testing.expect(t, selected.constructions[0].valid)
     testing.expect(t, !selected.constructions[1].valid)
@@ -89,10 +121,16 @@ stretch_delimiter_item_uses_ink_width_without_trailing_cell_space :: proc(
     t: ^testing.T) {
 
     item: dynviewmodel.Dynview_Layout_Item
-    selected := Stretch_Delimiter_Selection{ok = true}
+    selected: Stretch_Delimiter_Selection = {
+        ok = true,
+    }
     selected.widths[0] = 3
     stretch_delimiter_apply_item(&item, {
-        selected = selected, axis = 2, generation = 9, scale = 0.01})
+        selected = selected,
+        axis = 2,
+        generation = 9,
+        scale = 0.01,
+    })
     testing.expect_value(t, item.draw_width, f32(3))
     testing.expect_value(t, item.math_stretch_content_x, f32(3))
 }
@@ -102,13 +140,20 @@ stretch_delimiter_item_uses_ink_width_without_trailing_cell_space :: proc(
 math_stretch_rejects_partial_delimiter_selection :: proc(t: ^testing.T) {
     sources: [2]fontmodel.Font_Math_Stretch_Source
     variants, assembly := math_stretch_test_records()
-    sources[0] = {variants = variants, assembly = assembly}
+    sources[0] = {
+        variants = variants,
+        assembly = assembly,
+    }
     variants.generation = 8
     assembly.generation = 8
-    sources[1] = {variants = variants, assembly = assembly}
-    selected := math_stretch_select_delimiters(
-        sources, {accent_mode = DELIMITER_KIND_LEFT_PAREN,
-            radical_mode = DELIMITER_KIND_RIGHT_PAREN}, 9, 0.01, 1000)
+    sources[1] = {
+        variants = variants,
+        assembly = assembly,
+    }
+    selected := math_stretch_select_delimiters(sources, {
+        accent_mode = DELIMITER_KIND_LEFT_PAREN,
+        radical_mode = DELIMITER_KIND_RIGHT_PAREN,
+    }, 9, 0.01, 1000)
     testing.expect(t, !selected.ok)
     testing.expect(t, !selected.constructions[0].valid)
 }
@@ -116,13 +161,26 @@ math_stretch_rejects_partial_delimiter_selection :: proc(t: ^testing.T) {
 //   Verify cumulative assembly advances position later parts toward the ink top.
 @(test)
 math_stretch_ink_bounds_follow_bottom_up_part_offsets :: proc(t: ^testing.T) {
-    construction := fontmodel.Font_Math_Stretch_Construction{
-        valid = true, assembled = true, count = 2}
+    construction: fontmodel.Font_Math_Stretch_Construction = {
+        valid = true,
+        assembled = true,
+        count = 2,
+    }
     construction.parts[0] = {
-        glyph_id = 20, extents = {y_bearing = 200, height = -300}}
+        glyph_id = 20,
+        extents = {
+            y_bearing = 200,
+            height = -300,
+        },
+    }
     construction.parts[1] = {
-        glyph_id = 22, advance_offset = 400,
-        extents = {y_bearing = 250, height = -350}}
+        glyph_id = 22,
+        advance_offset = 400,
+        extents = {
+            y_bearing = 250,
+            height = -350,
+        },
+    }
 
     bounds := math_stretch_ink_vertical_bounds(construction, 0.01)
     testing.expect(t, bounds.valid)
@@ -135,14 +193,27 @@ math_stretch_ink_bounds_follow_bottom_up_part_offsets :: proc(t: ^testing.T) {
 math_stretch_centers_delimiter_sides_independently :: proc(t: ^testing.T) {
     sources: [2]fontmodel.Font_Math_Stretch_Source
     variants, assembly := math_stretch_test_records()
-    variants.values[1].extents = {y_bearing = 900, height = -1000}
-    sources[0] = {variants = variants, assembly = assembly}
-    variants.values[1].extents = {y_bearing = 700, height = -1200}
-    sources[1] = {variants = variants, assembly = assembly}
+    variants.values[1].extents = {
+        y_bearing = 900,
+        height = -1000,
+    }
+    sources[0] = {
+        variants = variants,
+        assembly = assembly,
+    }
+    variants.values[1].extents = {
+        y_bearing = 700,
+        height = -1200,
+    }
+    sources[1] = {
+        variants = variants,
+        assembly = assembly,
+    }
 
-    selected := math_stretch_select_delimiters(
-        sources, {accent_mode = DELIMITER_KIND_LEFT_PAREN,
-            radical_mode = DELIMITER_KIND_RIGHT_PAREN}, 9, 0.01, 1000)
+    selected := math_stretch_select_delimiters(sources, {
+        accent_mode = DELIMITER_KIND_LEFT_PAREN,
+        radical_mode = DELIMITER_KIND_RIGHT_PAREN,
+    }, 9, 0.01, 1000)
     testing.expect(t, selected.ok)
     testing.expect_value(t, selected.vertical_origins[0], f32(4))
     testing.expect_value(t, selected.vertical_origins[1], f32(1))
@@ -153,8 +224,11 @@ math_stretch_centers_delimiter_sides_independently :: proc(t: ^testing.T) {
 //   Verify degree raise remains a percentage while radical kerns scale as positions.
 @(test)
 radical_math_metrics_preserve_degree_constant_units :: proc(t: ^testing.T) {
-    constants := fontmodel.Font_Math_Constants{
-        valid = true, generation = 9, base_pixel_size = 32}
+    constants: fontmodel.Font_Math_Constants = {
+        valid = true,
+        generation = 9,
+        base_pixel_size = 32,
+    }
     constants.values[int(Math_Constant.Radical_Display_Style_Vertical_Gap)] = 128
     constants.values[int(Math_Constant.Radical_Rule_Thickness)] = 64
     constants.values[int(Math_Constant.Radical_Extra_Ascender)] = 32

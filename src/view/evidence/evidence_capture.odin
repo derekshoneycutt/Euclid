@@ -25,10 +25,12 @@ record_constraint_trace_summary :: proc(state: ^core.Euclid_General_State) {
             correlation_kind = .Fixed_Step,
             correlation = state^.fixed_step,
             tick = state^.fixed_step,
-            payload = {counts = {
-                first = u32(active_constraints),
-                second = u32(state^.shape_world.constraints.count),
-            }},
+            payload = {
+                counts = {
+                    first = u32(active_constraints),
+                    second = u32(state^.shape_world.constraints.count),
+                },
+            },
         })
 }
 
@@ -63,10 +65,12 @@ record_evidence_checkpoint :: proc(
             generation = u64(handle.generation),
             tick = state^.fixed_step,
             flags = flags,
-            payload = {handle = {
-                slot = handle.slot,
-                generation = handle.generation,
-            }},
+            payload = {
+                handle = {
+                    slot = handle.slot,
+                    generation = handle.generation,
+                },
+            },
         })
     return handle
 }
@@ -98,7 +102,7 @@ capture_evidence_point :: proc(
 capture_evidence_checkpoint :: proc(
     state: ^core.Euclid_General_State) -> evidence_checkpoint.Snapshot {
     world := &state^.shape_world
-    snapshot := evidence_checkpoint.Snapshot{
+    snapshot: evidence_checkpoint.Snapshot = {
         fixed_step = state^.fixed_step,
         simulation_time = state^.simulation_time,
         runtime_generation = state^.julia_runtime_service^.runtime_generation,

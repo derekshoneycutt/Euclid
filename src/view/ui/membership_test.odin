@@ -52,13 +52,17 @@ membership_popup_preserves_focus_modality :: proc(t: ^testing.T) {
     focus.focus_origin = .Pointer
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
     testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
-    uioverlay.membership_key(state, {kind = .Press, key = .Down})
+    uioverlay.membership_key(state, {
+        kind = .Press,
+        key = .Down,
+    })
     testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Keyboard)
     row := uioverlay.membership_row(&state.ui_runtime.membership, 0)
     uioverlay.membership_pointer(state, {
         window_focused = true,
         mouse_position = {row.x + 50, row.y + row.height * 0.5},
-        mouse_pressed = {.Left}, mouse_down = {.Left},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
     })
     testing.expect_value(t, focus.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
     uioverlay.membership_close(state, true)
@@ -138,15 +142,19 @@ membership_popup_pointer_and_semantic_routes_share_accepted_checkboxes :: proc(
     id := membership_test_head(t, state, 1)
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
     row := uioverlay.membership_row(&state.ui_runtime.membership, 0)
-    point := input.Input_Position{row.x + 50, row.y + row.height*0.5}
+    point: input.Input_Position = {row.x + 50, row.y + row.height*0.5}
     storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed := uioverlay.membership_route(state, {
-        window_focused = true, mouse_position = point,
-        mouse_pressed = {.Left}, mouse_down = {.Left},
+        window_focused = true,
+        mouse_position = point,
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
     }, storage[:])
     testing.expect_value(t, card(routed.mouse_pressed), 0)
     _ = uioverlay.membership_route(state, {
-        window_focused = true, mouse_position = point, mouse_released = {.Left},
+        window_focused = true,
+        mouse_position = point,
+        mouse_released = {.Left},
     }, storage[:])
     uioverlay.membership_commit(state)
     testing.expect(t, uioverlay.membership_checkbox(state, 0, {}).checked)
@@ -172,7 +180,9 @@ membership_test_native_toggle :: proc(
     testing.expect_value(t, snapshot.nodes[index].role, viewmodel.Ui_Node_Role.Checkbox)
     testing.expect(t, .Checked in snapshot.nodes[index].states)
     state.semantic_focus.commands[0] = {
-        kind = .Toggle, target = snapshot.nodes[index].id}
+        kind = .Toggle,
+        target = snapshot.nodes[index].id,
+    }
     state.semantic_focus.command_count = 1
     uioverlay.membership_commands(state)
     uioverlay.membership_commit(state)
@@ -194,7 +204,10 @@ membership_popup_scrolls_and_reuses_workspace :: proc(t: ^testing.T) {
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
     menu := &state.ui_runtime.membership
     address := raw_data(menu.order)
-    uioverlay.membership_key(state, {kind = .Press, key = .End})
+    uioverlay.membership_key(state, {
+        kind = .Press,
+        key = .End,
+    })
     testing.expect_value(t, menu.focused, last)
     testing.expect(t, menu.scroll_y > 0)
     row := uioverlay.membership_row(menu, menu.count - 1)
@@ -248,11 +261,20 @@ membership_popup_keyboard_dismissal_and_held_activation :: proc(t: ^testing.T) {
     membership_test_fixture(t, state, &ji, &nodes)
     _ = membership_test_head(t, state, 1)
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
-    uioverlay.membership_key(state, {kind = .Press, key = .Space})
+    uioverlay.membership_key(state, {
+        kind = .Press,
+        key = .Space,
+    })
     uioverlay.membership_commit(state)
-    uioverlay.membership_key(state, {kind = .Repeat, key = .Space})
+    uioverlay.membership_key(state, {
+        kind = .Repeat,
+        key = .Space,
+    })
     testing.expect(t, !state.ui_runtime.membership.pending_valid)
-    uioverlay.membership_key(state, {kind = .Press, key = .Escape})
+    uioverlay.membership_key(state, {
+        kind = .Press,
+        key = .Escape,
+    })
     testing.expect(t, !state.ui_runtime.membership.active)
     testing.expect_value(t, state.semantic_focus.logical_focus,
         uisemantics.semantic_control_id(
@@ -269,19 +291,41 @@ membership_popup_dismissal_preserves_unrelated_text :: proc(t: ^testing.T) {
     membership_test_fixture(t, state, &ji, &nodes)
     _ = membership_test_head(t, state, 1)
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
-    uioverlay.membership_key(state, {kind = .Press, key = .Space})
+    uioverlay.membership_key(state, {
+        kind = .Press,
+        key = .Space,
+    })
     uioverlay.membership_close(state, true)
-    events := [4]input.Input_Event{
-        {kind = .Text, codepoint = 'T'},
-        {kind = .Repeat, key = .Space,
-            correlation = {partner_index = 2, valid = true}},
-        {kind = .Text, codepoint = ' ',
-            correlation = {partner_index = 1, valid = true}},
-        {kind = .Release, key = .Space},
+    events: [4]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'T',
+        },
+        {
+            kind = .Repeat,
+            key = .Space,
+            correlation = {
+                partner_index = 2,
+                valid = true,
+            },
+        },
+        {
+            kind = .Text,
+            codepoint = ' ',
+            correlation = {
+                partner_index = 1,
+                valid = true,
+            },
+        },
+        {
+            kind = .Release,
+            key = .Space,
+        },
     }
     storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed := uioverlay.membership_route(state, {
-        window_focused = true, events = events[:],
+        window_focused = true,
+        events = events[:],
     }, storage[:])
     testing.expect_value(t, len(routed.events), 1)
     if len(routed.events) == 1 {
@@ -301,14 +345,20 @@ membership_popup_focus_loss_and_outside_press_dismiss :: proc(t: ^testing.T) {
     _ = membership_test_head(t, state, 1)
     storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
-    _ = uioverlay.membership_route(state, {window_focused = true}, storage[:])
+    _ = uioverlay.membership_route(state, {
+        window_focused = true,
+    }, storage[:])
     testing.expect(t, state.ui_runtime.membership.active)
-    _ = uioverlay.membership_route(state, {window_focused = false}, storage[:])
+    _ = uioverlay.membership_route(state, {
+        window_focused = false,
+    }, storage[:])
     testing.expect(t, !state.ui_runtime.membership.active)
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
     routed := uioverlay.membership_route(state, {
-        window_focused = true, mouse_position = {-1, -1},
-        mouse_pressed = {.Left}, mouse_down = {.Left},
+        window_focused = true,
+        mouse_position = {-1, -1},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
     }, storage[:])
     testing.expect(t, !state.ui_runtime.membership.active)
     testing.expect(t, .Left in routed.mouse_pressed)
@@ -327,7 +377,10 @@ membership_popup_rejects_retired_native_identity :: proc(t: ^testing.T) {
     stale := uioverlay.membership_id(&state.ui_runtime.membership, id)
     uioverlay.membership_close(state, true)
     testing.expect(t, uioverlay.membership_open(state, {580, 430, 30, 30}))
-    state.semantic_focus.commands[0] = {kind = .Toggle, target = stale}
+    state.semantic_focus.commands[0] = {
+        kind = .Toggle,
+        target = stale,
+    }
     state.semantic_focus.command_count = 1
     uioverlay.membership_commands(state)
     uioverlay.membership_prepare(state)

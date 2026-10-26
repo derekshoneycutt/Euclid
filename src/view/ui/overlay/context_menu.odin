@@ -224,12 +224,17 @@ context_menu_open :: proc(
     swallowed := menu^.swallowed_activation_keys
     caret := menu^.keyboard_anchor
     menu^ = {
-        active = true, target = target, generation = generation,
+        active = true,
+        target = target,
+        generation = generation,
         content_revision = state^.dynview.content.revision,
         process_id = u64(state^.shell.operation_id.slot),
         process_generation = state^.shell.operation_id.generation,
-        focused = -1, pressed_item = -1, captured_buttons = capture,
-        swallowed_activation_keys = swallowed, keyboard_anchor = caret,
+        focused = -1,
+        pressed_item = -1,
+        captured_buttons = capture,
+        swallowed_activation_keys = swallowed,
+        keyboard_anchor = caret,
         window = runtime^.layout.window,
         viewport = uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect),
     }
@@ -242,8 +247,11 @@ context_menu_open :: proc(
     menu^.bounds = context_menu_place(
         anchor, context_menu_size(state), runtime^.layout.window)
     runtime^.input.interaction.logical_focus =
-        {kind = .Terminal} if target.domain == .Terminal else
-            viewmodel.Ui_Focus_Target{kind = .Presentation}
+        {
+            kind = .Terminal,
+        } if target.domain == .Terminal else viewmodel.Ui_Focus_Target{
+            kind = .Presentation,
+        }
     context_menu_focus(menu, runtime^.semantic_focus)
 }
 
@@ -264,8 +272,10 @@ context_menu_keyboard_anchor :: proc(
     if selection.active && selection.mode == .Semantic_Document && len(targets) > 0 {
         index := max(0, min(selection.head.unit_index-1, len(targets)-1))
         rect := ui_dynview.dynview_document_target_rect(targets[index], {
-            panel = panel, scroll_y = state^.ui_runtime.presentation.text_scroll_y,
-            text_padding = theme.TEXT_PADDING})
+            panel = panel,
+            scroll_y = state^.ui_runtime.presentation.text_scroll_y,
+            text_padding = theme.TEXT_PADDING,
+        })
         return {
             max(panel.x, min(rect.x, panel.x+panel.width-CONTEXT_MENU_PADDING)),
             max(panel.y,
@@ -363,7 +373,9 @@ context_menu_key :: proc(
             semantic_focus^.logical_focus = snapshot^.nodes[next].id
         }
     }
-    if menu^.active { context_menu_focus(menu, semantic_focus) }
+    if menu^.active {
+        context_menu_focus(menu, semantic_focus)
+    }
 }
 
 // context_menu_opening_key recognizes reserved Euclid popup chords.
@@ -493,20 +505,30 @@ context_menu_publish :: proc(state: ^core.Euclid_General_State) {
     }
     id := context_menu_id(menu)
     _ = uisemantics.semantic_register_control(runtime^.semantic_focus, {
-        id = id, parent = menu^.target, role = .Menu,
-        states = {.Visible, .Enabled, .Focusable}, actions = {.Focus},
-        bounds = menu^.bounds, clip_bounds = menu^.bounds,
-        label = viewmessages.shell_message(state, .Context_Menu_Label)})
+        id = id,
+        parent = menu^.target,
+        role = .Menu,
+        states = {.Visible, .Enabled, .Focusable},
+        actions = {.Focus},
+        bounds = menu^.bounds,
+        clip_bounds = menu^.bounds,
+        label = viewmessages.shell_message(state, .Context_Menu_Label),
+    })
     for &item, index in menu^.items[:menu^.count] {
-        states := viewmodel.Ui_Node_State{.Visible, .Focusable}
+        states: viewmodel.Ui_Node_State = {.Visible, .Focusable}
         if item.enabled {
             states += {.Enabled}
         }
         _ = uisemantics.semantic_register_control(runtime^.semantic_focus, {
-            id = context_menu_id(menu, index+1), parent = id, role = .Menu_Item,
-            states = states, actions = {.Focus, .Activate},
-            bounds = context_menu_item_rect(menu, index), clip_bounds = menu^.bounds,
-            label = string(item.label[:item.label_length])})
+            id = context_menu_id(menu, index+1),
+            parent = id,
+            role = .Menu_Item,
+            states = states,
+            actions = {.Focus, .Activate},
+            bounds = context_menu_item_rect(menu, index),
+            clip_bounds = menu^.bounds,
+            label = string(item.label[:item.label_length]),
+        })
     }
 }
 
@@ -593,13 +615,18 @@ context_menu_draw_label :: proc(
     if !enabled {
         tint = theme.draw_color(encoder, .Disabled_Text)
     }
+    font_size_mod := (row.height - theme.ui_font_size(
+        state^.ui_runtime.preferences.values.interface.text_size_percent)) * 0.5
     _ = viewtext.ui_text_shaped({
         encoder = encoder,
         resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-        key = .Regular, text = label,
-        position = {row.x, row.y + (row.height-theme.ui_font_size(
-            state^.ui_runtime.preferences.values.interface.text_size_percent))*0.5},
-        color = tint, font = viewtext.ui_text_font(
-            face, encoder^.ui_text_size_percent),
+        key = .Regular,
+        text = label,
+        position = {
+            row.x,
+            row.y + font_size_mod,
+        },
+        color = tint,
+        font = viewtext.ui_text_font(face, encoder^.ui_text_size_percent),
     })
 }

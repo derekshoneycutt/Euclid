@@ -156,18 +156,27 @@ presentation_parse_key :: proc(
     if mode == .Math {
         whole := dynparse.tex_document_whole_math(dynparse.tex_document_trim(source))
         if !whole.present {
-            return {mode = mode}
+            return {
+                mode = mode,
+            }
         }
         parse_mode = .Math
         root_style = whole.style
         parse_source = whole.content
     } else if mode != .Document {
-        return {mode = mode}
+        return {
+            mode = mode,
+        }
     }
     key := dyncore.document_store_key(parse_source,
         dyncore.DYNVIEW_DOCUMENT_SEMANTIC_PROFILE_DEFAULT, parse_mode, root_style,
         dyncore.document_store_source_hash(parse_source))
-    return {source = parse_source, key = key, mode = mode, valid = generation != 0}
+    return {
+        source = parse_source,
+        key = key,
+        mode = mode,
+        valid = generation != 0,
+    }
 }
 
 //   Drain Julia egress and advance presentation work without blocking a frame.
@@ -306,8 +315,10 @@ presentation_start_pending :: proc(
     source := bridge.presentation_literal_source(content.content)
     parse := presentation_parse_key(
         content.content, state^.dynview_documents.generation)
-    request := bridge.Presentation_Snapshot_Request{
-        content = content, source = source, mode = parse.mode,
+    request: bridge.Presentation_Snapshot_Request = {
+        content = content,
+        source = source,
+        mode = parse.mode,
     }
     if parse.mode == .Plain || !parse.valid {
         presentation_materialize(state, runtime, request)
@@ -373,7 +384,9 @@ presentation_submit_parse :: proc(
         &state^.simulation_executor^.pool,
         presentation_parse_task, rawptr(&runtime^.active))
     if outcome != .Queued {
-        runtime^.active = {result = result}
+        runtime^.active = {
+            result = result,
+        }
         return
     }
     runtime^.pending = nil
@@ -420,7 +433,9 @@ presentation_poll_active :: proc(
     }
     _ = bridge.return_julia_egress(state^.julia_runtime_service, message)
     result := operation^.result
-    operation^ = {result = result}
+    operation^ = {
+        result = result,
+    }
 }
 
 //   Commit one current joined result and publish semantics or the exact literal source.
@@ -429,7 +444,7 @@ presentation_commit_joined :: proc(
     runtime: ^Presentation_Runtime,
     content: bridgemodel.View_Content_Ready) {
     operation := &runtime^.active
-    request := bridge.Presentation_Snapshot_Request{
+    request: bridge.Presentation_Snapshot_Request = {
         content = content,
         source = bridge.presentation_literal_source(content.content),
         mode = operation^.mode,
@@ -498,10 +513,12 @@ presentation_set_arrival_style :: proc(
 presentation_effects_observe :: proc(
     runtime: ^Presentation_Runtime) -> observe.Presentation_Effects {
     if runtime == nil {
-        return {arrival_selection = uidust.UI_DUST_ARRIVAL_STYLE}
+        return {
+            arrival_selection = uidust.UI_DUST_ARRIVAL_STYLE,
+        }
     }
     dust := &runtime^.dust
-    result := observe.Presentation_Effects{
+    result: observe.Presentation_Effects = {
         arrival_selection = presentation_arrival_style(runtime),
         arrival_style = dust.incoming_style,
         arrival_active = dust.incoming_active,
@@ -519,15 +536,25 @@ presentation_effects_observe :: proc(
         arrival_cancelled_count = dust.arrival_cancelled_count,
         arrival_completed_duration = dust.arrival_completed_duration,
     }
+    presentation_effects_observe_phases(dust, &result)
+    return result
+}
+
+// Count initialized particle phases without exposing dust storage in evidence.
+presentation_effects_observe_phases :: proc(
+    dust: ^uidust.Ui_Dust_System, result: ^observe.Presentation_Effects) {
     for phase in dust.particles.phase[:dust.initialized_slots] {
         #partial switch phase {
-        case .Airborne_Departure: result.airborne_count += 1
-        case .Resting_Departure: result.resting_count += 1
-        case .Reclaimed_Arrival: result.reclaimed_count += 1
-        case .Fresh_Arrival: result.fresh_count += 1
+        case .Airborne_Departure:
+            result.airborne_count += 1
+        case .Resting_Departure:
+            result.resting_count += 1
+        case .Reclaimed_Arrival:
+            result.reclaimed_count += 1
+        case .Fresh_Arrival:
+            result.fresh_count += 1
         }
     }
-    return result
 }
 
 // presentation_effects_begin_departure breaks the last drawn ink into dust.
@@ -708,7 +735,9 @@ quiesce_presentation_runtime :: proc(
         assert(joined == .Joined)
         _ = bridge.return_julia_egress(service, runtime^.active.message)
         result := runtime^.active.result
-        runtime^.active = {result = result}
+        runtime^.active = {
+            result = result,
+        }
     }
     if runtime^.pending != nil {
         _ = bridge.return_julia_egress(service, runtime^.pending)

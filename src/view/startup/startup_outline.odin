@@ -52,10 +52,10 @@ startup_outline_append_segment :: proc(
 // Append one clockwise rectangular path to the startup silhouette.
 startup_outline_append_rect :: proc(
     outline: ^Startup_Outline, rect: geometry.Rectangle) {
-    top_left := geometry.Vector2{rect.x, rect.y}
-    top_right := geometry.Vector2{rect.x + rect.width, rect.y}
-    bottom_right := geometry.Vector2{rect.x + rect.width, rect.y + rect.height}
-    bottom_left := geometry.Vector2{rect.x, rect.y + rect.height}
+    top_left: geometry.Vector2 = {rect.x, rect.y}
+    top_right: geometry.Vector2 = {rect.x + rect.width, rect.y}
+    bottom_right: geometry.Vector2 = {rect.x + rect.width, rect.y + rect.height}
+    bottom_left: geometry.Vector2 = {rect.x, rect.y + rect.height}
     startup_outline_append_segment(outline, top_left, top_right)
     startup_outline_append_segment(outline, top_right, bottom_right)
     startup_outline_append_segment(outline, bottom_right, bottom_left)

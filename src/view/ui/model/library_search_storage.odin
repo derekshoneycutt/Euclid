@@ -11,7 +11,9 @@ library_search_reserve_ids :: proc(
         return false
     }
     if !search.visible_id_allocator.initialized {
-        heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+        heap_allocator: runtime.Allocator = {
+            procedure = runtime.heap_allocator_proc,
+        }
         if storage.tlsf_owner_init(
             &search.visible_id_allocator, heap_allocator) != .Ok {
             return false

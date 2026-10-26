@@ -39,7 +39,7 @@ tex_parse_cursor_rejects_malformed_utf8 :: proc(t: ^testing.T) {
 //   Verify source, work, and command limits fail before excess consumption.
 @(test)
 tex_parse_cursor_enforces_lexical_limits :: proc(t: ^testing.T) {
-    limits := Tex_Parse_Limits{
+    limits: Tex_Parse_Limits = {
         source_bytes = 3,
         work_units = 1,
         command_bytes = 2,

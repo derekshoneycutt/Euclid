@@ -3,6 +3,7 @@ package view
 
 import preferencesmodel "preferences/model"
 import app_core "../core"
+import protocol "../core/protocol"
 import setting_model "../settings"
 import taskpool "../taskpool"
 import user_data "../userdata"
@@ -18,6 +19,7 @@ import testing "core:testing"
 import thread "core:thread"
 import time "core:time"
 import viewpreferences "preferences"
+import viewuserdata "userdata"
 import uilibrary "ui/library"
 import viewmodel "ui/model"
 
@@ -341,7 +343,7 @@ settings_save_test_enqueue_ordered_mutations :: proc(
         settings_save_test_id(3), settings_save_test_id(4))
     third := settings_save_test_add_favorite(
         settings_save_test_id(5), settings_save_test_id(6))
-    additions := []collections.Mutation{first, second, third}
+    additions: []collections.Mutation = {first, second, third}
     for mutation in additions {
         testing.expect_value(t,
             viewpreferences.settings_save_collection_mutation(state, mutation),
@@ -383,7 +385,7 @@ settings_save_test_enqueue_in_flight_moves :: proc(
         settings_save_test_id(13), settings_save_test_id(14))
     third := settings_save_test_add_favorite(
         settings_save_test_id(15), settings_save_test_id(16))
-    additions := []collections.Mutation{second, third}
+    additions: []collections.Mutation = {second, third}
     for mutation in additions {
         testing.expect_value(t,
             viewpreferences.settings_save_collection_mutation(state, mutation),
@@ -484,6 +486,22 @@ settings_save_expect_committed_preferences :: proc(
     testing.expect(t, .Interface_Increased_Contrast in preferences.present)
 }
 
+// Populate one coalesced settings batch with repeated and independent edits.
+settings_save_test_set_coalesced_changes :: proc(
+    state: ^app_core.Euclid_General_State) {
+    pending := &state^.preferences_runtime.settings_pending
+    _ = setting_model.change_set_set(
+        pending, .Rendering_Vsync, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(
+        pending, .Rendering_Vsync, setting_model.boolean_value(false))
+    _ = setting_model.change_set_set(
+        pending, .Interface_Display_Fps, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(
+        pending, .Interface_Reduce_Motion, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(
+        pending, .Interface_Increased_Contrast, setting_model.boolean_value(true))
+}
+
 // Verify edits coalesce by setting and commit one batch on a worker.
 @(test)
 settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
@@ -499,24 +517,21 @@ settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
     defer settings_save_test_destroy_state(state)
     state^.preferences_runtime.settings_store = &store
     state^.ui_runtime.preferences.store_available = true
-    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
-        .Rendering_Vsync, setting_model.boolean_value(true))
-    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
-        .Rendering_Vsync, setting_model.boolean_value(false))
-    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
-        .Interface_Display_Fps, setting_model.boolean_value(true))
-    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
-        .Interface_Reduce_Motion, setting_model.boolean_value(true))
-    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
-        .Interface_Increased_Contrast, setting_model.boolean_value(true))
+    settings_save_test_set_coalesced_changes(state)
 
     viewpreferences.settings_save_service(state, &pool)
     testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)
     testing.expect(t, state^.preferences_runtime.settings_save_active)
+    testing.expect_value(t, state^.user_data_admission.owner,
+        protocol.User_Data_Connection_Client.Settings_Save)
+    testing.expect_value(t, state^.user_data_admission.phase,
+        protocol.User_Data_Connection_Admission_Phase.Submitted)
     testing.expect(t, settings_save_test_wait_terminal(state, &pool))
     testing.expect_value(t, state^.ui_runtime.preferences.save_status,
         preferencesmodel.Settings_Save_Status.Saved)
     settings_save_expect_committed_preferences(t, &store)
+    testing.expect(t, viewuserdata.connection_admission_is_idle(
+        &state^.user_data_admission))
     viewpreferences.settings_save_shutdown(state, &pool)
     taskpool.task_pool_destroy(&pool)
     testing.expect_value(t, user_data.store_close(&store).kind,
@@ -549,6 +564,8 @@ settings_save_retains_pending_batch_when_pool_is_full :: proc(t: ^testing.T) {
     viewpreferences.settings_save_service(state, &pool)
     testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 1)
     testing.expect(t, !state^.preferences_runtime.settings_save_active)
+    testing.expect(t, viewuserdata.connection_admission_is_idle(
+        &state^.user_data_admission))
     settings_save_test_release_worker(&gate)
     _, joined := taskpool.task_pool_wait(&pool, blocker)
     testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
@@ -558,6 +575,62 @@ settings_save_retains_pending_batch_when_pool_is_full :: proc(t: ^testing.T) {
     taskpool.task_pool_destroy(&pool)
     testing.expect_value(t, user_data.store_close(&store).kind,
         user_data.Store_Error_Kind.None)
+}
+
+// Verify settings waits until another borrower has joined and released its connection lease.
+@(test)
+settings_save_waits_for_other_borrower_join_before_admission :: proc(t: ^testing.T) {
+    path := settings_save_test_path(t)
+    defer settings_save_test_path_destroy(path)
+    testing.expect(t, path.valid)
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    pool: taskpool.Task_Pool
+    testing.expect(t, taskpool.task_pool_init(&pool, 1, 2))
+    gate: Settings_Save_Test_Gate
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    state^.preferences_runtime.settings_store = &store
+    blocker := settings_save_test_hold_history_lease(t, state, &pool, &gate)
+    settings_save_test_release_worker(&gate)
+    _, joined := taskpool.task_pool_wait(&pool, blocker)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+    viewpreferences.settings_save_service(state, &pool, true)
+    testing.expect(t, !state^.preferences_runtime.settings_save_active)
+    testing.expect(t, viewuserdata.connection_admission_release_joined(
+        &state^.user_data_admission, .Terminal_History))
+    viewpreferences.settings_save_service(state, &pool)
+    testing.expect(t, state^.preferences_runtime.settings_save_active)
+    testing.expect(t, settings_save_test_wait_terminal(state, &pool))
+    viewpreferences.settings_save_shutdown(state, &pool)
+    testing.expect(t, viewuserdata.connection_admission_drain_complete(
+        &state^.user_data_admission))
+    taskpool.task_pool_destroy(&pool)
+    testing.expect_value(t, user_data.store_close(&store).kind,
+        user_data.Store_Error_Kind.None)
+}
+
+// Hold a history lease through worker completion to prove settings waits for owner join.
+settings_save_test_hold_history_lease :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool, gate: ^Settings_Save_Test_Gate) -> taskpool.Task_Handle {
+    testing.expect(t, viewuserdata.connection_admission_claim(
+        &state^.user_data_admission, .Terminal_History, false, false))
+    blocker, outcome := taskpool.task_pool_submit(
+        pool, settings_save_test_block_worker, gate, .Worker_Only)
+    testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
+    testing.expect(t, viewuserdata.connection_admission_mark_submitted(
+        &state^.user_data_admission, .Terminal_History))
+    testing.expect(t, settings_save_test_wait_worker(gate))
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
+        .Drawing_Dust_Limit, setting_model.integer_value(1250))
+    viewpreferences.settings_save_service(state, pool, true)
+    testing.expect(t, !state^.preferences_runtime.settings_save_active)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 1)
+    testing.expect_value(t, state^.user_data_admission.owner,
+        protocol.User_Data_Connection_Client.Terminal_History)
+    return blocker
 }
 
 // Verify newer edits survive an in-flight save and shutdown joins accepted work.
@@ -619,7 +692,9 @@ settings_save_retry_merges_latest :: proc(t: ^testing.T) {
         .Interface_Display_Fps, setting_model.boolean_value(true))
     saves.settings_save_payload.result = {
         outcome = user_data.Commit_Outcome.Not_Committed,
-        failure = {kind = .Write},
+        failure = {
+            kind = .Write,
+        },
     }
     viewpreferences.settings_save_apply_result(state, .Failed)
     testing.expect_value(t, saves.settings_pending.count, 2)
@@ -652,7 +727,9 @@ settings_save_test_with_write_failure :: proc() ->
     }
     saves.settings_save_payload.result = {
         outcome = user_data.Commit_Outcome.Not_Committed,
-        failure = {kind = .Write},
+        failure = {
+            kind = .Write,
+        },
     }
     saves.settings_failure_count = 1
     viewpreferences.settings_save_apply_result(state, .Failed)
@@ -725,7 +802,9 @@ settings_save_test_apply_failed_collection_batch :: proc(
     saves^.settings_save_payload.mutation_count = len(failed)
     saves^.settings_save_payload.result = {
         outcome = user_data.Commit_Outcome.Not_Committed,
-        failure = {kind = .Write},
+        failure = {
+            kind = .Write,
+        },
     }
     saves^.settings_failure_count = 1
     viewpreferences.settings_save_apply_result(state, .Failed)
@@ -747,19 +826,19 @@ settings_save_retry_requeues_collection_operations_in_order :: proc(t: ^testing.
         settings_save_test_id(21), settings_save_test_id(22))
     following := settings_save_test_add_favorite(
         settings_save_test_id(23), settings_save_test_id(24))
-    move := collections.Mutation{
+    move: collections.Mutation = {
         kind = .Reorder_Siblings,
         placement = failed.placement,
         entry_id = failed.entry_id,
         sibling_entry_id = following.entry_id,
         direction = .Down,
     }
-    newer := collections.Mutation{
+    newer: collections.Mutation = {
         kind = .Remove_Favorite,
         placement = following.placement,
         entry_id = following.entry_id,
     }
-    failed_batch := []collections.Mutation{failed, following, move}
+    failed_batch: []collections.Mutation = {failed, following, move}
     settings_save_test_apply_failed_collection_batch(
         t, state, saves, failed_batch, newer)
     settings_save_test_expect_replay(
@@ -849,13 +928,15 @@ settings_save_test_expect_active_capacity_rejection :: proc(
     runtime := &state^.preferences_runtime
     ji: bridgemodel.Euclid_Julia_Interface
     ji.content_generation = 1
-    tree_params := uilibrary.Tree_List_Params{
+    tree_params: uilibrary.Tree_List_Params = {
         general_state = state,
         ji = &ji,
         collections = &runtime.collections_state,
         collections_revision = runtime.collection_revision,
         ui_runtime = &state^.ui_runtime,
-        visibility = {search = &state^.ui_runtime.library.search},
+        visibility = {
+            search = &state^.ui_runtime.library.search,
+        },
     }
     testing.expect(t, uilibrary.tree_projection_prepare(tree_params))
     projection := &state^.ui_runtime.library.tree.projection
@@ -924,7 +1005,9 @@ settings_save_window_shutdown_flushes_before_font_pool_teardown :: proc(t: ^test
     defer free(executor, context.allocator)
     defer taskpool.task_pool_destroy(&executor^.pool)
     testing.expect(t, font.cache_request(&state^.font_cache, .Bold))
-    testing.expect_value(t, shutdown_window_runtime({state = state}), 0)
+    testing.expect_value(t, shutdown_window_runtime({
+        state = state,
+    }), 0)
     testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)
     testing.expect_value(t,
         state^.preferences_runtime.settings_save_commit_count, u64(1))
@@ -1047,7 +1130,10 @@ library_entry_name_admission_failure_retains_draft :: proc(t: ^testing.T) {
     testing.expect(t, !uilibrary.library_entry_name_flush(state))
     testing.expect(t, state^.ui_runtime.library.entry_name.active)
     testing.expect(t, state^.ui_runtime.library.entry_name.dirty)
-    state^.ui_runtime.library.actions.drawer = {entry_id = entry_id, open = true}
+    state^.ui_runtime.library.actions.drawer = {
+        entry_id = entry_id,
+        open = true,
+    }
     testing.expect(t, !uilibrary.tree_actions_close_context(&state^.ui_runtime, state))
     testing.expect(t, state^.ui_runtime.library.actions.drawer.open)
     testing.expect_value(t,
@@ -1072,7 +1158,10 @@ library_entry_name_context_close_flushes_before_retirement :: proc(t: ^testing.T
         settings_save_test_id(56)), collections.Policy_Error.None)
     testing.expect(t, uilibrary.library_entry_name_begin(state, entry_id, "Point"))
     testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, "Start"))
-    state^.ui_runtime.library.actions.drawer = {entry_id = entry_id, open = true}
+    state^.ui_runtime.library.actions.drawer = {
+        entry_id = entry_id,
+        open = true,
+    }
     testing.expect(t, uilibrary.tree_actions_close_context(&state^.ui_runtime, state))
     testing.expect(t, !state^.ui_runtime.library.entry_name.active)
     testing.expect_value(t,

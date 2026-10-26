@@ -242,7 +242,9 @@ ui_route_logical_focus :: proc(
     terminal_present := input.terminal_present
     visible := uipresentation.ui_presentation_is_visible(&runtime^.presentation)
     if terminal_present && visible && !runtime^.input.interaction.terminal_was_present {
-        result = {kind = .Terminal}
+        result = {
+            kind = .Terminal,
+        }
     } else if (!terminal_present || !visible) && result.kind == .Terminal {
         result = {}
     }
@@ -300,7 +302,7 @@ ui_route_interaction_frame :: proc(
         uipresentation.ui_presentation_is_visible(&runtime^.presentation))
     wheel_target := ui_interaction_wheel_target(
         input.frame.mouse_wheel_delta, capture, hover)
-    result := viewmodel.Ui_Interaction_Frame{
+    result: viewmodel.Ui_Interaction_Frame = {
         logical_focus = logical_focus,
         effective_focus = logical_focus if input.frame.window_focused else {},
         hover = hover,

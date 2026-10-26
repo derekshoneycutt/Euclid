@@ -53,7 +53,10 @@ ui_dust_reclaim_excludes_ineligible_material :: proc(t: ^testing.T) {
     system := ui_dust_test_system({0, 0, 200, 200})
     defer free(system, context.allocator)
     floor := ui_dust_slot_emit(system, {
-        phase = .Resting_Departure, pos_x = 50, pos_y = 199, life = 1,
+        phase = .Resting_Departure,
+        pos_x = 50,
+        pos_y = 199,
+        life = 1,
         color = {20, 40, 60, 255},
     })
     testing.expect(t, ui_dust_emit(system, {40, 40}, {20, 40, 60, 255}, 255, 0))
@@ -63,7 +66,10 @@ ui_dust_reclaim_excludes_ineligible_material :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_dust_test_phase_count(system, .Reclaimed_Arrival), 0)
     testing.expect(t, ui_dust_slot_valid(system, floor))
     ui_dust_settle(system)
-    ui_dust_validate_context(system, {visible = true, viewport = {0, 0, 200, 200}})
+    ui_dust_validate_context(system, {
+        visible = true,
+        viewport = {0, 0, 200, 200},
+    })
     system^.transition = .Independent
     testing.expect(t, ui_dust_emit(system, {40, 40}, {20, 40, 60, 255}, 255, 1))
     ui_dust_test_reclaim_targets(system, 3)
@@ -81,7 +87,10 @@ ui_dust_reclaim_comparison_styles_clear_replacements :: proc(t: ^testing.T) {
         ui_dust_begin_departure(system, 2, style)
         testing.expect_value(t, system^.live_count, int(style == .Falling_Ink))
         ui_dust_settle(system)
-        ui_dust_validate_context(system, {visible = true, viewport = {0, 0, 200, 200}})
+        ui_dust_validate_context(system, {
+            visible = true,
+            viewport = {0, 0, 200, 200},
+        })
         testing.expect(t, ui_dust_emit(system, {40, 40}, {20, 40, 60, 255}, 255, 1))
         ui_dust_begin_arrival(system, 2, style)
         ui_dust_begin_departure(system, 3, .Falling_Ink)
@@ -118,7 +127,7 @@ ui_dust_reclaim_continuous_takeover_and_endpoint :: proc(t: ^testing.T) {
     defer free(system, context.allocator)
     testing.expect(t, ui_dust_emit(system, {60, 30}, {200, 80, 40, 255}, 192, 0.7))
     ui_dust_advance(system, 0.1)
-    reference := Ui_Dust_Slot_Ref{0, system^.order[0].generation}
+    reference: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
     before, _ := ui_dust_evaluate(system, reference)
     age := system^.particles.age[0]
     order := system^.order[0]
@@ -149,7 +158,7 @@ ui_dust_reclaim_interruption_preserves_visible_history :: proc(t: ^testing.T) {
         system := ui_dust_test_system({0, 0, 400, 1200})
         testing.expect(t, ui_dust_test_formation(system, 1, {80, 100}))
         ui_dust_advance(system, elapsed)
-        reference := Ui_Dust_Slot_Ref{0, system^.order[0].generation}
+        reference: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
         before, _ := ui_dust_evaluate(system, reference)
         age := system^.particles.age[0]
         ui_dust_begin_departure(system, 2)
@@ -209,7 +218,8 @@ ui_dust_test_fill_reclaim_capacity :: proc(system: ^Ui_Dust_System) {
             phase = .Airborne_Departure,
             pos_x = f32(index % 128) + 10,
             pos_y = f32(index / 128) + 10,
-            color = {20, 40, 60, 255}, life = 1,
+            color = {20, 40, 60, 255},
+            life = 1,
         })
     }
     ui_dust_begin_arrival(system, 2, .Falling_Ink)
@@ -245,12 +255,18 @@ ui_dust_reclaim_shortage_eviction_keeps_deadline :: proc(t: ^testing.T) {
     system := ui_dust_test_system({0, 0, 400, 400})
     defer free(system, context.allocator)
     oldest := ui_dust_slot_emit(system, {
-        phase = .Airborne_Departure, pos_x = 20, pos_y = 20, color = {20, 40, 60, 255},
+        phase = .Airborne_Departure,
+        pos_x = 20,
+        pos_y = 20,
+        color = {20, 40, 60, 255},
     })
     for _ in 1..<UI_DUST_TOTAL_PARTICLES {
         _ = ui_dust_slot_emit(system, {
-            phase = .Resting_Departure, pos_x = 20, pos_y = 399,
-            life = 1, color = {20, 40, 60, 255},
+            phase = .Resting_Departure,
+            pos_x = 20,
+            pos_y = 399,
+            life = 1,
+            color = {20, 40, 60, 255},
         })
     }
     ui_dust_test_reclaim_targets(system, 3)

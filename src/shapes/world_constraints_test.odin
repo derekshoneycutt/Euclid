@@ -35,8 +35,12 @@ world_constraint_test_distance_parity_case :: proc(
     first := world_constraint_test_point(world, {-1, 0, 0})
     second := world_constraint_test_point(world, {1, 0, 0})
     _, status := world_create_distance_constraint(world, {
-        first = first, second = second, length = 6,
-        movement = movement, enabled = true})
+        first = first,
+        second = second,
+        length = 6,
+        movement = movement,
+        enabled = true,
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_apply_all_constraints(world)
 
@@ -68,11 +72,17 @@ world_constraints_reject_invalid_targets_without_append :: proc(t: ^testing.T) {
     before := world.constraints.count
 
     _, stale_status := world_create_distance_constraint(world, {
-        first = baseline, second = stale, length = 1, enabled = true})
+        first = baseline,
+        second = stale,
+        length = 1,
+        enabled = true,
+    })
     host, host_status := world_create_line(
         world, {}, {1, 0, 0}, Shape_Style{})
     _, host_target_status := world_create_floor_constraint(world, {
-        point = host.shape, enabled = true})
+        point = host.shape,
+        enabled = true,
+    })
 
     testing.expect_value(t, stale_status, shapemodel.Shape_World_Status.Not_Found)
     testing.expect_value(t, host_status, shapemodel.Shape_World_Status.Ok)
@@ -89,8 +99,14 @@ world_constraints_stale_target_is_safe_at_solve_time :: proc(t: ^testing.T) {
     testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
         world), shapemodel.Shape_World_Status.Ok)
     stale := world_constraint_test_point(world, {1, 0, 0})
-    constraint := shapemodel.Shape_Constraint{kind = .Snap_Point, enabled = true}
-    constraint.payload.snap_point = {point = stale, position = {9, 0, 0}}
+    constraint: shapemodel.Shape_Constraint = {
+        kind = .Snap_Point,
+        enabled = true,
+    }
+    constraint.payload.snap_point = {
+        point = stale,
+        position = {9, 0, 0},
+    }
     testing.expect_value(t, shapemodel.shape_world_rewind_animation(
         world), shapemodel.Shape_World_Status.Ok)
     current := world_constraint_test_point(world, {2, 0, 0})
@@ -111,9 +127,15 @@ world_constraints_preserve_forward_and_reverse_order :: proc(t: ^testing.T) {
     defer free(world, context.allocator)
     point := world_constraint_test_point(world, {})
     _, first_status := world_create_snap_point_constraint(world, {
-        point = point, position = {1, 0, 0}, enabled = true})
+        point = point,
+        position = {1, 0, 0},
+        enabled = true,
+    })
     _, second_status := world_create_snap_point_constraint(world, {
-        point = point, position = {2, 0, 0}, enabled = true})
+        point = point,
+        position = {2, 0, 0},
+        enabled = true,
+    })
     testing.expect_value(t, first_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, second_status, shapemodel.Shape_World_Status.Ok)
 
@@ -132,7 +154,11 @@ world_constraints_solve_to_allowed_error :: proc(t: ^testing.T) {
     defer free(world, context.allocator)
     point := world_constraint_test_point(world, {0, 0, -2})
     _, status := world_create_snap_to_floor_constraint(world, {
-        point = point, height = 0, allowance = 0.01, enabled = true})
+        point = point,
+        height = 0,
+        allowance = 0.01,
+        enabled = true,
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, world_total_constraint_error(world), f32(2))
 
@@ -149,9 +175,15 @@ world_constraints_nonconvergent_solve_is_bounded :: proc(t: ^testing.T) {
     defer free(world, context.allocator)
     point := world_constraint_test_point(world, {})
     _, first_status := world_create_snap_point_constraint(world, {
-        point = point, position = {1, 0, 0}, enabled = true})
+        point = point,
+        position = {1, 0, 0},
+        enabled = true,
+    })
     _, second_status := world_create_snap_point_constraint(world, {
-        point = point, position = {2, 0, 0}, enabled = true})
+        point = point,
+        position = {2, 0, 0},
+        enabled = true,
+    })
     testing.expect_value(t, first_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, second_status, shapemodel.Shape_World_Status.Ok)
 
@@ -166,9 +198,12 @@ world_constraints_compass_locks_keep_hinge_above_floor :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
     compass, status := world_create_compass(world, {
-        joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
-        joint2 = {0.02, 0.02, 0}, limb_length = 0.35,
-        style = Shape_Style{}})
+        joint1 = {0, 0, 0},
+        pivot = {0.01, 0.01, 0.01},
+        joint2 = {0.02, 0.02, 0},
+        limb_length = 0.35,
+        style = Shape_Style{},
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     for iteration in 0..<64 {
         if iteration & 1 == 0 {
@@ -206,8 +241,12 @@ world_constraints_reject_non_angle_kind_for_angle_payload :: proc(t: ^testing.T)
     pivot := world_constraint_test_point(world, {})
     second := world_constraint_test_point(world, {0, 1, 0})
     _, status := world_create_angle_constraint(world, .Distance, {
-        first = first, pivot = pivot, second = second,
-        limit = 1, enabled = true})
+        first = first,
+        pivot = pivot,
+        second = second,
+        limit = 1,
+        enabled = true,
+    })
 
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Invalid_Argument)
     testing.expect_value(t, world.constraints.count, u16(0))
@@ -221,13 +260,21 @@ world_constraints_rewind_to_baseline_frontier :: proc(t: ^testing.T) {
     first := world_constraint_test_point(world, {})
     second := world_constraint_test_point(world, {1, 0, 0})
     _, baseline_status := world_create_distance_constraint(world, {
-        first = first, second = second, length = 1, enabled = true})
+        first = first,
+        second = second,
+        length = 1,
+        enabled = true,
+    })
     testing.expect_value(t, baseline_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
         world), shapemodel.Shape_World_Status.Ok)
     animation := world_constraint_test_point(world, {2, 0, 0})
     _, animation_status := world_create_distance_constraint(world, {
-        first = second, second = animation, length = 1, enabled = true})
+        first = second,
+        second = animation,
+        length = 1,
+        enabled = true,
+    })
     testing.expect_value(t, animation_status, shapemodel.Shape_World_Status.Ok)
 
     testing.expect_value(t, shapemodel.shape_world_rewind_animation(

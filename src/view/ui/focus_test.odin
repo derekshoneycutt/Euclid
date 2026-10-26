@@ -19,7 +19,10 @@ semantic_test_publish_scaled :: proc(
         node.position_in_set = 70000
         node.set_size = 80000
         testing.expect_value(t, uisemantics.semantic_register_node(state,
-            {node = node, label = "Reusable semantic node"}),
+            {
+                node = node,
+                label = "Reusable semantic node",
+            }),
             viewmodel.Ui_Semantic_Status.Ok)
     }
     testing.expect_value(t, uisemantics.semantic_publish(state),
@@ -59,11 +62,16 @@ semantic_parent_cycles_reject_without_replacing_snapshot :: proc(t: ^testing.T) 
     first := semantic_test_id(.Animation_Tree, 1)
     second := semantic_test_id(.Animation_Tree, 2)
     testing.expect_value(t, uisemantics.semantic_register_node(&state,
-        {node = semantic_test_node(first, second), label = "first"}),
+        {
+            node = semantic_test_node(first, second),
+            label = "first",
+        }),
         viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(&state,
-        {node = semantic_test_node(second, first, .Accordion_Content, 1),
-         label = "second"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = semantic_test_node(second, first, .Accordion_Content, 1),
+            label = "second",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_publish(&state),
         viewmodel.Ui_Semantic_Status.Missing_Parent)
     testing.expect_value(t, uisemantics.semantic_snapshot(&state), accepted)
@@ -73,7 +81,11 @@ semantic_parent_cycles_reject_without_replacing_snapshot :: proc(t: ^testing.T) 
 semantic_test_id :: proc(
     domain: viewmodel.Ui_Node_Domain, local_id: u64,
     generation: u64 = 0) -> viewmodel.Ui_Node_Id {
-    return {domain = domain, local_id = local_id, generation = generation}
+    return {
+        domain = domain,
+        local_id = local_id,
+        generation = generation,
+    }
 }
 
 // semantic_test_node constructs one visible and enabled focus candidate.
@@ -97,8 +109,11 @@ semantic_test_node :: proc(
 semantic_identity_is_domain_and_generation_qualified :: proc(t: ^testing.T) {
     stable_id, read_error := uuid.read("11111111-1111-4111-8111-111111111111")
     testing.expect(t, read_error == nil)
-    base := viewmodel.Ui_Node_Id{
-        domain = .Animation_Tree, stable_id = stable_id, generation = 1}
+    base: viewmodel.Ui_Node_Id = {
+        domain = .Animation_Tree,
+        stable_id = stable_id,
+        generation = 1,
+    }
     other_domain := base
     other_domain.domain = .Presentation
     other_generation := base
@@ -115,7 +130,7 @@ semantic_registration_owns_utf8_and_publishes_atomically :: proc(t: ^testing.T) 
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(state)
-    label := [6]u8{'R', 'e', 's', 'u', 'm', 'e'}
+    label: [6]u8 = {'R', 'e', 's', 'u', 'm', 'e'}
     testing.expect(t, uisemantics.semantic_begin(state))
     status := uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Animation_Control, 1)),
@@ -148,7 +163,10 @@ semantic_duplicate_rejects_publication :: proc(t: ^testing.T) {
     id := semantic_test_id(.Settings_Control, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = semantic_test_node(id), label = "First"}),
+        {
+            node = semantic_test_node(id),
+            label = "First",
+        }),
         viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
@@ -156,10 +174,16 @@ semantic_duplicate_rejects_publication :: proc(t: ^testing.T) {
 
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = semantic_test_node(id), label = "First"}),
+        {
+            node = semantic_test_node(id),
+            label = "First",
+        }),
         viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = semantic_test_node(id), label = "Duplicate"}),
+        {
+            node = semantic_test_node(id),
+            label = "Duplicate",
+        }),
         viewmodel.Ui_Semantic_Status.Duplicate_Id)
     testing.expect_value(t, uisemantics.semantic_publish(state),
         viewmodel.Ui_Semantic_Status.Duplicate_Id)
@@ -185,11 +209,13 @@ semantic_validation_rejects_invalid_relations :: proc(t: ^testing.T) {
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Settings_Control, 1), {},
-            .Accordion_Content, 4), label = "First",
+            .Accordion_Content, 4),
+        label = "First",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Settings_Control, 2), {},
-            .Accordion_Content, 4), label = "Second",
+            .Accordion_Content, 4),
+        label = "Second",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_publish(state),
         viewmodel.Ui_Semantic_Status.Traversal_Collision)
@@ -201,7 +227,7 @@ semantic_registration_rejects_text_atomically :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(state)
-    invalid := [1]u8{0xff}
+    invalid: [1]u8 = {0xff}
     testing.expect(t, uisemantics.semantic_begin(state))
     staging := uisemantics.semantic_staging_snapshot(state)
     staging^.text_count = int(max(u32)) - 1
@@ -271,11 +297,13 @@ semantic_registration_accepts_maximum_text_capacity :: proc(t: ^testing.T) {
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Application, 1), {},
-            .Animation_Overlay, 0), label = string(text),
+            .Animation_Overlay, 0),
+        label = string(text),
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Application, 2), {},
-            .Animation_Overlay, 1), label = string(text),
+            .Animation_Overlay, 1),
+        label = string(text),
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
@@ -309,22 +337,25 @@ semantic_focus_repairs_deterministically :: proc(t: ^testing.T) {
     first := semantic_test_id(.Settings_Control, 1)
     middle := semantic_test_id(.Settings_Control, 2)
     last := semantic_test_id(.Settings_Control, 3)
-    ids := [3]viewmodel.Ui_Node_Id{first, middle, last}
+    ids: [3]viewmodel.Ui_Node_Id = {first, middle, last}
     semantic_test_publish_controls(t, state, ids[:])
     state^.logical_focus = middle
     state^.focus_origin = .Keyboard
 
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
-        node = semantic_test_node(first, {}, .Accordion_Content, 0), label = "First",
+        node = semantic_test_node(first, {}, .Accordion_Content, 0),
+        label = "First",
     }), viewmodel.Ui_Semantic_Status.Ok)
     disabled_middle := semantic_test_node(middle, {}, .Accordion_Content, 1)
     disabled_middle.states -= {.Enabled}
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
-        node = disabled_middle, label = "Disabled",
+        node = disabled_middle,
+        label = "Disabled",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
-        node = semantic_test_node(last, {}, .Accordion_Content, 2), label = "Last",
+        node = semantic_test_node(last, {}, .Accordion_Content, 2),
+        label = "Last",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
@@ -348,12 +379,13 @@ semantic_focus_repairs_within_composite_first :: proc(t: ^testing.T) {
     middle := semantic_test_id(.Animation_Tree, 3)
     last := semantic_test_id(.Animation_Tree, 4)
     testing.expect(t, uisemantics.semantic_begin(state))
-    ids := [4]viewmodel.Ui_Node_Id{parent, first, middle, last}
+    ids: [4]viewmodel.Ui_Node_Id = {parent, first, middle, last}
     for id, index in ids {
         node_parent := index == 0 ? viewmodel.Ui_Node_Id{} : parent
         testing.expect_value(t, uisemantics.semantic_register_node(state, {
             node = semantic_test_node(id, node_parent, .Accordion_Content,
-                u32(index)), label = "Tree node",
+                u32(index)),
+            label = "Tree node",
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
     testing.expect_value(t,
@@ -361,13 +393,14 @@ semantic_focus_repairs_within_composite_first :: proc(t: ^testing.T) {
     state^.logical_focus = middle
 
     testing.expect(t, uisemantics.semantic_begin(state))
-    remaining := [3]viewmodel.Ui_Node_Id{parent, first, last}
-    orders := [3]u32{0, 1, 3}
+    remaining: [3]viewmodel.Ui_Node_Id = {parent, first, last}
+    orders: [3]u32 = {0, 1, 3}
     for id, index in remaining {
         node_parent := index == 0 ? viewmodel.Ui_Node_Id{} : parent
         testing.expect_value(t, uisemantics.semantic_register_node(state, {
             node = semantic_test_node(id, node_parent, .Accordion_Content,
-                orders[index]), label = "Tree node",
+                orders[index]),
+            label = "Tree node",
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
     testing.expect_value(t,
@@ -385,28 +418,44 @@ semantic_keyboard_traversal_is_ordered_and_bounded :: proc(t: ^testing.T) {
     second := semantic_test_id(.Accordion, 1)
     third := semantic_test_id(.Settings_Control, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
-    nodes := [3]viewmodel.Ui_Semantic_Node{
+    nodes: [3]viewmodel.Ui_Semantic_Node = {
         semantic_test_node(third, {}, .Accordion_Content, 0),
         semantic_test_node(first, {}, .Animation_Overlay, 4),
         semantic_test_node(second, {}, .Accordion_Headers, 2),
     }
     for node in nodes {
         testing.expect_value(t, uisemantics.semantic_register_node(state,
-            {node = node, label = "Control"}), viewmodel.Ui_Semantic_Status.Ok)
+            {
+                node = node,
+                label = "Control",
+            }), viewmodel.Ui_Semantic_Status.Ok)
     }
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
-    events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+    }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, claims.claimed[0])
     testing.expect_value(t, state^.logical_focus, first)
-    _ = uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    _ = uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect_value(t, state^.logical_focus, second)
     events[0].modifiers = {.Shift}
-    _ = uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    _ = uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect_value(t, state^.logical_focus, first)
-    _ = uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    _ = uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect_value(t, state^.logical_focus, third)
 }
 
@@ -427,7 +476,10 @@ semantic_keyboard_traversal_uses_composite_anchor :: proc(t: ^testing.T) {
     item_node := semantic_test_node(item, tree, .Accordion_Content, 1)
     item_node.states -= {.Tab_Stop}
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = item_node, label = "Item"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = item_node,
+            label = "Item",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
         node = semantic_test_node(after, {}, .Accordion_Content, 2),
         label = "After",
@@ -435,9 +487,16 @@ semantic_keyboard_traversal_uses_composite_anchor :: proc(t: ^testing.T) {
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = item
-    events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+    }
 
-    _ = uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    _ = uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect_value(t, state^.logical_focus, after)
 }
 
@@ -453,20 +512,33 @@ semantic_terminal_escape_preserves_plain_tab :: proc(t: ^testing.T) {
     terminal_node := semantic_test_node(terminal, {}, .Presentation, 1)
     terminal_node.role = .Terminal
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = terminal_node, label = "Terminal"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = terminal_node,
+            label = "Terminal",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
-        node = semantic_test_node(after, {}, .Animation_Overlay, 1), label = "After",
+        node = semantic_test_node(after, {}, .Animation_Overlay, 1),
+        label = "After",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = terminal
-    events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+    }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, !claims.claimed[0])
     testing.expect_value(t, state^.logical_focus, terminal)
     events[0].modifiers = {.Control}
-    claims = uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims = uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, claims.claimed[0])
     testing.expect_value(t, state^.logical_focus, after)
 }
@@ -483,16 +555,27 @@ semantic_keyboard_routes_role_commands :: proc(t: ^testing.T) {
     node.role = .Slider
     node.actions = {.Focus, .Increment, .Decrement, .Set_To_Bound}
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = node, label = "Maximum particles"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = node,
+            label = "Maximum particles",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = slider
-    events := [2]input.Input_Event{
-        {kind = .Repeat, key = .Right},
-        {kind = .Press, key = .Page_Down},
+    events: [2]input.Input_Event = {
+        {
+            kind = .Repeat,
+            key = .Right,
+        },
+        {
+            kind = .Press,
+            key = .Page_Down,
+        },
     }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, claims.claimed[0] && claims.claimed[1])
     testing.expect_value(t, state^.command_count, 2)
     testing.expect_value(t, state^.commands[0].kind,
@@ -509,11 +592,20 @@ semantic_keyboard_leaves_tab_unclaimed_without_target :: proc(t: ^testing.T) {
     state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(state, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(state)
-    events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+    }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, !claims.claimed[0])
-    claims = uisemantics.semantic_route_keyboard(state, {events = events[:]}, true)
+    claims = uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    }, true)
     testing.expect(t, !claims.claimed[0])
 }
 
@@ -526,14 +618,22 @@ semantic_terminal_ownership_suppresses_control_commands :: proc(t: ^testing.T) {
     button := semantic_test_id(.Accordion, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
-        node = semantic_test_node(button), label = "Library",
+        node = semantic_test_node(button),
+        label = "Library",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = button
-    events := [1]input.Input_Event{{kind = .Press, key = .Enter}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+    }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]}, true)
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    }, true)
     testing.expect(t, !claims.claimed[0])
     testing.expect_value(t, state^.command_count, 0)
 }
@@ -550,9 +650,11 @@ semantic_publication_marks_keyboard_focus_visible :: proc(t: ^testing.T) {
     state^.window_focused = true
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
-        id = button, role = .Button,
+        id = button,
+        role = .Button,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Activate}, region = .Animation_Overlay,
+        actions = {.Focus, .Activate},
+        region = .Animation_Overlay,
         label = "Restart animation",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
@@ -563,9 +665,11 @@ semantic_publication_marks_keyboard_focus_visible :: proc(t: ^testing.T) {
     state^.focus_origin = .Pointer
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
-        id = button, role = .Button,
+        id = button,
+        role = .Button,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Activate}, region = .Animation_Overlay,
+        actions = {.Focus, .Activate},
+        region = .Animation_Overlay,
         label = "Restart animation",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
@@ -583,9 +687,11 @@ semantic_external_button_actions_validate_and_coalesce :: proc(t: ^testing.T) {
     button := semantic_test_id(.Animation_Control, 2101)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
-        id = button, role = .Button,
+        id = button,
+        role = .Button,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Activate}, region = .Animation_Overlay,
+        actions = {.Focus, .Activate},
+        region = .Animation_Overlay,
         label = "Restart animation",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
@@ -598,8 +704,11 @@ semantic_external_button_actions_validate_and_coalesce :: proc(t: ^testing.T) {
         uisemantics.semantic_apply_external_action(state, button, .Activate))
     testing.expect(t, uisemantics.semantic_command_requested(state, button, .Activate))
     action := uiwidgets.button_resolve_action({
-        semantics = {focus = state, id = button,
-            states = {.Visible, .Enabled, .Focusable}},
+        semantics = {
+            focus = state,
+            id = button,
+            states = {.Visible, .Enabled, .Focusable},
+        },
         pointer_activated = true,
     })
     testing.expect(t, action.activated)
@@ -615,7 +724,8 @@ semantic_external_slider_value_retains_payload :: proc(t: ^testing.T) {
     slider := semantic_test_id(.Settings_Control, 6101)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
-        id = slider, role = .Slider,
+        id = slider,
+        role = .Slider,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Increment, .Decrement, .Set_Value},
         numeric_range = {0, 100, 25, 1, .Horizontal, true},
@@ -638,8 +748,11 @@ semantic_external_button_actions_reject_invalid_targets :: proc(t: ^testing.T) {
     button := semantic_test_id(.Animation_Control, 2101)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_control(state, {
-        id = button, role = .Button, states = {.Visible, .Focusable},
-        actions = {.Focus, .Activate}, label = "Restart animation",
+        id = button,
+        role = .Button,
+        states = {.Visible, .Focusable},
+        actions = {.Focus, .Activate},
+        label = "Restart animation",
     }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
@@ -664,13 +777,23 @@ semantic_keyboard_rejects_unadvertised_action :: proc(t: ^testing.T) {
     node := semantic_test_node(button)
     node.actions = {.Focus}
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = node, label = "Save"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = node,
+            label = "Save",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = button
-    events := [1]input.Input_Event{{kind = .Press, key = .Enter}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+    }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, !claims.claimed[0])
     testing.expect_value(t, state^.command_count, 0)
 }
@@ -685,19 +808,30 @@ semantic_terminal_reverse_escape_wraps_backward :: proc(t: ^testing.T) {
     terminal := semantic_test_id(.Terminal, 1)
     testing.expect(t, uisemantics.semantic_begin(state))
     testing.expect_value(t, uisemantics.semantic_register_node(state, {
-        node = semantic_test_node(first, {}, .Animation_Overlay, 1), label = "First",
+        node = semantic_test_node(first, {}, .Animation_Overlay, 1),
+        label = "First",
     }), viewmodel.Ui_Semantic_Status.Ok)
     terminal_node := semantic_test_node(terminal, {}, .Presentation, 1)
     terminal_node.role = .Terminal
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = terminal_node, label = "Terminal"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = terminal_node,
+            label = "Terminal",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = terminal
-    events := [1]input.Input_Event{{
-        kind = .Press, key = .Tab, modifiers = {.Control, .Shift}}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Tab,
+            modifiers = {.Control, .Shift},
+        },
+    }
 
-    claims := uisemantics.semantic_route_keyboard(state, {events = events[:]})
+    claims := uisemantics.semantic_route_keyboard(state, {
+        events = events[:],
+    })
     testing.expect(t, claims.claimed[0])
     testing.expect_value(t, state^.logical_focus, first)
 }
@@ -717,7 +851,10 @@ semantic_traversal_test_state :: proc(
     terminal_node := semantic_test_node(terminal, {}, .Presentation, 1)
     terminal_node.role = .Terminal
     testing.expect_value(t, uisemantics.semantic_register_node(state,
-        {node = terminal_node, label = "Terminal"}), viewmodel.Ui_Semantic_Status.Ok)
+        {
+            node = terminal_node,
+            label = "Terminal",
+        }), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t,
         uisemantics.semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
     state^.logical_focus = terminal
@@ -729,13 +866,19 @@ semantic_traversal_test_runtime :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State) -> viewmodel.Euclid_Ui_Runtime_State {
     return viewmodel.Euclid_Ui_Runtime_State{
         semantic_focus = state,
-        presentation = {visible = true},
+        presentation = {
+            visible = true,
+        },
         input = {
             interaction = {
-                logical_focus = {kind = .Terminal},
+                logical_focus = {
+                    kind = .Terminal,
+                },
                 terminal_effectively_focused = true,
             },
-            interaction_frame = {terminal_focused = true},
+            interaction_frame = {
+                terminal_focused = true,
+            },
         },
     }
 }
@@ -746,9 +889,17 @@ semantic_traversal_updates_surface_focus_same_frame :: proc(t: ^testing.T) {
     state := semantic_traversal_test_state(t)
     defer free(state, context.allocator)
     runtime := semantic_traversal_test_runtime(state)
-    events := [1]input.Input_Event{{
-        kind = .Press, key = .Tab, modifiers = {.Control}}}
-    frame := input.Input_Frame{events = events[:], window_focused = true}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Tab,
+            modifiers = {.Control},
+        },
+    }
+    frame: input.Input_Frame = {
+        events = events[:],
+        window_focused = true,
+    }
 
     _ = uisemantics.semantic_route_keyboard(state, frame, true)
     ui_apply_semantic_focus(&runtime, frame, true)

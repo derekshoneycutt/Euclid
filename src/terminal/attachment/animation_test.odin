@@ -23,11 +23,17 @@ attachment_test_fill_animation :: proc(preparation: Animation_Preparation) {
         preparation.pixels[index] = u8(index)
     }
     preparation.frames[0] = {
-        pixels = {offset = 0, count = 16},
+        pixels = {
+            offset = 0,
+            count = 16,
+        },
         duration_ns = 20_000_000,
     }
     preparation.frames[1] = {
-        pixels = {offset = 16, count = 16},
+        pixels = {
+            offset = 16,
+            count = 16,
+        },
         duration_ns = 30_000_000,
     }
 }

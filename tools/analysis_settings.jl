@@ -61,6 +61,15 @@ const RuleResponses = Dict(
     "ODIN-SYNTAX" => Fail,
     "ODIN-BUILD-FAILED" => Fail,
     "ODIN-CLOSING-PAREN-PLACEMENT" => Fail,
+    "ODIN-DECLARATION-COLON-SPACING" => Fail,
+    "ODIN-EQUALS-SPACING" => Fail,
+    "ODIN-INFERRED-DECLARATION-SPACING" => Fail,
+    "ODIN-CONSTANT-DECLARATION-SPACING" => Fail,
+    "ODIN-SINGLE-LINE-CONTROL-BODY" => Fail,
+    "ODIN-DO-CONTROL-BODY" => Fail,
+    "ODIN-CASE-BODY-PLACEMENT" => Fail,
+    "ODIN-NAMED-INITIALIZER-LAYOUT" => Fail,
+    "ODIN-COMPOUND-LITERAL-DECLARATION" => Fail,
     "ODIN-NAMING" => Warn,
     "ODIN-NONCONST-GLOBAL" => Warn,
     "ODIN-DECLARATION-ORDER" => Fail,
@@ -374,6 +383,14 @@ end
 """Review failure-test allocator callback signatures required by the Odin ABI."""
 function add_allocator_callback_reviews!(reviews)
     push!(reviews, ReviewedComplexity(
+        "test-content-scratch-allocator-parameters",
+        "src/view/content/scratch_test.odin",
+        :odin,
+        "content_test_scratch_allocator",
+        :parameters,
+        "The test scratch allocator wrapper preserves Odin's required seven-parameter allocator callback signature.";
+        response=Ignore))
+    push!(reviews, ReviewedComplexity(
         "test-bounded-builder-allocator-parameters",
         "src/core/storage/bounded_builder_test.odin",
         :odin,
@@ -484,7 +501,10 @@ AnalysisSettings(
         BaseSettings.function_metrics.odin_lines,
         BaseSettings.function_metrics.julia_cyclomatic,
         BaseSettings.function_metrics.odin_cyclomatic,
-        animation_loop_reviews()),
+        animation_loop_reviews();
+        odin_line_count_mode=:aggregate_initializers,
+        odin_flat_switch_enabled=true,
+        odin_flat_switch_max_outside_lines=6),
     euclid_architecture_settings(),
     AllocationSettings(
         BaseSettings.allocations.known_procedures,
@@ -1246,32 +1266,6 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "terminal-history-entry-storage",
-                "src/terminal/history/termhist.odin",
-                "termhist_allocate_storage",
-                :custom,
-                "History entry storage releases through the borrowed domain before owner teardown.";
-                operation="make",
-                target="[]Termhist_Entry",
-                allocator_source="state.borrowed_allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "terminal-history-cloned-text",
-                "src/terminal/history/termhist.odin",
-                "termhist_clone_text",
-                :custom,
-                "Exact UTF-8 history snapshots release on replacement or teardown under allocator policy.";
-                operation="make",
-                target="[]u8",
-                allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
                 "terminal-hyperlink-registry",
                 "src/terminal/hyperlink/hyperlink.odin",
                 "hyperlink_registry_init",
@@ -1332,19 +1326,6 @@ AnalysisSettings(
                 operation="new",
                 target="model.Terminal_Highlighting",
                 allocator_source="allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "terminal-history-entry-growth",
-                "src/terminal/history/termhist.odin",
-                "termhist_ensure_history_capacity",
-                :custom,
-                "History growth replaces storage and issues releases through the borrowed allocation domain.";
-                operation="make",
-                target="[]Termhist_Entry",
-                allocator_source="state.borrowed_allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -2126,6 +2107,32 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "taskpool-test-worker-scratch-buffers",
+                "src/taskpool/taskpool_test.odin",
+                "task_test_allocate_scratch",
+                :temporary,
+                "Test-only worker buffers exercise temporary-arena growth and are reclaimed when the worker task scratch is rewound after each joined task.";
+                operation="make",
+                target="[]u8",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "taskpool-test-caller-scratch-buffer",
+                "src/taskpool/taskpool_test.odin",
+                "task_pool_test_helping_preserves_scratch",
+                :temporary,
+                "Test-only caller buffer remains live across owner-helped tasks to verify scratch preservation, then is reclaimed by the test temporary-allocator reset.";
+                operation="make",
+                target="[]u8",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             # Native terminal backends reserve one fixed workspace for their complete
             # lifetime and destroy it on initialization failure or backend teardown.
             ReviewedAllocationPolicy(
@@ -2736,4 +2743,5 @@ AnalysisSettings(
             "analysis-extension:sdl-extension_phases", :julia,
             "extension_phases", "tools/sdl_boundary_analysis.jl",
             "The analyzer invokes this SDL boundary method through Base.invokelatest")],
-        ReviewedImportPolicy[]))
+        ReviewedImportPolicy[]),
+    BaseSettings.odin_spacing)

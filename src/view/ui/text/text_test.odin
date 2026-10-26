@@ -36,8 +36,16 @@ text_test_shape_label_ink :: proc(
     if len(output) < 2 {
         return 0, false
     }
-    output[0] = {glyph_id = 11, cluster = 0, x_advance = 640}
-    output[1] = {glyph_id = 12, cluster = 1, x_advance = 640}
+    output[0] = {
+        glyph_id = 11,
+        cluster = 0,
+        x_advance = 640,
+    }
+    output[1] = {
+        glyph_id = 12,
+        cluster = 1,
+        x_advance = 640,
+    }
     return 2, true
 }
 
@@ -48,8 +56,15 @@ text_test_resolve_label_ink_glyph :: proc(
     state := cast(^Label_Ink_Resolver_Test_State)user_data
     return {
         glyph_id = glyph_id,
-        texture = {handle = rawptr(uintptr(1)), width = 32, height = 32},
-        source = {width = 8, height = 10},
+        texture = {
+            handle = rawptr(uintptr(1)),
+            width = 32,
+            height = 32,
+        },
+        source = {
+            width = 8,
+            height = 10,
+        },
         raster_pixel_height = 32,
         raster_ascent = 24,
         canonical_pixel_height = 32,
@@ -87,8 +102,17 @@ text_test_resolved_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
     ui_text_draw_resolved_glyph({
         encoder = &encoder,
         resolved = {
-            texture = {handle = texture, width = 32, height = 32},
-            source = {x = 1, y = 2, width = 8, height = 10},
+            texture = {
+                handle = texture,
+                width = 32,
+                height = 32,
+            },
+            source = {
+                x = 1,
+                y = 2,
+                width = 8,
+                height = 10,
+            },
             raster_pixel_height = 32,
             raster_ascent = 24,
             canonical_pixel_height = 32,
@@ -111,21 +135,29 @@ text_test_glyph_coverage_samples_follow_rendered_placement :: proc(
     batches: [1]native.Draw_Batch
     commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
-    capture := Text_Ink_Capture_Test_State{}
-    samples := [1]view_font.Font_Glyph_Coverage_Sample{{2, 3, 128}}
-    tint := color.Color_RGBA8{20, 40, 60, 200}
+    capture: Text_Ink_Capture_Test_State = {}
+    samples: [1]view_font.Font_Glyph_Coverage_Sample = {{2, 3, 128}}
+    tint: color.Color_RGBA8 = {20, 40, 60, 200}
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {200, 200}))
     native.draw_encoder_set_ink_sink(&encoder, {
-        user_data = &capture, record = text_test_record_ink_sample,
+        user_data = &capture,
+        record = text_test_record_ink_sample,
     })
 
     ui_text_draw_resolved_glyph({
         encoder = &encoder,
         resolved = {
-            texture = {handle = rawptr(uintptr(1)), width = 32, height = 32},
-            source = {width = 8, height = 10},
+            texture = {
+                handle = rawptr(uintptr(1)),
+                width = 32,
+                height = 32,
+            },
+            source = {
+                width = 8,
+                height = 10,
+            },
             raster_pixel_height = 32,
             raster_ascent = 24,
             canonical_pixel_height = 32,
@@ -156,23 +188,30 @@ text_test_collect_shaped_ink_samples_matches_draw_placement :: proc(
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
     workspace: [4]view_font.Shaped_Glyph
-    state := Label_Ink_Resolver_Test_State{
-        coverage = {{x = 2, y = 3, coverage = 128}},
+    state: Label_Ink_Resolver_Test_State = {
+        coverage = {{
+            x = 2,
+            y = 3,
+            coverage = 128,
+        }},
     }
-    resolver := view_font.Font_Resolver{
+    resolver: view_font.Font_Resolver = {
         user_data = &state,
         resolve_glyph = text_test_resolve_label_ink_glyph,
         shape = text_test_shape_label_ink,
         workspace = workspace[:],
     }
-    request := Shaped_Text_Draw{
+    request: Shaped_Text_Draw = {
         encoder = &encoder,
         resolver = resolver,
         key = .Regular,
         text = "A′",
         position = {10, 20},
         font = {
-            font = {base_size = 32, space_advance = 16},
+            font = {
+                base_size = 32,
+                space_advance = 16,
+            },
             font_size = 32,
         },
     }
@@ -200,8 +239,17 @@ text_test_resolved_glyph_separates_raster_and_shaping_scales :: proc(t: ^testing
     ui_text_draw_resolved_glyph({
         encoder = &encoder,
         resolved = {
-            texture = {handle = texture, width = 32, height = 32},
-            source = {x = 1, y = 2, width = 8, height = 10},
+            texture = {
+                handle = texture,
+                width = 32,
+                height = 32,
+            },
+            source = {
+                x = 1,
+                y = 2,
+                width = 8,
+                height = 10,
+            },
             offset_x = 6,
             offset_y = 20,
             raster_pixel_height = 24,
@@ -260,7 +308,8 @@ text_test_resolve_codepoint :: proc(
     state.requested_codepoint = codepoint
     if codepoint == rune(0xfffd) {
         return {
-            advance_x = i32(state.replacement_id), raster_pixel_height = 32,
+            advance_x = i32(state.replacement_id),
+            raster_pixel_height = 32,
         }, .Resident
     }
     return {}, .Pending
@@ -290,16 +339,21 @@ text_test_cluster_column :: proc(t: ^testing.T) {
 // Verify pending direct text resolves to the resident replacement glyph.
 @(test)
 text_test_pending_codepoint_uses_replacement :: proc(t: ^testing.T) {
-    state := Codepoint_Resolver_Test_State{replacement_id = 77}
-    resolver := view_font.Font_Resolver{
+    state: Codepoint_Resolver_Test_State = {
+        replacement_id = 77,
+    }
+    resolver: view_font.Font_Resolver = {
         user_data = &state,
         resolve_codepoint = text_test_resolve_codepoint,
     }
 
-    raster_request := view_font.Font_Raster_Request{
-        key = .Regular, source_generation = 1,
-        logical_size = 16, scene_pixels_per_logical_unit = 1,
-        pixel_height = 16, policy = .Freetype_Light,
+    raster_request: view_font.Font_Raster_Request = {
+        key = .Regular,
+        source_generation = 1,
+        logical_size = 16,
+        scene_pixels_per_logical_unit = 1,
+        pixel_height = 16,
+        policy = .Freetype_Light,
     }
     resolution := ui_text_resolve_codepoint(
         resolver, .Regular, 'α', raster_request)
@@ -313,7 +367,7 @@ text_test_pending_codepoint_uses_replacement :: proc(t: ^testing.T) {
 // Verify cached 26.6 offsets and advances scale from the shaping base size.
 @(test)
 text_test_cached_glyph_placement_uses_shaped_metrics :: proc(t: ^testing.T) {
-    glyph := view_font.Shaped_Glyph{
+    glyph: view_font.Shaped_Glyph = {
         x_advance = 640,
         x_offset = 64,
         y_offset = -32,
@@ -329,15 +383,19 @@ text_test_cached_glyph_placement_uses_shaped_metrics :: proc(t: ^testing.T) {
 // Verify cached JuliaMono glyphs use source columns instead of cumulative advances.
 @(test)
 text_test_cached_monospace_placement_uses_source_cluster :: proc(t: ^testing.T) {
-    glyph := view_font.Shaped_Glyph{
+    glyph: view_font.Shaped_Glyph = {
         cluster = 3,
         x_advance = 700,
         x_offset = -32,
         y_offset = 64,
     }
 
-    request := Cached_Monospace_Run_Draw{
-        shaped = {position = {10, 20}, font_size = 16, base_pixel_size = 32},
+    request: Cached_Monospace_Run_Draw = {
+        shaped = {
+            position = {10, 20},
+            font_size = 16,
+            base_pixel_size = 32,
+        },
         text = "α=>",
         column_advance = 8,
     }
@@ -361,19 +419,31 @@ text_test_cached_run_line_top_uses_font_ascent :: proc(t: ^testing.T) {
 // Verify one pending cached glyph rejects the complete run before drawing begins.
 @(test)
 text_test_cached_run_preflights_all_glyphs :: proc(t: ^testing.T) {
-    state := Cached_Glyph_Resolver_Test_State{reject_glyph_id = 2}
-    glyphs := []view_font.Shaped_Glyph{
-        {glyph_id = 1, x_advance = 640},
-        {glyph_id = 2, x_advance = 640},
+    state: Cached_Glyph_Resolver_Test_State = {
+        reject_glyph_id = 2,
     }
-    resolver := view_font.Font_Resolver{
+    glyphs: []view_font.Shaped_Glyph = {
+        {
+            glyph_id = 1,
+            x_advance = 640,
+        },
+        {
+            glyph_id = 2,
+            x_advance = 640,
+        },
+    }
+    resolver: view_font.Font_Resolver = {
         user_data = &state,
         resolve_glyph = text_test_resolve_cached_glyph,
     }
 
     drawn := ui_text_cached_shaped_run({
-        resolver = resolver, key = .Math_Regular, glyphs = glyphs,
-        font_size = 32, base_pixel_size = 32})
+        resolver = resolver,
+        key = .Math_Regular,
+        glyphs = glyphs,
+        font_size = 32,
+        base_pixel_size = 32,
+    })
 
     testing.expect(t, !drawn)
     testing.expect_value(t, state.calls, 2)

@@ -5,7 +5,7 @@ import "core:testing"
 // Verify RGBA channels preserve declaration order and exact byte values.
 @(test)
 color_rgba8_preserves_channels :: proc(t: ^testing.T) {
-    value := Color_RGBA8{0x12, 0x34, 0x56, 0x78}
+    value: Color_RGBA8 = {0x12, 0x34, 0x56, 0x78}
     testing.expect_value(t, value, Color_RGBA8{0x12, 0x34, 0x56, 0x78})
     testing.expect_value(t, BLACK, Color_RGBA8{0, 0, 0, 255})
     testing.expect_value(t, WHITE, Color_RGBA8{255, 255, 255, 255})

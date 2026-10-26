@@ -140,7 +140,7 @@ input_terminal_modifier_parameter :: proc(modifiers: Input_Modifiers) -> u8 {
 input_terminal_enqueue_modified_final :: proc(
     runtime: ^Input_Runtime, final: u8, modifiers: Input_Modifiers) -> bool {
     parameter := input_terminal_modifier_parameter(modifiers)
-    bytes := [6]u8{'\e', '[', '1', ';', '0' + parameter, final}
+    bytes: [6]u8 = {'\e', '[', '1', ';', '0' + parameter, final}
     return input_runtime_enqueue_bytes(runtime, bytes[:])
 }
 
@@ -183,14 +183,22 @@ input_terminal_enqueue_modified_tilde :: proc(
 //   - The conventional control byte and true, or zero and false when unsupported.
 input_terminal_special_control_byte :: proc(key: Input_Key) -> (u8, bool) {
     #partial switch key {
-    case .Space, .Digit2: return 0, true
-    case .Left_Bracket:   return 27, true
-    case .Backslash:      return 28, true
-    case .Right_Bracket:  return 29, true
-    case .Digit6:         return 30, true
-    case .Minus:          return 31, true
-    case .Slash:          return 127, true
-    case:                 return 0, false
+    case .Space, .Digit2:
+        return 0, true
+    case .Left_Bracket:
+        return 27, true
+    case .Backslash:
+        return 28, true
+    case .Right_Bracket:
+        return 29, true
+    case .Digit6:
+        return 30, true
+    case .Minus:
+        return 31, true
+    case .Slash:
+        return 127, true
+    case:
+        return 0, false
     }
 }
 
@@ -236,10 +244,10 @@ input_terminal_enqueue_control :: proc(
         return false
     }
     if .Alt in event.modifiers {
-        bytes := [2]u8{'\e', byte}
+        bytes: [2]u8 = {'\e', byte}
         input_runtime_enqueue_bytes(runtime, bytes[:])
     } else {
-        bytes := [1]u8{byte}
+        bytes: [1]u8 = {byte}
         input_runtime_enqueue_bytes(runtime, bytes[:])
     }
     return true
@@ -266,21 +274,28 @@ input_terminal_enqueue_navigation_event :: proc(
     mode: termmodel.Terminal_Input_Mode) -> bool {
     final: u8
     #partial switch event.key {
-    case .Up:    final = 'A'
-    case .Down:  final = 'B'
-    case .Right: final = 'C'
-    case .Left:  final = 'D'
-    case .Home:  final = 'H'
-    case .End:   final = 'F'
-    case:        return false
+    case .Up:
+        final = 'A'
+    case .Down:
+        final = 'B'
+    case .Right:
+        final = 'C'
+    case .Left:
+        final = 'D'
+    case .Home:
+        final = 'H'
+    case .End:
+        final = 'F'
+    case:
+        return false
     }
     if card(event.modifiers) > 0 {
         input_terminal_enqueue_modified_final(runtime, final, event.modifiers)
     } else if mode.cursor_keys_application {
-        bytes := [3]u8{'\e', 'O', final}
+        bytes: [3]u8 = {'\e', 'O', final}
         input_runtime_enqueue_bytes(runtime, bytes[:])
     } else {
-        bytes := [3]u8{'\e', '[', final}
+        bytes: [3]u8 = {'\e', '[', final}
         input_runtime_enqueue_bytes(runtime, bytes[:])
     }
     return true
@@ -304,16 +319,21 @@ input_terminal_enqueue_editing_event :: proc(
     runtime: ^Input_Runtime, event: Input_Event) -> bool {
     number := 0
     #partial switch event.key {
-    case .Insert:    number = 2
-    case .Delete:    number = 3
-    case .Page_Up:   number = 5
-    case .Page_Down: number = 6
-    case:            return false
+    case .Insert:
+        number = 2
+    case .Delete:
+        number = 3
+    case .Page_Up:
+        number = 5
+    case .Page_Down:
+        number = 6
+    case:
+        return false
     }
     if card(event.modifiers) > 0 {
         input_terminal_enqueue_modified_tilde(runtime, number, event.modifiers)
     } else {
-        bytes := [4]u8{'\e', '[', u8('0' + number), '~'}
+        bytes: [4]u8 = {'\e', '[', u8('0' + number), '~'}
         input_runtime_enqueue_bytes(runtime, bytes[:])
     }
     return true
@@ -345,12 +365,12 @@ input_terminal_enqueue_function_event :: proc(
         if card(event.modifiers) > 0 {
             input_terminal_enqueue_modified_final(runtime, final, event.modifiers)
         } else {
-            bytes := [3]u8{'\e', 'O', final}
+            bytes: [3]u8 = {'\e', 'O', final}
             input_runtime_enqueue_bytes(runtime, bytes[:])
         }
         return true
     }
-    numbers := [8]int{15, 17, 18, 19, 20, 21, 23, 24}
+    numbers: [8]int = {15, 17, 18, 19, 20, 21, 23, 24}
     number := numbers[index - 4]
     if card(event.modifiers) > 0 {
         input_terminal_enqueue_modified_tilde(runtime, number, event.modifiers)
@@ -394,12 +414,12 @@ input_terminal_enqueue_keypad_event :: proc(
         }
         return true
     }
-    finals := [17]u8{
+    finals: [17]u8 = {
         'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y',
         'n', 'o', 'j', 'm', 'k', 'M', 'X',
     }
     final := finals[int(event.key) - int(Input_Key.Keypad0)]
-    bytes := [3]u8{'\e', 'O', final}
+    bytes: [3]u8 = {'\e', 'O', final}
     input_runtime_enqueue_bytes(runtime, bytes[:])
     return true
 }
@@ -631,12 +651,12 @@ input_terminal_format_decrqss_payload :: proc(
     case .Decrqss_Sgr:
         bytes[count] = '0'; count += 1
         attributes := response.first
-        flags := [3]u32{
+        flags: [3]u32 = {
             termemulator.TERMINAL_SGR_BOLD,
             termemulator.TERMINAL_SGR_ITALIC,
             termemulator.TERMINAL_SGR_UNDERLINE,
         }
-        parameters := [3]int{1, 3, 4}
+        parameters: [3]int = {1, 3, 4}
         for flag, index in flags {
             if attributes & flag == 0 {
                 continue 
@@ -682,7 +702,7 @@ input_terminal_format_decrqss_response :: proc(
 // Append packed validated XTGETTCAP name bytes from one semantic response.
 input_terminal_append_capability_name :: proc(
     bytes: []u8, count: ^int, response: termmodel.Terminal_Response) {
-    words := [2]u32{response.second, response.third}
+    words: [2]u32 = {response.second, response.third}
     for word in words {
         for index in 0..<4 {
             byte := u8(word >> u32(index * 8))
@@ -701,10 +721,14 @@ input_terminal_format_xtgetcap_response :: proc(
     kind := termemulator.Terminal_Capability_Kind(response.first)
     value: string
     switch kind {
-    case .Terminal_Name: value = "\eP1+r544e=6575636c6964\e\\"
-    case .Colors: value = "\eP1+r436f=323536\e\\"
-    case .Rgb: value = "\eP1+r524742=38\e\\"
-    case .Truecolor: value = "\eP1+r5463\e\\"
+    case .Terminal_Name:
+        value = "\eP1+r544e=6575636c6964\e\\"
+    case .Colors:
+        value = "\eP1+r436f=323536\e\\"
+    case .Rgb:
+        value = "\eP1+r524742=38\e\\"
+    case .Truecolor:
+        value = "\eP1+r5463\e\\"
     case .Unknown:
         copy(bytes, "\eP0+r")
         count := 5
@@ -722,9 +746,12 @@ input_terminal_format_size_response :: proc(
     bytes: []u8, response: termmodel.Terminal_Response) -> int {
     selector: u8
     #partial switch response.kind {
-    case .Window_Pixels: selector = '4'
-    case .Cell_Pixels: selector = '6'
-    case .Text_Area_Size: selector = '8'
+    case .Window_Pixels:
+        selector = '4'
+    case .Cell_Pixels:
+        selector = '6'
+    case .Text_Area_Size:
+        selector = '8'
     }
     count := 0
     bytes[count] = '\e'; count += 1
@@ -831,11 +858,16 @@ input_terminal_format_kitty_graphics_response :: proc(
     bytes[count] = ';'; count += 1
     status := "OK"
     #partial switch response.status {
-    case .Ok: status = "OK"
-    case .Invalid: status = "EINVAL"
-    case .Not_Found: status = "ENOENT"
-    case .Unsupported: status = "ENOTSUP"
-    case .Capacity_Exceeded: status = "ENOSPC"
+    case .Ok:
+        status = "OK"
+    case .Invalid:
+        status = "EINVAL"
+    case .Not_Found:
+        status = "ENOENT"
+    case .Unsupported:
+        status = "ENOTSUP"
+    case .Capacity_Exceeded:
+        status = "ENOSPC"
     }
     copy(bytes[count:], transmute([]u8)status)
     count += len(status)
@@ -1006,7 +1038,7 @@ input_terminal_modify_other_keys_codepoint :: proc(
 input_terminal_format_modify_other_key :: proc(
     bytes: []u8, modifiers: Input_Modifiers, codepoint: rune) -> int {
     count := 0
-    prefix := [5]u8{'\e', '[', '2', '7', ';'}
+    prefix: [5]u8 = {'\e', '[', '2', '7', ';'}
     copy(bytes, prefix[:])
     count += len(prefix)
     input_terminal_append_decimal(bytes, &count,
@@ -1081,9 +1113,12 @@ input_terminal_kitty_modifier_parameter :: proc(modifiers: Input_Modifiers) -> u
 // Return the Kitty event-type value for one physical event.
 input_terminal_kitty_event_type :: proc(kind: Input_Event_Kind) -> (u8, bool) {
     switch kind {
-    case .Press:   return 1, true
-    case .Repeat:  return 2, true
-    case .Release: return 3, true
+    case .Press:
+        return 1, true
+    case .Repeat:
+        return 2, true
+    case .Release:
+        return 3, true
     case .Text, .Text_Commit, .Text_Preedit, .Text_Cancel:
         return 0, false
     }
@@ -1098,7 +1133,7 @@ input_terminal_kitty_associated_text :: proc(
         return {}
     }
     event := frame.events[event_index]
-    result := Input_Terminal_Kitty_Associated_Text{
+    result: Input_Terminal_Kitty_Associated_Text = {
         start = int(event.correlation.partner_index),
         count = max(int(event.correlation.partner_count), 1),
     }
@@ -1179,18 +1214,24 @@ input_terminal_format_kitty_key :: proc(
 input_terminal_kitty_functional_key :: proc(
     key: Input_Key) -> Input_Terminal_Kitty_Functional_Key {
     if key >= .Insert && key <= .End {
-        numbers := [10]int{2, 3, 1, 1, 1, 1, 5, 6, 1, 1}
-        finals := [10]u8{'~', '~', 'C', 'D', 'B', 'A', '~', '~', 'H', 'F'}
+        numbers: [10]int = {2, 3, 1, 1, 1, 1, 5, 6, 1, 1}
+        finals: [10]u8 = {'~', '~', 'C', 'D', 'B', 'A', '~', '~', 'H', 'F'}
         index := int(key) - int(Input_Key.Insert)
-        return {number = numbers[index], final = finals[index]}
+        return {
+            number = numbers[index],
+            final = finals[index],
+        }
     }
     if key < .F1 || key > .F12 {
         return {} 
     }
-    numbers := [12]int{1, 1, 13, 1, 15, 17, 18, 19, 20, 21, 23, 24}
-    finals := [12]u8{'P', 'Q', '~', 'S', '~', '~', '~', '~', '~', '~', '~', '~'}
+    numbers: [12]int = {1, 1, 13, 1, 15, 17, 18, 19, 20, 21, 23, 24}
+    finals: [12]u8 = {'P', 'Q', '~', 'S', '~', '~', '~', '~', '~', '~', '~', '~'}
     index := int(key) - int(Input_Key.F1)
-    return {number = numbers[index], final = finals[index]}
+    return {
+        number = numbers[index],
+        final = finals[index],
+    }
 }
 
 // Format one canonical Kitty functional key with a non-press event type.
@@ -1255,10 +1296,14 @@ input_terminal_kitty_codepoint :: proc(
     }
     if flags & 8 != 0 {
         #partial switch event.key {
-        case .Enter:     return 13, true
-        case .Tab:       return 9, true
-        case .Backspace: return 127, true
-        case:            // Continue with ordinary physical identities.
+        case .Enter:
+            return 13, true
+        case .Tab:
+            return 9, true
+        case .Backspace:
+            return 127, true
+        case:
+            // Continue with ordinary physical identities.
         }
     }
     codepoint, ordinary := input_terminal_ordinary_key_codepoint(event.key)
@@ -1432,9 +1477,12 @@ input_terminal_enqueue_mouse_report :: proc(
 //   - Zero for left, one for middle, or two for right.
 input_terminal_mouse_button_code :: proc(button: Input_Mouse_Button) -> int {
     switch button {
-    case .Left: return 0
-    case .Middle: return 1
-    case .Right: return 2
+    case .Left:
+        return 0
+    case .Middle:
+        return 1
+    case .Right:
+        return 2
     }
     return 0
 }
@@ -1478,7 +1526,7 @@ input_terminal_mouse_modifier_code :: proc(modifiers: Input_Modifiers) -> int {
 //     after successful admission.
 input_terminal_retry_mouse_releases :: proc(
     runtime: ^Input_Runtime, modifiers: Input_Modifiers) -> bool {
-    buttons := [3]Input_Mouse_Button{.Left, .Middle, .Right}
+    buttons: [3]Input_Mouse_Button = {.Left, .Middle, .Right}
     for button in buttons {
         if button not_in runtime.mouse_pending_releases {
             continue
@@ -1512,7 +1560,7 @@ input_terminal_retry_mouse_releases :: proc(
 input_terminal_enqueue_mouse_buttons :: proc(
     runtime: ^Input_Runtime, frame: Input_Frame, modifier_code: int) {
     position := frame.terminal_mouse_position
-    buttons := [3]Input_Mouse_Button{.Left, .Middle, .Right}
+    buttons: [3]Input_Mouse_Button = {.Left, .Middle, .Right}
     for button in buttons {
         if button in frame.mouse_pressed && frame.terminal_mouse_inside &&
             frame.terminal_mouse_owned {
@@ -1543,7 +1591,7 @@ input_terminal_enqueue_mouse_buttons :: proc(
 // Returns:
 //   - Motion base code for the first captured button, or 35 when none is captured.
 input_terminal_mouse_motion_code :: proc(runtime: ^Input_Runtime) -> int {
-    buttons := [3]Input_Mouse_Button{.Left, .Middle, .Right}
+    buttons: [3]Input_Mouse_Button = {.Left, .Middle, .Right}
     for button in buttons {
         if button in runtime.mouse_captured {
             return input_terminal_mouse_button_code(button) + 32
@@ -1736,7 +1784,7 @@ input_terminal_enqueue_frame :: proc(
         return
     }
     claims: Input_Event_Claim_State
-    encoding_mode := Input_Terminal_Encoding_Mode{
+    encoding_mode: Input_Terminal_Encoding_Mode = {
         mode, modify_other_keys_level, kitty_keyboard_flags}
     for _, event_index in frame.events {
         if !input_terminal_enqueue_frame_event(

@@ -10,10 +10,10 @@ Diagnostic_Level :: log.Level
 
 // Application-owned state shared by every thread context using the configured logger.
 Logging_State :: struct {
-    mutex : sync.Mutex,
-    file : ^os.File,
-    logger : log.Logger,
-    enabled : bool,
+    mutex: sync.Mutex,
+    file: ^os.File,
+    logger: log.Logger,
+    enabled: bool,
 }
 
 //   Serialize one formatted core logger record into the lifecycle-owned file.
@@ -33,7 +33,7 @@ synchronized_file_logger_proc :: proc(
     if !state^.enabled || state^.file == nil {
         return
     }
-    file_data := log.File_Console_Logger_Data{
+    file_data: log.File_Console_Logger_Data = {
         file_handle = state^.file,
         ident = "euclid",
     }

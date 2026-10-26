@@ -23,16 +23,34 @@ catalog_materializer_test_snapshot :: proc() -> ^content.Content_Generation {
         return nil
     }
     records := [?]content.Catalog_Record{
-        {stable_id = catalog_materializer_test_id(1), node_kind = .Animation,
-            sibling_order = 0, catalog_order = 0},
-        {stable_id = catalog_materializer_test_id(2),
-            parent_stable_id = catalog_materializer_test_id(1), has_parent = true,
-            node_kind = .Animation, sibling_order = 5, catalog_order = 1},
-        {stable_id = catalog_materializer_test_id(3),
-            parent_stable_id = catalog_materializer_test_id(1), has_parent = true,
-            node_kind = .Animation, sibling_order = 1, catalog_order = 2},
-        {stable_id = catalog_materializer_test_id(4), node_kind = .Terminal,
-            sibling_order = 1, catalog_order = 3},
+        {
+            stable_id = catalog_materializer_test_id(1),
+            node_kind = .Animation,
+            sibling_order = 0,
+            catalog_order = 0,
+        },
+        {
+            stable_id = catalog_materializer_test_id(2),
+            parent_stable_id = catalog_materializer_test_id(1),
+            has_parent = true,
+            node_kind = .Animation,
+            sibling_order = 5,
+            catalog_order = 1,
+        },
+        {
+            stable_id = catalog_materializer_test_id(3),
+            parent_stable_id = catalog_materializer_test_id(1),
+            has_parent = true,
+            node_kind = .Animation,
+            sibling_order = 1,
+            catalog_order = 2,
+        },
+        {
+            stable_id = catalog_materializer_test_id(4),
+            node_kind = .Terminal,
+            sibling_order = 1,
+            catalog_order = 3,
+        },
     }
     names := [?]string{"Root", "Later child", "Earlier child", "Terminal"}
     paths := [?]string{"root.jl", "later.jl", "earlier.jl", ""}

@@ -12,8 +12,9 @@ import "core:testing"
 // Playback predicates distinguish session choices from capture's effective rate.
 @(test)
 scenario_test_playback_state_predicates :: proc(t: ^testing.T) {
-    display := observe.Display{
-        animation_controls_hidden = true, animation_playback_rate = .Quadruple,
+    display: observe.Display = {
+        animation_controls_hidden = true,
+        animation_playback_rate = .Quadruple,
         animation_effective_rate = .Normal,
     }
     names := [?]string{
@@ -115,7 +116,9 @@ scenario_library_name_text_is_bounded :: proc(t: ^testing.T) {
 scenario_tree_motion_predicates :: proc(t: ^testing.T) {
     testing.expect(t, state_matches("tree_settled", observe.Display{}))
     testing.expect(t, !state_matches("tree_transitioning", observe.Display{}))
-    display := observe.Display{tree_transition_count = 2}
+    display: observe.Display = {
+        tree_transition_count = 2,
+    }
     testing.expect(t, state_matches("tree_transitioning", display))
     testing.expect(t, !state_matches("tree_settled", display))
 }
@@ -151,7 +154,9 @@ scenario_test_settings_payload_validation :: proc(t: ^testing.T) {
 // Verify settings waits distinguish pending saves and expose worker ownership evidence.
 @(test)
 scenario_test_settings_states_and_events :: proc(t: ^testing.T) {
-    display := observe.Display{settings_save_status = .Saved}
+    display: observe.Display = {
+        settings_save_status = .Saved,
+    }
     testing.expect(t, state_matches("settings_saved", display))
     display.settings_pending_count = 1
     testing.expect(t, !state_matches("settings_saved", display))
@@ -258,21 +263,25 @@ scenario_test_library_search_commands :: proc(t: ^testing.T) {
     event, event_valid := event_kind("library_search_committed")
     testing.expect(t, event_valid)
     testing.expect_value(t, event, trace.Kind.Library_Search_Committed)
-    testing.expect(t, state_matches("library_search_idle",
-        observe.Display{library_search_idle = true}))
-    testing.expect(t, state_matches("library_search_has_matches",
-        observe.Display{library_search_has_matches = true}))
+    testing.expect(t, state_matches("library_search_idle", observe.Display{
+        library_search_idle = true,
+    }))
+    testing.expect(t, state_matches("library_search_has_matches", observe.Display{
+        library_search_has_matches = true,
+    }))
 }
 
 // Verify tooltip predicates mirror the observed display-owned visibility.
 @(test)
 scenario_test_tooltip_state_predicates :: proc(t: ^testing.T) {
-    testing.expect(t, state_matches("tooltip_visible",
-        observe.Display{tooltip_visible = true}))
+    testing.expect(t, state_matches("tooltip_visible", observe.Display{
+        tooltip_visible = true,
+    }))
     testing.expect(t, !state_matches("tooltip_visible", observe.Display{}))
     testing.expect(t, state_matches("tooltip_hidden", observe.Display{}))
-    testing.expect(t, !state_matches("tooltip_hidden",
-        observe.Display{tooltip_visible = true}))
+    testing.expect(t, !state_matches("tooltip_hidden", observe.Display{
+        tooltip_visible = true,
+    }))
 }
 
 // Verify named viewport payloads retain explicit zero and both splitter coordinates.
@@ -343,12 +352,23 @@ scenario_test_parse_arrival_style_actions :: proc(t: ^testing.T) {
 // Verify presentation-effect predicates distinguish dust, arrivals, and settled panes.
 @(test)
 scenario_test_presentation_effect_predicates :: proc(t: ^testing.T) {
-    settled := observe.Display{}
-    dust := observe.Display{
-        presentation_effects = {departure_particle_count = 12}}
-    fade := observe.Display{presentation_effects = {arrival_active = true}}
-    falling := observe.Display{
-        presentation_effects = {arrival_active = true, arrival_particle_count = 4}}
+    settled: observe.Display = {}
+    dust: observe.Display = {
+        presentation_effects = {
+            departure_particle_count = 12,
+        },
+    }
+    fade: observe.Display = {
+        presentation_effects = {
+            arrival_active = true,
+        },
+    }
+    falling: observe.Display = {
+        presentation_effects = {
+            arrival_active = true,
+            arrival_particle_count = 4,
+        },
+    }
     testing.expect(t, state_matches("presentation_effects_settled", settled))
     testing.expect(t, !state_matches("presentation_effects_active", settled))
     testing.expect(t, state_matches("presentation_dust_active", dust))
@@ -366,10 +386,15 @@ scenario_test_presentation_effect_predicates :: proc(t: ^testing.T) {
 // Reclamation predicates distinguish live material from retained completion facts.
 @(test)
 scenario_test_reclamation_predicates :: proc(t: ^testing.T) {
-    effects := observe.Presentation_Effects{
-        reclaimed_count = 2, fresh_count = 1, resting_count = 3,
-        live_count = 6, eviction_count = 1, arrival_cancelled_count = 1,
-        arrival_completed_count = 1, arrival_completed_duration = 0.30,
+    effects: observe.Presentation_Effects = {
+        reclaimed_count = 2,
+        fresh_count = 1,
+        resting_count = 3,
+        live_count = 6,
+        eviction_count = 1,
+        arrival_cancelled_count = 1,
+        arrival_completed_count = 1,
+        arrival_completed_duration = 0.30,
     }
     for name in ([9]string{
         "presentation_reclaimed", "presentation_fresh", "presentation_floor_dust",
@@ -521,9 +546,13 @@ scenario_test_viewport_actions_create_frame_boundaries :: proc(t: ^testing.T) {
         "{\"shutdown\":true}\n", &program), Parse_Error.None)
     runner: Runner
     runner_init(&runner, program)
-    frame := Runner_Frame{
-        display = {required_evidence_complete = true},
-        actions = {issue = scenario_test_runtime_action},
+    frame: Runner_Frame = {
+        display = {
+            required_evidence_complete = true,
+        },
+        actions = {
+            issue = scenario_test_runtime_action,
+        },
     }
 
     testing.expect_value(t, runner_update(&runner, frame), Run_Status.Running)
@@ -542,9 +571,13 @@ scenario_test_view_content_creates_frame_boundary :: proc(t: ^testing.T) {
         "{\"shutdown\":true}\n", &program), Parse_Error.None)
     runner: Runner
     runner_init(&runner, program)
-    frame := Runner_Frame{
-        display = {required_evidence_complete = true},
-        actions = {issue = scenario_test_runtime_action},
+    frame: Runner_Frame = {
+        display = {
+            required_evidence_complete = true,
+        },
+        actions = {
+            issue = scenario_test_runtime_action,
+        },
     }
 
     testing.expect_value(t, runner_update(&runner, frame), Run_Status.Running)
@@ -575,19 +608,26 @@ scenario_test_animation_idle_state :: proc(t: ^testing.T) {
 // Verify dust predicates distinguish complete rest from local and airborne activity.
 @(test)
 scenario_test_dust_state_predicates :: proc(t: ^testing.T) {
-    settled := observe.Display{
-        dust_live_count = 8, dust_grounded_count = 8,
-        dust_peak_speed_sq = particlemodel.DUST_SETTLED_SPEED_SQ}
+    settled: observe.Display = {
+        dust_live_count = 8,
+        dust_grounded_count = 8,
+        dust_peak_speed_sq = particlemodel.DUST_SETTLED_SPEED_SQ,
+    }
     testing.expect(t, state_matches("dust_settled", settled))
     testing.expect(t, !state_matches("dust_active", settled))
     testing.expect(t, !state_matches("dust_settled", observe.Display{
-        dust_live_count = 8, dust_grounded_count = 7}))
+        dust_live_count = 8,
+        dust_grounded_count = 7,
+    }))
     testing.expect(t, state_matches("dust_active", observe.Display{
-        dust_live_count = 8, dust_grounded_count = 8,
-        dust_peak_speed_sq =
-            particlemodel.DUST_SETTLED_SPEED_SQ * 2}))
+        dust_live_count = 8,
+        dust_grounded_count = 8,
+        dust_peak_speed_sq = particlemodel.DUST_SETTLED_SPEED_SQ * 2,
+    }))
     testing.expect(t, state_matches("dust_airborne", observe.Display{
-        dust_live_count = 8, dust_airborne_count = 1}))
+        dust_live_count = 8,
+        dust_airborne_count = 1,
+    }))
 }
 
 // Verify Terminal input and cell assertions are bounded scenario commands.
@@ -604,10 +644,12 @@ scenario_test_terminal_commands :: proc(t: ^testing.T) {
     testing.expect_value(t, program.commands[1].kind, Command_Kind.Key)
     testing.expect_value(t,
         program.commands[2].kind, Command_Kind.Assert_Terminal_Contains)
-    testing.expect(t, state_matches(
-        "terminal_idle", observe.Display{terminal_idle = true}))
-    testing.expect(t, state_matches(
-        "terminal_completion_ready", observe.Display{terminal_completion_ready = true}))
+    testing.expect(t, state_matches("terminal_idle", observe.Display{
+        terminal_idle = true,
+    }))
+    testing.expect(t, state_matches("terminal_completion_ready", observe.Display{
+        terminal_completion_ready = true,
+    }))
     testing.expect(t, !state_matches("terminal_completion_ready", observe.Display{}))
 }
 
@@ -620,24 +662,34 @@ scenario_test_runner_event_and_deadline :: proc(t: ^testing.T) {
         &program), Parse_Error.None)
     runner: Runner
     runner_init(&runner, program)
-    display := observe.Display{required_evidence_complete = true}
+    display: observe.Display = {
+        required_evidence_complete = true,
+    }
 
-    testing.expect_value(t,
-        runner_update(&runner, {now_ns = 100, display = display}),
-        Run_Status.Running)
-    event := trace.Event{kind = .Runtime_Ready}
-    testing.expect_value(t,
-        runner_update(&runner, {
-            now_ns = 101, events = {event}, display = display,
-        }), Run_Status.Passed)
+    testing.expect_value(t, runner_update(&runner, {
+        now_ns = 100,
+        display = display,
+    }), Run_Status.Running)
+    event: trace.Event = {
+        kind = .Runtime_Ready,
+    }
+    testing.expect_value(t, runner_update(&runner, {
+        now_ns = 101,
+        events = {
+            event,
+        },
+        display = display,
+    }), Run_Status.Passed)
 
     runner_init(&runner, program)
-    testing.expect_value(t,
-        runner_update(&runner, {now_ns = 100, display = display}),
-        Run_Status.Running)
-    testing.expect_value(t,
-        runner_update(&runner, {now_ns = 5_000_100, display = display}),
-        Run_Status.Failed)
+    testing.expect_value(t, runner_update(&runner, {
+        now_ns = 100,
+        display = display,
+    }), Run_Status.Running)
+    testing.expect_value(t,runner_update(&runner, {
+        now_ns = 5_000_100,
+        display = display,
+    }), Run_Status.Failed)
 }
 
 // Verify presentation replacement transitions are available to scenarios.
@@ -683,8 +735,12 @@ scenario_test_reload_failure_injection :: proc(t: ^testing.T) {
 // Verify required evidence loss makes the run inconclusive before actions execute.
 @(test)
 scenario_test_required_trace_loss_is_inconclusive :: proc(t: ^testing.T) {
-    program := Program{count = 1}
-    program.commands[0] = {kind = .Shutdown}
+    program: Program = {
+        count = 1,
+    }
+    program.commands[0] = {
+        kind = .Shutdown,
+    }
     runner: Runner
     runner_init(&runner, program)
 
@@ -702,13 +758,17 @@ scenario_test_typed_alias_matching :: proc(t: ^testing.T) {
         "\"correlation\":\"reload\"}\n", &program), Parse_Error.None)
     runner: Runner
     runner_init(&runner, program)
-    display := observe.Display{required_evidence_complete = true}
+    display: observe.Display = {
+        required_evidence_complete = true,
+    }
     testing.expect_value(t, runner_update(&runner, {
         display = display,
-        actions = {issue = scenario_test_runtime_action},
+        actions = {
+            issue = scenario_test_runtime_action,
+        },
     }), Run_Status.Running)
 
-    wrong_generation := trace.Event{
+    wrong_generation: trace.Event = {
         kind = .Runtime_Reload_Committed,
         correlation_kind = .Runtime_Request,
         correlation = 42,
@@ -716,10 +776,12 @@ scenario_test_typed_alias_matching :: proc(t: ^testing.T) {
     }
     testing.expect_value(t, runner_update(&runner, {
         now_ns = 1,
-        events = {wrong_generation},
+        events = {
+            wrong_generation,
+        },
         display = display,
     }), Run_Status.Running)
-    matching := [2]trace.Event{wrong_generation, {
+    matching: [2]trace.Event = {wrong_generation, {
         kind = .Runtime_Reload_Committed,
         correlation_kind = .Runtime_Request,
         correlation = 42,
@@ -741,20 +803,34 @@ scenario_test_animation_frame_matching :: proc(t: ^testing.T) {
         "\"frame_number\":2}\n", &program), Parse_Error.None)
     runner: Runner
     runner_init(&runner, program)
-    display := observe.Display{required_evidence_complete = true}
-    wrong_frame := trace.Event{
+    display: observe.Display = {
+        required_evidence_complete = true,
+    }
+    wrong_frame: trace.Event = {
         kind = .Animation_Frame_Presented,
-        payload = {counts = {first = 1}},
+        payload = {
+            counts = {
+                first = 1,
+            },
+        },
     }
     testing.expect_value(t, runner_update(&runner, {
-        events = {wrong_frame}, display = display,
+        events = {
+            wrong_frame,
+        },
+        display = display,
     }), Run_Status.Running)
-    matching := [2]trace.Event{wrong_frame, {
+    matching: [2]trace.Event = {wrong_frame, {
         kind = .Animation_Frame_Presented,
-        payload = {counts = {first = 2}},
+        payload = {
+            counts = {
+                first = 2,
+            },
+        },
     }}
     testing.expect_value(t, runner_update(&runner, {
-        events = matching[:], display = display,
+        events = matching[:],
+        display = display,
     }), Run_Status.Passed)
 }
 
@@ -769,8 +845,12 @@ scenario_test_allocation_commands :: proc(t: ^testing.T) {
     runner: Runner
     runner_init(&runner, program)
     testing.expect_value(t, runner_update(&runner, {
-        display = observe.Display{required_evidence_complete = true},
-        actions = {issue = scenario_test_allocation_action},
+        display = observe.Display{
+            required_evidence_complete = true,
+        },
+        actions = {
+            issue = scenario_test_allocation_action,
+        },
     }), Run_Status.Passed)
     testing.expect_value(t, runner.assertion_count, u32(2))
 }

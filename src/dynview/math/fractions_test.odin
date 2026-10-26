@@ -6,8 +6,11 @@ import "core:testing"
 
 //   Build deterministic fraction constants whose 26.6 values map directly at 32 px.
 math_fraction_test_constants :: proc() -> fontmodel.Font_Math_Constants {
-    constants := fontmodel.Font_Math_Constants{
-        valid = true, generation = 13, base_pixel_size = 32}
+    constants: fontmodel.Font_Math_Constants = {
+        valid = true,
+        generation = 13,
+        base_pixel_size = 32,
+    }
     constants.values[int(Math_Constant.Axis_Height)] = 4 * 64
     constants.values[int(Math_Constant.Fraction_Rule_Thickness)] = 2 * 64
     constants.values[int(
@@ -27,9 +30,21 @@ math_fraction_test_constants :: proc() -> fontmodel.Font_Math_Constants {
 @(test)
 math_fraction_geometry_enforces_display_clearances :: proc(t: ^testing.T) {
     geometry := math_fraction_geometry({
-        constants = math_fraction_test_constants(), generation = 13, font_size = 32,
-        style = {.Display, false}, numerator = {width = 12, ascent = 7, descent = 3},
-        denominator = {width = 8, ascent = 6, descent = 2}, side_padding = 2,
+        constants = math_fraction_test_constants(),
+        generation = 13,
+        font_size = 32,
+        style = {.Display, false},
+        numerator = {
+            width = 12,
+            ascent = 7,
+            descent = 3,
+        },
+        denominator = {
+            width = 8,
+            ascent = 6,
+            descent = 2,
+        },
+        side_padding = 2,
         minimum_width = 10,
     })
 
@@ -50,9 +65,21 @@ math_fraction_geometry_enforces_display_clearances :: proc(t: ^testing.T) {
 @(test)
 math_fraction_geometry_uses_nested_style_constants :: proc(t: ^testing.T) {
     geometry := math_fraction_geometry({
-        constants = math_fraction_test_constants(), generation = 13, font_size = 32,
-        style = {.Text, false}, numerator = {width = 5, ascent = 4, descent = 1},
-        denominator = {width = 5, ascent = 3, descent = 1}, side_padding = 1,
+        constants = math_fraction_test_constants(),
+        generation = 13,
+        font_size = 32,
+        style = {.Text, false},
+        numerator = {
+            width = 5,
+            ascent = 4,
+            descent = 1,
+        },
+        denominator = {
+            width = 5,
+            ascent = 3,
+            descent = 1,
+        },
+        side_padding = 1,
     })
 
     testing.expect_value(t, geometry.numerator_baseline, f32(-8))
@@ -63,9 +90,19 @@ math_fraction_geometry_uses_nested_style_constants :: proc(t: ^testing.T) {
 @(test)
 math_fraction_geometry_rejects_stale_constants :: proc(t: ^testing.T) {
     geometry := math_fraction_geometry({
-        constants = math_fraction_test_constants(), generation = 14, font_size = 32,
-        numerator = {width = 5, ascent = 4, descent = 1},
-        denominator = {width = 5, ascent = 3, descent = 1},
+        constants = math_fraction_test_constants(),
+        generation = 14,
+        font_size = 32,
+        numerator = {
+            width = 5,
+            ascent = 4,
+            descent = 1,
+        },
+        denominator = {
+            width = 5,
+            ascent = 3,
+            descent = 1,
+        },
     })
     testing.expect(t, !geometry.valid)
 }

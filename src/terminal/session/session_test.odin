@@ -5,14 +5,20 @@ import "core:log"
 import "core:strings"
 import "core:testing"
 
-TEST_SESSION_OWNER :: Session_Owner{id = 7, generation = 2}
-TEST_SESSION_DIMENSIONS :: Terminal_Dimensions{columns = 128, rows = 34}
+TEST_SESSION_OWNER: Session_Owner : {
+    id = 7,
+    generation = 2,
+}
+TEST_SESSION_DIMENSIONS: Terminal_Dimensions : {
+    columns = 128,
+    rows = 34,
+}
 
 Terminal_Session_Test_Log_State :: struct {
-    started_count : int,
-    rejected_count : int,
-    completed_count : int,
-    correlated : bool,
+    started_count: int,
+    rejected_count: int,
+    completed_count: int,
+    correlated: bool,
 }
 
 // Capture session lifecycle records and their stable correlation metadata.
@@ -34,7 +40,7 @@ terminal_session_test_log_proc :: proc(
 
 // Build one valid direct plan for operation tests.
 termsession_test_plan :: proc() -> Process_Plan {
-    arguments := [2]string{"tool", "a b|c"}
+    arguments: [2]string = {"tool", "a b|c"}
     result := process_plan_build(arguments[:], "/tmp", nil)
     return result.plan
 }
@@ -43,7 +49,7 @@ termsession_test_plan :: proc() -> Process_Plan {
 termsession_test_begin :: proc(
     t: ^testing.T, manager: ^Terminal_Session_Manager,
     request_id: protocol.Request_Id = 11) -> Terminal_Session_Operation_Id {
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = request_id,
         owner = TEST_SESSION_OWNER,
         plan = termsession_test_plan(),
@@ -58,17 +64,22 @@ termsession_test_begin :: proc(
 // Verify invalid and stale requests fail before backend resource allocation.
 @(test)
 termsession_test_admission_precedes_backend_start :: proc(t: ^testing.T) {
-    backend := Fake_Terminal_Backend{
-        start_status = .Started, resize_succeeds = true}
+    backend: Fake_Terminal_Backend = {
+        start_status = .Started,
+        resize_succeeds = true,
+    }
     manager: Terminal_Session_Manager
     testing.expect(t, terminal_session_init(
         &manager, TEST_SESSION_OWNER, fake_terminal_backend_make(&backend)))
     nil_request := terminal_session_begin(&manager, nil)
     testing.expect_value(t, nil_request.rejection,
         Terminal_Session_Rejection.Invalid_Request)
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = 1,
-        owner = {id = 7, generation = 1},
+        owner = {
+            id = 7,
+            generation = 1,
+        },
         plan = termsession_test_plan(),
         dimensions = TEST_SESSION_DIMENSIONS,
     }
@@ -111,17 +122,23 @@ termsession_test_expect_resize_failure :: proc(
 // Verify resize applies only to the current operation and newer geometry generation.
 @(test)
 termsession_test_resize_is_correlated_and_ordered :: proc(t: ^testing.T) {
-    backend := Fake_Terminal_Backend{
-        start_status = .Started, resize_succeeds = true}
+    backend: Fake_Terminal_Backend = {
+        start_status = .Started,
+        resize_succeeds = true,
+    }
     manager: Terminal_Session_Manager
-    testing.expect(t, terminal_session_init(
-        &manager, TEST_SESSION_OWNER, fake_terminal_backend_make(&backend)))
+    testing.expect(t,
+        terminal_session_init(&manager, TEST_SESSION_OWNER,
+            fake_terminal_backend_make(&backend)))
     operation_id := termsession_test_begin(t, &manager)
-    request := Terminal_Session_Resize_Request{
+    request: Terminal_Session_Resize_Request = {
         owner = TEST_SESSION_OWNER,
         operation_id = operation_id,
         geometry_generation = 2,
-        dimensions = {columns = 100, rows = 30},
+        dimensions = {
+            columns = 100,
+            rows = 30,
+        },
     }
 
     testing.expect_value(t, terminal_session_resize(&manager, request),
@@ -141,7 +158,7 @@ termsession_test_resize_is_correlated_and_ordered :: proc(t: ^testing.T) {
 termsession_test_expect_foreground_busy :: proc(
     t: ^testing.T, manager: ^Terminal_Session_Manager,
     backend: ^Fake_Terminal_Backend) {
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = 12,
         owner = TEST_SESSION_OWNER,
         plan = termsession_test_plan(),
@@ -158,7 +175,7 @@ termsession_test_expect_input_output :: proc(
     t: ^testing.T, manager: ^Terminal_Session_Manager,
     backend: ^Fake_Terminal_Backend,
     operation_id: Terminal_Session_Operation_Id) {
-    input := Terminal_Session_Input_Request{
+    input: Terminal_Session_Input_Request = {
         owner = TEST_SESSION_OWNER,
         operation_id = operation_id,
         byte_count = 3,
@@ -177,7 +194,10 @@ termsession_test_expect_input_output :: proc(
 termsession_test_expect_completion :: proc(
     t: ^testing.T, manager: ^Terminal_Session_Manager,
     backend: ^Fake_Terminal_Backend) {
-    fake_terminal_backend_finish(backend, {kind = .Exited, status = 3})
+    fake_terminal_backend_finish(backend, {
+        kind = .Exited,
+        status = 3,
+    })
     completed := terminal_session_update(manager)
     testing.expect(t, completed.completion_available)
     testing.expect_value(t, completed.completion.kind,
@@ -200,7 +220,9 @@ termsession_test_fake_backend_lifecycle :: proc(t: ^testing.T) {
     }
     defer context.logger = prior_logger
 
-    backend := Fake_Terminal_Backend{start_status = .Started}
+    backend: Fake_Terminal_Backend = {
+        start_status = .Started,
+    }
     manager: Terminal_Session_Manager
     terminal_session_init(
         &manager, TEST_SESSION_OWNER, fake_terminal_backend_make(&backend))
@@ -219,22 +241,29 @@ termsession_test_fake_backend_lifecycle :: proc(t: ^testing.T) {
 // Verify owner stop requests cancellation and completion reconciles once.
 @(test)
 termsession_test_owner_stop_cancels_without_transfer_or_detach :: proc(t: ^testing.T) {
-    backend := Fake_Terminal_Backend{start_status = .Started}
+    backend: Fake_Terminal_Backend = {
+        start_status = .Started,
+    }
     manager: Terminal_Session_Manager
     terminal_session_init(
         &manager, TEST_SESSION_OWNER, fake_terminal_backend_make(&backend))
     operation_id := termsession_test_begin(t, &manager, 21)
 
-    testing.expect_value(t, terminal_session_transfer_owner(
-        &manager, TEST_SESSION_OWNER, {id = 8, generation = 1}),
-        Terminal_Session_Rejection.Unsupported)
+    testing.expect_value(t,
+        terminal_session_transfer_owner(&manager, TEST_SESSION_OWNER, {
+            id = 8,
+            generation = 1,
+        }), Terminal_Session_Rejection.Unsupported)
     testing.expect_value(t, terminal_session_detach(&manager, operation_id),
         Terminal_Session_Rejection.Unsupported)
     testing.expect(t, terminal_session_owner_stopped(&manager, TEST_SESSION_OWNER))
     testing.expect(t, terminal_session_owner_stopped(&manager, TEST_SESSION_OWNER))
     testing.expect_value(t, backend.terminate_count, 1)
 
-    fake_terminal_backend_finish(&backend, {kind = .Signalled, status = 15})
+    fake_terminal_backend_finish(&backend, {
+        kind = .Signalled,
+        status = 15,
+    })
     update := terminal_session_update(&manager)
     testing.expect(t, update.completion_available)
     testing.expect_value(t, update.completion.kind,
@@ -247,11 +276,13 @@ termsession_test_owner_stop_cancels_without_transfer_or_detach :: proc(t: ^testi
 // Verify executable discovery failures remain explicit admission outcomes.
 @(test)
 termsession_test_executable_not_found_is_explicit :: proc(t: ^testing.T) {
-    backend := Fake_Terminal_Backend{start_status = .Executable_Not_Found}
+    backend: Fake_Terminal_Backend = {
+        start_status = .Executable_Not_Found,
+    }
     manager: Terminal_Session_Manager
     terminal_session_init(
         &manager, TEST_SESSION_OWNER, fake_terminal_backend_make(&backend))
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = 31,
         owner = TEST_SESSION_OWNER,
         plan = termsession_test_plan(),
@@ -286,17 +317,22 @@ termsession_test_bounded_close_completes_gracefully :: proc(t: ^testing.T) {
     registry: Process_Cleanup_Registry
     coordinator: Terminal_Process_Close_Coordinator
 
-    testing.expect(t, terminal_process_close_begin(
-        &coordinator, &manager, &registry,
-        {generation = 2, now_ns = 100, graceful_ns = 10, final_ns = 20}))
-    testing.expect_value(t, coordinator.phase,
-        Terminal_Process_Close_Phase.Graceful_Requested)
+    testing.expect(t, terminal_process_close_begin(&coordinator, &manager, &registry, {
+        generation = 2,
+        now_ns = 100,
+        graceful_ns = 10,
+        final_ns = 20,
+    }))
+    testing.expect_value(t,
+        coordinator.phase, Terminal_Process_Close_Phase.Graceful_Requested)
     testing.expect_value(t, backend.terminate_count, 1)
     fake_terminal_backend_queue_output(&backend, "last")
-    fake_terminal_backend_finish(&backend, {kind = .Exited, status = 0})
+    fake_terminal_backend_finish(&backend, {
+        kind = .Exited,
+        status = 0,
+    })
 
-    update := terminal_process_close_advance(
-        &coordinator, &manager, &registry, 105)
+    update := terminal_process_close_advance(&coordinator, &manager, &registry, 105)
     testing.expect_value(t, string(update.output[:update.output_count]), "last")
     testing.expect(t, update.completion_available)
     testing.expect_value(t, coordinator.phase,
@@ -313,8 +349,12 @@ termsession_test_bounded_close_escalates_once :: proc(t: ^testing.T) {
     manager := termsession_test_close_manager(t, &backend)
     registry: Process_Cleanup_Registry
     coordinator: Terminal_Process_Close_Coordinator
-    terminal_process_close_begin(&coordinator, &manager, &registry,
-        {generation = 2, now_ns = 100, graceful_ns = 10, final_ns = 20})
+    terminal_process_close_begin(&coordinator, &manager, &registry, {
+        generation = 2,
+        now_ns = 100,
+        graceful_ns = 10,
+        final_ns = 20,
+    })
 
     terminal_process_close_advance(&coordinator, &manager, &registry, 109)
     testing.expect_value(t, backend.force_terminate_count, 0)
@@ -333,17 +373,23 @@ termsession_test_bounded_close_reaps_then_transfers :: proc(t: ^testing.T) {
     manager := termsession_test_close_manager(t, &backend)
     registry: Process_Cleanup_Registry
     coordinator: Terminal_Process_Close_Coordinator
-    terminal_process_close_begin(&coordinator, &manager, &registry,
-        {generation = 2, now_ns = 100, graceful_ns = 10, final_ns = 20})
+    terminal_process_close_begin(&coordinator, &manager, &registry, {
+        generation = 2,
+        now_ns = 100,
+        graceful_ns = 10,
+        final_ns = 20,
+    })
     backend.process_exited = true
-    backend.exit = {kind = .Exited, status = 0}
+    backend.exit = {
+        kind = .Exited,
+        status = 0,
+    }
 
     terminal_process_close_advance(&coordinator, &manager, &registry, 110)
     testing.expect_value(t, coordinator.phase, Terminal_Process_Close_Phase.Reaping)
     testing.expect_value(t, backend.force_terminate_count, 0)
     fake_terminal_backend_queue_output(&backend, "tail")
-    update := terminal_process_close_advance(
-        &coordinator, &manager, &registry, 120)
+    update := terminal_process_close_advance(&coordinator, &manager, &registry, 120)
 
     testing.expect_value(t, string(update.output[:update.output_count]), "tail")
     testing.expect(t, update.completion_available)
@@ -367,7 +413,7 @@ termsession_test_bounded_close_signal_failure_transfers :: proc(t: ^testing.T) {
         lowest_level = .Debug,
     }
     defer context.logger = prior_logger
-    backend := Fake_Terminal_Backend{
+    backend: Fake_Terminal_Backend = {
         terminate_fails = true,
         force_terminate_fails = true,
     }
@@ -375,11 +421,13 @@ termsession_test_bounded_close_signal_failure_transfers :: proc(t: ^testing.T) {
     registry: Process_Cleanup_Registry
     coordinator: Terminal_Process_Close_Coordinator
 
-    testing.expect(t, terminal_process_close_begin(
-        &coordinator, &manager, &registry,
-        {generation = 2, now_ns = 100, graceful_ns = 10, final_ns = 20}))
-    testing.expect_value(t, coordinator.phase,
-        Terminal_Process_Close_Phase.Transferred)
+    testing.expect(t, terminal_process_close_begin(&coordinator, &manager, &registry, {
+        generation = 2,
+        now_ns = 100,
+        graceful_ns = 10,
+        final_ns = 20,
+    }))
+    testing.expect_value(t, coordinator.phase, Terminal_Process_Close_Phase.Transferred)
     testing.expect_value(t, backend.transfer_count, 1)
     testing.expect_value(t, registry.entry_count, 1)
     testing.expect_value(t, manager.operation.state, Terminal_Session_State.Inactive)
@@ -396,7 +444,7 @@ termsession_test_bounded_close_registry_full_retains_operation :: proc(t: ^testi
         lowest_level = .Debug,
     }
     defer context.logger = prior_logger
-    backend := Fake_Terminal_Backend{
+    backend: Fake_Terminal_Backend = {
         terminate_fails = true,
         force_terminate_fails = true,
     }
@@ -405,11 +453,14 @@ termsession_test_bounded_close_registry_full_retains_operation :: proc(t: ^testi
     registry.entry_count = len(registry.entries)
     coordinator: Terminal_Process_Close_Coordinator
 
-    testing.expect(t, terminal_process_close_begin(
-        &coordinator, &manager, &registry,
-        {generation = 2, now_ns = 100, graceful_ns = 10, final_ns = 20}))
-    testing.expect_value(t, coordinator.phase,
-        Terminal_Process_Close_Phase.Force_Requested)
+    testing.expect(t, terminal_process_close_begin(&coordinator, &manager, &registry, {
+        generation = 2,
+        now_ns = 100,
+        graceful_ns = 10,
+        final_ns = 20,
+    }))
+    testing.expect_value(t,
+        coordinator.phase, Terminal_Process_Close_Phase.Force_Requested)
     testing.expect_value(t, backend.transfer_count, 0)
     testing.expect(t, manager.operation.state != .Inactive)
 }
@@ -441,16 +492,19 @@ termsession_test_cleanup_registry_polls_and_releases :: proc(t: ^testing.T) {
         lowest_level = .Debug,
     }
     defer context.logger = prior_logger
-    backend := Fake_Terminal_Backend{
+    backend: Fake_Terminal_Backend = {
         terminate_fails = true,
         force_terminate_fails = true,
     }
     manager := termsession_test_close_manager(t, &backend)
     registry: Process_Cleanup_Registry
     coordinator: Terminal_Process_Close_Coordinator
-    testing.expect(t, terminal_process_close_begin(
-        &coordinator, &manager, &registry,
-        {generation = 4, now_ns = 100, graceful_ns = 10, final_ns = 20}))
+    testing.expect(t, terminal_process_close_begin(&coordinator, &manager, &registry, {
+        generation = 4,
+        now_ns = 100,
+        graceful_ns = 10,
+        final_ns = 20,
+    }))
 
     process_cleanup_registry_update(&registry)
     testing.expect_value(t, backend.cleanup_poll_count, 1)

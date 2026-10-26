@@ -74,7 +74,7 @@ interpreter_consume_graphics_frames :: proc(interpreter: ^Interpreter) {
     if interpreter == nil || interpreter.title_state == nil {
         return 
     }
-    semantics_context := gfxsemantics.Context{
+    semantics_context: gfxsemantics.Context = {
         state = interpreter.title_state.graphics,
         user_data = interpreter,
         anchor = interpreter_graphics_anchor,

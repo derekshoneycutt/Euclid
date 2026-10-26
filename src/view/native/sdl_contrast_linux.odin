@@ -55,24 +55,36 @@ sdl_query_system_contrast :: proc(
     should_query: bool) -> Sdl_Contrast_Query_Result {
     if preference^.worker != nil {
         if !thread.is_done(preference^.worker) {
-            return {status = .Pending}
+            return {
+                status = .Pending,
+            }
         }
         thread.join(preference^.worker)
         thread.destroy(preference^.worker)
         preference^.worker = nil
-        return {requested = preference^.worker_requested,
-            status = preference^.worker_status, complete = true}
+        return {
+            requested = preference^.worker_requested,
+            status = preference^.worker_status,
+            complete = true,
+        }
     }
     if !should_query {
-        return {status = preference^.status}
+        return {
+            status = preference^.status,
+        }
     }
     preference^.worker_status = .Pending
     preference^.worker = thread.create_and_start_with_data(
         rawptr(preference), sdl_contrast_linux_worker)
     if preference^.worker == nil {
-        return {status = .Failed, complete = true}
+        return {
+            status = .Failed,
+            complete = true,
+        }
     }
-    return {status = .Pending}
+    return {
+        status = .Pending,
+    }
 }
 
 // sdl_contrast_linux_worker owns the portal call and publishes only its bounded result.
@@ -109,7 +121,10 @@ sdl_contrast_portal_read :: proc(
         return false, .Failed
     }
     defer gio.g_object_unref(cancellable)
-    deadline := Sdl_Contrast_Deadline{gio = gio, cancellable = cancellable}
+    deadline: Sdl_Contrast_Deadline = {
+        gio = gio,
+        cancellable = cancellable,
+    }
     timer := thread.create_and_start_with_data(
         rawptr(&deadline), sdl_contrast_deadline_worker)
     if timer == nil {
@@ -129,7 +144,9 @@ sdl_contrast_portal_read_cancellable :: proc(
     error: rawptr
     connection := gio.g_bus_get_sync(SDL_G_BUS_TYPE_SESSION, cancellable, &error)
     if connection == nil {
-        if error != nil { gio.g_error_free(error) }
+        if error != nil {
+            gio.g_error_free(error)
+        }
         if gio.g_cancellable_is_cancelled(cancellable) != 0 {
             return false, .Failed
         }
@@ -138,7 +155,7 @@ sdl_contrast_portal_read_cancellable :: proc(
     defer gio.g_object_unref(connection)
     namespace := gio.g_variant_new_string("org.freedesktop.appearance")
     key := gio.g_variant_new_string("contrast")
-    children := [2]rawptr{namespace, key}
+    children: [2]rawptr = {namespace, key}
     parameters := gio.g_variant_ref_sink(
         gio.g_variant_new_tuple(&children[0], uintptr(len(children))))
     defer gio.g_variant_unref(parameters)
@@ -150,7 +167,9 @@ sdl_contrast_portal_read_cancellable :: proc(
         cancellable, &error)
     if reply == nil {
         status := sdl_contrast_portal_error_status(gio, error)
-        if error != nil { gio.g_error_free(error) }
+        if error != nil {
+            gio.g_error_free(error)
+        }
         return false, status
     }
     defer gio.g_variant_unref(reply)

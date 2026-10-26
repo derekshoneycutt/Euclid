@@ -534,7 +534,10 @@ grid_prepare_resize :: proc(
         row.dirty_start = 0
         row.dirty_end = columns
     }
-    return {grid = candidate, ready = true}, .Prepared
+    return {
+        grid = candidate,
+        ready = true,
+    }, .Prepared
 }
 
 //   Atomically replace one live grid with a prepared candidate.
@@ -782,7 +785,9 @@ grid_clear_cell :: proc(grid: ^Grid, row_index, column: int) {
 grid_clear_row :: proc(grid: ^Grid, row_index: int) {
     row := &grid.rows[row_index]
     for &cell in row.cells {
-        cell = {style = grid.style}
+        cell = {
+            style = grid.style,
+        }
     }
     row.wrapped = false
     row.shell_markers = {}
@@ -1143,7 +1148,9 @@ grid_relocate_promoted_cluster :: proc(
     grid_clear_cell(grid, grid.cursor.row, 1)
     leader.width = 2
     row.cells[0] = leader
-    row.cells[1] = {continuation = true}
+    row.cells[1] = {
+        continuation = true,
+    }
     grid_mark_dirty(row, 0, 2)
     if grid.columns == 2 {
         grid.cursor.column = 1
@@ -1173,7 +1180,9 @@ grid_promote_previous_cluster :: proc(
     row := &grid.rows[grid.cursor.row]
     grid_clear_cell(grid, grid.cursor.row, previous_column + 1)
     previous.width = 2
-    row.cells[previous_column + 1] = {continuation = true}
+    row.cells[previous_column + 1] = {
+        continuation = true,
+    }
     if !grid.cursor.wrap_pending && grid.cursor.column == previous_column + 1 {
         grid.cursor.column += 1
         if grid.cursor.column >= grid.columns {
@@ -1269,7 +1278,9 @@ grid_place_rune :: proc(
     cell.emoji_candidate = unicode_is_emoji(codepoint)
     grid_append_cluster_bytes(grid, cell, encoded)
     if rune_width == 2 {
-        row.cells[column + 1] = {continuation = true} 
+        row.cells[column + 1] = {
+            continuation = true,
+        } 
     }
     grid_mark_dirty(row, column, column + int(rune_width))
 }

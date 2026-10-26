@@ -88,7 +88,10 @@ tex_document_parse_option :: proc(
     if len(key) == 0 || len(value) == 0 || tex_document_option_has(options, key) {
         return false
     }
-    options.values[options.count] = {key = key, value = value}
+    options.values[options.count] = {
+        key = key,
+        value = value,
+    }
     options.count += 1
     return true
 }
@@ -138,13 +141,17 @@ tex_document_shape_option_allowed :: proc(
         return true
     }
     switch shape_kind {
-    case .Point: return key == "size"
-    case .Line: return key == "length"
-    case .Circle: return key == "size" || key == "filled"
+    case .Point:
+        return key == "size"
+    case .Line:
+        return key == "length"
+    case .Circle:
+        return key == "size" || key == "filled"
     case .Box:
         return key == "width" || key == "height" || key == "filled" ||
             tex_document_edge_key(key, 4)
-    case .None: return false
+    case .None:
+        return false
     case .Angle, .Semicircle, .Perpendicular, .Triangle, .Pentagon:
         return tex_document_advanced_shape_option_allowed(shape_kind, key)
     }
@@ -171,7 +178,8 @@ tex_document_advanced_shape_option_allowed :: proc(
     case .Pentagon:
         return key == "width" || key == "height" || key == "filled" ||
             key == "fill_color" || tex_document_edge_key(key, 5)
-    case .None, .Point, .Line, .Circle, .Box: return false
+    case .None, .Point, .Line, .Circle, .Box:
+        return false
     }
     return false
 }
@@ -211,19 +219,25 @@ tex_document_build_shape :: proc(
 //   Return legacy default dimensions and flags for one shape kind.
 tex_document_shape_defaults :: proc(
     shape_kind: Tex_Document_Shape_Kind) -> Tex_Document_Shape {
-    shape := Tex_Document_Shape{
+    shape: Tex_Document_Shape = {
         kind = shape_kind,
         width = 1,
         height = 1,
         thickness = 1,
     }
     switch shape_kind {
-    case .Point: shape.filled = true
-    case .Line: shape.width = 3
-    case .Box: shape.width = 2
-    case .Angle: shape.end_angle = 90
-    case .Semicircle: shape.end_angle = 180
-    case .Perpendicular: shape.width = 2
+    case .Point:
+        shape.filled = true
+    case .Line:
+        shape.width = 3
+    case .Box:
+        shape.width = 2
+    case .Angle:
+        shape.end_angle = 90
+    case .Semicircle:
+        shape.end_angle = 180
+    case .Perpendicular:
+        shape.width = 2
     case .None, .Circle, .Triangle, .Pentagon:
     }
     return shape

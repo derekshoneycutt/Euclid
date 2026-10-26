@@ -53,7 +53,9 @@ animation_value_test_entity :: proc(
     entity: shapemodel.Shape_Entity
     assert(shapemodel.shape_world_create_entity(world, &entity) == .Ok)
     assert(shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
-        entity, shapemodel.Shape_Transform{position = position}) == .Ok)
+        entity, shapemodel.Shape_Transform{
+            position = position,
+        }) == .Ok)
     return entity
 }
 
@@ -63,8 +65,8 @@ animation_value_abi_round_trips_copied_bytes :: proc(t: ^testing.T) {
     state := animation_value_test_state_create()
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
-    source := [4]u8{1, 2, 3, 4}
-    identity := Animation_Value_Abi_Identity{7, 11, 12}
+    source: [4]u8 = {1, 2, 3, 4}
+    identity: Animation_Value_Abi_Identity = {7, 11, 12}
     testing.expect_value(t, set_animation_value(
         state, identity, raw_data(source[:]), 4), i32(BRIDGE_STATUS_OK))
     source = {9, 9, 9, 9}
@@ -81,7 +83,7 @@ animation_value_abi_rejects_malformed_calls :: proc(t: ^testing.T) {
     state := animation_value_test_state_create()
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
-    payload := [1]u8{1}
+    payload: [1]u8 = {1}
     pointer := raw_data(payload[:])
 
     testing.expect_value(t, set_animation_value(
@@ -102,9 +104,9 @@ animation_value_abi_preserves_destination_on_rejection :: proc(t: ^testing.T) {
     state := animation_value_test_state_create()
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
-    source := [2]u8{4, 5}
+    source: [2]u8 = {4, 5}
     _ = set_animation_value(state, {1, 2, 3}, raw_data(source[:]), 2)
-    destination := [2]u8{8, 9}
+    destination: [2]u8 = {8, 9}
 
     testing.expect_value(t, get_animation_value(
         state, {2, 2, 3}, raw_data(destination[:]), 2), i32(BRIDGE_STATUS_NOT_FOUND))
@@ -122,7 +124,7 @@ animation_value_test_stage_pending_writes :: proc(
     t: ^testing.T,
     state: ^core.Euclid_General_State,
     identity: Animation_Value_Abi_Identity) {
-    pending_values := [2]u8{2, 3}
+    pending_values: [2]u8 = {2, 3}
     for &value in pending_values {
         testing.expect_value(t, set_animation_value(
             state, identity, &value, size_of(value)),
@@ -136,8 +138,8 @@ animation_value_abi_reads_snapshot_and_newest_pending_write :: proc(t: ^testing.
     state := animation_value_test_state_create()
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
-    identity := Animation_Value_Abi_Identity{1, 1, 1}
-    canonical := [1]u8{1}
+    identity: Animation_Value_Abi_Identity = {1, 1, 1}
+    canonical: [1]u8 = {1}
     _ = set_animation_value(
         state, identity, raw_data(canonical[:]), len(canonical))
     snapshot: bridgemodel.Animation_Query_Snapshot
@@ -180,10 +182,18 @@ animation_value_batch_commits_scene_and_typed_state :: proc(t: ^testing.T) {
     state^.julia_interface = &interface
     interface.current_animation = animation
     entity := animation_value_test_entity(world, {})
-    identity := animation_model.Animation_Value_Identity{1, 1, 1, 1}
+    identity: animation_model.Animation_Value_Identity = {
+        generation = 1,
+        key = 1,
+        schema_low = 1,
+        schema_high = 1,
+    }
     _ = animation_model.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
-    batch := bridgemodel.Scene_Command_Batch{animation = animation, command_count = 1}
+    batch: bridgemodel.Scene_Command_Batch = {
+        animation = animation,
+        command_count = 1,
+    }
     batch.commands[0] = {
         kind = .Set_Shape_Position,
         entity = shapemodel.shape_entity_pack(entity),
@@ -213,13 +223,24 @@ animation_value_batch_rejects_typed_write_with_invalid_scene :: proc(t: ^testing
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    identity := animation_model.Animation_Value_Identity{1, 1, 1, 1}
+    identity: animation_model.Animation_Value_Identity = {
+        generation = 1,
+        key = 1,
+        schema_low = 1,
+        schema_high = 1,
+    }
     _ = animation_model.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
-    batch := bridgemodel.Scene_Command_Batch{animation = animation, command_count = 1}
+    batch: bridgemodel.Scene_Command_Batch = {
+        animation = animation,
+        command_count = 1,
+    }
     batch.commands[0] = {
         kind = .Set_Shape_Position,
-        entity = shapemodel.shape_entity_pack({slot = 1, generation = 1}),
+        entity = shapemodel.shape_entity_pack({
+            slot = 1,
+            generation = 1,
+        }),
         position = {2, 3, 4},
     }
     _ = animation_model.animation_value_pending_append(
@@ -244,7 +265,10 @@ animation_value_batch_rejects_scene_with_invalid_typed_write :: proc(t: ^testing
     state^.julia_interface = &interface
     interface.current_animation = animation
     entity := animation_value_test_entity(world, {9, 9, 9})
-    batch := bridgemodel.Scene_Command_Batch{animation = animation, command_count = 1}
+    batch: bridgemodel.Scene_Command_Batch = {
+        animation = animation,
+        command_count = 1,
+    }
     batch.commands[0] = {
         kind = .Set_Shape_Position,
         entity = shapemodel.shape_entity_pack(entity),
@@ -279,7 +303,7 @@ animation_value_stale_tick_does_not_commit_typed_write :: proc(t: ^testing.T) {
     interface.current_animation = animation
     interface.selected_animation = animation
     service.animation_generation = 2
-    identity := animation_model.Animation_Value_Identity{1, 1, 1, 1}
+    identity: animation_model.Animation_Value_Identity = {1, 1, 1, 1}
     _ = animation_model.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
     slot := &service.animation_tick_slots[0]

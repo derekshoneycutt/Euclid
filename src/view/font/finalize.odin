@@ -89,8 +89,10 @@ prepared_face :: proc(
 finalize_face :: proc(
     prepared: ^Prepared_Font, operations: Font_Texture_Operations,
     identity, generation: u64) -> (Font_Face, bool) {
-    texture, uploaded := finalize_texture(
-        prepared, operations, {identity = identity, generation = generation})
+    texture, uploaded := finalize_texture(prepared, operations, {
+        identity = identity,
+        generation = generation,
+    })
     if !uploaded {
        return {}, false
     }

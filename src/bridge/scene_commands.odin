@@ -167,7 +167,9 @@ active_animation_query_snapshot :: proc "contextless" (
 begin_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
 
-    batch^ = Scene_Command_Batch{animation = state^.julia_interface^.current_animation}
+    batch^ = Scene_Command_Batch{
+        animation = state^.julia_interface^.current_animation,
+    }
     state^.scene_command_batch_target = batch
 }
 
@@ -192,7 +194,9 @@ append_scene_command :: proc "contextless" (
         return nil, true
     }
     command := &batch^.commands[batch^.command_count]
-    command^ = Scene_Command{kind = kind}
+    command^ = Scene_Command{
+        kind = kind,
+    }
     batch^.command_count += 1
     return command, true
 }
@@ -747,9 +751,12 @@ scene_find_live_reveal :: proc(
 formation_target_kind :: proc(
     kind: bridgemodel.Animation_Reveal_Kind) -> particles.Formation_Target_Kind {
     switch kind {
-    case .Label: return .Label
-    case .Region: return .Region
-    case .Sweep: return .Sweep
+    case .Label:
+        return .Label
+    case .Region:
+        return .Region
+    case .Sweep:
+        return .Sweep
     }
     return .Label
 }

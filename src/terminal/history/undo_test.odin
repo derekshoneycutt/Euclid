@@ -8,7 +8,7 @@ import "core:testing"
 @(test)
 termhist_test_undo_operation_order :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 2, 1, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 2, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, !termhist_undo(&state))
     for text in ([]string{"a", "β", "👩‍💻"}) {
@@ -31,7 +31,7 @@ termhist_test_undo_operation_order :: proc(t: ^testing.T) {
 @(test)
 termhist_test_undo_editor_metadata :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 32, 4, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 32, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "e\u0301β\nlast"))
     testing.expect(t, termhist_set_cursor(&state, 3))
@@ -55,7 +55,7 @@ termhist_test_undo_editor_metadata :: proc(t: ^testing.T) {
 @(test)
 termhist_test_undo_movement_and_branch :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 32, 4, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 32, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "abc"))
     testing.expect(t, termhist_insert_text(&state, "d"))
@@ -79,7 +79,7 @@ termhist_test_undo_movement_and_branch :: proc(t: ^testing.T) {
 @(test)
 termhist_test_undo_noops_and_composition :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 32, 4, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 32, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "β"))
     testing.expect(t, termhist_undo(&state))
@@ -99,11 +99,11 @@ termhist_test_undo_noops_and_composition :: proc(t: ^testing.T) {
     testing.expect_value(t, termhist_current_text(&state), "β日本\nx")
 }
 
-// Resets and history recall discard edit history without discarding retained capacity.
+// Accepting a line resets edit history without discarding retained capacity.
 @(test)
 termhist_test_undo_reset_reuse :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 32, 4, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 32, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "saved"))
     testing.expect(t, termhist_accept_current(&state))
@@ -119,10 +119,10 @@ termhist_test_undo_reset_reuse :: proc(t: ^testing.T) {
     testing.expect_value(t, raw_data(state.undo.snapshots), snapshots)
     testing.expect_value(t, raw_data(state.undo.bytes), bytes)
     testing.expect(t, termhist_insert_text(&state, "draft"))
-    testing.expect(t, termhist_history_prev(&state))
-    testing.expect(t, !termhist_undo(&state))
-    testing.expect(t, termhist_history_next(&state))
-    testing.expect_value(t, termhist_current_text(&state), "draft")
+    testing.expect(t, termhist_undo(&state))
+    testing.expect(t, termhist_redo(&state))
+    testing.expect(t, termhist_accept_current(&state))
+    testing.expect_value(t, termhist_current_text(&state), "")
     testing.expect(t, !termhist_undo(&state))
 }
 
@@ -131,18 +131,13 @@ termhist_test_undo_reset_reuse :: proc(t: ^testing.T) {
 termhist_test_undo_initialization_failures :: proc(t: ^testing.T) {
     storage: [128]u64
     bytes := transmute([]u8)storage[:]
-    alignment := align_of(Termhist_Entry)
-    history_start := (2 + alignment - 1) / alignment * alignment
-    history_end := history_start + size_of(Termhist_Entry)
-    capacities := [?]int{
-        0, 1, 2, history_end, history_end + size_of(Termhist_Snapshot),
-    }
+    capacities := [?]int{0, 1, 2}
     for capacity in capacities {
         arena: mem.Arena
         mem.arena_init(&arena, bytes[:capacity])
         state: Termhist_State
         testing.expect(t, !termhist_init_with_allocator(
-            &state, 1, 1, mem.arena_allocator(&arena)))
+            &state, 1, mem.arena_allocator(&arena)))
         testing.expect_value(t, state.borrowed_allocator, mem.Allocator{})
         testing.expect_value(t, len(state.text), 0)
         testing.expect_value(t, len(state.undo.snapshots), 0)
@@ -156,7 +151,7 @@ termhist_test_undo_edit_allocation_failures :: proc(t: ^testing.T) {
     for stage in 0..<3 {
         state: Termhist_State
         testing.expect(t, termhist_init_with_allocator(
-            &state, 1, 1, context.allocator))
+            &state, 1, context.allocator))
         testing.expect(t, termhist_insert_text(&state, "ab"))
         if stage >= 1 {
             testing.expect(t, termhist_ensure_u8_capacity(
@@ -186,7 +181,7 @@ termhist_test_undo_edit_allocation_failures :: proc(t: ^testing.T) {
 @(test)
 termhist_test_undo_endpoint_allocation_failure :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 1, 1, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 1, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "long"))
     storage: [1]u8
@@ -208,7 +203,7 @@ termhist_test_undo_endpoint_allocation_failure :: proc(t: ^testing.T) {
 @(test)
 termhist_test_undo_reuse_and_rejected_branch :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(&state, 32, 4, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 32, context.allocator))
     defer termhist_destroy(&state)
     storage: [1]u8
     arena: mem.Arena

@@ -103,13 +103,13 @@ ui_dust_evaluate :: proc(
 ui_dust_reclaimed_motion :: proc(
     particle: Ui_Dust_Particle, elapsed: f32) -> (
     position, velocity: geometry.Vector2) {
-    target := geometry.Vector2{particle.target_x, particle.target_y}
+    target: geometry.Vector2 = {particle.target_x, particle.target_y}
     if particle.duration <= 0 || elapsed >= particle.duration {
         return target, {}
     }
     unit := clamp(elapsed / particle.duration, 0, 1)
-    start := geometry.Vector2{particle.start_x, particle.start_y}
-    initial := geometry.Vector2{particle.start_velocity_x, particle.start_velocity_y}
+    start: geometry.Vector2 = {particle.start_x, particle.start_y}
+    initial: geometry.Vector2 = {particle.start_velocity_x, particle.start_velocity_y}
     squared, cubed := unit * unit, unit * unit * unit
     position = start * (2*cubed - 3*squared + 1) +
         initial * particle.duration * (cubed - 2*squared + unit) +
@@ -138,7 +138,7 @@ ui_dust_reclaim_eligible :: proc(
         return false
     }
     index := reference.index
-    position := geometry.Vector2{
+    position: geometry.Vector2 = {
         system^.particles.pos_x[index], system^.particles.pos_y[index],
     }
     viewport := system^.viewport

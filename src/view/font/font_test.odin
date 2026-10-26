@@ -17,11 +17,11 @@ import geometry "../../core/geometry"
 import color "../../core/color"
 
 Codepoint_Resolver_Test_Result :: struct {
-    ascii : Font_Glyph_Resolve_Status,
-    math : Font_Glyph_Resolve_Status,
-    unsupported : Font_Glyph_Resolve_Status,
-    capacity : Font_Glyph_Resolve_Status,
-    pending_count : i32,
+    ascii: Font_Glyph_Resolve_Status,
+    math: Font_Glyph_Resolve_Status,
+    unsupported: Font_Glyph_Resolve_Status,
+    capacity: Font_Glyph_Resolve_Status,
+    pending_count: i32,
 }
 
 Math_Shaping_Task_Test_Result :: struct {
@@ -141,7 +141,9 @@ font_test_configure_raster_cache :: proc(cache: ^Font_Cache, glyph_count: int) -
     entry.generation = 1
     entry.requested_generation = 1
     entry.raster_ascent = 24
-    entry.font = {base_size = JULIA_MONO_FONT_SIZE}
+    entry.font = {
+        base_size = JULIA_MONO_FONT_SIZE,
+    }
     entry.canonical_raster = {
         identity = {
             key = .Regular,
@@ -152,13 +154,22 @@ font_test_configure_raster_cache :: proc(cache: ^Font_Cache, glyph_count: int) -
         },
         state = .Resident,
         raster_ascent = 24,
-        texture = {handle = rawptr(uintptr(1)), width = 16, height = 16},
+        texture = {
+            handle = rawptr(uintptr(1)),
+            width = 16,
+            height = 16,
+        },
     }
     if !font_generation_glyphs_init(entry, glyph_count, context.allocator) {
         return false
     }
     entry.canonical_raster.glyphs[2] = {
-        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        rectangle = {
+            x = 1,
+            y = 1,
+            width = 4,
+            height = 8,
+        },
         offset_y = 24,
         advance_x = 8,
         state = .Resident,
@@ -232,14 +243,26 @@ view_test_optional_raster_preserves_canonical_advance :: proc(t: ^testing.T) {
     }
     optional_glyphs: [8]Font_Glyph_Record
     optional_glyphs[2] = {
-        rectangle = {x = 1, y = 1, width = 2, height = 4},
+        rectangle = {
+            x = 1,
+            y = 1,
+            width = 2,
+            height = 4,
+        },
         advance_x = 3,
         state = .Resident,
     }
-    optional := Font_Raster_Instance{
-        identity = {pixel_height = 12, slot_incarnation = 2},
+    optional: Font_Raster_Instance = {
+        identity = {
+            pixel_height = 12,
+            slot_incarnation = 2,
+        },
         state = .Resident,
-        texture = {handle = rawptr(uintptr(1)), width = 8, height = 8},
+        texture = {
+            handle = rawptr(uintptr(1)),
+            width = 8,
+            height = 8,
+        },
         glyphs = optional_glyphs[:],
     }
 
@@ -358,7 +381,12 @@ font_test_configure_partial_glyph_run :: proc(
     }
     entry := &cache.entries[int(Font_Key.Regular)]
     entry.canonical_raster.glyphs[3] = {
-        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        rectangle = {
+            x = 1,
+            y = 1,
+            width = 4,
+            height = 8,
+        },
         offset_y = 24,
         advance_x = 8,
         state = .Resident,
@@ -375,9 +403,18 @@ font_test_configure_partial_glyph_run :: proc(
     partial := &cache.optional_rasters[slot_index]
     partial.state = .Resident
     partial.raster_ascent = 14
-    partial.texture = {handle = rawptr(uintptr(2)), width = 16, height = 16}
+    partial.texture = {
+        handle = rawptr(uintptr(2)),
+        width = 16,
+        height = 16,
+    }
     partial.glyphs[2] = {
-        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        rectangle = {
+            x = 1,
+            y = 1,
+            width = 4,
+            height = 8,
+        },
         offset_y = 14,
         advance_x = 8,
         state = .Resident,
@@ -393,7 +430,7 @@ view_test_glyph_run_selects_one_complete_raster :: proc(t: ^testing.T) {
     request: fontmodel.Font_Raster_Request
     slot_index := font_test_configure_partial_glyph_run(&cache, &request)
     testing.expect(t, slot_index >= 0)
-    glyph_ids := [2]u32{2, 3}
+    glyph_ids: [2]u32 = {2, 3}
     selection, selected := cache_terminal_select_glyph_raster(
         &cache, .Regular, glyph_ids[:], request)
     testing.expect(t, selected)
@@ -424,7 +461,7 @@ view_test_glyph_run_rejects_incomplete_residency :: proc(t: ^testing.T) {
     testing.expect(t, slot_index >= 0)
     entry := &cache.entries[int(Font_Key.Regular)]
     entry.canonical_raster.glyphs[3].state = .Missing
-    glyph_ids := [2]u32{2, 3}
+    glyph_ids: [2]u32 = {2, 3}
     _, incomplete_run_selected := cache_terminal_select_glyph_raster(
         &cache, .Regular, glyph_ids[:], request)
     testing.expect(t, !incomplete_run_selected)
@@ -460,7 +497,7 @@ font_test_publish_page :: proc(
         return 0, false
     }
     task.rgba_reservation_bytes = rgba_bytes
-    texture := Font_Texture{
+    texture: Font_Texture = {
         handle = rawptr(uintptr(2)),
         width = u32(task.prepared.atlas_width),
         height = u32(task.prepared.atlas_height),
@@ -562,9 +599,18 @@ font_test_configure_resident_optional_glyph :: proc(
     raster := &cache.optional_rasters[slot_index]
     raster.state = .Resident
     raster.raster_ascent = 14
-    raster.texture = {handle = rawptr(uintptr(2)), width = 16, height = 16}
+    raster.texture = {
+        handle = rawptr(uintptr(2)),
+        width = 16,
+        height = 16,
+    }
     raster.glyphs[2] = {
-        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        rectangle = {
+            x = 1,
+            y = 1,
+            width = 4,
+            height = 8,
+        },
         offset_y = 14,
         advance_x = 8,
         state = .Resident,
@@ -642,7 +688,9 @@ view_test_upload_completion_rejects_stale_identity :: proc(t: ^testing.T) {
         upload_identity = 42,
     }
     cache.preparation.pending_texture = {
-        handle = rawptr(uintptr(7)), width = 8, height = 8,
+        handle = rawptr(uintptr(7)),
+        width = 8,
+        height = 8,
     }
 
     cache_texture_upload_completed(&cache, 41, 3, true)
@@ -859,7 +907,9 @@ test_math_shaping_task :: proc(
     result := cast(^Math_Shaping_Task_Test_Result)payload
     result^.glyph_count, result^.shaped = math_shaping_shape(
         result^.capability, result^.generation, {
-            text = "x+1", role = .Italic, workspace = result^.workspace[:],
+            text = "x+1",
+            role = .Italic,
+            workspace = result^.workspace[:],
         }, result^.glyphs[:])
     result^.properties_ready = math_shaping_has_math_properties(
         result^.capability)
@@ -874,7 +924,7 @@ view_run_math_shaping_task :: proc(
     pool: taskpool.Task_Pool
     testing.expect(t, taskpool.task_pool_init(&pool, 1, 1))
     defer taskpool.task_pool_destroy(&pool)
-    task := Math_Shaping_Task_Test_Result{
+    task: Math_Shaping_Task_Test_Result = {
         capability = capability,
         generation = generation,
     }
@@ -993,7 +1043,9 @@ view_test_terminal_regular_font_key_is_shared :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Regular)] = {
         resident = true,
-        font = {base_size = 32},
+        font = {
+            base_size = 32,
+        },
     }
 
     resolved := cache_terminal_resolve(&cache, .Regular)
@@ -1038,14 +1090,22 @@ view_test_raster_metric_normalization :: proc(t: ^testing.T) {
 @(test)
 view_test_raster_baseline_placement_is_height_independent :: proc(t: ^testing.T) {
     top_24, valid_24 := font_raster_bitmap_top_logical({
-        line_top = 10, logical_size = 12, canonical_pixel_height = 32,
-        canonical_ascent = 24, bitmap_offset_y = 20,
-        raster_pixel_height = 24, raster_ascent = 18,
+        line_top = 10,
+        logical_size = 12,
+        canonical_pixel_height = 32,
+        canonical_ascent = 24,
+        bitmap_offset_y = 20,
+        raster_pixel_height = 24,
+        raster_ascent = 18,
     })
     top_48, valid_48 := font_raster_bitmap_top_logical({
-        line_top = 10, logical_size = 12, canonical_pixel_height = 32,
-        canonical_ascent = 24, bitmap_offset_y = 40,
-        raster_pixel_height = 48, raster_ascent = 36,
+        line_top = 10,
+        logical_size = 12,
+        canonical_pixel_height = 32,
+        canonical_ascent = 24,
+        bitmap_offset_y = 40,
+        raster_pixel_height = 48,
+        raster_ascent = 36,
     })
     testing.expect(t, valid_24 && valid_48)
     testing.expect_value(t, top_24, f32(20))
@@ -1057,7 +1117,9 @@ view_test_raster_baseline_placement_is_height_independent :: proc(t: ^testing.T)
 view_test_canonical_raster_identity :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 32},
+        font = {
+            base_size = 32,
+        },
         generation = 7,
         raster_ascent = 24,
         resident = true,
@@ -1232,10 +1294,12 @@ view_expect_math_vertical_variants :: proc(
     testing.expect(t, result.count > 0 && result.extended_shape)
     testing.expect_value(t, result.count, 2)
     testing.expect_value(t, variants[0], fontmodel.Font_Math_Glyph_Variant{
-        glyph_id = 874, advance = 2062,
+        glyph_id = 874,
+        advance = 2062,
     })
     testing.expect_value(t, variants[1], fontmodel.Font_Math_Glyph_Variant{
-        glyph_id = 6713, advance = 2869,
+        glyph_id = 6713,
+        advance = 2869,
     })
     testing.expect_value(t, repeated_result.count, result.count)
     testing.expect(t, !stale_result.ok)
@@ -1262,14 +1326,20 @@ view_expect_math_vertical_assembly :: proc(
     testing.expect_value(t, result.min_connector_overlap, i32(41))
     testing.expect_value(t, result.italic_correction, i32(0))
     testing.expect_value(t, parts[0], fontmodel.Font_Math_Glyph_Part{
-        glyph_id = 1296, end_connector_length = 655, full_advance = 3727,
+        glyph_id = 1296,
+        end_connector_length = 655,
+        full_advance = 3727,
     })
     testing.expect_value(t, parts[1], fontmodel.Font_Math_Glyph_Part{
-        glyph_id = 6716, start_connector_length = 1311,
-        end_connector_length = 1311, full_advance = 1311, extender = true,
+        glyph_id = 6716,
+        start_connector_length = 1311,
+        end_connector_length = 1311,
+        full_advance = 1311,
+        extender = true,
     })
     testing.expect_value(t, parts[2], fontmodel.Font_Math_Glyph_Part{
-        glyph_id = 6717, start_connector_length = 655,
+        glyph_id = 6717,
+        start_connector_length = 655,
         full_advance = 1270,
     })
     has_extender := false
@@ -1307,11 +1377,17 @@ view_expect_math_standalone_accent_shape :: proc(
     workspace: [16]u8
     normal: [2]Shaped_Glyph
     normal_count, normal_ok := math_shaping_shape(capability, 7, {
-        text = "̂", standalone_accent = true, workspace = workspace[:]}, normal[:])
+        text = "̂",
+        standalone_accent = true,
+        workspace = workspace[:],
+    }, normal[:])
     flattened: [2]Shaped_Glyph
     flattened_count, flattened_ok := math_shaping_shape(capability, 7, {
-        text = "̂", standalone_accent = true, flattened_accent = true,
-        workspace = workspace[:]}, flattened[:])
+        text = "̂",
+        standalone_accent = true,
+        flattened_accent = true,
+        workspace = workspace[:],
+    }, flattened[:])
     testing.expect(t, normal_ok && flattened_ok)
     testing.expect_value(t, normal_count, 1)
     testing.expect_value(t, flattened_count, 1)
@@ -1324,9 +1400,9 @@ view_expect_math_glyph_kerning :: proc(
     capability: ^Font_Math_Shaping_Capability,
     glyph_id: u32) {
 
-    corners := [4]Harfbuzz_Math_Kern{
+    corners: [4]Harfbuzz_Math_Kern = {
         .Top_Right, .Top_Left, .Bottom_Right, .Bottom_Left}
-    heights := [3]i32{-64, 0, 64}
+    heights: [3]i32 = {-64, 0, 64}
     for corner in corners {
         for height in heights {
             value, ok := math_shaping_glyph_kerning(
@@ -1348,7 +1424,7 @@ view_expect_math_glyph_kern_tables :: proc(
     capability: ^Font_Math_Shaping_Capability,
     glyph_id: u32) {
 
-    corners := [4]Harfbuzz_Math_Kern{
+    corners: [4]Harfbuzz_Math_Kern = {
         .Top_Right, .Top_Left, .Bottom_Right, .Bottom_Left}
     for corner in corners {
         entries: [fontmodel.FONT_MATH_KERN_ENTRY_CAPACITY]fontmodel.Font_Math_Kern_Entry
@@ -1388,13 +1464,19 @@ view_expect_math_shaping_capability :: proc(
     task := view_run_math_shaping_task(t, capability, 7)
     testing.expect(t, task.shaped && task.glyph_count == 3)
     testing.expect_value(t, task.glyphs[0], Shaped_Glyph{
-        glyph_id = 3455, cluster = 0, x_advance = 944,
+        glyph_id = 3455,
+        cluster = 0,
+        x_advance = 944,
     })
     testing.expect_value(t, task.glyphs[1], Shaped_Glyph{
-        glyph_id = 12, cluster = 4, x_advance = 1503,
+        glyph_id = 12,
+        cluster = 4,
+        x_advance = 1503,
     })
     testing.expect_value(t, task.glyphs[2], Shaped_Glyph{
-        glyph_id = 18, cluster = 5, x_advance = 1024,
+        glyph_id = 18,
+        cluster = 5,
+        x_advance = 1024,
     })
     italic_x, italic_x_ok := harfbuzz_nominal_glyph(
         &capability.resource, rune(0x1d465))
@@ -1447,17 +1529,21 @@ view_test_worker_math_shaping_rejects_invalid_requests :: proc(t: ^testing.T) {
 
     output: [4]Shaped_Glyph
     workspace: [16]u8
-    _, stale_ok := math_shaping_shape(
-        &capability, 2, {text = "x", role = .Italic, workspace = workspace[:]},
-        output[:])
-    _, missing_ok := math_shaping_shape(
-        &capability, 3, {
-            text = "\U0010ffff", role = .Upright, workspace = workspace[:],
-        }, output[:])
-    _, role_ok := math_shaping_shape(
-        &capability, 3, {
-            text = "x", role = Math_Shaping_Role(99), workspace = workspace[:],
-        }, output[:])
+    _, stale_ok := math_shaping_shape(&capability, 2, {
+        text = "x",
+        role = .Italic,
+        workspace = workspace[:],
+    }, output[:])
+    _, missing_ok := math_shaping_shape(&capability, 3, {
+        text = "\U0010ffff",
+        role = .Upright,
+        workspace = workspace[:],
+    }, output[:])
+    _, role_ok := math_shaping_shape(&capability, 3, {
+        text = "x",
+        role = Math_Shaping_Role(99),
+        workspace = workspace[:],
+    }, output[:])
     _, extents_ok := math_shaping_glyph_extents(
         &capability, 3, max(u32))
     testing.expect(t, !stale_ok && !missing_ok && !role_ok && !extents_ok)
@@ -1621,7 +1707,9 @@ view_test_prepare_complete_regular :: proc(t: ^testing.T) {
 // Verify cancellation before source I/O leaves no partial prepared-font ownership.
 @(test)
 view_test_prepare_cancels_before_open :: proc(t: ^testing.T) {
-    state := Font_Cancel_Test_State{cancel_at = 1}
+    state: Font_Cancel_Test_State = {
+        cancel_at = 1,
+    }
     prepared: Prepared_Font
     success := prepare({
         path = "assets/JuliaMono-Regular.ttf",
@@ -1644,7 +1732,9 @@ view_test_prepare_cancels_before_open :: proc(t: ^testing.T) {
 @(test)
 view_test_prepare_complete_cancellation_clears_result :: proc(t: ^testing.T) {
     codepoints := seed_codepoint_set()
-    state := Font_Cancel_Test_State{cancel_at = 8}
+    state: Font_Cancel_Test_State = {
+        cancel_at = 8,
+    }
     prepared: Prepared_Font
     success := prepare({
         path = "assets/JuliaMono-Regular.ttf",
@@ -1667,8 +1757,8 @@ view_test_prepare_complete_cancellation_clears_result :: proc(t: ^testing.T) {
 // Verify bounded subset preparation preserves face glyph IDs and deterministic packing.
 @(test)
 view_test_prepare_glyph_page :: proc(t: ^testing.T) {
-    glyph_ids := [3]u32{0, 17, 4000}
-    request := Font_Glyph_Page_Request{
+    glyph_ids: [3]u32 = {0, 17, 4000}
+    request: Font_Glyph_Page_Request = {
         key = .Regular,
         generation = 11,
         path = "assets/JuliaMono-Regular.ttf",
@@ -1709,7 +1799,7 @@ view_test_prepare_glyph_page :: proc(t: ^testing.T) {
 view_test_visible_ink_capture_reservoir_is_bounded_and_repeatable :: proc(
     t: ^testing.T) {
     first, second: Font_Cache
-    color_value := color.Color_RGBA8{20, 40, 60, 255}
+    color_value: color.Color_RGBA8 = {20, 40, 60, 255}
     testing.expect(t, cache_ink_capture_init(&first, context.allocator))
     testing.expect(t, cache_ink_capture_init(&second, context.allocator))
     defer cache_ink_capture_destroy(&first, context.allocator)
@@ -1717,7 +1807,7 @@ view_test_visible_ink_capture_reservoir_is_bounded_and_repeatable :: proc(
     cache_ink_capture_begin(&first)
     cache_ink_capture_begin(&second)
     for index in 0..<(FONT_VISIBLE_INK_SAMPLE_CAPACITY+1000) {
-        position := geometry.Vector2{f32(index), f32(index%31)}
+        position: geometry.Vector2 = {f32(index), f32(index%31)}
         cache_ink_capture_sample(&first, position, color_value, u8(index%255+1))
         cache_ink_capture_sample(&second, position, color_value, u8(index%255+1))
     }
@@ -1782,8 +1872,10 @@ font_test_expect_visible_ink_snapshots_match :: proc(
 // Verify glyph-page cancellation clears partial compact-page ownership.
 @(test)
 view_test_prepare_glyph_page_cancellation_clears_result :: proc(t: ^testing.T) {
-    glyph_ids := [3]u32{0, 17, 4000}
-    state := Font_Cancel_Test_State{cancel_at = 5}
+    glyph_ids: [3]u32 = {0, 17, 4000}
+    state: Font_Cancel_Test_State = {
+        cancel_at = 5,
+    }
     prepared: Prepared_Font
     success := prepare_glyph_page({
         path = "assets/JuliaMono-Regular.ttf",
@@ -1805,10 +1897,10 @@ view_test_prepare_glyph_page_cancellation_clears_result :: proc(t: ^testing.T) {
 // Verify page preparation rejects duplicate and out-of-range face glyph IDs.
 @(test)
 view_test_prepare_glyph_page_rejects_invalid_ids :: proc(t: ^testing.T) {
-    duplicate_ids := [2]u32{17, 17}
-    out_of_range_ids := [1]u32{65535}
+    duplicate_ids: [2]u32 = {17, 17}
+    out_of_range_ids: [1]u32 = {65535}
     prepared: Prepared_Font
-    request := Font_Glyph_Page_Request{
+    request: Font_Glyph_Page_Request = {
         path = "assets/JuliaMono-Regular.ttf",
         pixel_size = JULIA_MONO_FONT_SIZE,
         glyph_ids = duplicate_ids[:],
@@ -2142,9 +2234,18 @@ font_test_configure_codepoint_fallback :: proc(
     fallback := &cache.optional_rasters[fallback_index]
     fallback.state = .Resident
     fallback.raster_ascent = 12
-    fallback.texture = {handle = rawptr(uintptr(2)), width = 16, height = 16}
+    fallback.texture = {
+        handle = rawptr(uintptr(2)),
+        width = 16,
+        height = 16,
+    }
     fallback.glyphs[glyph_id] = {
-        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        rectangle = {
+            x = 1,
+            y = 1,
+            width = 4,
+            height = 8,
+        },
         offset_y = 12,
         advance_x = 8,
         state = .Resident,
@@ -2289,7 +2390,7 @@ view_test_prepared_font_uses_bulk_arena_release :: proc(t: ^testing.T) {
     cache: Font_Cache
     testing.expect(t, cache_preparation_arena_init(&cache))
     allocator := vmem.arena_allocator(&cache.preparation_arena)
-    codepoints := [1]rune{'A'}
+    codepoints: [1]rune = {'A'}
     prepared: Prepared_Font
     testing.expect(t, prepare({
         key = .Bold,
@@ -2313,7 +2414,7 @@ view_test_prepared_font_uses_bulk_arena_release :: proc(t: ^testing.T) {
 // Verify incomplete prepared results are rejected before display finalization.
 @(test)
 view_test_prepared_validation :: proc(t: ^testing.T) {
-    prepared := Prepared_Font{
+    prepared: Prepared_Font = {
         base_size = 64,
         glyph_count = 1,
         atlas_width = 8,
@@ -2335,12 +2436,14 @@ view_test_prepared_validation :: proc(t: ^testing.T) {
 view_test_cache_rejects_stale_publication :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 55},
+        font = {
+            base_size = 55,
+        },
         generation = 5,
         requested_generation = 5,
         resident = true,
     }
-    prepared := Prepared_Font{
+    prepared: Prepared_Font = {
         key = .Bold,
         generation = 4,
         glyph_count = 1,
@@ -2357,7 +2460,9 @@ view_test_cache_rejects_stale_publication :: proc(t: ^testing.T) {
 view_test_cache_reload_supersedes_active_generation :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 55},
+        font = {
+            base_size = 55,
+        },
         generation = 5,
         requested_generation = 5,
         resident = true,
@@ -2366,10 +2471,14 @@ view_test_cache_reload_supersedes_active_generation :: proc(t: ^testing.T) {
     testing.expect(t, cache_reload(&cache, .Bold))
     testing.expect_value(t, cache.preparation.task.generation, u64(6))
     testing.expect(t, cache_reload(&cache, .Bold))
-    testing.expect_value(
-        t, cache.entries[int(Font_Key.Bold)].requested_generation, u64(7))
+    testing.expect_value(t,
+        cache.entries[int(Font_Key.Bold)].requested_generation, u64(7))
 
-    prepared := Prepared_Font{key = .Bold, generation = 6, glyph_count = 1}
+    prepared: Prepared_Font = {
+        key = .Bold,
+        generation = 6,
+        glyph_count = 1,
+    }
     testing.expect(t, !cache_publish(&cache, &prepared))
     testing.expect_value(t, prepared.glyph_count, i32(1))
     testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.base_size, 55)
@@ -2381,7 +2490,9 @@ view_test_cache_reload_supersedes_active_generation :: proc(t: ^testing.T) {
 view_test_cache_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Regular)] = {
-        font = {base_size = 64},
+        font = {
+            base_size = 64,
+        },
         generation = 3,
         requested_generation = 3,
         resident = true,
@@ -2402,7 +2513,9 @@ view_test_cache_reload_failure_preserves_resident :: proc(t: ^testing.T) {
 view_test_math_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Math_Regular)] = {
-        font = {base_size = 32},
+        font = {
+            base_size = 32,
+        },
         generation = 4,
         requested_generation = 4,
         resident = true,
@@ -2438,7 +2551,9 @@ view_test_source_monitor_debounces_rapid_changes :: proc(t: ^testing.T) {
     cache: Font_Cache
     key := Font_Key.Bold
     cache.entries[int(key)] = {
-        font = {base_size = 55},
+        font = {
+            base_size = 55,
+        },
         generation = 2,
         requested_generation = 2,
         resident = true,
@@ -2446,13 +2561,21 @@ view_test_source_monitor_debounces_rapid_changes :: proc(t: ^testing.T) {
     }
     cache.source_monitor.initialized = true
     cache.source_monitor.entries[int(key)].observed = {
-        modification_ns = 10, size = 100, present = true,
+        modification_ns = 10,
+        size = 100,
+        present = true,
     }
 
-    source_monitor_observe(
-        &cache, key, {modification_ns = 20, size = 110, present = true}, 100)
-    source_monitor_observe(
-        &cache, key, {modification_ns = 30, size = 120, present = true}, 200)
+    source_monitor_observe(&cache, key, {
+        modification_ns = 20,
+        size = 110,
+        present = true,
+    }, 100)
+    source_monitor_observe(&cache, key, {
+        modification_ns = 30,
+        size = 120,
+        present = true,
+    }, 200)
     source_monitor_commit(&cache, 200 + FONT_SOURCE_DEBOUNCE_NS - 1)
     testing.expect_value(
         t, cache.entries[int(key)].requested_generation, u64(2))
@@ -2463,9 +2586,8 @@ view_test_source_monitor_debounces_rapid_changes :: proc(t: ^testing.T) {
     testing.expect_value(t, cache.preparation.task.generation, u64(3))
     testing.expect_value(t, cache.source_monitor.change_count, u64(1))
     testing.expect_value(t, cache.source_monitor.reload_count, u64(1))
-    testing.expect_value(
-        t, cache.source_monitor.entries[int(key)].observed.modification_ns,
-        i64(30))
+    testing.expect_value(t,
+        cache.source_monitor.entries[int(key)].observed.modification_ns, i64(30))
 }
 
 // Verify changes to unused optional sources do not create demand.
@@ -2474,10 +2596,13 @@ view_test_source_monitor_ignores_unused_variant :: proc(t: ^testing.T) {
     cache: Font_Cache
     key := Font_Key.Black_Italic
     cache.source_monitor.entries[int(key)].observed = {
-        modification_ns = 10, present = true,
+        modification_ns = 10,
+        present = true,
     }
-    source_monitor_observe(
-        &cache, key, {modification_ns = 20, present = true}, 100)
+    source_monitor_observe(&cache, key, {
+        modification_ns = 20,
+        present = true,
+    }, 100)
     source_monitor_commit(&cache, 100 + FONT_SOURCE_DEBOUNCE_NS)
 
     testing.expect_value(
@@ -2498,7 +2623,9 @@ view_test_cache_service_discards_stale_completion :: proc(t: ^testing.T) {
 
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 55},
+        font = {
+            base_size = 55,
+        },
         generation = 4,
         requested_generation = 6,
         resident = true,
@@ -2509,7 +2636,11 @@ view_test_cache_service_discards_stale_completion :: proc(t: ^testing.T) {
     cache.preparation.task = {
         key = .Bold,
         generation = 5,
-        prepared = {key = .Bold, generation = 5, glyph_count = 1},
+        prepared = {
+            key = .Bold,
+            generation = 5,
+            glyph_count = 1,
+        },
     }
     for taskpool.task_pool_poll(&pool, handle) == .Pending {
         thread.yield()
@@ -2638,7 +2769,9 @@ view_test_cache_service_preserves_current_other_key_work :: proc(t: ^testing.T) 
 font_test_request_optional_preparation :: proc(
     t: ^testing.T, cache: ^Font_Cache, reload: bool) {
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 55},
+        font = {
+            base_size = 55,
+        },
         resident = true,
         generation = 1,
         requested_generation = 1,
@@ -2810,7 +2943,10 @@ view_test_cache_retries_queue_full :: proc(t: ^testing.T) {
         &pool, test_task_succeed, nil)
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 55}, resident = true,
+        font = {
+            base_size = 55,
+        },
+        resident = true,
     }
     testing.expect(t, cache_request(&cache, .Bold))
     testing.expect(t, prepare_task_set_path(
@@ -2878,11 +3014,15 @@ view_test_cache_shutdown_task_states :: proc(t: ^testing.T) {
 view_test_cache_resolution :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Regular)] = {
-        font = {base_size = 11},
+        font = {
+            base_size = 11,
+        },
         resident = true,
     }
     cache.entries[int(Font_Key.Bold)] = {
-        font = {base_size = 22},
+        font = {
+            base_size = 22,
+        },
         resident = true,
         state = .Ready,
     }
@@ -2913,7 +3053,11 @@ view_test_cache_resolution :: proc(t: ^testing.T) {
 view_test_cache_serializes_demand :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Regular)] = {
-        font = {base_size = 11}, resident = true, state = .Ready,
+        font = {
+            base_size = 11,
+        },
+        resident = true,
+        state = .Ready,
     }
 
     testing.expect_value(t, cache_resolve(&cache, .Bold).base_size, 11)

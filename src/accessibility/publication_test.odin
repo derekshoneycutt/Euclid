@@ -17,8 +17,7 @@ publication_fail_allocate :: proc(
 @(test)
 control_tree_scales_owned_nodes_text_and_widths :: proc(t: ^testing.T) {
     memory: storage.Tlsf_Owner
-    testing.expect_value(t,
-        storage.tlsf_owner_init(&memory, context.allocator),
+    testing.expect_value(t, storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
     controls := make([]Control_Publication_Input, 5000, context.allocator)
@@ -29,9 +28,14 @@ control_tree_scales_owned_nodes_text_and_widths :: proc(t: ^testing.T) {
         byte = 'a'
     }
     for &control, index in controls {
-        control = {native_id = u64(index + 2), label = "Library entry",
-            enabled = true, role = .Tree_Item, position_in_set = u32(index + 1),
-            set_size = 5000}
+        control = {
+            native_id = u64(index + 2),
+            label = "Library entry",
+            enabled = true,
+            role = .Tree_Item,
+            position_in_set = u32(index + 1),
+            set_size = 5000,
+        }
     }
     controls[0].label = string(label)
     controls[1].value = string(label[:2048])
@@ -39,7 +43,10 @@ control_tree_scales_owned_nodes_text_and_widths :: proc(t: ^testing.T) {
     controls[1].text_cursor_byte = 2048
     controls[4999].level = max(u32)
     value: Control_Tree_Publication
-    testing.expect_value(t, control_tree_build(&value, {controls = controls}, &memory),
+    testing.expect_value(t,
+        control_tree_build(&value, {
+            controls = controls,
+        }, &memory),
         Publication_Status.Ok)
     testing.expect_value(t, value.control_count, 5000)
     testing.expect_value(t, value.controls[0].label_length, 70000)
@@ -60,9 +67,16 @@ protected_control_leases_retire_only_on_display_collection :: proc(t: ^testing.T
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    protected := Protected_Control_Publication{memory = &memory}
-    controls := [1]Control_Publication_Input{{native_id = 2, label = "before"}}
-    input := Tree_Publication_Input{controls = controls[:]}
+    protected: Protected_Control_Publication = {
+        memory = &memory,
+    }
+    controls: [1]Control_Publication_Input = {{
+        native_id = 2,
+        label = "before",
+    }}
+    input: Tree_Publication_Input = {
+        controls = controls[:],
+    }
     testing.expect_value(t,
         protected_publish_controls(&protected, input), Publication_Status.Ok)
     first := protected_control_acquire(&protected)
@@ -97,20 +111,31 @@ protected_control_growth_failure_preserves_predecessor :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    protected := Protected_Control_Publication{memory = &memory}
-    controls := [1]Control_Publication_Input{{native_id = 2, label = "retained"}}
-    input := Tree_Publication_Input{controls = controls[:]}
+    protected: Protected_Control_Publication = {
+        memory = &memory,
+    }
+    controls: [1]Control_Publication_Input = {{
+        native_id = 2,
+        label = "retained",
+    }}
+    input: Tree_Publication_Input = {
+        controls = controls[:],
+    }
     testing.expect_value(t,
         protected_publish_controls(&protected, input), Publication_Status.Ok)
     first := protected_control_acquire(&protected)
     original_backing := memory.backing_allocator
-    memory.backing_allocator = {procedure = publication_fail_allocate}
+    memory.backing_allocator = {
+        procedure = publication_fail_allocate,
+    }
     testing.expect_value(t,
         protected_publish_controls(&protected, input), Publication_Status.Ok)
     testing.expect(t, first == protected.active)
     huge := make([]u8, 1024 * 1024, context.allocator)
     defer delete(huge, context.allocator)
-    for &byte in huge {byte = 'z'}
+    for &byte in huge {
+        byte = 'z'
+    }
     controls[0].label = string(huge)
     testing.expect_value(t,
         protected_publish_controls(&protected, input), Publication_Status.Capacity)
@@ -127,26 +152,64 @@ protected_control_growth_failure_preserves_predecessor :: proc(t: ^testing.T) {
 // phase_two_control_fixture returns representative ordinary-control facts.
 phase_two_control_fixture :: proc() -> [6]Control_Publication_Input {
     return {
-        {native_id = 2, role = .Button, bounds = {10, 10, 40, 30},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true, focused = true},
-        {native_id = 3, role = .Checkbox, bounds = {10, 40, 160, 64},
-            label = "Limit frame rate", actions = {.Focus, .Toggle},
-            enabled = true, focusable = true, checked = true},
-        {native_id = 4, role = .Slider, bounds = {10, 70, 180, 94},
-            label = "Maximum dust", value = "50000",
+        {
+            native_id = 2,
+            role = .Button,
+            bounds = {10, 10, 40, 30},
+            label = "Restart animation",
+            actions = {.Focus, .Activate},
+            enabled = true,
+            focusable = true,
+            focused = true,
+        },
+        {
+            native_id = 3,
+            role = .Checkbox,
+            bounds = {10, 40, 160, 64},
+            label = "Limit frame rate",
+            actions = {.Focus, .Toggle},
+            enabled = true,
+            focusable = true,
+            checked = true,
+        },
+        {
+            native_id = 4,
+            role = .Slider,
+            bounds = {10, 70, 180, 94},
+            label = "Maximum dust",
+            value = "50000",
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
             range = {0, 100000, 50000, 1000, false, true},
-            enabled = true, focusable = true},
-        {native_id = 5, controls_native_id = 6, role = .Accordion_Header,
-            bounds = {200, 10, 360, 34}, label = "Save GIF",
-            actions = {.Focus, .Activate}, enabled = true, focusable = true,
-            expanded = true},
-        {native_id = 6, role = .Panel, bounds = {200, 40, 360, 120},
-            label = "GIF capture settings", enabled = true},
-        {native_id = 7, parent_native_id = 6, role = .Status,
-            bounds = {210, 80, 350, 104}, label = "GIF capture saving",
-            enabled = true, busy = true},
+            enabled = true,
+            focusable = true,
+        },
+        {
+            native_id = 5,
+            controls_native_id = 6,
+            role = .Accordion_Header,
+            bounds = {200, 10, 360, 34},
+            label = "Save GIF",
+            actions = {.Focus, .Activate},
+            enabled = true,
+            focusable = true,
+            expanded = true,
+        },
+        {
+            native_id = 6,
+            role = .Panel,
+            bounds = {200, 40, 360, 120},
+            label = "GIF capture settings",
+            enabled = true,
+        },
+        {
+            native_id = 7,
+            parent_native_id = 6,
+            role = .Status,
+            bounds = {210, 80, 350, 104},
+            label = "GIF capture saving",
+            enabled = true,
+            busy = true,
+        },
     }
 }
 
@@ -161,7 +224,8 @@ control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
     controls := phase_two_control_fixture()
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, window_focused = true,
+        root_bounds = {0, 0, 800, 600},
+        window_focused = true,
         controls = controls[:],
     }, &memory), Publication_Status.Ok)
     testing.expect_value(t, value.control_count, 6)
@@ -183,25 +247,57 @@ control_tree_builds_search_and_tree_hierarchy :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [5]Control_Publication_Input{
-        {native_id = 2, controls_native_id = 3, role = .Search_Input,
-            bounds = {10, 10, 220, 40}, label = "Search animations",
-            enabled = true, focusable = true, text_present = true},
-        {native_id = 6, parent_native_id = 2, role = .Text_Run,
-            bounds = {14, 14, 216, 36}, value = "axiom",
-            enabled = true, text_present = true},
-        {native_id = 3, role = .Tree, bounds = {10, 48, 280, 400},
-            label = "Animation library", active_descendant_native_id = 5,
-            enabled = true, focusable = true},
-        {native_id = 4, parent_native_id = 3, role = .Tree_Item,
-            bounds = {10, 48, 280, 72}, label = "Elements", enabled = true},
-        {native_id = 5, parent_native_id = 4, role = .Tree_Item,
-            bounds = {26, 72, 280, 96}, label = "Proposition I",
-            enabled = true, selected = true},
+    controls: [5]Control_Publication_Input = {
+        {
+            native_id = 2,
+            controls_native_id = 3,
+            role = .Search_Input,
+            bounds = {10, 10, 220, 40},
+            label = "Search animations",
+            enabled = true,
+            focusable = true,
+            text_present = true,
+        },
+        {
+            native_id = 6,
+            parent_native_id = 2,
+            role = .Text_Run,
+            bounds = {14, 14, 216, 36},
+            value = "axiom",
+            enabled = true,
+            text_present = true,
+        },
+        {
+            native_id = 3,
+            role = .Tree,
+            bounds = {10, 48, 280, 400},
+            label = "Animation library",
+            active_descendant_native_id = 5,
+            enabled = true,
+            focusable = true,
+        },
+        {
+            native_id = 4,
+            parent_native_id = 3,
+            role = .Tree_Item,
+            bounds = {10, 48, 280, 72},
+            label = "Elements",
+            enabled = true,
+        },
+        {
+            native_id = 5,
+            parent_native_id = 4,
+            role = .Tree_Item,
+            bounds = {26, 72, 280, 96},
+            label = "Proposition I",
+            enabled = true,
+            selected = true,
+        },
     }
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), Publication_Status.Ok)
     testing.expect_value(t, value.controls[0].parent_native_id, value.root_id)
     testing.expect_value(t, value.controls[4].parent_native_id, u64(4))
@@ -219,15 +315,23 @@ control_tree_builds_utf8_editable_text :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [1]Control_Publication_Input{{
-        native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
-        label = "Search animations", value = "aβc", placeholder = "Search",
-        enabled = true, focusable = true, text_present = true,
-        text_cursor_byte = 3, text_anchor_byte = 1,
+    controls: [1]Control_Publication_Input = {{
+        native_id = 2,
+        role = .Search_Input,
+        bounds = {10, 10, 220, 40},
+        label = "Search animations",
+        value = "aβc",
+        placeholder = "Search",
+        enabled = true,
+        focusable = true,
+        text_present = true,
+        text_cursor_byte = 3,
+        text_anchor_byte = 1,
     }}
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), Publication_Status.Ok)
     text := value.controls[0]
     testing.expect_value(t, text.character_count, int(3))
@@ -250,14 +354,19 @@ control_tree_rejects_non_boundary_text_selection :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [1]Control_Publication_Input{{
-        native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
-        value = "aβc", text_present = true,
-        text_cursor_byte = 2, text_anchor_byte = 0,
+    controls: [1]Control_Publication_Input = {{
+        native_id = 2,
+        role = .Search_Input,
+        bounds = {10, 10, 220, 40},
+        value = "aβc",
+        text_present = true,
+        text_cursor_byte = 2,
+        text_anchor_byte = 0,
     }}
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), Publication_Status.Invalid_Utf8)
 }
 
@@ -270,27 +379,41 @@ control_tree_rejects_dangling_cycles_and_unrelated_active_descendants :: proc(
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [2]Control_Publication_Input{
-        {native_id = 2, role = .Tree, bounds = {0, 0, 200, 200},
-            label = "Library", enabled = true},
-        {native_id = 3, parent_native_id = 2, role = .Tree_Item,
-            bounds = {0, 0, 200, 24}, label = "Item", enabled = true},
+    controls: [2]Control_Publication_Input = {
+        {
+            native_id = 2,
+            role = .Tree,
+            bounds = {0, 0, 200, 200},
+            label = "Library",
+            enabled = true,
+        },
+        {
+            native_id = 3,
+            parent_native_id = 2,
+            role = .Tree_Item,
+            bounds = {0, 0, 200, 24},
+            label = "Item",
+            enabled = true,
+        },
     }
     value: Control_Tree_Publication
     controls[1].parent_native_id = 99
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), Publication_Status.Missing_Parent)
     controls[0].parent_native_id = 3
     controls[1].parent_native_id = 2
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), Publication_Status.Cycle)
     controls[0].parent_native_id = 0
     controls[0].active_descendant_native_id = 3
     controls[1].parent_native_id = 0
     testing.expect_value(t, control_tree_build(&value, {
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }, &memory), Publication_Status.Unreachable_Node)
 }
 
@@ -302,14 +425,22 @@ protected_control_tree_suppresses_and_preserves :: proc(t: ^testing.T) {
         storage.tlsf_owner_init(&memory, context.allocator),
         storage.Tlsf_Owner_Status.Ok)
     defer storage.tlsf_owner_destroy(&memory)
-    controls := [1]Control_Publication_Input{{
-        native_id = 2, role = .Slider, bounds = {10, 10, 180, 34},
-        label = "Output scale", actions = {.Focus, .Increment, .Decrement},
-        range = {1, 8, 2, 1, false, true}, enabled = true, focusable = true,
+    controls: [1]Control_Publication_Input = {{
+        native_id = 2,
+        role = .Slider,
+        bounds = {10, 10, 180, 34},
+        label = "Output scale",
+        actions = {.Focus, .Increment, .Decrement},
+        range = {1, 8, 2, 1, false, true},
+        enabled = true,
+        focusable = true,
     }}
-    protected := Protected_Control_Publication{memory = &memory}
-    input := Tree_Publication_Input{
-        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    protected: Protected_Control_Publication = {
+        memory = &memory,
+    }
+    input: Tree_Publication_Input = {
+        root_bounds = {0, 0, 800, 600},
+        controls = controls[:],
     }
     testing.expect_value(t, protected_publish_controls(&protected, input),
         Publication_Status.Ok)
@@ -341,7 +472,7 @@ publication_builds_static_root_and_child :: proc(t: ^testing.T) {
 @(test)
 protected_button_publication_differences_complete_records :: proc(t: ^testing.T) {
     protected: Protected_Publication
-    input := Button_Publication_Input{
+    input: Button_Publication_Input = {
         present = true,
         child_id = 2,
         root_bounds = {0, 0, 800, 600},
@@ -373,9 +504,14 @@ protected_button_publication_differences_complete_records :: proc(t: ^testing.T)
 publication_builds_real_button :: proc(t: ^testing.T) {
     value: Static_Publication
     status := publication_build_button(&value, {
-        present = true, child_id = 12, root_bounds = {0, 0, 800, 600},
-        child_bounds = {16, 520, 48, 552}, label = "Restart animation",
-        window_focused = true, child_enabled = true, child_focused = true,
+        present = true,
+        child_id = 12,
+        root_bounds = {0, 0, 800, 600},
+        child_bounds = {16, 520, 48, 552},
+        label = "Restart animation",
+        window_focused = true,
+        child_enabled = true,
+        child_focused = true,
     })
     testing.expect_value(t, status, Publication_Status.Ok)
     testing.expect_value(t, value.child_role, Publication_Role.Button)

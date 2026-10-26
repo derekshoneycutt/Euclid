@@ -154,11 +154,13 @@ tex_parse_document :: proc(
     if !tex_semantic_output_init(output) {
         return .Work_Limit
     }
-    parser := Tex_Document_Parser{
+    parser: Tex_Document_Parser = {
         source = source,
         active_paragraph = -1,
         paragraph_alignment = .Left,
-        paragraph_format = {alignment = .Left},
+        paragraph_format = {
+            alignment = .Left,
+        },
         output = output,
         limits = limits,
     }
@@ -402,7 +404,9 @@ tex_document_parse_color :: proc(
     }
     parser.offset += 1
     return tex_document_parse_sequence(parser, {
-        font_flags = font_flags, color = color, stop_on_brace = true,
+        font_flags = font_flags,
+        color = color,
+        stop_on_brace = true,
         inline_only = parser.description_label_active,
     })
 }
@@ -461,8 +465,11 @@ tex_document_parse_math_run :: proc(
         return .Work_Limit
     }
     return tex_document_append_semantic_math(parser, {
-        text = span, color = color, root_style = style,
-        math_program = program, source_start = source_start,
+        text = span,
+        color = color,
+        root_style = style,
+        math_program = program,
+        source_start = source_start,
         is_inline = delimiters.is_inline,
     })
 }
@@ -471,7 +478,7 @@ tex_document_parse_math_run :: proc(
 tex_document_append_semantic_math :: proc(
     parser: ^Tex_Document_Parser,
     input: Tex_Document_Math_Input) -> Tex_Parse_Status {
-    item := Tex_Document_Inline{
+    item: Tex_Document_Inline = {
         kind = .Math,
         source = {input.source_start, parser.offset-input.source_start},
         text = input.text,
@@ -697,9 +704,14 @@ tex_document_append_semantic_prose :: proc(
             continue
         }
         status := tex_document_append_semantic_prose_space(parser, {
-            text = text, source_start = source_start, text_start = start,
-            space_start = space_start, space_end = space_end,
-            kind = kind, font_flags = font_flags, color = color,
+            text = text,
+            source_start = source_start,
+            text_start = start,
+            space_start = space_start,
+            space_end = space_end,
+            kind = kind,
+            font_flags = font_flags,
+            color = color,
         })
         if status != .Ok {
             return status
@@ -837,15 +849,24 @@ tex_document_environment_starts :: proc(
 // Return the exact source spelling for one supported alignment environment.
 tex_document_environment_name :: proc(environment: Tex_Document_Environment) -> string {
     switch environment {
-    case .Center: return "center"
-    case .Flush_Left: return "flushleft"
-    case .Flush_Right: return "flushright"
-    case .Quote: return "quote"
-    case .Quotation: return "quotation"
-    case .Itemize: return "itemize"
-    case .Enumerate: return "enumerate"
-    case .Description: return "description"
-    case .None: return ""
+    case .Center:
+        return "center"
+    case .Flush_Left:
+        return "flushleft"
+    case .Flush_Right:
+        return "flushright"
+    case .Quote:
+        return "quote"
+    case .Quotation:
+        return "quotation"
+    case .Itemize:
+        return "itemize"
+    case .Enumerate:
+        return "enumerate"
+    case .Description:
+        return "description"
+    case .None:
+        return ""
     }
     return ""
 }
@@ -856,15 +877,24 @@ tex_document_environment_ends :: proc(
     environment: Tex_Document_Environment) -> bool {
 
     switch environment {
-    case .Center: return tex_document_starts(parser, "\\end{center}")
-    case .Flush_Left: return tex_document_starts(parser, "\\end{flushleft}")
-    case .Flush_Right: return tex_document_starts(parser, "\\end{flushright}")
-    case .Quote: return tex_document_starts(parser, "\\end{quote}")
-    case .Quotation: return tex_document_starts(parser, "\\end{quotation}")
-    case .Itemize: return tex_document_starts(parser, "\\end{itemize}")
-    case .Enumerate: return tex_document_starts(parser, "\\end{enumerate}")
-    case .Description: return tex_document_starts(parser, "\\end{description}")
-    case .None: return false
+    case .Center:
+        return tex_document_starts(parser, "\\end{center}")
+    case .Flush_Left:
+        return tex_document_starts(parser, "\\end{flushleft}")
+    case .Flush_Right:
+        return tex_document_starts(parser, "\\end{flushright}")
+    case .Quote:
+        return tex_document_starts(parser, "\\end{quote}")
+    case .Quotation:
+        return tex_document_starts(parser, "\\end{quotation}")
+    case .Itemize:
+        return tex_document_starts(parser, "\\end{itemize}")
+    case .Enumerate:
+        return tex_document_starts(parser, "\\end{enumerate}")
+    case .Description:
+        return tex_document_starts(parser, "\\end{description}")
+    case .None:
+        return false
     }
     return false
 }
@@ -959,14 +989,18 @@ tex_document_enter_environment :: proc(
     environment: Tex_Document_Environment) -> Tex_Parse_Status {
 
     switch environment {
-    case .Center: parser.paragraph_alignment = .Center
-    case .Flush_Left: parser.paragraph_alignment = .Left
-    case .Flush_Right: parser.paragraph_alignment = .Right
+    case .Center:
+        parser.paragraph_alignment = .Center
+    case .Flush_Left:
+        parser.paragraph_alignment = .Left
+    case .Flush_Right:
+        parser.paragraph_alignment = .Right
     case .Quote, .Quotation:
         return tex_document_enter_quote_environment(parser, environment)
     case .Itemize, .Enumerate, .Description:
         return tex_document_enter_list_environment(parser, environment)
-    case .None: return .Unexpected_Token
+    case .None:
+        return .Unexpected_Token
     }
     return .Ok
 }
@@ -1045,11 +1079,14 @@ tex_document_append_list_label :: proc(
         return .Work_Limit
     }
     block_index := tex_document_begin_list_label(parser, source)
-    if block_index < 0 || !tex_semantic_append_document_inline(
-        parser.output, block_index, {
-        kind = .Text, source = source, text = span,
-        font_flags = TEX_DOCUMENT_STYLE_BOLD, math_program = -1,
-    }) {
+    if block_index < 0 ||
+        !tex_semantic_append_document_inline(parser.output, block_index, {
+            kind = .Text,
+            source = source,
+            text = span,
+            font_flags = TEX_DOCUMENT_STYLE_BOLD,
+            math_program = -1,
+        }) {
         return .Work_Limit
     }
     return .Ok
@@ -1142,7 +1179,8 @@ tex_document_parse_list_item_label :: proc(
             return .Unexpected_Token
         }
         return tex_document_append_list_label(parser, source, "•")
-    case .None: return .Unexpected_Token
+    case .None:
+        return .Unexpected_Token
     }
     return .Unexpected_Token
 }
@@ -1162,7 +1200,7 @@ tex_document_parse_list_item :: proc(
     }
     source_start := parser.offset
     parser.offset += len("\\item")
-    label_source := Tex_Source_Span{source_start, len("\\item")}
+    label_source: Tex_Source_Span = {source_start, len("\\item")}
     ordinal := int(parser.paragraph_format.item_ordinal)+1
     parser.paragraph_format.item_ordinal += 1
     parser.list_item_started = true
@@ -1270,7 +1308,11 @@ tex_document_shape_command :: proc(
     }
     for index in 0..<len(commands) {
         if tex_document_command_starts(parser, commands[index]) {
-            return {kind = kinds[index], text = commands[index], present = true}
+            return {
+                kind = kinds[index],
+                text = commands[index],
+                present = true,
+            }
         }
     }
     return {}
@@ -1280,10 +1322,19 @@ tex_document_shape_command :: proc(
 tex_document_math_delimiters :: proc(
     parser: ^Tex_Document_Parser) -> Tex_Document_Math_Delimiters {
     if tex_document_starts(parser, "$$") {
-        return {opener = "$$", closer = "$$", present = true}
+        return {
+            opener = "$$",
+            closer = "$$",
+            present = true,
+        }
     }
     if tex_document_starts(parser, "$") {
-        return {opener = "$", closer = "$", is_inline = true, present = true}
+        return {
+            opener = "$",
+            closer = "$",
+            is_inline = true,
+            present = true,
+        }
     }
     if tex_document_starts(parser, "\\(") {
         return {
@@ -1294,7 +1345,11 @@ tex_document_math_delimiters :: proc(
         }
     }
     if tex_document_starts(parser, "\\[") {
-        return {opener = "\\[", closer = "\\]", present = true}
+        return {
+            opener = "\\[",
+            closer = "\\]",
+            present = true,
+        }
     }
     return {}
 }
@@ -1302,7 +1357,9 @@ tex_document_math_delimiters :: proc(
 //   Return a complete outer math fragment and its root style.
 tex_document_whole_math :: proc(
     source: string) -> Tex_Document_Whole_Math {
-    parser := Tex_Document_Parser{source = source}
+    parser: Tex_Document_Parser = {
+        source = source,
+    }
     delimiters := tex_document_math_delimiters(&parser)
     if !delimiters.present ||
         len(source) < len(delimiters.opener)+len(delimiters.closer) ||
@@ -1312,7 +1369,11 @@ tex_document_whole_math :: proc(
     content := source[
         len(delimiters.opener):len(source)-len(delimiters.closer)]
     style := Tex_Math_Root_Style.Text if delimiters.is_inline else .Display
-    return {content = content, style = style, present = true}
+    return {
+        content = content,
+        style = style,
+        present = true,
+    }
 }
 
 //   Consume one nonnested braced source field.

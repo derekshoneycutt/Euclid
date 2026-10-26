@@ -32,10 +32,23 @@ sdl_input_test_keyboard_order_and_kinds :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
     accumulation: Sdl_Input_Accumulation
     testing.expect(t, input.input_runtime_begin_frame(&runtime))
-    events := []sdl.KeyboardEvent{
-        {scancode = .A, mod = {.LCTRL}, down = true},
-        {scancode = .A, mod = {.LCTRL}, down = true, repeat = true},
-        {scancode = .A, mod = {}, down = false},
+    events: []sdl.KeyboardEvent = {
+        {
+            scancode = .A,
+            mod = {.LCTRL},
+            down = true,
+        },
+        {
+            scancode = .A,
+            mod = {.LCTRL},
+            down = true,
+            repeat = true,
+        },
+        {
+            scancode = .A,
+            mod = {},
+            down = false,
+        },
     }
     for event in events {
        sdl_input_append_keyboard(&runtime, event, &accumulation)
@@ -54,7 +67,9 @@ sdl_input_test_text_decodes_multiple_runes :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
     testing.expect(t, input.input_runtime_begin_frame(&runtime))
     _ = input.input_runtime_set_text_target(&runtime, .Input_Box, 27)
-    accumulation := Sdl_Input_Accumulation{modifiers = {.Shift}}
+    accumulation: Sdl_Input_Accumulation = {
+        modifiers = {.Shift},
+    }
     sdl_input_append_text(&runtime, "A界", &accumulation)
     captured := input.input_runtime_events(&runtime)
     testing.expect_value(t, len(captured), 1)
@@ -73,8 +88,14 @@ sdl_input_test_preedit_payload_and_selection :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
     testing.expect(t, input.input_runtime_begin_frame(&runtime))
     _ = input.input_runtime_set_text_target(&runtime, .Terminal, 0)
-    accumulation := Sdl_Input_Accumulation{focused = true}
-    event := sdl.TextEditingEvent{text = "にほん", start = 1, length = 2}
+    accumulation: Sdl_Input_Accumulation = {
+        focused = true,
+    }
+    event: sdl.TextEditingEvent = {
+        text = "にほん",
+        start = 1,
+        length = 2,
+    }
     sdl_input_append_preedit(&runtime, event, &accumulation)
     events := input.input_runtime_events(&runtime)
     testing.expect_value(t, len(events), 1)
@@ -92,7 +113,7 @@ sdl_input_test_preedit_payload_and_selection :: proc(t: ^testing.T) {
 sdl_input_test_text_rejects_invalid_utf8 :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
     testing.expect(t, input.input_runtime_begin_frame(&runtime))
-    invalid := [2]u8{0xff, 0}
+    invalid: [2]u8 = {0xff, 0}
     accumulation: Sdl_Input_Accumulation
     _ = input.input_runtime_set_text_target(&runtime, .Input_Box, 9)
     runtime.invalid_text_payload_count = 0
@@ -115,21 +136,31 @@ sdl_input_test_text_requires_active_target :: proc(t: ^testing.T) {
 @(test)
 sdl_input_test_pointer_wheel_and_focus :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
-    accumulation := Sdl_Input_Accumulation{focused = true}
-    pressed := sdl.Event{type = .MOUSE_BUTTON_DOWN}
+    accumulation: Sdl_Input_Accumulation = {
+        focused = true,
+    }
+    pressed: sdl.Event = {
+        type = .MOUSE_BUTTON_DOWN,
+    }
     pressed.button.button = sdl.BUTTON_LEFT
     pressed.button.down = true
     pressed.button.clicks = 2
     sdl_input_consume_event(&runtime, &pressed, &accumulation)
-    normal_wheel := sdl.Event{type = .MOUSE_WHEEL}
+    normal_wheel: sdl.Event = {
+        type = .MOUSE_WHEEL,
+    }
     normal_wheel.wheel.y = -1.25
     normal_wheel.wheel.direction = .NORMAL
     sdl_input_consume_event(&runtime, &normal_wheel, &accumulation)
-    flipped_wheel := sdl.Event{type = .MOUSE_WHEEL}
+    flipped_wheel: sdl.Event = {
+        type = .MOUSE_WHEEL,
+    }
     flipped_wheel.wheel.y = 2.5
     flipped_wheel.wheel.direction = .FLIPPED
     sdl_input_consume_event(&runtime, &flipped_wheel, &accumulation)
-    lost := sdl.Event{type = .WINDOW_FOCUS_LOST}
+    lost: sdl.Event = {
+        type = .WINDOW_FOCUS_LOST,
+    }
     sdl_input_consume_event(&runtime, &lost, &accumulation)
     testing.expect(t, .Left in accumulation.mouse_pressed)
     testing.expect_value(t, accumulation.mouse_left_clicks, u8(2))
@@ -143,7 +174,9 @@ sdl_input_test_pointer_wheel_and_focus :: proc(t: ^testing.T) {
 sdl_input_test_click_count_tracks_latest_left_press :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
     accumulation: Sdl_Input_Accumulation
-    event := sdl.Event{type = .MOUSE_BUTTON_DOWN}
+    event: sdl.Event = {
+        type = .MOUSE_BUTTON_DOWN,
+    }
     event.button.button = sdl.BUTTON_LEFT
     event.button.down = true
     click_counts := [?]u8{1, 2, 3}

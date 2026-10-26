@@ -27,7 +27,7 @@ content_generation_test_build :: proc(
     testing.expect_value(t, content_generation_append_text(
         generation, "root.jl", CATALOG_PATH_BYTE_CAPACITY, &path_ref),
         Content_Generation_Status.Ok)
-    root := Content_Generation_Record{
+    root: Content_Generation_Record = {
         stable_id = root_id,
         node_kind = .Animation,
         sibling_order = 0,
@@ -56,8 +56,10 @@ content_generation_test_append_child :: proc(
         CATALOG_PATH_BYTE_CAPACITY, &child_path)
     content_generation_test_append_text(t, generation, "Terminal",
         CATALOG_NAME_BYTE_CAPACITY, &terminal_name)
-    empty_path := Content_Text_Ref{offset = u32(generation.text_builder.count)}
-    child := Content_Generation_Record{
+    empty_path: Content_Text_Ref = {
+        offset = u32(generation.text_builder.count),
+    }
+    child: Content_Generation_Record = {
         stable_id = content_generation_test_id(identity),
         parent_stable_id = content_generation_test_id(1),
         has_parent = true,
@@ -67,7 +69,7 @@ content_generation_test_append_child :: proc(
         display_name = child_name,
         implementation_path = child_path,
     }
-    terminal := Content_Generation_Record{
+    terminal: Content_Generation_Record = {
         stable_id = content_generation_test_id(255),
         node_kind = .Terminal,
         sibling_order = 1,
@@ -194,7 +196,8 @@ content_generation_rejects_invalid_text_references :: proc(t: ^testing.T) {
     defer content_generation_destroy(&generation)
     testing.expect(t, content_generation_test_build(t, &generation, 20, false))
     generation.records[0].display_name = Content_Text_Ref{
-        offset = max(u32), length = max(u32),
+        offset = max(u32),
+        length = max(u32),
     }
     testing.expect_value(t, content_generation_seal(&generation),
         Content_Generation_Status.Invalid_Reference)
@@ -205,7 +208,8 @@ content_generation_rejects_invalid_text_references :: proc(t: ^testing.T) {
         Content_Generation_Status.Ok)
     testing.expect(t, content_generation_test_build_recordless_root(t, &generation))
     generation.records[0].display_name = Content_Text_Ref{
-        offset = max(u32), length = max(u32),
+        offset = max(u32),
+        length = max(u32),
     }
     testing.expect_value(t, content_generation_seal(&generation),
         Content_Generation_Status.Invalid_Reference)
@@ -228,7 +232,7 @@ content_generation_test_append_root :: proc(
         CATALOG_NAME_BYTE_CAPACITY, &name)
     content_generation_test_append_text(t, generation, "root.jl",
         CATALOG_PATH_BYTE_CAPACITY, &path)
-    root := Content_Generation_Record{
+    root: Content_Generation_Record = {
         stable_id = content_generation_test_id(1),
         node_kind = .Animation,
         sibling_order = 0,
@@ -249,7 +253,7 @@ content_generation_test_append_terminal :: proc(
         CATALOG_NAME_BYTE_CAPACITY, &terminal_name)
     content_generation_test_append_text(t, generation, "",
         CATALOG_PATH_BYTE_CAPACITY, &empty_path)
-    terminal := Content_Generation_Record{
+    terminal: Content_Generation_Record = {
         stable_id = content_generation_test_id(255),
         node_kind = .Terminal,
         sibling_order = 1,

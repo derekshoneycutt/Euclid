@@ -23,8 +23,12 @@ TREE_COLLECTION_CREATE :: u64(9)
 tree_actions_semantic_id :: proc(
     params: Tree_List_Params, entry_id: uuid.Identifier,
     action: u64) -> viewmodel.Ui_Node_Id {
-    return {domain = .Library_Action, local_id = action,
-        stable_id = entry_id, generation = params.ji^.content_generation}
+    return {
+        domain = .Library_Action,
+        local_id = action,
+        stable_id = entry_id,
+        generation = params.ji^.content_generation,
+    }
 }
 
 // tree_actions_repair_context_focus repairs only focus owned by a retired drawer.
@@ -220,9 +224,12 @@ tree_actions_content_bounds :: proc(
     case TREE_ENTRY_NAME_INPUT:
         return {row.actions.label_clip.x + row.offset_x, row.content_y,
             row.actions.label_clip.width, tree_prepared_row_height(row)}
-    case TREE_ACTION_UP: return row.actions.move_up_rect
-    case TREE_ACTION_DOWN: return row.actions.move_down_rect
-    case TREE_COLLECTION_DELETE: return row.actions.delete_rect
+    case TREE_ACTION_UP:
+        return row.actions.move_up_rect
+    case TREE_ACTION_DOWN:
+        return row.actions.move_down_rect
+    case TREE_COLLECTION_DELETE:
+        return row.actions.delete_rect
     }
     return row.actions.toggle_rect
 }
@@ -362,7 +369,7 @@ tree_actions_reveal_focus :: proc(
 // tree_actions_control_states excludes clipped and disabled controls from interaction.
 tree_actions_control_states :: proc(
     bounds, clip: geometry.Rectangle, enabled: bool) -> viewmodel.Ui_Node_State {
-    states := viewmodel.Ui_Node_State{.Visible}
+    states: viewmodel.Ui_Node_State = {.Visible}
     if enabled {
         states += {.Enabled, .Focusable, .Tab_Stop}
     }
@@ -384,10 +391,16 @@ tree_actions_publish_button :: proc(
         actions = {.Focus, .Activate}
     }
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
-        id = id, parent = parent,
-        role = .Button, states = states, actions = actions,
-        region = .Accordion_Content, traversal_order = u32(id.local_id + 4),
-        bounds = bounds.bounds, clip_bounds = bounds.clip_bounds, label = label,
+        id = id,
+        parent = parent,
+        role = .Button,
+        states = states,
+        actions = actions,
+        region = .Accordion_Content,
+        traversal_order = u32(id.local_id + 4),
+        bounds = bounds.bounds,
+        clip_bounds = bounds.clip_bounds,
+        label = label,
     })
 }
 
@@ -408,24 +421,33 @@ tree_actions_publish_row :: proc(
     }
     storage: [content.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     label := viewmessages.shell_format(params.general_state, .Library_Actions_For,
-        []content.Content_Format_Argument{{name = "name",
-            value = tree_item_label(params.ji, row.item, params.collections)}},
+        []content.Content_Format_Argument{{
+            name = "name",
+            value = tree_item_label(params.ji, row.item, params.collections),
+        }},
         storage[:])
     drawer_id := tree_actions_semantic_id(params, entry_id, TREE_ACTION_DRAWER)
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
         id = tree_actions_semantic_id(params, entry_id, TREE_ACTION_TOGGLE),
         parent = tree_placement_semantic_id(row.item),
         controls = drawer_id,
-        role = .Button, states = states,
+        role = .Button,
+        states = states,
         actions = {.Focus, .Activate, .Expand, .Collapse},
-        region = .Accordion_Content, traversal_order = 4,
-        bounds = toggle, clip_bounds = clip, label = label,
+        region = .Accordion_Content,
+        traversal_order = 4,
+        bounds = toggle,
+        clip_bounds = clip,
+        label = label,
     })
     _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
-        id = drawer_id, parent = tree_placement_semantic_id(row.item),
-        role = .Panel, states = {.Visible},
+        id = drawer_id,
+        parent = tree_placement_semantic_id(row.item),
+        role = .Panel,
+        states = {.Visible},
         bounds = tree_actions_screen_rect(row.actions.drawer_rect, panel, scroll_y),
-        clip_bounds = tree_actions_screen_clip(row, panel, scroll_y), label = label,
+        clip_bounds = tree_actions_screen_clip(row, panel, scroll_y),
+        label = label,
     })
     tree_actions_publish_moves(params, row, panel, scroll_y)
 }
@@ -440,8 +462,10 @@ tree_actions_publish_create :: proc(
         role = .Button,
         states = tree_actions_control_states(
             geometry.bounds, geometry.clip_bounds, true),
-        actions = {.Focus, .Activate}, region = .Accordion_Content,
-        traversal_order = 4, bounds = geometry.bounds,
+        actions = {.Focus, .Activate},
+        region = .Accordion_Content,
+        traversal_order = 4,
+        bounds = geometry.bounds,
         clip_bounds = geometry.clip_bounds,
         label = viewmessages.shell_message(
             params.general_state, .Library_Create_Collection),

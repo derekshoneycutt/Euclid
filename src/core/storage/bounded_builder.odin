@@ -19,16 +19,16 @@ Bounded_Builder_Status :: enum {
 //   - A successful seal permanently rejects further mutation.
 Bounded_Byte_Builder :: struct {
     // Allocator ownership and hard logical admission limit.
-    allocator : runtime.Allocator,
-    max_count : int,
+    allocator: runtime.Allocator,
+    max_count: int,
 
     // Current allocation, populated prefix, and cumulative allocated byte capacity.
-    storage : []u8,
-    count : int,
-    allocated_capacity : int,
+    storage: []u8,
+    count: int,
+    allocated_capacity: int,
 
     // One-way lifecycle state.
-    sealed : bool,
+    sealed: bool,
 }
 
 // Build a bounded sequence of plain values in allocator-owned storage.
@@ -40,16 +40,16 @@ Bounded_Byte_Builder :: struct {
 //   - A successful seal permanently rejects further mutation.
 Bounded_Element_Builder :: struct($Element: typeid) {
     // Allocator ownership and hard logical element limit.
-    allocator : runtime.Allocator,
-    max_count : int,
+    allocator: runtime.Allocator,
+    max_count: int,
 
     // Current allocation, populated prefix, and cumulative allocated element capacity.
-    storage : []Element,
-    count : int,
-    allocated_capacity : int,
+    storage: []Element,
+    count: int,
+    allocated_capacity: int,
 
     // One-way lifecycle state.
-    sealed : bool,
+    sealed: bool,
 }
 
 //   Initialize an empty bounded byte builder without allocating storage.
@@ -77,7 +77,10 @@ bounded_byte_builder_init_with_allocator :: proc(
     if builder == nil || max_count <= 0 || allocator.procedure == nil {
         return .Invalid_Argument
     }
-    builder^ = {allocator = allocator, max_count = max_count}
+    builder^ = {
+        allocator = allocator,
+        max_count = max_count,
+    }
     return .Ok
 }
 
@@ -148,7 +151,10 @@ bounded_element_builder_init_with_allocator :: proc(
     if builder == nil || max_count <= 0 || allocator.procedure == nil {
         return .Invalid_Argument
     }
-    builder^ = {allocator = allocator, max_count = max_count}
+    builder^ = {
+        allocator = allocator,
+        max_count = max_count,
+    }
     return .Ok
 }
 

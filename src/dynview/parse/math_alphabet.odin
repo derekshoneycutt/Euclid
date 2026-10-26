@@ -127,5 +127,8 @@ tex_math_append_alphabet_text :: proc(
         copy(output.text[output.text_count:], encoded[:encoded_count])
         output.text_count += encoded_count
     }
-    return {offset = start, length = output.text_count-start}, true
+    return {
+        offset = start,
+        length = output.text_count-start,
+    }, true
 }

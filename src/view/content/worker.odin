@@ -16,7 +16,9 @@ Search_Coalesced_Request :: struct {
 search_worker_coalesce :: proc(
     service: ^Content_Service,
     first: Content_Worker_Request) -> Search_Coalesced_Request {
-    result := Search_Coalesced_Request{query = first}
+    result: Search_Coalesced_Request = {
+        query = first,
+    }
     for {
         candidate, available := chan.try_recv(service.requests)
         if !available {
@@ -95,7 +97,9 @@ content_worker_discard :: proc(
         log.error("content_discard_close_failed")
     }
     _ = chan.send(service.control_results, Content_Control_Result{
-        status = .Candidate_Discarded, cleanup_failed = !closed})
+        status = .Candidate_Discarded,
+        cleanup_failed = !closed,
+    })
 }
 
 // Retire the previous active connection after the outer transaction publishes.
@@ -119,7 +123,9 @@ content_worker_dispatch_control :: proc(
         return false, false
     }
     if request.kind == .Shutdown {
-        _ = chan.send(service.results, Search_Query_Result{status = .Stopped})
+        _ = chan.send(service.results, Search_Query_Result{
+            status = .Stopped,
+        })
         return true, true
     }
     if request.kind == .Stage {
@@ -150,6 +156,7 @@ content_worker_run :: proc(service: ^Content_Service, database: ^Content_Databas
         }
     }
     for {
+        defer free_all(context.temp_allocator)
         request: Content_Worker_Request
         if has_pending {
             request = pending
@@ -176,7 +183,7 @@ content_worker_run :: proc(service: ^Content_Service, database: ^Content_Databas
     }
 }
 
-// Execute and publish a bounded result before retiring query-local temporary storage.
+// Execute and publish a pointer-free result within the owning request's scratch lifetime.
 content_worker_execute_query :: proc(
     service: ^Content_Service, database: ^Content_Database,
     query: Search_Query_Request) {
@@ -185,11 +192,11 @@ content_worker_execute_query :: proc(
         execution.result.status = .Query_Failed
     }
     _ = chan.try_send(service.results, execution.result)
-    free_all(context.temp_allocator)
 }
 
 // Own SQLite from open through finalization on the dedicated worker thread.
 content_worker_entry :: proc(data: rawptr) {
+    defer free_all(context.temp_allocator)
     service := cast(^Content_Service)data
     path := string(service.database_path[:service.database_path_length])
     fingerprint := string(service.expected_fingerprint[:])
@@ -200,7 +207,10 @@ content_worker_entry :: proc(data: rawptr) {
         database.index_generation == service.active_generation^.generation
     status := ready ? Search_Query_Status.Ready : .Unavailable
     _ = chan.send(service.results, Search_Query_Result{
-        status = status, index_generation = database.index_generation})
+        status = status,
+        index_generation = database.index_generation,
+    })
+    free_all(context.temp_allocator)
     if ready {
         content_worker_run(service, &database)
     }

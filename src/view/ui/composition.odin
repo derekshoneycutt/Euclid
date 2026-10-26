@@ -85,7 +85,7 @@ ui_publish_presentation_visibility :: proc(
 accordion_sections_for_layout :: proc(
     mode: viewmodel.Ui_Layout_Mode, title: string,
     state: ^core.Euclid_General_State) -> uiaccordion.Accordion_Section_Set {
-    labels := [3]string{
+    labels: [3]string = {
         viewmessages.shell_message(state, .Navigation_Library),
         viewmessages.shell_message(state, .Gif_Save),
         viewmessages.shell_message(state, .Navigation_Settings),

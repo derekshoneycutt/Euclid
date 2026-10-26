@@ -7,7 +7,9 @@ import runtime "base:runtime"
 import bridge "../../../bridge"
 import core "../../../core"
 import protocol "../../../core/protocol"
+import historyruntime "../../../terminal/history/runtime"
 import termhist "../../../terminal/history"
+import termhiststore "../../../terminal/history/store"
 import input "../../input"
 import terminalview ".."
 import strings "core:strings"
@@ -19,7 +21,41 @@ when ODIN_OS != .Linux {
     _ :: viewterminalmodel
 }
 
+Terminal_Service_Test_History_Result :: struct {
+    outcome: termhiststore.History_Read_Outcome,
+    submission_id: u64,
+    mode: protocol.Evaluation_Mode,
+    source: string,
+}
 
+// Do not retain standalone whitespace submissions or discard blank continuations.
+@(test)
+terminal_service_test_history_skips_empty_standalone_input :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    terminal_service_record_history(state, {
+        text = "",
+        submitted = true,
+    })
+    terminal_service_record_history(state, {
+        text = " \t\n",
+        submitted = true,
+    })
+    testing.expect_value(t, state^.terminal_history_runtime.next_submission_id, u64(0))
+    testing.expect_value(t, state^.terminal_history_runtime.mutation_count, 0)
+    state^.terminal_history_runtime.status = .Ready
+    state^.terminal.provisional_submission_id = 1
+    state^.terminal.provisional_desired_revision = 1
+    terminal_service_record_history(state, {
+        text = "",
+        continuation = true,
+        submitted = true,
+    })
+    testing.expect_value(t, state^.terminal_history_runtime.mutation_count, 1)
+    testing.expect_value(
+        t, state^.terminal_history_runtime.queued_mutations[0].kind,
+        historyruntime.History_Mutation_Kind.Update)
+}
 
 
 
@@ -65,7 +101,7 @@ terminal_service_test_dispatch_egress :: proc(
 terminal_service_test_send_evaluation_result :: proc(
     t: ^testing.T, service: ^bridgemodel.Julia_Runtime_Service,
     request: protocol.Evaluation_Requested) {
-    first := protocol.Terminal_Output_Batch{
+    first: protocol.Terminal_Output_Batch = {
         request_id = request.request_id,
         animation_generation = request.animation_generation,
         bytes = "first\n",
@@ -95,6 +131,221 @@ terminal_service_test_state_init :: proc(
     state^.julia_interface^.selected_animation = animation
     state^.julia_interface^.current_animation = animation
     animation^.name = "Terminal"
+}
+
+// Verify recording IDs and revision dependencies survive a pending TEMP initialization.
+@(test)
+terminal_service_test_history_mutations_keep_submission_identity :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.terminal.animation_generation = 12
+    state^.terminal_history_runtime.status = .Uninitialized
+    terminal_service_record_history(state, {
+        text = "begin",
+        mode = .Normal,
+        submitted = true,
+    })
+    terminal_service_record_history(state, {
+        text = "begin\n    end",
+        mode = .Normal,
+        continuation = true,
+        submitted = true,
+    })
+    runtime := &state^.terminal_history_runtime
+    testing.expect_value(t, runtime^.mutation_count, 2)
+    first := runtime^.queued_mutations[runtime^.mutation_head]
+    second := runtime^.queued_mutations[(runtime^.mutation_head + 1) %
+        len(runtime^.queued_mutations)]
+    testing.expect_value(t, first.record.submission_id, u64(1))
+    testing.expect_value(t, first.record.source_revision, u64(1))
+    testing.expect_value(t, string(runtime^.queued_sources[runtime^.mutation_head][:5]),
+        "begin")
+    testing.expect_value(t, second.update.submission_id, u64(1))
+    testing.expect_value(t, second.update.expected_revision, u64(1))
+    testing.expect_value(t, second.update.new_revision, u64(2))
+    testing.expect_value(t, second.source_length, len("begin\n    end"))
+    testing.expect_value(t, state^.terminal.provisional_desired_revision, u64(2))
+    testing.expect(t, state^.terminal.provisional_recording_valid)
+}
+
+// Verify delayed recall applies source/mode atomically and Down restores the full draft.
+@(test)
+terminal_service_test_history_recall_validates_and_restores_draft :: proc(
+    t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 21)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    testing.expect(t, terminalview.terminal_init_for_animation(
+        &state^.terminal, &state^.animation_memory, 21))
+    defer terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
+    terminal_service_test_history_reject_stale_edit(t, state)
+    terminal_service_test_history_apply_and_restore(t, state)
+}
+
+// Reject a delayed result after editing and retain the new source and prompt mode.
+terminal_service_test_history_reject_stale_edit :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    term := &state^.terminal
+    term^.banner_ready = true
+    term^.input_mode = .Help
+    termhist.termhist_insert_text(term^.history, "draft")
+    _ = termhist.termhist_move_left(term^.history)
+    _ = termhist.termhist_move_left(term^.history, true)
+    runtime := &state^.terminal_history_runtime
+    runtime^.status = .Ready
+    runtime^.terminal_generation = 21
+    runtime^.next_submission_id = 1
+    request := terminal_service_test_history_request(
+        t, state, .Up, .Older, 2)
+    terminal_service_test_history_result(state, request, {
+        outcome = .Found,
+        submission_id = 1,
+        mode = .Pkg,
+        source = "prior",
+    })
+    _ = terminalview.terminal_update_keyboard_event(term, {
+        kind = .Text,
+        codepoint = '!',
+    }, "")
+    terminal_service_consume_history_read(state)
+    testing.expect_value(t, termhist.termhist_current_text(term^.history), "dra!t")
+    testing.expect_value(t, term^.input_mode, protocol.Evaluation_Mode.Help)
+    testing.expect_value(t, term^.history_navigation_anchor_id, u64(0))
+}
+
+// Apply a current result, then restore source, selection, preferred column, and mode.
+terminal_service_test_history_apply_and_restore :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    term := &state^.terminal
+    cursor := termhist.termhist_cursor(term^.history)
+    anchor := termhist.termhist_anchor(term^.history)
+    preferred := term^.history.preferred_column
+    term^.history_navigation_draft_mode = .Help
+    term^.input_mode = .Help
+    state^.terminal_history_runtime.next_submission_id = 2
+    terminal_service_test_history_browse_older(t, state)
+    terminal_service_test_history_browse_newer(t, state)
+    testing.expect_value(t, termhist.termhist_current_text(term^.history), "dra!t")
+    testing.expect_value(t, termhist.termhist_cursor(term^.history), cursor)
+    testing.expect_value(t, termhist.termhist_anchor(term^.history), anchor)
+    testing.expect_value(t, term^.history.preferred_column, preferred)
+    testing.expect_value(t, term^.input_mode, protocol.Evaluation_Mode.Help)
+}
+
+// Verify Up traverses older records and clamps at the oldest without wrapping.
+terminal_service_test_history_browse_older :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    term := &state^.terminal
+    request := terminal_service_test_history_request(
+        t, state, .Up, .Older, 3)
+    terminal_service_test_history_release_and_complete(t, state, request, .Up, {
+        outcome = .Found,
+        submission_id = 2,
+        mode = .Pkg,
+        source = "newer\nline",
+    })
+    terminal_service_consume_history_read(state)
+    testing.expect_value(
+        t, termhist.termhist_current_text(term^.history), "newer\nline")
+    testing.expect_value(t, term^.input_mode, protocol.Evaluation_Mode.Pkg)
+    request = terminal_service_test_history_request(
+        t, state, .Up, .Older, 2)
+    terminal_service_test_history_release_and_complete(t, state, request, .Up, {
+        outcome = .Found,
+        submission_id = 1,
+        mode = .Normal,
+        source = "prior",
+    })
+    terminal_service_consume_history_read(state)
+    testing.expect_value(t, termhist.termhist_current_text(term^.history), "prior")
+    testing.expect_value(t, term^.history_navigation_anchor_id, u64(1))
+    request = terminal_service_test_history_request(
+        t, state, .Up, .Older, 1)
+    terminal_service_test_history_release_and_complete(t, state, request, .Up, {
+        outcome = .Boundary,
+    })
+    terminal_service_consume_history_read(state)
+    testing.expect_value(t, termhist.termhist_current_text(term^.history), "prior")
+    testing.expect_value(t, term^.history_navigation_anchor_id, u64(1))
+}
+
+// Verify Down returns through newer records and restores the original draft at the tail.
+terminal_service_test_history_browse_newer :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    term := &state^.terminal
+    request := terminal_service_test_history_request(
+        t, state, .Down, .Newer, 1)
+    terminal_service_test_history_release_and_complete(t, state, request, .Down, {
+        outcome = .Found,
+        submission_id = 2,
+        mode = .Pkg,
+        source = "newer\nline",
+    })
+    terminal_service_consume_history_read(state)
+    testing.expect_value(
+        t, termhist.termhist_current_text(term^.history), "newer\nline")
+    testing.expect_value(t, term^.history_navigation_anchor_id, u64(2))
+    request = terminal_service_test_history_request(
+        t, state, .Down, .Newer, 2)
+    terminal_service_test_history_release_and_complete(t, state, request, .Down, {
+        outcome = .Boundary,
+    })
+    terminal_service_consume_history_read(state)
+    testing.expect(t, !term^.history_navigation_active)
+    testing.expect_value(t, term^.history_navigation_anchor_id, u64(0))
+}
+
+// Deliver a navigation key's release before its asynchronous read completion.
+terminal_service_test_history_release_and_complete :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    request: historyruntime.History_Read_Request, key: input.Input_Key,
+    result: Terminal_Service_Test_History_Result) {
+    _ = terminalview.terminal_update_keyboard_event(&state^.terminal, {
+        kind = .Release,
+        key = key,
+    }, "")
+    terminal_service_test_history_result(state, request, result)
+}
+
+// Issue one key and return the queued request with its expected stable anchor.
+terminal_service_test_history_request :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    key: input.Input_Key, kind: historyruntime.History_Read_Kind,
+    anchor: u64) -> historyruntime.History_Read_Request {
+    _ = terminalview.terminal_update_keyboard_event(&state^.terminal, {
+        kind = .Press,
+        key = key,
+    }, "")
+    terminal_service_schedule_history_read(state)
+    runtime := &state^.terminal_history_runtime
+    request := runtime^.interactive_reads[0]
+    testing.expect_value(t, request.kind, kind)
+    testing.expect_value(t, request.submission_id, anchor)
+    runtime^.interactive_read_count = 0
+    return request
+}
+
+// Publish one synthetic joined history result through the runtime-owned result slot.
+terminal_service_test_history_result :: proc(
+    state: ^core.Euclid_General_State,
+    request: historyruntime.History_Read_Request,
+    result: Terminal_Service_Test_History_Result) {
+    runtime := &state^.terminal_history_runtime
+    runtime^.read_result_request = request
+    runtime^.read_result = {
+        outcome = result.outcome,
+        record = {
+            submission_id = result.submission_id,
+            mode = result.mode,
+            source_revision = 1,
+        },
+        source_length = len(result.source),
+    }
+    copy(runtime^.read_result_source[:], transmute([]u8)result.source)
+    runtime^.read_result_ready = true
 }
 
 // Report whether any retained terminal output row contains the requested text.
@@ -127,12 +378,21 @@ terminal_service_test_command_frame :: proc(
     storage: []input.Input_Event, command: string) -> input.Input_Frame {
     count := 0
     for byte in transmute([]u8)command {
-        storage[count] = {kind = .Text, codepoint = rune(byte)}
+        storage[count] = {
+            kind = .Text,
+            codepoint = rune(byte),
+        }
         count += 1
     }
-    storage[count] = {kind = .Press, key = .Enter}
+    storage[count] = {
+        kind = .Press,
+        key = .Enter,
+    }
     count += 1
-    return {events = storage[:count], window_focused = true}
+    return {
+        events = storage[:count],
+        window_focused = true,
+    }
 }
 
 // Verify literal shell submissions use a real PTY and can launch repeatedly.
@@ -327,6 +587,79 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
         animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
+// Verify history admission failure cannot block or duplicate evaluation acceptance.
+@(test)
+terminal_service_test_history_failure_does_not_block_evaluation :: proc(
+    t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 13)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    terminal_service_test_runtime_init(t, state)
+    defer terminal_service_test_runtime_destroy(state)
+    state^.terminal_history_runtime.status = .Unavailable
+    testing.expect(t, terminal_service_enter(state))
+    started, started_received := bridge.communication_link_try_recv(
+        &state^.julia_runtime_service^.request_link)
+    testing.expect(t, started_received)
+    testing.expect(t, bridge.communication_link_return(
+        &state^.julia_runtime_service^.request_link, started))
+    testing.expect(t, terminal_service_test_contains(
+        state, "History recall unavailable"))
+    state^.terminal.julia_session_ready = true
+    terminal_service_apply_submission(state, {
+        text = "accepted once",
+        mode = .Normal,
+        submitted = true,
+    })
+    testing.expect(t, state^.terminal.awaiting_eval)
+    testing.expect(t, !state^.terminal.provisional_recording_valid)
+    ingress, received := bridge.communication_link_try_recv(
+        &state^.julia_runtime_service^.request_link)
+    testing.expect(t, received)
+    request, is_request := ingress^.(protocol.Evaluation_Requested)
+    testing.expect(t, is_request)
+    testing.expect_value(t, request.code, "accepted once")
+    testing.expect(t, bridge.communication_link_return(
+        &state^.julia_runtime_service^.request_link, ingress))
+    terminalview.terminal_complete_eval(&state^.terminal)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
+}
+
+// A failed continuation revision invalidates anchors after a newer submit is active.
+@(test)
+terminal_service_test_old_history_failure_invalidates_revision :: proc(
+    t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    term := &state^.terminal
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        term, context.allocator, 1))
+    defer terminalview.terminal_destroy(term, context.allocator)
+    term.provisional_submission_id = 2
+    term.highlighting.history[0] = {
+        id = 1,
+        source_revision = 2,
+        terminal_generation = 1,
+    }
+    history := &state^.terminal_history_runtime
+    history^.write_completion_serial = 1
+    history^.last_completed_mutation = {
+        kind = .Update,
+        update = {
+            submission_id = 1,
+            new_revision = 2,
+        },
+    }
+    history^.last_write_result.outcome =
+        termhiststore.History_Write_Outcome.Conflict
+    terminal_service_consume_history_write(state)
+    testing.expect(t,
+        terminalview.terminal_highlight_history_find(term, 1, 2) == nil)
+}
+
 // Verify only a current ambiguous completion may append its candidate table.
 @(test)
 terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
@@ -377,17 +710,23 @@ terminal_service_test_common_prefix_tab :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_insert_text(term.history, "func"))
     request := terminalview.terminal_request_completion(term, false)
     result := bridgemodel.Julia_Host_Egress(protocol.Completion_Result{
-        request_id = request.request_id, animation_generation = 17,
-        found = true, replacement_end = 4, insertion = "function",
+        request_id = request.request_id,
+        animation_generation = 17,
+        found = true,
+        replacement_end = 4,
+        insertion = "function",
     })
     testing.expect(t, terminal_service_dispatch_completion_result(state, &result))
     testing.expect_value(t, termhist.termhist_current_text(term.history), "func")
     testing.expect_value(t, term.completion_preview_insertion, "function")
     request = terminalview.terminal_request_completion(term, true)
     result = protocol.Completion_Result{
-        request_id = request.request_id, animation_generation = 17,
-        found = true, replacement_end = 4,
-        insertion = "function", show_candidates = true,
+        request_id = request.request_id,
+        animation_generation = 17,
+        found = true,
+        replacement_end = 4,
+        insertion = "function",
+        show_candidates = true,
     }
     testing.expect(t, terminal_service_dispatch_completion_result(state, &result))
     testing.expect_value(t, termhist.termhist_current_text(term.history), "function")
@@ -414,9 +753,12 @@ terminal_service_test_explicit_completion_stale :: proc(t: ^testing.T) {
     request := terminalview.terminal_request_completion(term, true)
     testing.expect(t, termhist.termhist_insert_text(term.history, "x"))
     result := bridgemodel.Julia_Host_Egress(protocol.Completion_Result{
-        request_id = request.request_id, animation_generation = 18,
-        found = true, replacement_end = 4,
-        insertion = "function", show_candidates = true,
+        request_id = request.request_id,
+        animation_generation = 18,
+        found = true,
+        replacement_end = 4,
+        insertion = "function",
+        show_candidates = true,
     })
     testing.expect(t, !terminal_service_dispatch_completion_result(state, &result))
     current := terminalview.terminal_request_completion(term, false)
@@ -447,7 +789,8 @@ terminal_service_test_completion_failures :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_insert_text(term.history, "func"))
     request := terminalview.terminal_request_completion(term, true)
     failure := bridgemodel.Julia_Host_Egress(protocol.Completion_Failed{
-        request_id = request.request_id, animation_generation = 19,
+        request_id = request.request_id,
+        animation_generation = 19,
         reason = .Internal_Failure,
     })
     testing.expect(t, terminal_service_dispatch_completion_result(state, &failure))
@@ -478,7 +821,7 @@ terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
         &state^.animation_memory, 21), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, terminal_service_enter(state))
 
-    stale := protocol.Terminal_Output_Batch{
+    stale: protocol.Terminal_Output_Batch = {
         request_id = 1,
         animation_generation = 20,
         bytes = "stale output\n",
@@ -507,18 +850,27 @@ terminal_service_test_dispatches_fixed_response_families :: proc(t: ^testing.T) 
     state^.terminal.geometry.generation = 4
     geometry := state^.terminal.geometry
 
-    messages := [5]bridgemodel.Julia_Host_Egress{
+    messages: [5]bridgemodel.Julia_Host_Egress = {
         protocol.Terminal_Input_Acquired{
-            request_id = request_id, animation_generation = 30},
+            request_id = request_id,
+            animation_generation = 30,
+        },
         protocol.Terminal_Input_Released{
-            request_id = request_id, animation_generation = 30},
+            request_id = request_id,
+            animation_generation = 30,
+        },
         protocol.Terminal_Geometry_Observed{
-            animation_generation = 30, geometry = geometry},
+            animation_generation = 30,
+            geometry = geometry,
+        },
         protocol.Terminal_Capabilities_Observed{
             animation_generation = 30,
-            capabilities = terminalview.TERMINAL_CAPABILITIES},
+            capabilities = terminalview.TERMINAL_CAPABILITIES,
+        },
         protocol.Terminal_Session_Ready{
-            animation_generation = 30, banner = "Julia Version test\n"},
+            animation_generation = 30,
+            banner = "Julia Version test\n",
+        },
     }
     for &message in messages {
         testing.expect(t, terminal_service_dispatch_egress(state, &message))
@@ -529,7 +881,8 @@ terminal_service_test_dispatches_fixed_response_families :: proc(t: ^testing.T) 
     testing.expect(t, state^.terminal.julia_capabilities_observed)
 
     stale := bridgemodel.Julia_Host_Egress(protocol.Terminal_Session_Stopped{
-        animation_generation = 29})
+        animation_generation = 29,
+    })
     testing.expect(t, !terminal_service_dispatch_egress(state, &stale))
     terminalview.terminal_destroy(&state^.terminal,
         animation_model.animation_memory_allocator(&state^.animation_memory))

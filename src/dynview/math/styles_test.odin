@@ -8,7 +8,7 @@ import "core:testing"
 //   Verify every recursive level advances once and saturates at script-script.
 @(test)
 math_style_next_level_saturates :: proc(t: ^testing.T) {
-    expected := [Math_Style_Level]Math_Style_Level{
+    expected: [Math_Style_Level]Math_Style_Level = {
         .Display = .Text,
         .Text = .Script,
         .Script = .Script_Script,
@@ -50,7 +50,7 @@ math_child_style_resolves_radical_transitions :: proc(t: ^testing.T) {
 //   Verify positional and percentage constants use their distinct scaling rules.
 @(test)
 math_constants_scale_fake_metrics_exactly :: proc(t: ^testing.T) {
-    constants := fontmodel.Font_Math_Constants{
+    constants: fontmodel.Font_Math_Constants = {
         valid = true,
         generation = 9,
         base_pixel_size = 32,
@@ -74,7 +74,7 @@ math_constants_scale_fake_metrics_exactly :: proc(t: ^testing.T) {
 //   Verify the text match scale is generation-gated and falls back to identity.
 @(test)
 math_text_match_scale_requires_current_generation :: proc(t: ^testing.T) {
-    constants := fontmodel.Font_Math_Constants{
+    constants: fontmodel.Font_Math_Constants = {
         valid = true,
         generation = 9,
         base_pixel_size = 32,
@@ -92,7 +92,7 @@ math_text_match_scale_requires_current_generation :: proc(t: ^testing.T) {
 //   Verify stale or unavailable snapshots fail without returning partial values.
 @(test)
 math_constants_reject_stale_or_unavailable_generations :: proc(t: ^testing.T) {
-    constants := fontmodel.Font_Math_Constants{
+    constants: fontmodel.Font_Math_Constants = {
         valid = true,
         generation = 4,
         base_pixel_size = 32,

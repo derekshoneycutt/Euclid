@@ -32,7 +32,7 @@ Graphics_Semantics_Test_Context :: struct {
 graphics_semantics_test_anchor :: proc(user_data: rawptr) -> (Anchor, bool) {
     fixture := cast(^Graphics_Semantics_Test_Context)user_data
     if fixture == nil {
-        return {}, false 
+        return {}, false
     }
     return fixture.anchor, true
 }
@@ -41,7 +41,7 @@ graphics_semantics_test_anchor :: proc(user_data: rawptr) -> (Anchor, bool) {
 graphics_semantics_test_advance :: proc(user_data: rawptr, rows: int) {
     fixture := cast(^Graphics_Semantics_Test_Context)user_data
     if fixture != nil {
-        fixture.advanced_rows += rows 
+        fixture.advanced_rows += rows
     }
 }
 
@@ -49,7 +49,7 @@ graphics_semantics_test_advance :: proc(user_data: rawptr, rows: int) {
 graphics_semantics_test_cell_height :: proc(user_data: rawptr) -> (int, bool) {
     fixture := cast(^Graphics_Semantics_Test_Context)user_data
     if fixture == nil || fixture.cell_height <= 0 {
-        return 0, false 
+        return 0, false
     }
     return fixture.cell_height, true
 }
@@ -128,13 +128,16 @@ graphics_semantics_test_iterm2_and_sixel_controls :: proc(t: ^testing.T) {
 // Verify geometry snapshots and cursor effects use only explicit capabilities.
 @(test)
 graphics_semantics_test_context_capabilities :: proc(t: ^testing.T) {
-    fixture := Graphics_Semantics_Test_Context{cell_height = 16, anchor = {
-        screen = termattachment.Screen_Identity.Alternate,
-        logical_row = 42,
-        column = 3,
-        sixel_scrolling_mode = true,
-    }}
-    semantics_context := Context{
+    fixture: Graphics_Semantics_Test_Context = {
+        cell_height = 16,
+        anchor = {
+            screen = termattachment.Screen_Identity.Alternate,
+            logical_row = 42,
+            column = 3,
+            sixel_scrolling_mode = true,
+        },
+    }
+    semantics_context: Context = {
         user_data = &fixture,
         anchor = graphics_semantics_test_anchor,
         cell_height = graphics_semantics_test_cell_height,
@@ -153,10 +156,17 @@ graphics_semantics_test_context_capabilities :: proc(t: ^testing.T) {
     testing.expect_value(t, geometry.z_index, i32(-3))
     graphics_kitty_advance_cursor(&semantics_context, 4)
     testing.expect_value(t, fixture.advanced_rows, 4)
-    testing.expect_value(t, graphics_placement_rows(
-        &semantics_context, {pixel_height = 33}, {height = 64}), 3)
-    testing.expect_value(t, graphics_placement_rows(
-        &semantics_context, {row_span = 5, pixel_height = 33}, {height = 64}), 5)
+    testing.expect_value(t, graphics_placement_rows(&semantics_context, {
+        pixel_height = 33,
+    }, {
+        height = 64,
+    }), 3)
+    testing.expect_value(t, graphics_placement_rows(&semantics_context, {
+        row_span = 5,
+        pixel_height = 33,
+    }, {
+        height = 64,
+    }), 5)
 }
 
 // Queue one GIF for asynchronous preflight without reserving an attachment.

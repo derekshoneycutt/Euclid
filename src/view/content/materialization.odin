@@ -74,7 +74,8 @@ content_admission_read_locale_row :: proc(
         return false
     }
     generation.data.locales[index] = contentdata.Content_Locale{
-        tag = reference, is_default = default_value == 1,
+        tag = reference,
+        is_default = default_value == 1,
     }
     generation.data.locale_count += 1
     return true
@@ -187,10 +188,14 @@ content_admission_argument_kind :: proc(
         return .Text, false
     }
     switch string(storage[:count]) {
-    case "text": return .Text, true
-    case "uint32": return .Uint32, true
-    case "int64": return .Int64, true
-    case "float32_1dp": return .Float32_One_Decimal, true
+    case "text":
+        return .Text, true
+    case "uint32":
+        return .Uint32, true
+    case "int64":
+        return .Int64, true
+    case "float32_1dp":
+        return .Float32_One_Decimal, true
     }
     return .Text, false
 }

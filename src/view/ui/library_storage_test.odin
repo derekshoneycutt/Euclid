@@ -66,8 +66,9 @@ library_storage_edit_batch :: proc(
         entry[0] = 201
         entry[1] = byte(index)
         entry[2] = byte(index >> 8)
-        add := collections.Mutation{
-            kind = .Add_Favorite, entry_id = entry,
+        add: collections.Mutation = {
+            kind = .Add_Favorite,
+            entry_id = entry,
             animation_id = params^.ji^.animation_head^.stable_id,
             placement = {
                 collection_id = collections.FAVORITES_COLLECTION_ID,
@@ -77,7 +78,8 @@ library_storage_edit_batch :: proc(
         library_storage_apply(t, params, add, "Animation")
         library_storage_move_roundtrip(t, params, identity)
         library_storage_apply(t, params, {
-            kind = .Remove_Favorite, entry_id = entry,
+            kind = .Remove_Favorite,
+            entry_id = entry,
             placement = add.placement,
         }, "")
         rename, rename_error = collections.make_placement_name_mutation(identity, "")
@@ -91,7 +93,7 @@ library_storage_edit_batch :: proc(
 library_storage_move_roundtrip :: proc(
     t: ^testing.T, params: ^uilibrary.Tree_List_Params,
     identity: collections.Placement_Identity) {
-    directions := [2]collections.Move_Direction{.Down, .Up}
+    directions: [2]collections.Move_Direction = {.Down, .Up}
     for direction in directions {
         move, failure := collections.make_placement_move(
             params^.collections, identity, direction)

@@ -101,8 +101,10 @@ userdata_test_membership_readd_mutations :: proc(
     add, _ := collections.make_collection_animation_add_mutation(
         snapshot, userdata_test_id(41), userdata_test_id(46), userdata_test_id(44))
     testing.expect_value(t, collections.append_entry(snapshot, {
-        id = userdata_test_id(43), collection_id = userdata_test_id(41),
-        parent_entry_id = userdata_test_id(42), kind = .Animation,
+        id = userdata_test_id(43),
+        collection_id = userdata_test_id(41),
+        parent_entry_id = userdata_test_id(42),
+        kind = .Animation,
         animation_id = userdata_test_id(44),
     }), collections.Policy_Error.None)
     return {rename, remove, add}

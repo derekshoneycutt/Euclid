@@ -45,12 +45,20 @@ library_name_test_native_edit :: proc(t: ^testing.T, params: uilibrary.Tree_List
     before_length := draft^.value_length
     draft^.input.anchor_byte = 0
     draft^.input.cursor_byte = before_length
-    rect := geometry.Rectangle{0, 0, 320, 30}
-    event := input.Input_Event{kind = .Text_Preedit, text_length = 3,
-        text_target = {kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}}
+    rect: geometry.Rectangle = {0, 0, 320, 30}
+    event: input.Input_Event = {
+        kind = .Text_Preedit,
+        text_length = 3,
+        text_target = {
+            kind = .Input_Box,
+            id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+        },
+    }
     copy(event.text[:3], "名")
     edit := uilibrary.library_entry_name_input_params(
-        params, draft^.entry_id, rect, rect, {events = []input.Input_Event{event}})
+        params, draft^.entry_id, rect, rect, {
+            events = []input.Input_Event{event},
+        })
     resolved := edit
     _ = uiwidgets.input_box_apply_focused_input(edit, &resolved)
     testing.expect(t, draft^.input.preedit_active)
@@ -87,7 +95,7 @@ library_entry_name_selection_flush_preserves_exact_text :: proc(t: ^testing.T) {
         state, entry_id, "Animation"))
     testing.expect(t, uilibrary.library_entry_name_edit(state, entry_id, name))
 
-    other_id := uuid.Identifier{}
+    other_id: uuid.Identifier = {}
     other_id[0] = 90
     other_index := uilibrary.tree_projection_find(
         &state^.ui_runtime.library.tree.projection, other_id)
@@ -129,11 +137,20 @@ library_entry_name_test_complete_unicode_name :: proc(
     testing.expect(t, uilibrary.library_entry_name_begin(
         state, selected, string(prefill[:])))
 
-    edit_events := [2]input.Input_Event{
-        {kind = .Press, key = .End}, {kind = .Press, key = .Right}}
-    rect := geometry.Rectangle{0, 0, 320, 30}
+    edit_events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .End,
+        },
+        {
+            kind = .Press,
+            key = .Right,
+        }}
+    rect: geometry.Rectangle = {0, 0, 320, 30}
     input_params := uilibrary.library_entry_name_input_params(
-        params, selected, rect, rect, {events = edit_events[:]})
+        params, selected, rect, rect, {
+            events = edit_events[:],
+        })
     input_params.focused = true
     testing.expect(t, input_params.edit_policy.unicode_completion)
     testing.expect(t, uiwidgets.input_box_unicode_enabled(input_params))
@@ -165,10 +182,15 @@ library_entry_name_unicode_completion_saves_within_byte_limit :: proc(t: ^testin
     expected: [collections.ENTRY_NAME_MAX_BYTES]u8
     expected_length := library_entry_name_test_complete_unicode_name(
         t, params, selected, expected[:])
-    rect := geometry.Rectangle{0, 0, 320, 30}
-    enter := [1]input.Input_Event{{kind = .Press, key = .Enter}}
+    rect: geometry.Rectangle = {0, 0, 320, 30}
+    enter: [1]input.Input_Event = {{
+        kind = .Press,
+        key = .Enter,
+    }}
     input_params := uilibrary.library_entry_name_input_params(
-        params, selected, rect, rect, {events = enter[:]})
+        params, selected, rect, rect, {
+            events = enter[:],
+        })
     prepared := uiwidgets.input_box_apply_edit_keyboard(
         input_params.state, input_params.edit_target, input_params.frame,
         "", input_params.edit_policy)
@@ -281,10 +303,12 @@ semantic_favorites_name_editor_keyboard_focus_routes_to_widget :: proc(t: ^testi
             row^.actions.toggle_rect, params.list_panel, 0))
     semantic^.logical_focus = uilibrary.tree_actions_semantic_id(
         params, selected, uilibrary.TREE_ENTRY_NAME_INPUT)
-    ui_apply_semantic_focus(
-        &state^.ui_runtime, {window_focused = true}, false)
-    expected := viewmodel.Ui_Focus_Target{
-        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+    ui_apply_semantic_focus(&state^.ui_runtime, {
+        window_focused = true,
+    }, false)
+    expected: viewmodel.Ui_Focus_Target = {
+        kind = .Input_Box,
+        id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
     }
     testing.expect_value(t, state^.ui_runtime.input.interaction.logical_focus, expected)
     testing.expect_value(t,
@@ -368,8 +392,13 @@ semantic_favorites_actions_context_focus_repair :: proc(t: ^testing.T) {
     _ = tree_actions_test_semantic_frame(t, &params)
     selected := state^.ui_runtime.library.tree.selected_item_id
     semantic^.logical_focus = uilibrary.tree_semantic_id()
-    events := [1]input.Input_Event{{kind = .Press, key = .Escape}}
-    claims := uisemantics.semantic_route_keyboard(semantic, {events = events[:]})
+    events: [1]input.Input_Event = {{
+        kind = .Press,
+        key = .Escape,
+    }}
+    claims := uisemantics.semantic_route_keyboard(semantic, {
+        events = events[:],
+    })
     testing.expect(t, !claims.claimed[0])
     semantic^.logical_focus = uilibrary.tree_actions_semantic_id(params,
         selected, uilibrary.TREE_ACTION_TOGGLE)

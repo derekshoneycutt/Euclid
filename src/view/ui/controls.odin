@@ -142,7 +142,9 @@ prepare_active_library_controls :: proc(
         scroll_y = &state^.ui_runtime.library.tree.scroll_y,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-        visibility = {search = &state^.ui_runtime.library.search},
+        visibility = {
+            search = &state^.ui_runtime.library.search,
+        },
         reduce_motion = uiaccordion.ui_reduced_motion(
             state^.ui_runtime.preferences.values.interface.reduce_motion,
             state^.ui_runtime.platform_reduce_motion),
@@ -209,8 +211,9 @@ ui_guard_library_entry_name_focus :: proc(
     if !draft^.active || !draft^.dirty || semantic == nil {
         return frame
     }
-    editor_id := viewmodel.Ui_Node_Id{
-        domain = .Library_Action, local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
+    editor_id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
         stable_id = draft^.entry_id,
         generation = state^.julia_interface.content_generation,
     }
@@ -237,8 +240,9 @@ ui_retain_library_entry_name_focus :: proc(
     runtime := &state^.ui_runtime
     semantic := runtime^.semantic_focus
     draft := &runtime^.library.entry_name
-    editor_id := viewmodel.Ui_Node_Id{
-        domain = .Library_Action, local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
+    editor_id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
         stable_id = draft^.entry_id,
         generation = state^.julia_interface.content_generation,
     }
@@ -249,11 +253,17 @@ ui_retain_library_entry_name_focus :: proc(
         uilibrary.LIBRARY_ENTRY_NAME_INPUT_TRAVERSAL_ORDER
     semantic^.command_count = 0
     runtime^.input.interaction.logical_focus = {
-        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+        kind = .Input_Box,
+        id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+    }
     runtime^.input.interaction_frame.logical_focus = {
-        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+        kind = .Input_Box,
+        id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+    }
     runtime^.input.interaction_frame.effective_focus = {
-        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+        kind = .Input_Box,
+        id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+    }
     filtered := input.input_frame_filter_pointer(frame, {.Screen_Position})
     filtered.events = frame.events[:0]
     ui_apply_semantic_focus(runtime, filtered, uiterminal.is_terminal_selected(state))
@@ -341,11 +351,13 @@ prepare_outgoing_accordion_section :: proc(
             ui_runtime = &state^.ui_runtime,
             list_panel = result^.library_search.layout.tree,
             scroll_y = &state^.ui_runtime.library.tree.scroll_y,
-            visibility = {search = &state^.ui_runtime.library.search},
+            visibility = {
+                search = &state^.ui_runtime.library.search,
+            },
             reduce_motion = uiaccordion.ui_reduced_motion(
                 state^.ui_runtime.preferences.values.interface.reduce_motion,
-                state^.ui_runtime.platform_reduce_motion)},
-            &result^.tree)
+                state^.ui_runtime.platform_reduce_motion),
+        }, &result^.tree)
     case .View:
     }
 }
@@ -370,6 +382,19 @@ prepare_and_finish_ui_layout :: proc(
     return result
 }
 
+// Register Terminal bounds and anchor popup keyboard placement to the prepared caret.
+prepare_terminal_layout_semantics :: proc(
+    state: ^core.Euclid_General_State, terminal: uiterminal.Terminal_Prepared_Frame) {
+    bounds := uiterminal.terminal_content_panel(
+        state^.ui_runtime.layout.ui_regions.text_rect)
+    if terminal.available {
+        bounds = terminal.bounds
+        state^.ui_runtime.context_menu.keyboard_anchor =
+            terminal.editable_geometry.caret
+    }
+    uiterminal.register_terminal_semantics(state, bounds, terminal.scroll)
+}
+
 // Resolve layout-dependent presentation interaction before drawing begins.
 prepare_ui_layout_interaction :: proc(
     state: ^core.Euclid_General_State,
@@ -381,22 +406,15 @@ prepare_ui_layout_interaction :: proc(
         return {}
     }
     if uiterminal.is_terminal_selected(state) {
-        bounds := uiterminal.terminal_content_panel(
-            state^.ui_runtime.layout.ui_regions.text_rect)
-        if terminal.available {
-            bounds = terminal.bounds
-            state^.ui_runtime.context_menu.keyboard_anchor =
-                terminal.editable_geometry.caret
-        }
-        uiterminal.register_terminal_semantics(state, bounds, terminal.scroll)
+        prepare_terminal_layout_semantics(state, terminal)
         return {}
     }
     state^.ui_runtime.terminal.semantic_focus_initialized = false
     routed := state^.ui_runtime.input.interaction_frame.presentation
     presentation_frame := input.input_frame_filter_pointer(frame,
         routed.pointer ? input.Input_Pointer_Fields{
-            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels,
-            .Wheel} : input.Input_Pointer_Fields{.Screen_Position})
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels, .Wheel} :
+            input.Input_Pointer_Fields{.Screen_Position})
     if !routed.wheel {
         presentation_frame.mouse_wheel_delta = 0
     }
@@ -404,7 +422,9 @@ prepare_ui_layout_interaction :: proc(
         presentation_frame = ui_clip_accordion_child_frame(
             &state^.ui_runtime, presentation_frame)
     }
-    return {presentation = uipresentation.prepare_presentation_interaction(state,
-        state^.ui_runtime.layout.ui_regions.text_rect, presentation_frame,
-        routed.keyboard)}
+    return {
+        presentation = uipresentation.prepare_presentation_interaction(state,
+            state^.ui_runtime.layout.ui_regions.text_rect, presentation_frame,
+            routed.keyboard),
+    }
 }

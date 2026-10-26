@@ -15,9 +15,12 @@ terminal_presentation_test_seed :: proc(
     terminal_highlight_observe_live(term, 0)
     request, ready := terminal_highlight_take_request(term, 1)
     testing.expect(t, ready)
-    runs := [1]protocol.Highlight_Run{{
-        end_byte = u32(len(source)), foreground_kind = .Rgb,
-        foreground = 0x123456, weight = .Bold, italic = 1,
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = u32(len(source)),
+        foreground_kind = .Rgb,
+        foreground = 0x123456,
+        weight = .Bold,
+        italic = 1,
     }}
     testing.expect(t, terminal_highlight_publish(term,
         {request.identity, request.source, runs[:]}))
@@ -56,7 +59,7 @@ terminal_test_presentation_insert_pending :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_insert_text(term.history, "XY"))
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
     terminal_highlight_observe_live(&term, 2)
-    colors := [6]u32{0x123456, 0x123456, 0, 0, 0x123456, 0x123456}
+    colors: [6]u32 = {0x123456, 0x123456, 0, 0, 0x123456, 0x123456}
     terminal_presentation_test_colors(t, &term, colors[:])
     _, early := terminal_highlight_take_request(&term, 2.1)
     testing.expect(t, !early)
@@ -82,7 +85,7 @@ terminal_test_presentation_repeated_edits :: proc(t: ^testing.T) {
     first.source = first_source
     testing.expect(t, termhist.termhist_replace_input_range(term.history, 2, 3, "Y"))
     terminal_highlight_observe_live(&term, 4)
-    colors := [4]u32{0x123456, 0, 0, 0x123456}
+    colors: [4]u32 = {0x123456, 0, 0, 0x123456}
     terminal_presentation_test_colors(t, &term, colors[:])
     testing.expect(t, !terminal_highlight_test_publish(&term, first))
     terminal_presentation_test_colors(t, &term, colors[:])
@@ -103,10 +106,14 @@ terminal_test_presentation_edit_ranges :: proc(t: ^testing.T) {
         term: model.Terminal_State
         terminal_presentation_test_seed(t, &term, "abcdef")
         switch variant {
-        case 0: _ = termhist.termhist_replace_input_range(term.history, 0, 0, "X")
-        case 1: _ = termhist.termhist_insert_text(term.history, "X")
-        case 2: _ = termhist.termhist_replace_input_range(term.history, 2, 4, "")
-        case 3: _ = termhist.termhist_replace_input_range(term.history, 2, 4, "XY")
+        case 0:
+            _ = termhist.termhist_replace_input_range(term.history, 0, 0, "X")
+        case 1:
+            _ = termhist.termhist_insert_text(term.history, "X")
+        case 2:
+            _ = termhist.termhist_replace_input_range(term.history, 2, 4, "")
+        case 3:
+            _ = termhist.termhist_replace_input_range(term.history, 2, 4, "XY")
         case 4:
             _ = termhist.termhist_replace_input_range(term.history, 1, 2, "X")
             _ = termhist.termhist_replace_input_range(term.history, 4, 5, "Y")
@@ -159,12 +166,17 @@ terminal_test_presentation_reset_boundaries :: proc(t: ^testing.T) {
         case 0:
             termhist.termhist_clear(term.history)
             _ = termhist.termhist_insert_text(term.history, "abcd")
-        case 1: _ = termhist.termhist_load_entry(
+        case 1:
+            _ = termhist.termhist_load_entry(
             term.history, term.history.text[:term.history.text_len])
-        case 2: term.input_mode = .Help
-        case 3: term.awaiting_eval = true
-        case 4: _ = terminal_highlight_set_face_generation(&term, 2)
-        case 5: term.animation_generation += 1
+        case 2:
+            term.input_mode = .Help
+        case 3:
+            term.awaiting_eval = true
+        case 4:
+            _ = terminal_highlight_set_face_generation(&term, 2)
+        case 5:
+            term.animation_generation += 1
         }
         terminal_highlight_observe_live(&term, 2)
         testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
@@ -182,10 +194,12 @@ terminal_test_presentation_malformed_result :: proc(t: ^testing.T) {
     terminal_highlight_observe_live(&term, 2)
     request, ready := terminal_highlight_take_request(&term, 3)
     testing.expect(t, ready)
-    runs := [1]protocol.Highlight_Run{{end_byte = 1}}
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = 1,
+    }}
     testing.expect(t, !terminal_highlight_publish(&term,
         {request.identity, request.source, runs[:]}))
-    colors := [5]u32{0x123456, 0x123456, 0x123456, 0x123456, 0}
+    colors: [5]u32 = {0x123456, 0x123456, 0x123456, 0x123456, 0}
     terminal_presentation_test_colors(t, &term, colors[:])
     testing.expect_value(t, term.highlighting.rejected_count, u64(1))
 }
@@ -199,10 +213,24 @@ terminal_test_presentation_distinct_runs :: proc(t: ^testing.T) {
     terminal_highlight_invalidate(&term)
     terminal_highlight_observe_live(&term, 1)
     request, _ := terminal_highlight_take_request(&term, 2)
-    runs := [3]protocol.Highlight_Run{
-        {end_byte = 2, foreground_kind = .Rgb, foreground = 1},
-        {start_byte = 2, end_byte = 4, foreground_kind = .Rgb, foreground = 2},
-        {start_byte = 4, end_byte = 6, foreground_kind = .Rgb, foreground = 3},
+    runs: [3]protocol.Highlight_Run = {
+        {
+            end_byte = 2,
+            foreground_kind = .Rgb,
+            foreground = 1,
+        },
+        {
+            start_byte = 2,
+            end_byte = 4,
+            foreground_kind = .Rgb,
+            foreground = 2,
+        },
+        {
+            start_byte = 4,
+            end_byte = 6,
+            foreground_kind = .Rgb,
+            foreground = 3,
+        },
     }
     testing.expect(t, terminal_highlight_publish(&term,
         {request.identity, request.source, runs[:]}))
@@ -233,8 +261,12 @@ terminal_test_presentation_run_capacity :: proc(t: ^testing.T) {
     runs := make([]protocol.Highlight_Run, len(source), context.allocator)
     defer delete(runs, context.allocator)
     for &run, index in runs {
-        run = {start_byte = u32(index), end_byte = u32(index + 1),
-            foreground_kind = .Rgb, foreground = u32(index % 2 + 1)}
+        run = {
+            start_byte = u32(index),
+            end_byte = u32(index + 1),
+            foreground_kind = .Rgb,
+            foreground = u32(index % 2 + 1),
+        }
     }
     testing.expect(t, terminal_highlight_publish(&term,
         {request.identity, request.source, runs}))
@@ -281,23 +313,25 @@ terminal_test_presentation_pending_saturation :: proc(t: ^testing.T) {
     terminal_highlight_observe_live(&term, 20)
     _, full := terminal_highlight_take_request(&term, 21)
     testing.expect(t, !full)
-    colors := [5]u32{0x123456, 0x123456, 0x123456, 0x123456, 0}
+    colors: [5]u32 = {0x123456, 0x123456, 0x123456, 0x123456, 0}
     terminal_presentation_test_colors(t, &term, colors[:])
 }
 
-// Recall/draft restoration reset styles even when the recalled command shares all its bytes.
+// Source replacement and draft restoration reset styles even for identical bytes.
 @(test)
 terminal_test_presentation_recall_and_delete_all :: proc(t: ^testing.T) {
     term: model.Terminal_State
     terminal_presentation_test_seed(t, &term, "abcd")
     defer terminal_destroy(&term, context.allocator)
-    testing.expect(t, termhist.termhist_history_push(term.history, "abcd"))
-    testing.expect(t, termhist.termhist_history_prev(term.history))
+    testing.expect(t, termhist.termhist_backup_current(term.history))
+    recalled := "abcd"
+    testing.expect(t, termhist.termhist_load_entry(
+        term.history, transmute([]u8)recalled))
     terminal_highlight_observe_live(&term, 2)
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
     request, _ := terminal_highlight_take_request(&term, 3)
     testing.expect(t, terminal_highlight_test_publish(&term, request))
-    testing.expect(t, termhist.termhist_history_next(term.history))
+    testing.expect(t, termhist.termhist_restore_backup(term.history))
     terminal_highlight_observe_live(&term, 4)
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
     testing.expect(t, termhist.termhist_replace_input_range(term.history, 0, 4, ""))
@@ -314,16 +348,19 @@ terminal_test_presentation_completion_and_paste :: proc(t: ^testing.T) {
     completion := terminal_request_completion(&term)
     testing.expect(t, completion.requested)
     testing.expect(t, terminal_set_completion_preview(&term, {
-        request_id = completion.request_id, found = true,
-        replacement_start = 2, replacement_end = len("x=\\alpha"), insertion = "α",
+        request_id = completion.request_id,
+        found = true,
+        replacement_start = 2,
+        replacement_end = len("x=\\alpha"),
+        insertion = "α",
     }))
     testing.expect(t, terminal_accept_completion_preview(&term))
     terminal_highlight_observe_live(&term, 2)
-    completed := [4]u32{0x123456, 0x123456, 0, 0}
+    completed: [4]u32 = {0x123456, 0x123456, 0, 0}
     terminal_presentation_test_colors(t, &term, completed[:])
     testing.expect(t, terminal_insert_clipboard_text(&term, "β"))
     terminal_highlight_observe_live(&term, 3)
-    pasted := [6]u32{0x123456, 0x123456, 0, 0, 0, 0}
+    pasted: [6]u32 = {0x123456, 0x123456, 0, 0, 0, 0}
     terminal_presentation_test_colors(t, &term, pasted[:])
     term.history.cursor = 0
     term.history.anchor = 0

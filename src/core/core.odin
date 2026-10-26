@@ -15,6 +15,7 @@ import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
 import settings "../settings"
 import taskpool "../taskpool"
+import protocol "protocol"
 import evidence_allocation "../evidence/allocation"
 import evidence_checkpoint "../evidence/checkpoint"
 import evidence_session "../evidence/session"
@@ -25,6 +26,7 @@ import worldmodel "../view/world/model"
 import viewmodel "../view/ui/model"
 import capturemodel "../view/capture/model"
 import inputmodel "../view/input"
+import historyruntime "../terminal/history/runtime"
 
 // Defines the core structures used in the Euclid application.
 // Euclid_General_State owns its same-lifetime runtime values directly.
@@ -85,7 +87,7 @@ Julia_Interface_Slots ::
 
 
 Euclid_General_State :: struct {
-    saved_context : runtime.Context,
+    saved_context: runtime.Context,
 
     iso_scale: worldmodel.Iso_Scale,
     draw_surface: worldmodel.Euclid_Drawing_Surface,
@@ -112,6 +114,8 @@ Euclid_General_State :: struct {
     
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
     preferences_runtime: preferencesmodel.Settings_Save_Runtime,
+    user_data_admission: protocol.User_Data_Connection_Admission,
+    terminal_history_runtime: historyruntime.History_Runtime,
     telemetry: telemetrymodel.Runtime,
     message_labels: messagesmodel.Label_Cache,
     gif_capture: capturemodel.Gif_Capture_Session,
@@ -140,8 +144,8 @@ Euclid_General_State :: struct {
 
     fixed_step: u64,
     simulation_time: f32,
-    current_delta_time : f32,
-    accumulator : f32,
+    current_delta_time: f32,
+    accumulator: f32,
 
     animation_memory: animation_model.Animation_Memory,
     animation_values: animation_model.Animation_Value_Store,
@@ -149,9 +153,9 @@ Euclid_General_State :: struct {
 }
 
 Euclid_Run_Settings :: struct {
-    do_run : bool,
-    do_antialiasing : bool,
-    do_vsync : bool,
+    do_run: bool,
+    do_antialiasing: bool,
+    do_vsync: bool,
     dust_particle_max: int,
     limit_fps: bool,
     use_simd_batch_projection: bool,
@@ -162,5 +166,5 @@ Euclid_Run_Settings :: struct {
     profile_path: string,
     scenario_input: string,
     scenario_artifact_output: string,
-    diagnostics_path : string,
+    diagnostics_path: string,
 }

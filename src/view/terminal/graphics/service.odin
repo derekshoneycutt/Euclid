@@ -189,13 +189,13 @@ service_draw_resolved_raster :: proc(
     if service.encoder == nil {
         return false
     }
-    uv := geometry.Rectangle{
+    uv: geometry.Rectangle = {
         f32(source.x)/f32(entry.texture.width),
         f32(source.y)/f32(entry.texture.height),
         f32(source.width)/f32(entry.texture.width),
         f32(source.height)/f32(entry.texture.height),
     }
-    destination := geometry.Rectangle{request.destination.x, request.destination.y,
+    destination: geometry.Rectangle = {request.destination.x, request.destination.y,
         request.destination.width, request.destination.height}
     if !native.draw_encoder_texture_quad(service.encoder, destination, uv,
         color.WHITE, {entry.texture.handle, .Linear}) {
@@ -234,7 +234,10 @@ service_renderer :: proc(service: ^Service) -> termattachment.Raster_Renderer {
     if service == nil || service.store == nil {
         return {} 
     }
-    return {user_data = service, draw = service_draw_raster}
+    return {
+        user_data = service,
+        draw = service_draw_raster,
+    }
 }
 
 // service_bind_native borrows live display resources for texture publication.
@@ -373,10 +376,12 @@ service_record_publication :: proc(
         lane = .Presentation,
         kind = .Terminal_Raster_Published,
         flags = {.Required},
-        payload = {counts = {
-            first = u32(metrics.width),
-            second = u32(metrics.height),
-        }},
+        payload = {
+            counts = {
+                first = u32(metrics.width),
+                second = u32(metrics.height),
+            },
+        },
     })
 }
 
@@ -400,10 +405,12 @@ service_record_animation :: proc(
         kind = .Animation_Playback_Completed if completed else
             .Animation_Frame_Presented,
         flags = {.Required},
-        payload = {counts = {
-            first = u32(frame_index + 1),
-            second = cycles,
-        }},
+        payload = {
+            counts = {
+                first = u32(frame_index + 1),
+                second = cycles,
+            },
+        },
     })
 }
 
@@ -412,12 +419,18 @@ operation_prepare_kind :: proc(
     decode_kind: gfxprotocol.Graphics_Decode_Kind) ->
     (termgraphicsprepare.Prepare_Kind, bool) {
     switch decode_kind {
-    case .Kitty_Png, .Iterm2_Image: return .Encoded_Image, true
-    case .Iterm2_Animated_Gif: return .Animated_Gif, true
-    case .Kitty_Zlib_Rgb: return .Zlib_Rgb, true
-    case .Kitty_Zlib_Rgba: return .Zlib_Rgba, true
-    case .Sixel: return .Sixel, true
-    case .Iterm2_Gif_Preflight: return {}, false
+    case .Kitty_Png, .Iterm2_Image:
+        return .Encoded_Image, true
+    case .Iterm2_Animated_Gif:
+        return .Animated_Gif, true
+    case .Kitty_Zlib_Rgb:
+        return .Zlib_Rgb, true
+    case .Kitty_Zlib_Rgba:
+        return .Zlib_Rgba, true
+    case .Sixel:
+        return .Sixel, true
+    case .Iterm2_Gif_Preflight:
+        return {}, false
     }
     return {}, false
 }
@@ -433,7 +446,10 @@ operation_prepare_output :: proc(
     }
     output, available := termattachment.attachment_preparation_buffer(
         service.store, operation.decode.attachment_id)
-    return {pixels = output, found = available}
+    return {
+        pixels = output,
+        found = available,
+    }
 }
 
 //   Convert protocol-neutral decode metadata into one worker preparation request.
@@ -518,7 +534,10 @@ operation_preflight_reserve :: proc(
             metadata = {
                 kind = .Raster,
                 origin = .Iterm2,
-                metrics = {width = inspection.width, height = inspection.height},
+                metrics = {
+                    width = inspection.width,
+                    height = inspection.height,
+                },
             },
             frame_count = inspection.frame_count,
             payload_byte_count = inspection.decoded_byte_count,
@@ -591,7 +610,8 @@ texture_payload_info :: proc(
         bytes_per_pixel, format = 3, .Rgb8
     case .Rgba8:
         bytes_per_pixel, format = 4, .Rgba8
-    case .Indexed8: return {}, false
+    case .Indexed8:
+        return {}, false
     }
     width := payload.stride / bytes_per_pixel
     if width <= 0 || len(payload.bytes) % payload.stride != 0 {
@@ -884,15 +904,12 @@ playback_command_candidate :: proc(
             candidate.loading = false
             candidate.completed = false
             candidate.completed_cycles = 0
-        case 2:
+        case 2, 3:
             candidate.stopped = false
-            candidate.loading = true
+            candidate.loading = command.animation_state == 2
             candidate.completed = false
-        case 3:
-            candidate.stopped = false
-            candidate.loading = false
-            candidate.completed = false
-        case: return entry, false
+        case:
+            return entry, false
         }
     }
     candidate.deadline_ns = playback_deadline(
@@ -927,8 +944,10 @@ playback_apply_command :: proc(
         return 
     }
     if !playback_upload_frame(
-        service, id, animation, candidate.frame_index,
-        {handler = upload, user_data = user_data}) {
+        service, id, animation, candidate.frame_index, {
+            handler = upload,
+            user_data = user_data,
+        }) {
         service.playback_upload_failure_count += 1
         return
     }
@@ -963,8 +982,11 @@ playback_apply_texture_command :: proc(
     if !valid {
         return
     }
-    plan := Playback_Plan{candidate = candidate,
-        frame_changed = true, valid = true}
+    plan: Playback_Plan = {
+        candidate = candidate,
+        frame_changed = true,
+        valid = true,
+    }
     frame := animation.frames[candidate.frame_index].pixels
     if frame.offset < 0 || frame.count <= 0 ||
         frame.offset > len(animation.pixels) - frame.count ||
@@ -1364,12 +1386,16 @@ service_cancel_producer :: proc(
             break 
         }
         if request.producer == producer {
-            operation := Operation{decode = request}
+            operation: Operation = {
+                decode = request,
+            }
             operation_discard(service, &operation)
         } else if !gfxprotocol.graphics_parser_queue_decode_request(
             service.parser, request) {
             service.failure_count += 1
-            operation := Operation{decode = request}
+            operation: Operation = {
+                decode = request,
+            }
             operation_discard(service, &operation)
         }
     }
@@ -1395,7 +1421,9 @@ service_discard_parser_requests :: proc(service: ^Service) {
         if !available {
             return 
         }
-        operation := Operation{decode = request}
+        operation: Operation = {
+            decode = request,
+        }
         operation_discard(service, &operation)
     }
 }

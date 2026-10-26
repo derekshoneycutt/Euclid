@@ -98,7 +98,7 @@ userdata_collection_schema_rejects_reserved_and_duplicate_orders :: proc(t: ^tes
     store: Store
     testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
     defer store_close(&store)
-    statements := []cstring{
+    statements: []cstring = {
         "INSERT INTO user_collection VALUES (X'00000000000000000000000000000001',NULL,'Name',0,0)",
         "INSERT INTO user_collection VALUES (X'00000000000000000000000000000000',NULL,'Name',1,0)",
         "UPDATE user_collection SET collection_order=1 WHERE system_role='favorites'",

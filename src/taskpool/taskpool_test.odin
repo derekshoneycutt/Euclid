@@ -1,6 +1,7 @@
 #+test
 package taskpool
 
+import "base:runtime"
 import "core:mem"
 import "core:os"
 import "core:sync"
@@ -9,28 +10,122 @@ import "core:thread"
 import "core:time"
 
 Task_Test_Payload :: struct {
-    input : int,
-    output : int,
-    executed : bool,
-    fail : bool,
-    execution_count : int,
-    thread_id : int,
+    input: int,
+    output: int,
+    executed: bool,
+    fail: bool,
+    execution_count: int,
+    thread_id: int,
 }
 
 Task_Test_Stopped_Observation :: struct {
-    blocker : Task_Handle,
-    protected : Task_Handle,
-    release_signal : Task_Handle,
-    protected_payload : ^Task_Test_Payload,
-    owner_id : int,
+    blocker: Task_Handle,
+    protected: Task_Handle,
+    release_signal: Task_Handle,
+    protected_payload: ^Task_Test_Payload,
+    owner_id: int,
 }
 
 Task_Test_Gate :: struct {
-    mutex : sync.Mutex,
-    changed : sync.Cond,
-    worker_started : bool,
-    worker_released : bool,
-    release_requested : bool,
+    mutex: sync.Mutex,
+    changed: sync.Cond,
+    worker_started: bool,
+    worker_released: bool,
+    release_requested: bool,
+}
+
+Task_Test_Scratch :: struct {
+    result: Task_Result,
+    used_before: uint,
+    blocks_grew: bool,
+    cold_start: bool,
+    ordinary_allocator_disabled: bool,
+    thread_id: int,
+    output: u8,
+}
+
+// Observe scratch only on its owner thread and copy the result into joined storage.
+task_test_allocate_scratch :: proc(
+    payload: rawptr, _: Task_Cancellation_Token) -> Task_Result {
+    task := (^Task_Test_Scratch)(payload)
+    arena := &runtime.global_default_temp_allocator_data.arena
+    task.used_before = arena.total_used
+    task.cold_start = arena.curr_block == nil
+    task.thread_id = sync.current_thread_id()
+    task.ordinary_allocator_disabled =
+        context.allocator.procedure == mem.nil_allocator().procedure
+    first := make([]u8, 64, context.temp_allocator)
+    block := arena.curr_block
+    large := make([]u8, 2 * runtime.DEFAULT_TEMP_ALLOCATOR_BACKING_SIZE,
+        context.temp_allocator)
+    task.blocks_grew = arena.curr_block != block
+    first[0] = 17
+    large[len(large) - 1] = 25
+    task.output = first[0] + large[len(large) - 1]
+    return task.result
+}
+
+// Verify persistent workers reclaim scratch even after failure and cancellation returns.
+@(test)
+task_pool_test_worker_scratch_reclaimed :: proc(t: ^testing.T) {
+    pool: Task_Pool
+    testing.expect(t, task_pool_init(&pool, 1, 4))
+    defer task_pool_destroy(&pool)
+    outcomes: [4]Task_Result = {.Succeeded, .Failed, .Cancelled, .Succeeded}
+    for expected, index in outcomes {
+        payload: Task_Test_Scratch = {
+            result = expected,
+        }
+        handle, outcome := task_pool_submit(
+            &pool, task_test_allocate_scratch, &payload, .Worker_Only)
+        testing.expect_value(t, outcome, Task_Submit_Outcome.Queued)
+        result, joined := task_pool_wait(&pool, handle)
+        testing.expect_value(t, joined, Task_Join_Outcome.Joined)
+        testing.expect_value(t, result, expected)
+        testing.expect_value(t, payload.used_before, uint(0))
+        testing.expect_value(t, payload.output, u8(42))
+        testing.expect(t, payload.blocks_grew && payload.ordinary_allocator_disabled)
+        testing.expect(t, payload.thread_id != sync.current_thread_id())
+        testing.expect_value(t, payload.cold_start, index == 0)
+    }
+}
+
+// Verify owner helping rewinds task scratch without invalidating caller allocations.
+@(test)
+task_pool_test_helping_preserves_scratch :: proc(t: ^testing.T) {
+    pool: Task_Pool
+    testing.expect(t, task_pool_init(&pool, 1, 4))
+    defer task_pool_destroy(&pool)
+    gate: Task_Test_Gate
+    defer task_test_finish_gate_releaser(&gate, nil)
+    blocker, _ := task_pool_submit(&pool, task_test_wait_at_gate, &gate, .Worker_Only)
+    testing.expect(t, task_test_wait_for_worker(&gate))
+    caller := make([]u8, 128, context.temp_allocator)
+    caller[0], caller[127] = 19, 23
+    arena := &runtime.global_default_temp_allocator_data.arena
+    baseline := arena.total_used
+    block := arena.curr_block
+    allocator := context.allocator
+    outcomes: [3]Task_Result = {.Succeeded, .Failed, .Cancelled}
+    for expected in outcomes {
+        payload: Task_Test_Scratch = {
+            result = expected,
+        }
+        handle, _ := task_pool_submit(&pool, task_test_allocate_scratch, &payload)
+        result, joined := task_pool_wait(&pool, handle)
+        testing.expect_value(t, joined, Task_Join_Outcome.Joined)
+        testing.expect_value(t, result, expected)
+        testing.expect_value(t, payload.used_before, baseline)
+        testing.expect_value(t, arena.total_used, baseline)
+        testing.expect(t, arena.curr_block == block)
+        testing.expect_value(t, caller[0] + caller[127], u8(42))
+        testing.expect_value(t, payload.output, u8(42))
+        testing.expect_value(t, payload.thread_id, sync.current_thread_id())
+        testing.expect(t, payload.blocks_grew && payload.ordinary_allocator_disabled)
+        testing.expect(t, context.allocator == allocator)
+    }
+    task_test_release_worker(&gate)
+    task_pool_wait(&pool, blocker)
 }
 
 // Compute one isolated test result without touching pool or application state.
@@ -178,10 +273,14 @@ task_pool_test_handle_generation :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1))
     defer task_pool_destroy(&pool)
-    first_payload := Task_Test_Payload{input = 2}
+    first_payload: Task_Test_Payload = {
+        input = 2,
+    }
     first, _ := task_pool_submit(&pool, task_test_execute, &first_payload)
     task_pool_wait(&pool, first)
-    second_payload := Task_Test_Payload{input = 3}
+    second_payload: Task_Test_Payload = {
+        input = 3,
+    }
     second, _ := task_pool_submit(&pool, task_test_execute, &second_payload)
 
     testing.expect_value(t, first.index, second.index)
@@ -197,7 +296,9 @@ task_pool_test_immediate_wait :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1))
     defer task_pool_destroy(&pool)
-    payload := Task_Test_Payload{input = 4}
+    payload: Task_Test_Payload = {
+        input = 4,
+    }
     handle, outcome := task_pool_submit(&pool, task_test_execute, &payload)
 
     testing.expect_value(t, outcome, Task_Submit_Outcome.Queued)
@@ -214,7 +315,9 @@ task_pool_test_overlapped_wait :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1))
     defer task_pool_destroy(&pool)
-    payload := Task_Test_Payload{input = 5}
+    payload: Task_Test_Payload = {
+        input = 5,
+    }
     handle, _ := task_pool_submit(&pool, task_test_execute, &payload)
     independent_result := 7 * 6
 
@@ -230,7 +333,9 @@ task_pool_test_cross_tick_poll_join :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1))
     defer task_pool_destroy(&pool)
-    payload := Task_Test_Payload{input = 6}
+    payload: Task_Test_Payload = {
+        input = 6,
+    }
     handle, _ := task_pool_submit(&pool, task_test_execute, &payload)
 
     poll := task_pool_poll(&pool, handle)
@@ -250,7 +355,20 @@ task_pool_test_fence :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 2))
     defer task_pool_destroy(&pool)
-    payloads := [4]Task_Test_Payload{{input = 1}, {input = 2}, {input = 3}, {input = 4}}
+    payloads: [4]Task_Test_Payload = {
+        {
+            input = 1,
+        },
+        {
+            input = 2,
+        },
+        {
+            input = 3,
+        },
+        {
+            input = 4,
+        },
+    }
     fence, initialized := task_fence_begin(&pool)
     testing.expect(t, initialized)
     for &payload in payloads {
@@ -278,7 +396,9 @@ task_pool_test_helping_wait :: proc(t: ^testing.T) {
     testing.expect_value(t, worker_outcome, Task_Submit_Outcome.Queued)
     testing.expect(t, task_test_wait_for_worker(&gate))
 
-    payload := Task_Test_Payload{input = 9}
+    payload: Task_Test_Payload = {
+        input = 9,
+    }
     helped_handle, helped_outcome := task_pool_submit(
         &pool, task_test_execute, &payload)
     testing.expect_value(t, helped_outcome, Task_Submit_Outcome.Queued)
@@ -311,7 +431,9 @@ task_pool_test_helping_skips_worker_only :: proc(t: ^testing.T) {
     protected_payload: Task_Test_Payload
     protected, protected_outcome := task_pool_submit(
         &pool, task_test_execute, &protected_payload, .Worker_Only)
-    helpable_payload := Task_Test_Payload{input = 9}
+    helpable_payload: Task_Test_Payload = {
+        input = 9,
+    }
     helpable, helpable_outcome := task_pool_submit(
         &pool, task_test_execute, &helpable_payload)
     testing.expect_value(t, protected_outcome, Task_Submit_Outcome.Queued)
@@ -346,7 +468,9 @@ task_pool_test_worker_only_wait :: proc(t: ^testing.T) {
     defer task_test_finish_gate_releaser(&gate, nil)
     blocker, _ := task_pool_submit(&pool, task_test_wait_at_gate, &gate)
     testing.expect(t, task_test_wait_for_worker(&gate))
-    payload := Task_Test_Payload{input = 11}
+    payload: Task_Test_Payload = {
+        input = 11,
+    }
     handle, outcome := task_pool_submit(
         &pool, task_test_execute, &payload, .Worker_Only)
     testing.expect_value(t, outcome, Task_Submit_Outcome.Queued)
@@ -401,10 +525,17 @@ task_pool_test_mixed_policy_fence :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 2, 4))
     defer task_pool_destroy(&pool)
-    payloads := [3]Task_Test_Payload{
-        {input = 2},
-        {input = 3},
-        {input = 4, fail = true},
+    payloads: [3]Task_Test_Payload = {
+        {
+            input = 2,
+        },
+        {
+            input = 3,
+        },
+        {
+            input = 4,
+            fail = true,
+        },
     }
     fence, initialized := task_fence_begin(&pool)
     testing.expect(t, initialized)
@@ -440,9 +571,13 @@ task_pool_test_mixed_policy_fence :: proc(t: ^testing.T) {
 task_pool_test_worker_dispatch_alternates_policies :: proc(t: ^testing.T) {
     helpable_items: [3]int
     worker_only_items: [3]int
-    pool := Task_Pool{
-        helpable_ready = {items = helpable_items[:]},
-        worker_only_ready = {items = worker_only_items[:]},
+    pool: Task_Pool = {
+        helpable_ready = {
+            items = helpable_items[:],
+        },
+        worker_only_ready = {
+            items = worker_only_items[:],
+        },
         next_worker_policy = .Helpable,
     }
     for index in 0..<len(helpable_items) {
@@ -469,7 +604,9 @@ task_pool_test_worker_only_wakeup_and_completion_cycles :: proc(t: ^testing.T) {
     owner_id := sync.current_thread_id()
     for cycle in 0..<16 {
         for index in 0..<len(payloads) {
-            payloads[index] = {input = cycle * len(payloads) + index}
+            payloads[index] = {
+                input = cycle * len(payloads) + index,
+            }
             execution := Task_Execution_Policy.Worker_Only
             if (cycle + index) % 2 == 0 {
                 execution = .Helpable
@@ -535,7 +672,9 @@ task_pool_test_shutdown_drains_worker_only :: proc(t: ^testing.T) {
     defer task_test_finish_gate_releaser(&gate, releaser)
     blocker, _ := task_pool_submit(&pool, task_test_wait_at_gate, &gate)
     testing.expect(t, task_test_wait_for_worker(&gate))
-    protected_payload := Task_Test_Payload{input = 12}
+    protected_payload: Task_Test_Payload = {
+        input = 12,
+    }
     protected, protected_outcome := task_pool_submit(
         &pool, task_test_execute, &protected_payload, .Worker_Only)
     release_signal, signal_outcome := task_pool_submit(
@@ -562,7 +701,7 @@ task_pool_test_queue_full :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1, 8))
     defer task_pool_destroy(&pool)
-    payloads := [9]Task_Test_Payload{}
+    payloads: [9]Task_Test_Payload = {}
     handles: [8]Task_Handle
     for index in 0..<len(pool.slots) {
         execution := Task_Execution_Policy.Worker_Only
@@ -630,7 +769,9 @@ task_pool_test_failure_is_visible :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1))
     defer task_pool_destroy(&pool)
-    payload := Task_Test_Payload{fail = true}
+    payload: Task_Test_Payload = {
+        fail = true,
+    }
     handle, _ := task_pool_submit(&pool, task_test_execute, &payload)
 
     result, outcome := task_pool_wait(&pool, handle)
@@ -647,7 +788,9 @@ task_pool_test_cancellation_wins_until_join :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 1))
     defer task_pool_destroy(&pool)
-    payload := Task_Test_Payload{input = 7}
+    payload: Task_Test_Payload = {
+        input = 7,
+    }
     handle, outcome := task_pool_submit(&pool, task_test_execute, &payload)
     testing.expect_value(t, outcome, Task_Submit_Outcome.Queued)
     for task_pool_poll(&pool, handle) == .Pending {
@@ -693,8 +836,12 @@ task_pool_test_fence_result_precedence :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 2))
     defer task_pool_destroy(&pool)
-    cancelled_payload := Task_Test_Payload{input = 2}
-    succeeded_payload := Task_Test_Payload{input = 3}
+    cancelled_payload: Task_Test_Payload = {
+        input = 2,
+    }
+    succeeded_payload: Task_Test_Payload = {
+        input = 3,
+    }
     fence, initialized := task_fence_begin(&pool)
     testing.expect(t, initialized)
     testing.expect_value(t, task_fence_submit(
@@ -708,8 +855,12 @@ task_pool_test_fence_result_precedence :: proc(t: ^testing.T) {
     testing.expect_value(t, task_fence_wait(&pool, &fence),
         Task_Result.Cancelled)
 
-    cancelled_payload = {input = 4}
-    failed_payload := Task_Test_Payload{fail = true}
+    cancelled_payload = {
+        input = 4,
+    }
+    failed_payload: Task_Test_Payload = {
+        fail = true,
+    }
     fence, initialized = task_fence_begin(&pool)
     testing.expect(t, initialized)
     testing.expect_value(t, task_fence_submit(
@@ -728,7 +879,7 @@ task_pool_test_fence_result_precedence :: proc(t: ^testing.T) {
 task_pool_test_shutdown :: proc(t: ^testing.T) {
     pool: Task_Pool
     testing.expect(t, task_pool_init(&pool, 2))
-    payloads := [8]Task_Test_Payload{}
+    payloads: [8]Task_Test_Payload = {}
     for &payload in payloads {
         task_pool_submit(&pool, task_test_execute, &payload)
     }

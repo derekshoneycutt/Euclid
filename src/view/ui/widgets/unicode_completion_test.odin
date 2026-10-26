@@ -32,10 +32,21 @@ unicode_completion_resolves_exact_symbols :: proc(t: ^testing.T) {
 unicode_test_params :: proc(
     state: ^viewmodel.Ui_Input_Box_State, bytes: []u8,
     length: ^int) -> Input_Box_Params {
-    return {rect = {0, 0, 100, 30}, clip_rect = {0, 0, 100, 30},
-        descriptor = {text = string(bytes[:length^]), mode = .Editable},
-        state = state, focused = true, column_advance = 8,
-        edit_target = {bytes, length}, edit_policy = {unicode_completion = true}}
+    return {
+        rect = {0, 0, 100, 30},
+        clip_rect = {0, 0, 100, 30},
+        descriptor = {
+            text = string(bytes[:length^]),
+            mode = .Editable,
+        },
+        state = state,
+        focused = true,
+        column_advance = 8,
+        edit_target = {bytes, length},
+        edit_policy = {
+            unicode_completion = true,
+        },
+    }
 }
 
 // Verify replacement is a normal edit and consumes Right before spelling correction.
@@ -45,11 +56,24 @@ unicode_completion_replaces_suffix_before_spelling :: proc(t: ^testing.T) {
     text := "é \\alpha"
     copy(bytes[:], text)
     length := len(text)
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .Right}, {kind = .Press, key = .Right}}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = length,
+        anchor_byte = length,
+    }
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Right,
+        },
+        {
+            kind = .Press,
+            key = .Right,
+        },
+    }
     result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
-        {events = events[:]}, "", {true, "spelling"})
+        {
+            events = events[:],
+        }, "", {true, "spelling"})
     testing.expect(t, result.changed && !result.suggestion_accepted)
     testing.expect(t, !result.submit_requested)
     testing.expect_value(t, string(bytes[:length]), "é α")
@@ -65,25 +89,90 @@ unicode_completion_preserves_event_order :: proc(t: ^testing.T) {
         events: [2]input.Input_Event,
         expected: string,
     }{
-        {"\\alph", {{kind = .Text, codepoint = 'a'},
-            {kind = .Press, key = .Right}}, "α"},
-        {"\\alph", {{kind = .Press, key = .Right}, {kind = .Text, codepoint = 'a'}},
-            "\\alpha"},
-        {"\\alpha", {{kind = .Press, key = .Right},
-            {kind = .Text, codepoint = 'x'}}, "αx"},
-        {"\\alpha", {{kind = .Press, key = .Escape}, {kind = .Press, key = .Right}},
-            "spelling"},
-        {"\\alpha", {{kind = .Text, codepoint = 'x'}, {kind = .Press, key = .Right}},
-            "\\alphax"},
+        {
+            "\\alph",
+            {
+                {
+                    kind = .Text,
+                    codepoint = 'a',
+                },
+                {
+                    kind = .Press,
+                    key = .Right,
+                },
+            },
+            "α",
+        },
+        {
+            "\\alph",
+            {
+                {
+                    kind = .Press,
+                    key = .Right,
+                },
+                {
+                    kind = .Text,
+                    codepoint = 'a',
+                },
+            },
+            "\\alpha",
+        },
+        {
+            "\\alpha",
+            {
+                {
+                    kind = .Press,
+                    key = .Right,
+                },
+                {
+                    kind = .Text,
+                    codepoint = 'x',
+                },
+            },
+            "αx",
+        },
+        {
+            "\\alpha",
+            {
+                {
+                    kind = .Press,
+                    key = .Escape,
+                },
+                {
+                    kind = .Press,
+                    key = .Right,
+                },
+            },
+            "spelling",
+        },
+        {
+            "\\alpha",
+            {
+                {
+                    kind = .Text,
+                    codepoint = 'x',
+                },
+                {
+                    kind = .Press,
+                    key = .Right,
+                },
+            },
+            "\\alphax",
+        },
     }
     for &item in cases {
         bytes: [32]u8
         copy(bytes[:], item.text)
         length := len(item.text)
-        state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
+        state: viewmodel.Ui_Input_Box_State = {
+            cursor_byte = length,
+            anchor_byte = length,
+        }
         suggestion := "spelling" if item.events[0].key == .Escape else ""
         result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
-            {events = item.events[:]}, "", {true, suggestion})
+            {
+                events = item.events[:],
+            }, "", {true, suggestion})
         testing.expect_value(t, string(bytes[:length]), item.expected)
         testing.expect(t, result.changed)
     }
@@ -95,24 +184,69 @@ unicode_completion_dismissal_tracks_text_changes :: proc(t: ^testing.T) {
     bytes: [16]u8
     copy(bytes[:], "\\alpha")
     length := len("\\alpha")
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
-    escape := [1]input.Input_Event{{kind = .Press, key = .Escape}}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = length,
+        anchor_byte = length,
+    }
+    escape: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Escape,
+        },
+    }
     result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
-        {events = escape[:]}, "", {unicode_completion = true})
+        {
+            events = escape[:],
+        }, "", {
+            unicode_completion = true,
+        })
     testing.expect(t, !result.changed && state.unicode_dismissed)
     testing.expect_value(t, string(bytes[:length]), "\\alpha")
     testing.expect_value(t, input_box_unicode_candidate(&state, "\\alpha").text, "")
     testing.expect(t, !input_box_reconcile_content(&state, "\\alpha", 0))
     testing.expect(t, state.unicode_dismissed)
-    events := [2]input.Input_Event{
-        {kind = .Text, codepoint = 'x'}, {kind = .Press, key = .Backspace}}
+    events: [2]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+        {
+            kind = .Press,
+            key = .Backspace,
+        },
+    }
     _ = input_box_apply_edit_keyboard(&state, {bytes[:], &length},
-        {events = events[:]}, "", {unicode_completion = true})
+        {
+            events = events[:],
+        }, "", {
+            unicode_completion = true,
+        })
     testing.expect_value(t, input_box_unicode_candidate(
         &state, string(bytes[:length])).text, "α")
     state.unicode_dismissed = true
     testing.expect(t, input_box_reconcile_content(&state, "\\alpha", 1))
     testing.expect(t, !state.unicode_dismissed)
+}
+
+// Configure one completion-hint eligibility boundary while retaining editable storage.
+unicode_completion_disabled_params :: proc(
+    params: Input_Box_Params, index: int) -> Input_Box_Params {
+    disabled := params
+    switch index {
+    case 0:
+        disabled.focused = false
+    case 1:
+        disabled.descriptor.mode = .Read_Only
+    case 2:
+        disabled.edit_policy.unicode_completion = false
+    case 3:
+        disabled.rect.width = 30
+    case 4:
+        disabled.clip_rect.width = 50
+    case 5:
+        disabled.state.anchor_byte = 0
+    }
+    return disabled
 }
 
 // Verify hint eligibility respects editing, focus, selection, and fully visible bounds.
@@ -121,9 +255,17 @@ unicode_completion_hint_and_scroll_are_bounded :: proc(t: ^testing.T) {
     bytes: [32]u8
     copy(bytes[:], "long query \\alpha")
     length := len("long query \\alpha")
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = length,
+        anchor_byte = length,
+    }
     params := unicode_test_params(&state, bytes[:], &length)
-    right := [1]input.Input_Event{{kind = .Press, key = .Right}}
+    right: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Right,
+        },
+    }
     owner: viewmodel.Ui_Press_Owner_State
     result := input_box_prepare(params, &owner)
     testing.expect_value(t, result.unicode_completion.text, "α")
@@ -132,16 +274,8 @@ unicode_completion_hint_and_scroll_are_bounded :: proc(t: ^testing.T) {
         params.rect.x + params.rect.width)
     testing.expect(t, !result.changed)
     for index in 0..<6 {
-        disabled := params
+        disabled := unicode_completion_disabled_params(params, index)
         disabled.frame.events = right[:]
-        switch index {
-        case 0: disabled.focused = false
-        case 1: disabled.descriptor.mode = .Read_Only
-        case 2: disabled.edit_policy.unicode_completion = false
-        case 3: disabled.rect.width = 30
-        case 4: disabled.clip_rect.width = 50
-        case 5: state.anchor_byte = 0
-        }
         result = input_box_prepare(disabled, &owner)
         expected := "α" if index == 5 else ""
         testing.expect_value(t, result.unicode_completion.text, expected)
@@ -154,25 +288,64 @@ unicode_completion_hint_and_scroll_are_bounded :: proc(t: ^testing.T) {
 @(test)
 unicode_completion_preserves_ordinary_keys :: proc(t: ^testing.T) {
     events := [?]input.Input_Event{
-        {kind = .Repeat, key = .Right},
-        {kind = .Press, key = .Right, modifiers = {.Shift}},
-        {kind = .Press, key = .Right, modifiers = {.Control}},
-        {kind = .Press, key = .Right, modifiers = {.Alt}},
-        {kind = .Press, key = .Right, modifiers = {.Super}},
-        {kind = .Press, key = .Tab}, {kind = .Press, key = .Enter},
-        {kind = .Press, key = .Space},
+        {
+            kind = .Repeat,
+            key = .Right,
+        },
+        {
+            kind = .Press,
+            key = .Right,
+            modifiers = {.Shift},
+        },
+        {
+            kind = .Press,
+            key = .Right,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Press,
+            key = .Right,
+            modifiers = {.Alt},
+        },
+        {
+            kind = .Press,
+            key = .Right,
+            modifiers = {.Super},
+        },
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+        {
+            kind = .Press,
+            key = .Space,
+        },
     }
     for event in events {
         bytes: [8]u8
         copy(bytes[:], "\\alpha")
         length := len("\\alpha")
-        state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
+        state: viewmodel.Ui_Input_Box_State = {
+            cursor_byte = length,
+            anchor_byte = length,
+        }
         result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
-            {events = []input.Input_Event{event}}, "", {unicode_completion = true})
+            {
+                events = []input.Input_Event{event},
+            }, "", {
+                unicode_completion = true,
+            })
         testing.expect(t, !result.changed)
         testing.expect_value(t, string(bytes[:length]), "\\alpha")
     }
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 3, anchor_byte = 3}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 3,
+        anchor_byte = 3,
+    }
     testing.expect_value(t, input_box_unicode_candidate(&state, "\\alpha").text, "")
     state.cursor_byte = 6
     testing.expect_value(t, input_box_unicode_candidate(&state, "\\alpha").text, "")
@@ -184,7 +357,10 @@ unicode_completion_replacement_is_atomic :: proc(t: ^testing.T) {
     bytes: [6]u8
     copy(bytes[:], "\\alpha")
     length := len("\\alpha")
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = length,
+        anchor_byte = length,
+    }
     result: Input_Box_Update
     input_box_accept_completion(&state, {bytes[:], &length},
         {0, "α"}, &result)
@@ -192,7 +368,10 @@ unicode_completion_replacement_is_atomic :: proc(t: ^testing.T) {
     testing.expect(t, result.changed)
     copy(bytes[:], "\\alpha")
     length = len("\\alpha")
-    state = {cursor_byte = length, anchor_byte = length}
+    state = {
+        cursor_byte = length,
+        anchor_byte = length,
+    }
     result = {}
     input_box_accept_completion(&state, {bytes[:], &length},
         {len("\\alpha"), "α"}, &result)
@@ -207,11 +386,24 @@ unicode_completion_rejects_stale_spelling_after_edit :: proc(t: ^testing.T) {
     bytes: [32]u8
     copy(bytes[:], "\\alpha")
     length := len("\\alpha")
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = length, anchor_byte = length}
-    events := [2]input.Input_Event{
-        {kind = .Text, codepoint = 'x'}, {kind = .Press, key = .Right}}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = length,
+        anchor_byte = length,
+    }
+    events: [2]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+        {
+            kind = .Press,
+            key = .Right,
+        },
+    }
     result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
-        {events = events[:]}, "", {true, "spelling"})
+        {
+            events = events[:],
+        }, "", {true, "spelling"})
     testing.expect_value(t, string(bytes[:length]), "\\alphax")
     testing.expect(t, result.changed && !result.suggestion_accepted)
 }

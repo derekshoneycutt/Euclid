@@ -46,9 +46,12 @@ animation_controls_test_click_favorite :: proc(
     slots := uianimation.animation_control_layout_slots(
         geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect), true)
     _ = uianimation.prepare_animation_controls(state, {
-        mouse_position = {slots.favorite.x + slots.favorite.width * 0.5,
-            slots.favorite.y + slots.favorite.height * 0.5},
-        mouse_pressed = {.Left}, mouse_down = {.Left},
+        mouse_position = {
+            slots.favorite.x + slots.favorite.width * 0.5,
+            slots.favorite.y + slots.favorite.height * 0.5,
+        },
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
     })
     _ = uianimation.prepare_animation_controls(state, {
         mouse_position = {slots.favorite.x + slots.favorite.width * 0.5,
@@ -96,7 +99,7 @@ animation_controls_test_prepare_favorite_projection :: proc(
     t: ^testing.T,
     state: ^app_core.Euclid_General_State,
     ji: ^bridgemodel.Euclid_Julia_Interface) -> Animation_Favorite_Test_Projection {
-    params := uilibrary.Tree_List_Params{
+    params: uilibrary.Tree_List_Params = {
         general_state = state,
         ji = ji,
         collections = &state^.preferences_runtime.collections_state,
@@ -157,7 +160,8 @@ animation_controls_favorite_semantics_and_keyboard_activation :: proc(t: ^testin
     testing.expect_value(t, node.traversal_order, u32(3))
     testing.expect(t, .Activate in node.actions)
     testing.expect(t, uisemantics.semantic_append_command(focus, {
-        target = id, kind = .Activate,
+        target = id,
+        kind = .Activate,
     }))
     testing.expect(t, uisemantics.semantic_begin(focus))
     _ = uianimation.prepare_animation_controls(state, {})
@@ -223,7 +227,7 @@ animation_controls_favorite_semantics_use_separate_panel :: proc(t: ^testing.T) 
 // Offset and resized worlds keep matching control boxes apart and equally inset.
 @(test)
 animation_controls_separate_panels_follow_world_bounds :: proc(t: ^testing.T) {
-    worlds := [3]geometry.Rectangle{
+    worlds: [3]geometry.Rectangle = {
         {40, 70, 640, 480}, {20, 30, 360, 640}, {5, 10, 320, 240},
     }
     for world in worlds {
@@ -242,9 +246,12 @@ animation_controls_separate_panels_follow_world_bounds :: proc(t: ^testing.T) {
         testing.expect_value(t, slots.favorite_panel.height, slots.panel.height)
         testing.expect_value(t, slots.favorite.x - slots.favorite_panel.x,
             slots.refresh.x - slots.panel.x)
-        id, hit := uianimation.animation_control_hit_test(world, .Idle,
-            {slots.panel.x + slots.panel.width + 10, slots.favorite.y + 1},
-            {favorite = true})
+        id, hit := uianimation.animation_control_hit_test(world, .Idle, {
+                slots.panel.x + slots.panel.width + 10,
+                slots.favorite.y + 1,
+            }, {
+                favorite = true,
+            })
         testing.expect(t, !hit)
         testing.expect_value(t, id, 0)
     }
@@ -265,7 +272,7 @@ animation_controls_draw_separate_matching_panels :: proc(t: ^testing.T) {
     batches: [1]native.Draw_Batch
     commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
-    eligibility := [2]bool{true, false}
+    eligibility: [2]bool = {true, false}
     for eligible in eligibility {
         animation.node_kind = .Animation if eligible else .Terminal
         prepared := uianimation.prepare_animation_controls(state, {})
@@ -306,7 +313,7 @@ animation_controls_shadow_vertex_count :: proc(vertices: []native.Draw_Vertex) -
 // animation_controls_shadow_origin_present locates the shadow's contact ring.
 animation_controls_shadow_origin_present :: proc(
     vertices: []native.Draw_Vertex, panel: geometry.Rectangle) -> bool {
-    origin := geometry.Vector2{panel.x, panel.y}
+    origin: geometry.Vector2 = {panel.x, panel.y}
     for vertex in vertices {
         if vertex.color[0] == theme.UI_SHADOW_TINT[0] &&
             vertex.color[1] == theme.UI_SHADOW_TINT[1] &&
@@ -357,7 +364,7 @@ animation_controls_shadows_follow_independent_visibility :: proc(t: ^testing.T) 
 @(test)
 animation_controls_hover_geometry_preserves_hit_bounds :: proc(t: ^testing.T) {
     slots := uianimation.animation_control_layout_slots({0, 0, 640, 480}, true)
-    rectangles := [3]geometry.Rectangle{
+    rectangles: [3]geometry.Rectangle = {
         slots.refresh, slots.pause, slots.favorite,
     }
     for rectangle, index in rectangles {
@@ -370,9 +377,12 @@ animation_controls_hover_geometry_preserves_hit_bounds :: proc(t: ^testing.T) {
             testing.expect(t, point.y <= rectangle.y + rectangle.height)
         }
         id, hit := uianimation.animation_control_hit_test(
-            {0, 0, 640, 480}, .Idle,
-            {rectangle.x + rectangle.width * 0.5,
-                rectangle.y + rectangle.height * 0.5}, {favorite = true})
+            {0, 0, 640, 480}, .Idle, {
+                rectangle.x + rectangle.width * 0.5,
+                rectangle.y + rectangle.height * 0.5,
+            }, {
+                favorite = true,
+            })
         testing.expect(t, hit)
         expected_id := uianimation.ANIMATION_REFRESH_BUTTON_ID
         if index == 1 {
@@ -395,7 +405,7 @@ animation_controls_hover_draws_rounded_light_highlight :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {640, 480}, {640, 480}))
-    rectangle := geometry.Rectangle{10, 20, 30, 30}
+    rectangle: geometry.Rectangle = {10, 20, 30, 30}
     draw_color := uianimation.draw_encoded_animation_control_backing(
         &encoder, rectangle, true, false, false)
     highlight := theme.UI_HOVER_COLOR
@@ -420,9 +430,9 @@ animation_controls_active_backing_uses_contrasting_pair :: proc(t: ^testing.T) {
     batches: [1]native.Draw_Batch
     commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
-    loop_flags := ([3][3]bool{
+    loop_flags: [3][3]bool = {
         {false, true, false}, {false, false, true}, {true, true, true},
-    })
+    }
     for flags in loop_flags {
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
@@ -450,7 +460,7 @@ animation_controls_expect_uniform_coverage :: proc(
     rectangle: geometry.Rectangle) {
     for y in 0..<30 {
         for x in 0..<30 {
-            point := geometry.Vector2{rectangle.x + f32(x) + 0.37,
+            point: geometry.Vector2 = {rectangle.x + f32(x) + 0.37,
                 rectangle.y + f32(y) + 0.61}
             coverage := 0
             for index := 0; index < len(indices); index += 3 {

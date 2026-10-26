@@ -58,7 +58,7 @@ ui_test_shadow_vertex_count :: proc(vertices: []native.Draw_Vertex) -> int {
 // ui_test_shadow_origin_present locates a panel's zero-alpha contact origin.
 ui_test_shadow_origin_present :: proc(
     vertices: []native.Draw_Vertex, panel: geometry.Rectangle) -> bool {
-    origin := geometry.Vector2{panel.x, panel.y}
+    origin: geometry.Vector2 = {panel.x, panel.y}
     for vertex in vertices {
         if vertex.color[0] == theme.UI_SHADOW_TINT[0] &&
             vertex.color[1] == theme.UI_SHADOW_TINT[1] &&
@@ -104,8 +104,8 @@ ui_shadow_geometry_uses_logical_pixels_at_multiple_scales :: proc(t: ^testing.T)
     batches: [2]native.Draw_Batch
     commands: [2]native.Draw_Command
     encoder: native.Draw_Encoder
-    physical_extents := [2][2]u32{{100, 100}, {200, 200}}
-    expected_scissors := [2]native.Draw_Scissor{
+    physical_extents: [2][2]u32 = {{100, 100}, {200, 200}}
+    expected_scissors: [2]native.Draw_Scissor = {
         {1, 2, 11, 12}, {2, 4, 22, 24},
     }
     logical_positions: [native.DRAW_SHADOW_VERTEX_COUNT]geometry.Vector2
@@ -194,7 +194,9 @@ ui_test_update_splitters :: proc(
         layout = &runtime^.layout,
         press_owner = &runtime^.input.press_owner,
         semantic_focus = runtime^.semantic_focus,
-        mouse_input = frame, dt = dt, capture_view = capture_view,
+        mouse_input = frame,
+        dt = dt,
+        capture_view = capture_view,
     })
 }
 
@@ -253,7 +255,7 @@ ui_regions_compact_extent_remains_non_negative :: proc(t: ^testing.T) {
 // Verify a full-capacity dust value remains inside the settings panel inset.
 @(test)
 settings_dust_value_is_right_aligned_inside_panel :: proc(t: ^testing.T) {
-    panel := geometry.Rectangle{100, 0, 180, 240}
+    panel: geometry.Rectangle = {100, 0, 180, 240}
     text_width: f32 = 40
     x := uisettings.settings_right_aligned_x(geometry.Rectangle(panel), text_width)
 
@@ -268,11 +270,11 @@ settings_dust_value_is_right_aligned_inside_panel :: proc(t: ^testing.T) {
 gif_button_presentation_matches_capture_phase :: proc(t: ^testing.T) {
     state := make_shell_test_state(t)
     defer destroy_shell_test_state(state)
-    phases := [6]capturemodel.Gif_Capture_Phase{
+    phases: [6]capturemodel.Gif_Capture_Phase = {
         .Idle, .Armed, .Recording, .Finalizing, .Saved, .Error}
-    labels := [6]string{
+    labels: [6]string = {
         "Save GIF", "Cancel GIF", "Recording...", "Saving...", "Save GIF", "Save GIF"}
-    enabled := [6]bool{true, true, false, false, true, true}
+    enabled: [6]bool = {true, true, false, false, true, true}
     for phase, index in phases {
         testing.expect_value(t,
             uigif.gif_capture_button_label(state, phase), labels[index])
@@ -300,9 +302,9 @@ gif_status_labels_cover_capture_phases :: proc(t: ^testing.T) {
         state, .Saved, 12, storage[:]), "Status: Saved")
     testing.expect_value(t, uigif.gif_capture_status_label(
         state, .Error, 0, storage[:]), "Status: Error")
-    phases := [6]capturemodel.Gif_Capture_Phase{
+    phases: [6]capturemodel.Gif_Capture_Phase = {
         .Idle, .Armed, .Recording, .Finalizing, .Saved, .Error}
-    milestones := [6]string{"GIF capture idle", "GIF capture armed",
+    milestones: [6]string = {"GIF capture idle", "GIF capture armed",
         "GIF capture recording", "GIF capture saving", "GIF capture saved",
         "GIF capture error"}
     for phase, index in phases {
@@ -323,7 +325,7 @@ gif_control_value_labels_are_human_readable :: proc(t: ^testing.T) {
     testing.expect_value(t, uigif.gif_output_scale_label(state, 4), "25%")
     testing.expect_value(t, uigif.gif_output_scale_label(state, 0), "100%")
     testing.expect_value(t, uigif.gif_output_scale_label(state, 5), "25%")
-    cadence := [4]string{"frame", "2 frames", "3 frames", "4 frames"}
+    cadence: [4]string = {"frame", "2 frames", "3 frames", "4 frames"}
     for expected, index in cadence {
         testing.expect_value(t,
             uigif.gif_capture_cadence_label(state, index + 1, storage[:]), expected)
@@ -337,7 +339,7 @@ gif_control_value_labels_are_human_readable :: proc(t: ^testing.T) {
 // Verify GIF timing segments remain inside the minimum panel width.
 @(test)
 gif_timing_segments_fit_compact_panel :: proc(t: ^testing.T) {
-    panel := geometry.Rectangle{10, 20, 240, 300}
+    panel: geometry.Rectangle = {10, 20, 240, 300}
     animation, recorded := uigif.gif_timing_button_rects(panel, 100)
     testing.expect(t, animation.width > 0)
     testing.expect_value(t, animation.width, recorded.width)
@@ -349,9 +351,9 @@ gif_timing_segments_fit_compact_panel :: proc(t: ^testing.T) {
 // Verify GIF controls and the saved-path field fit each supported text size.
 @(test)
 gif_controls_fit_supported_text_sizes :: proc(t: ^testing.T) {
-    panel := geometry.Rectangle{10, 20, 240, 480}
-    stack := geometry.Rectangle{18, 28, 224, 472}
-    text_percents := [4]int{100, 125, 150, 175}
+    panel: geometry.Rectangle = {10, 20, 240, 480}
+    stack: geometry.Rectangle = {18, 28, 224, 472}
+    text_percents: [4]int = {100, 125, 150, 175}
     for text_percent in text_percents {
         rows := uigif.gif_view_layout_rows(stack, text_percent)
         animation, recorded := uigif.gif_timing_button_rects(
@@ -391,7 +393,7 @@ settings_capability_labels_match_prepared_availability :: proc(t: ^testing.T) {
 settings_statistic_messages_preserve_rendered_counts :: proc(t: ^testing.T) {
     state := make_shell_test_state(t)
     defer destroy_shell_test_state(state)
-    statistics := [5]struct{id: contentdata.Content_Message_Id, expected: string}{
+    statistics: [5]struct{id: contentdata.Content_Message_Id, expected: string} = {
         {.Settings_Stats_Dust, "Dust particles Rendered: 12"},
         {.Settings_Stats_Trail, "Trail particles Rendered: 12"},
         {.Settings_Stats_Flicker, "Flicker particles Rendered: 12"},
@@ -411,7 +413,7 @@ settings_statistic_messages_preserve_rendered_counts :: proc(t: ^testing.T) {
 gif_and_settings_static_messages_preserve_labels :: proc(t: ^testing.T) {
     state := make_shell_test_state(t)
     defer destroy_shell_test_state(state)
-    labels := []struct{id: contentdata.Content_Message_Id, expected: string}{
+    labels: []struct{id: contentdata.Content_Message_Id, expected: string} = {
         {.Settings_Display_Fps, "Display FPS"},
         {.Settings_Limit_Fps, "Limit FPS"},
         {.Settings_Drawing_Sound, "Enable Drawing Sound"},
@@ -482,7 +484,7 @@ ui_regions_portrait_is_full_width_and_compact_safe :: proc(t: ^testing.T) {
 // Verify separate control groups follow the world's bottom-left and bottom-right edges.
 @(test)
 animation_controls_follow_world_splitters :: proc(t: ^testing.T) {
-    world := geometry.Rectangle{0, 0, 640, 480}
+    world: geometry.Rectangle = {0, 0, 640, 480}
     slots := uianimation.animation_control_layout_slots(
         geometry.Rectangle(world), false)
     testing.expect_value(t, slots.panel.x, theme.ANIMATION_CONTROL_EDGE_INSET)
@@ -517,15 +519,19 @@ animation_controls_follow_world_splitters :: proc(t: ^testing.T) {
 animation_controls_apply_existing_actions :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     state^.julia_interface = &ji
     state^.ui_runtime.playback.simulation_paused = true
 
-    uianimation.apply_animation_control_hit(state, {refresh_requested = true})
+    uianimation.apply_animation_control_hit(state, {
+        refresh_requested = true,
+    })
     testing.expect(t, !state^.ui_runtime.playback.simulation_paused)
     testing.expect(t, ji.pending_animation_reset)
 
-    uianimation.apply_animation_control_hit(state, {toggle_pause_requested = true})
+    uianimation.apply_animation_control_hit(state, {
+        toggle_pause_requested = true,
+    })
     testing.expect(t, state^.ui_runtime.playback.simulation_paused)
 }
 
@@ -541,7 +547,10 @@ settings_drawing_sound_row_is_unconditional_and_user_owned :: proc(t: ^testing.T
     defer free(state, context.allocator)
     testing.expect(t, !state^.user_drawing_sound_enabled)
     uisettings.apply_settings_preparation(state, {
-        sound = {toggled = true, checked_out = true},
+        sound = {
+            toggled = true,
+            checked_out = true,
+        },
     }, false, false)
     testing.expect(t, state^.user_drawing_sound_enabled)
 }
@@ -549,40 +558,56 @@ settings_drawing_sound_row_is_unconditional_and_user_owned :: proc(t: ^testing.T
 // Verify Terminal entry focuses once while window activation only changes effective focus.
 @(test)
 ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
             ui_regions = uiregions.compute_ui_regions(.Landscape,
                 viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT,
                 worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT),
         },
-        presentation = {visible = true},
+        presentation = {
+            visible = true,
+        },
     }
-    focused := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    focused := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, true)
     testing.expect_value(t, focused.logical_focus.kind,
         viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, focused.terminal_focused)
     testing.expect(t, focused.terminal_focus_changed)
 
-    unfocused := ui_reconcile_focus(&runtime, {window_focused = false}, true)
+    unfocused := ui_reconcile_focus(&runtime, {
+        window_focused = false,
+    }, true)
     testing.expect_value(t, unfocused.logical_focus.kind,
         viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, !unfocused.terminal_focused)
     testing.expect(t, unfocused.terminal_focus_changed)
 
-    restored := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    restored := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, true)
     testing.expect(t, restored.terminal_focused)
     testing.expect(t, restored.terminal_focus_changed)
-    stable := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    stable := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, true)
     testing.expect(t, !stable.terminal_focus_changed)
 }
 
 // Verify primary presses retarget focus and Terminal exit invalidates its target.
 @(test)
 ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
-    _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
+    _ = ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, true)
 
     tree := runtime.layout.ui_regions.accordion_rect
     moved := ui_reconcile_focus(&runtime, {
@@ -607,7 +632,9 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
         viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, restored.terminal_focused)
 
-    exited := ui_reconcile_focus(&runtime, {window_focused = true}, false)
+    exited := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, false)
     testing.expect_value(t, exited.logical_focus.kind,
         viewmodel.Ui_Focus_Kind.None)
     testing.expect(t, !exited.terminal_focused)
@@ -617,10 +644,17 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
 // Verify the visible GIF path takes exclusive keyboard focus from Terminal by ID.
 @(test)
 ui_focus_routes_visible_gif_path_input :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
     runtime.layout.active_accordion_section = .Save_Gif
-    capture_view := capturemodel.Gif_Capture_View{phase = .Saved, path_available = true}
+    capture_view: capturemodel.Gif_Capture_View = {
+        phase = .Saved,
+        path_available = true,
+    }
     field := uigif.gif_path_input_rect(&runtime)
     routed := ui_reconcile_focus(&runtime, {
         window_focused = true,
@@ -634,7 +668,9 @@ ui_focus_routes_visible_gif_path_input :: proc(t: ^testing.T) {
     testing.expect(t, routed.accordion.pointer)
 
     runtime.layout.active_accordion_section = .Library
-    hidden := ui_reconcile_focus(&runtime, {window_focused = true}, true, capture_view)
+    hidden := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, true, capture_view)
     testing.expect_value(t, hidden.logical_focus.kind,
         viewmodel.Ui_Focus_Kind.None)
 }
@@ -642,10 +678,16 @@ ui_focus_routes_visible_gif_path_input :: proc(t: ^testing.T) {
 // Verify static routing declares splitter and panel priority independently of drawing.
 @(test)
 ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
     splitter := ui_route_interaction_frame(&runtime, {
-        frame = {mouse_position = {worldmodel.VIEW_WIDTH, 20}},
+        frame = {
+            mouse_position = {worldmodel.VIEW_WIDTH, 20},
+        },
         terminal_present = true,
     })
     testing.expect_value(t, splitter.hover.kind,
@@ -671,13 +713,19 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
 // Verify pause and Favorites controls route only when the latter is eligible.
 @(test)
 ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
     controls := uianimation.animation_control_layout_slots(
         geometry.Rectangle(runtime.layout.ui_regions.world_rect), false)
     animation := ui_route_interaction_frame(&runtime, {
-        frame = {mouse_position = {
-            controls.pause.x + 1, controls.pause.y + 1}},
+        frame = {
+            mouse_position = {
+                controls.pause.x + 1, controls.pause.y + 1},
+        },
     })
     testing.expect_value(t, animation.hover.kind,
         viewmodel.Ui_Interaction_Target_Kind.Control)
@@ -688,8 +736,10 @@ ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
     favorites := uianimation.animation_control_layout_slots(
         geometry.Rectangle(runtime.layout.ui_regions.world_rect), true)
     favorite := ui_route_interaction_frame(&runtime, {
-        frame = {mouse_position = {
-            favorites.favorite.x + 1, favorites.favorite.y + 1}},
+        frame = {
+            mouse_position = {
+                favorites.favorite.x + 1, favorites.favorite.y + 1},
+        },
         animation_favorite_eligible = true,
     })
     testing.expect_value(t, favorite.hover.kind,
@@ -697,8 +747,10 @@ ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
     testing.expect_value(t, favorite.hover.id,
         uianimation.ANIMATION_FAVORITE_BUTTON_ID)
     ineligible := ui_route_interaction_frame(&runtime, {
-        frame = {mouse_position = {
-            favorites.favorite.x + 1, favorites.favorite.y + 1}},
+        frame = {
+            mouse_position = {
+                favorites.favorite.x + 1, favorites.favorite.y + 1},
+        },
     })
     testing.expect_value(t, ineligible.hover.kind,
         viewmodel.Ui_Interaction_Target_Kind.World)
@@ -707,7 +759,7 @@ ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
 // Verify capture from frame start outranks new hover and suppresses wheel routing.
 @(test)
 ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
             vertical_split_x = worldmodel.VIEW_WIDTH,
@@ -716,7 +768,9 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
                 viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT,
                 worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT),
         },
-        presentation = {visible = true},
+        presentation = {
+            visible = true,
+        },
     }
     terminal := runtime.layout.ui_regions.terminal_rect
     routed := ui_route_interaction_frame(&runtime, {
@@ -726,8 +780,11 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
             mouse_wheel_delta = -1,
         },
         terminal_present = true,
-        capture = {active = true, kind = .Scrollbar,
-            id = uilibrary.UI_TREE_SCROLLBAR_ID},
+        capture = {
+            active = true,
+            kind = .Scrollbar,
+            id = uilibrary.UI_TREE_SCROLLBAR_ID,
+        },
     })
     testing.expect_value(t, routed.hover.focus.kind,
         viewmodel.Ui_Focus_Kind.Terminal)
@@ -744,7 +801,7 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
 // Verify prepared Terminal track geometry refines panel routing before consumption.
 @(test)
 ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
             vertical_split_x = worldmodel.VIEW_WIDTH,
@@ -753,7 +810,9 @@ ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
                 viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT,
                 worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT),
         },
-        presentation = {visible = true},
+        presentation = {
+            visible = true,
+        },
     }
     terminal := runtime.layout.ui_regions.terminal_rect
     _ = ui_route_interaction_frame(&runtime, {
@@ -780,14 +839,22 @@ ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
 // Verify tree routing independently filters pointer edges and wheel input.
 @(test)
 ui_accordion_input_frame_filters_independent_pointer_classes :: proc(t: ^testing.T) {
-    frame := input.Input_Frame{mouse_position = {12, 18}, mouse_pressed = {.Left},
-        mouse_down = {.Left}, mouse_wheel_delta = -2}
-    wheel_only := ui_accordion_input_frame(frame, {wheel = true})
+    frame: input.Input_Frame = {
+        mouse_position = {12, 18},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+        mouse_wheel_delta = -2,
+    }
+    wheel_only := ui_accordion_input_frame(frame, {
+        wheel = true,
+    })
     testing.expect(t, card(wheel_only.mouse_pressed) == 0)
     testing.expect(t, card(wheel_only.mouse_down) == 0)
     testing.expect_value(t, wheel_only.mouse_wheel_delta, f32(-2))
 
-    pointer_only := ui_accordion_input_frame(frame, {pointer = true})
+    pointer_only := ui_accordion_input_frame(frame, {
+        pointer = true,
+    })
     testing.expect(t, .Left in pointer_only.mouse_pressed)
     testing.expect(t, .Left in pointer_only.mouse_down)
     testing.expect_value(t, pointer_only.mouse_wheel_delta, f32(0))
@@ -797,16 +864,26 @@ ui_accordion_input_frame_filters_independent_pointer_classes :: proc(t: ^testing
 @(test)
 checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
-    params := uiwidgets.Checkbox_Params{
-        id = 41, rect = {10, 10, 20, 20}, checked = false,
-        enabled = true, mouse = {mouse_position = {15, 15},
-        mouse_pressed = {.Left}, mouse_down = {.Left}},
-        interaction_space_rect = {0, 0, 100, 100}, interaction_enabled = true,
+    params: uiwidgets.Checkbox_Params = {
+        id = 41,
+        rect = {10, 10, 20, 20},
+        checked = false,
+        enabled = true,
+        mouse = {
+            mouse_position = {15, 15},
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+        },
+        interaction_space_rect = {0, 0, 100, 100},
+        interaction_enabled = true,
     }
     pressed := uiwidgets.update_checkbox(params, &owner)
     testing.expect(t, pressed.pressed && owner.active)
 
-    params.mouse = {mouse_position = {15, 15}, mouse_released = {.Left}}
+    params.mouse = {
+        mouse_position = {15, 15},
+        mouse_released = {.Left},
+    }
     released := uiwidgets.update_checkbox(params, &owner)
     testing.expect(t, released.toggled && released.checked_out)
     testing.expect(t, !owner.active)
@@ -815,19 +892,24 @@ checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
 // Produce a checkbox toggle from an ordinary pointer press and release.
 settings_test_pointer_toggle :: proc() -> uiwidgets.Checkbox_Result {
     pointer_owner: viewmodel.Ui_Press_Owner_State
-    pointer_params := uiwidgets.Checkbox_Params{
+    pointer_params: uiwidgets.Checkbox_Params = {
         id = 4001,
         rect = {10, 10, 20, 20},
         checked = false,
         enabled = true,
-        mouse = {mouse_position = {15, 15},
-            mouse_pressed = {.Left}, mouse_down = {.Left}},
+        mouse = {
+            mouse_position = {15, 15},
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+        },
         interaction_space_rect = {0, 0, 100, 100},
         interaction_enabled = true,
     }
     _ = uiwidgets.update_checkbox(pointer_params, &pointer_owner)
     pointer_params.mouse = {
-        mouse_position = {15, 15}, mouse_released = {.Left}}
+        mouse_position = {15, 15},
+        mouse_released = {.Left},
+    }
     return uiwidgets.update_checkbox(pointer_params, &pointer_owner)
 }
 
@@ -840,7 +922,9 @@ settings_test_semantic_toggle :: proc(t: ^testing.T) -> uiwidgets.Checkbox_Resul
     semantic_id := uisemantics.semantic_control_id(.Settings_Control, 4002)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = semantic_id, kind = .Toggle}))
+        target = semantic_id,
+        kind = .Toggle,
+    }))
     semantic_toggle := uiwidgets.update_checkbox({
         id = 4002,
         rect = {10, 40, 20, 20},
@@ -866,7 +950,7 @@ settings_toggle_routes_record_intent_not_hardware_fallback :: proc(t: ^testing.T
     semantic_toggle := settings_test_semantic_toggle(t)
     testing.expect(t, pointer_toggle.toggled && pointer_toggle.checked_out)
     testing.expect(t, semantic_toggle.toggled && !semantic_toggle.checked_out)
-    prepared := uisettings.Settings_View_Preparation{
+    prepared: uisettings.Settings_View_Preparation = {
         fps = pointer_toggle,
         limit = semantic_toggle,
     }
@@ -886,8 +970,12 @@ settings_toggle_routes_record_intent_not_hardware_fallback :: proc(t: ^testing.T
 checkbox_result_publishes_authoritative_geometry :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     result := uiwidgets.update_checkbox({
-        id = 42, rect = {10, 20, 30, 18}, checked = false, enabled = true,
-        interaction_space_rect = {0, 0, 100, 100}, interaction_enabled = true,
+        id = 42,
+        rect = {10, 20, 30, 18},
+        checked = false,
+        enabled = true,
+        interaction_space_rect = {0, 0, 100, 100},
+        interaction_enabled = true,
         semantic_clip = {5, 6, 70, 80},
     }, &owner)
     testing.expect_value(t, result.box_rect,
@@ -908,14 +996,25 @@ text_button_converges_semantic_action_and_geometry :: proc(t: ^testing.T) {
     id := uisemantics.semantic_control_id(.Gif_Control, 77)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = id, kind = .Activate}))
+        target = id,
+        kind = .Activate,
+    }))
     result := uiwidgets.update_text_button({
-        id = 77, rect = {10, 20, 80, 24}, label = "Save", enabled = true,
-        interaction_space_rect = {0, 0, 200, 200}, interaction_enabled = true,
+        id = 77,
+        rect = {10, 20, 80, 24},
+        label = "Save",
+        enabled = true,
+        interaction_space_rect = {0, 0, 200, 200},
+        interaction_enabled = true,
         semantics = {
-            publish = true, focus = semantic, id = id, role = .Button,
-            states = uiwidgets.button_semantic_states(true), region = .Accordion_Content,
-            clip_bounds = {0, 0, 100, 100}, label = "Save",
+            publish = true,
+            focus = semantic,
+            id = id,
+            role = .Button,
+            states = uiwidgets.button_semantic_states(true),
+            region = .Accordion_Content,
+            clip_bounds = {0, 0, 100, 100},
+            label = "Save",
         },
     }, &owner)
     testing.expect(t, result.action.activated)
@@ -936,14 +1035,25 @@ disabled_text_button_rejects_semantic_activation :: proc(t: ^testing.T) {
     id := uisemantics.semantic_control_id(.Gif_Control, 78)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = id, kind = .Activate}))
+        target = id,
+        kind = .Activate,
+    }))
     result := uiwidgets.update_text_button({
-        id = 78, rect = {10, 20, 80, 24}, label = "Saving", enabled = false,
-        interaction_space_rect = {0, 0, 200, 200}, interaction_enabled = true,
+        id = 78,
+        rect = {10, 20, 80, 24},
+        label = "Saving",
+        enabled = false,
+        interaction_space_rect = {0, 0, 200, 200},
+        interaction_enabled = true,
         semantics = {
-            publish = true, focus = semantic, id = id, role = .Button,
-            states = uiwidgets.button_semantic_states(false), region = .Accordion_Content,
-            clip_bounds = {0, 0, 100, 100}, label = "Saving",
+            publish = true,
+            focus = semantic,
+            id = id,
+            role = .Button,
+            states = uiwidgets.button_semantic_states(false),
+            region = .Accordion_Content,
+            clip_bounds = {0, 0, 100, 100},
+            label = "Saving",
         },
     }, &owner)
     testing.expect(t, !result.action.activated)
@@ -960,12 +1070,21 @@ button_action_coalesces_duplicate_sources :: proc(t: ^testing.T) {
     id := uisemantics.semantic_control_id(.Animation_Control, 79)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = id, kind = .Activate}))
+        target = id,
+        kind = .Activate,
+    }))
     result := uiwidgets.button_resolve_action({
-        semantics = {focus = semantic, id = id, role = .Button,
-            states = uiwidgets.button_semantic_states(true)},
-        bounds = {10, 20, 80, 24}, press_owner = &owner,
-        press_kind = .Icon_Button, press_id = 79, pointer_activated = true,
+        semantics = {
+            focus = semantic,
+            id = id,
+            role = .Button,
+            states = uiwidgets.button_semantic_states(true),
+        },
+        bounds = {10, 20, 80, 24},
+        press_owner = &owner,
+        press_kind = .Icon_Button,
+        press_id = 79,
+        pointer_activated = true,
     })
     testing.expect(t, result.activated)
     testing.expect(t, .Pointer in result.sources)
@@ -975,7 +1094,8 @@ button_action_coalesces_duplicate_sources :: proc(t: ^testing.T) {
 //   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
 @(test)
 splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
-    window := viewmodel.Ui_Window_Metrics{viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT}
+    window: viewmodel.Ui_Window_Metrics = {
+        viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT}
     vertical := uisplitter.splitter_geometry(
         .Vertical, .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, window)
     horizontal := uisplitter.splitter_geometry(
@@ -987,7 +1107,7 @@ splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
     testing.expect_value(t, horizontal.visible_rect.height, f32(3))
     testing.expect_value(t, horizontal.hit_rect.width, f32(worldmodel.VIEW_WIDTH))
 
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = window,
             vertical_split_x = worldmodel.VIEW_WIDTH,
@@ -1058,7 +1178,7 @@ splitter_intersection_selects_nearest_axis :: proc(t: ^testing.T) {
 //   Verify portrait exposes only one full-width horizontal splitter target.
 @(test)
 portrait_splitter_is_horizontal_and_full_width :: proc(t: ^testing.T) {
-    window := viewmodel.Ui_Window_Metrics{640, 720}
+    window: viewmodel.Ui_Window_Metrics = {640, 720}
     horizontal := uisplitter.splitter_geometry(.Horizontal, .Portrait, 640, 360, window)
     testing.expect_value(t, horizontal.hit_rect.width, f32(640))
 
@@ -1074,11 +1194,17 @@ portrait_splitter_is_horizontal_and_full_width :: proc(t: ^testing.T) {
 //   Verify hidden portrait presentation surfaces cannot win pointer routing.
 @(test)
 portrait_routes_origin_to_world_not_hidden_presentation :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
     runtime.layout.current_layout_mode = .Portrait
     runtime.layout.ui_regions = uiregions.compute_ui_regions(.Portrait, 640, 720, 0, 360)
-    frame := input.Input_Frame{mouse_position = {0, 0}}
+    frame: input.Input_Frame = {
+        mouse_position = {0, 0},
+    }
 
     target := ui_hover_target(&runtime, frame, true)
     testing.expect_value(t, target.kind,
@@ -1088,27 +1214,37 @@ portrait_routes_origin_to_world_not_hidden_presentation :: proc(t: ^testing.T) {
 //   Verify portrait routes only expanded View content to Presentation or Terminal.
 @(test)
 portrait_routes_expanded_view_content :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
     runtime.layout.current_layout_mode = .Portrait
     runtime.layout.active_accordion_section = .View
     runtime.layout.ui_regions = uiregions.compute_ui_regions(.Portrait, 640, 720, 0, 360)
     _ = ui_publish_presentation_visibility(
         &runtime.layout, &runtime.presentation, &runtime.input, &runtime.terminal)
-    point := input.Input_Position{
+    point: input.Input_Position = {
         runtime.layout.ui_regions.terminal_rect.x + 1,
         runtime.layout.ui_regions.terminal_rect.y + 1,
     }
-    terminal := ui_hover_target(&runtime, {mouse_position = point}, true)
+    terminal := ui_hover_target(&runtime, {
+        mouse_position = point,
+    }, true)
     testing.expect_value(t, terminal.focus.kind, viewmodel.Ui_Focus_Kind.Terminal)
-    presentation := ui_hover_target(&runtime, {mouse_position = point}, false)
+    presentation := ui_hover_target(&runtime, {
+        mouse_position = point,
+    }, false)
     testing.expect_value(t, presentation.focus.kind,
         viewmodel.Ui_Focus_Kind.Presentation)
 
     runtime.layout.active_accordion_section = .Library
     _ = ui_publish_presentation_visibility(
         &runtime.layout, &runtime.presentation, &runtime.input, &runtime.terminal)
-    hidden := ui_hover_target(&runtime, {mouse_position = point}, true)
+    hidden := ui_hover_target(&runtime, {
+        mouse_position = point,
+    }, true)
     testing.expect_value(t, hidden.focus.kind,
         viewmodel.Ui_Focus_Kind.Accordion)
 }
@@ -1116,19 +1252,32 @@ portrait_routes_expanded_view_content :: proc(t: ^testing.T) {
 // Verify hiding View releases UI transactions without discarding selection or refocusing.
 @(test)
 portrait_view_hide_and_reopen_preserves_content_state :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        layout = make_baseline_layout_state(), presentation = {visible = true}}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
     runtime.layout.current_layout_mode = .Portrait
     runtime.layout.active_accordion_section = .View
     runtime.layout.ui_regions = uiregions.compute_ui_regions(.Portrait, 640, 720, 0, 360)
     runtime.presentation.selection = {
-        mode = .Wrapped_Text, revision = 7, anchor = {2}, head = {5},
-        active = true, dragging = true,
+        mode = .Wrapped_Text,
+        revision = 7,
+        anchor = {2},
+        head = {5},
+        active = true,
+        dragging = true,
     }
-    runtime.input.press_owner = {active = true, kind = .Dynview_Selection}
+    runtime.input.press_owner = {
+        active = true,
+        kind = .Dynview_Selection,
+    }
     _ = ui_publish_presentation_visibility(
         &runtime.layout, &runtime.presentation, &runtime.input, &runtime.terminal)
-    _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    _ = ui_reconcile_focus(&runtime, {
+        window_focused = true,
+    }, true)
 
     runtime.layout.active_accordion_section = .Library
     testing.expect(t, ui_publish_presentation_visibility(
@@ -1157,7 +1306,7 @@ portrait_view_hide_and_reopen_preserves_content_state :: proc(t: ^testing.T) {
 //   Verify splitter capture persists off-target, clamps, and releases on mouse-up.
 @(test)
 splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
-    ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
+    ui_runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
             landscape = {
@@ -1171,12 +1320,16 @@ splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
     }
     _ = ui_test_update_splitters(&ui_runtime, {
         mouse_position = {worldmodel.VIEW_WIDTH, 20},
-        mouse_pressed = {.Left}, mouse_down = {.Left}}, 0.05, {})
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+    }, 0.05, {})
     testing.expect(t, uisplitter.splitter_owns_press(
         ui_runtime.input.press_owner, uisplitter.SPLITTER_VERTICAL_PRESS_ID))
 
     dragged := ui_test_update_splitters(&ui_runtime, {
-        mouse_position = {0, 20}, mouse_down = {.Left}}, 0.05, {})
+        mouse_position = {0, 20},
+        mouse_down = {.Left},
+    }, 0.05, {})
     testing.expect_value(
         t, ui_runtime.layout.vertical_split_x, f32(worldmodel.VIEW_WIDTH))
     testing.expect(t, dragged.vertical.changed)
@@ -1187,7 +1340,9 @@ splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
     testing.expect(t, ui_runtime.input.press_owner.active)
 
     _ = ui_test_update_splitters(
-        &ui_runtime, {mouse_position = {0, 20}}, 0.05, {})
+        &ui_runtime, {
+            mouse_position = {0, 20},
+        }, 0.05, {})
     testing.expect(t, !ui_runtime.input.press_owner.active)
 }
 
@@ -1197,7 +1352,7 @@ splitter_semantic_step_precedes_owner_commit :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         semantic_focus = semantic,
         layout = {
             window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
@@ -1206,7 +1361,9 @@ splitter_semantic_step_precedes_owner_commit :: proc(t: ^testing.T) {
         },
     }
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = uisplitter.splitter_semantic_id(.Vertical), kind = .Increment}))
+        target = uisplitter.splitter_semantic_id(.Vertical),
+        kind = .Increment,
+    }))
     prepared := ui_test_update_splitters(&runtime, {}, 0, {})
     testing.expect_value(
         t, runtime.layout.vertical_split_x, f32(worldmodel.VIEW_WIDTH))
@@ -1221,9 +1378,9 @@ splitter_semantic_step_precedes_owner_commit :: proc(t: ^testing.T) {
 //   Verify active GIF phases lock and release splitter interaction.
 @(test)
 gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
-    phases := [3]capturemodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    phases: [3]capturemodel.Gif_Capture_Phase = {.Armed, .Recording, .Finalizing}
     for phase in phases {
-        ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
+        ui_runtime: viewmodel.Euclid_Ui_Runtime_State = {
             layout = {
                 window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
                 landscape = {
@@ -1235,13 +1392,21 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
                 vertical_split_x = worldmodel.VIEW_WIDTH,
                 horizontal_split_y = worldmodel.VIEW_HEIGHT,
             },
-            input = {press_owner = {active = true, kind = .Splitter,
-                id = uisplitter.SPLITTER_VERTICAL_PRESS_ID},
+            input = {
+                press_owner = {
+                    active = true,
+                    kind = .Splitter,
+                    id = uisplitter.SPLITTER_VERTICAL_PRESS_ID,
+                },
             },
         }
         ui_test_update_splitters(&ui_runtime, {
             mouse_position = {worldmodel.VIEW_WIDTH, 20},
-            mouse_pressed = {.Left}, mouse_down = {.Left}}, 0.05, {phase = phase})
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+        }, 0.05, {
+            phase = phase,
+        })
         testing.expect(t, !ui_runtime.input.press_owner.active)
         testing.expect_value(
             t, ui_runtime.layout.vertical_split_x, f32(worldmodel.VIEW_WIDTH))
@@ -1251,7 +1416,7 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
 //   Verify programmatic splitter placement is atomic, clamped, and capture-safe.
 @(test)
 scenario_splitter_positions_follow_ui_policy :: proc(t: ^testing.T) {
-    ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
+    ui_runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT},
             landscape = {
@@ -1264,8 +1429,12 @@ scenario_splitter_positions_follow_ui_policy :: proc(t: ^testing.T) {
             vertical_split_hover = 1,
             horizontal_split_hover = 1,
         },
-        input = {press_owner = {active = true, kind = .Splitter,
-            id = uisplitter.SPLITTER_VERTICAL_PRESS_ID},
+        input = {
+            press_owner = {
+                active = true,
+                kind = .Splitter,
+                id = uisplitter.SPLITTER_VERTICAL_PRESS_ID,
+            },
         },
     }
 
@@ -1289,18 +1458,22 @@ ui_test_expect_splitter_gif_locks :: proc(
     expected_vertical := f32(theme.WORLD_MIN_WIDTH)
     testing.expect(t, !uisplitter.set_splitter_positions(
         &runtime^.layout, &runtime^.input.press_owner,
-        worldmodel.VIEW_WIDTH, viewmodel.WINDOW_HEIGHT, {requested = true}))
+        worldmodel.VIEW_WIDTH, viewmodel.WINDOW_HEIGHT, {
+            requested = true,
+        }))
     testing.expect_value(t, runtime^.layout.vertical_split_x, expected_vertical)
     testing.expect(t, !uisplitter.set_splitter_positions(
         &runtime^.layout, &runtime^.input.press_owner,
-        worldmodel.VIEW_WIDTH, viewmodel.WINDOW_HEIGHT, {phase = .Recording}))
+        worldmodel.VIEW_WIDTH, viewmodel.WINDOW_HEIGHT, {
+            phase = .Recording,
+        }))
     testing.expect_value(t, runtime^.layout.vertical_split_x, expected_vertical)
 }
 
 //   Verify resize derives split pixels from intent and releases stale UI capture.
 @(test)
 window_resize_preserves_split_ratios_and_releases_capture :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {1280, 720},
             landscape = {
@@ -1310,11 +1483,23 @@ window_resize_preserves_split_ratios_and_releases_capture :: proc(t: ^testing.T)
             vertical_split_x = 900,
             horizontal_split_y = 500,
         },
-        input = {press_owner = {active = true, kind = .Splitter,
-            id = uisplitter.SPLITTER_VERTICAL_PRESS_ID},
+        input = {
+            press_owner = {
+                active = true,
+                kind = .Splitter,
+                id = uisplitter.SPLITTER_VERTICAL_PRESS_ID,
+            },
         },
-        library = {tree = {scroll_dragging = true}},
-        presentation = {selection = {dragging = true}},
+        library = {
+            tree = {
+                scroll_dragging = true,
+            },
+        },
+        presentation = {
+            selection = {
+                dragging = true,
+            },
+        },
     }
 
     testing.expect(t, ui_apply_window_metrics(&runtime, {1024, 768}))
@@ -1328,7 +1513,7 @@ window_resize_preserves_split_ratios_and_releases_capture :: proc(t: ^testing.T)
 //   Verify entering portrait restores its split and accordion intent.
 @(test)
 layout_transition_restores_portrait_state :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {1280, 720},
             layout_preference = .Auto,
@@ -1345,8 +1530,12 @@ layout_transition_restores_portrait_state :: proc(t: ^testing.T) {
             current_layout_mode = .Landscape,
             active_accordion_section = .Settings,
         },
-        input = {press_owner = {active = true, kind = .Splitter,
-            id = uisplitter.SPLITTER_VERTICAL_PRESS_ID},
+        input = {
+            press_owner = {
+                active = true,
+                kind = .Splitter,
+                id = uisplitter.SPLITTER_VERTICAL_PRESS_ID,
+            },
         },
     }
 
@@ -1363,12 +1552,17 @@ layout_transition_restores_portrait_state :: proc(t: ^testing.T) {
 //   Verify first portrait entry selects View regardless of unentered memory.
 @(test)
 layout_first_portrait_entry_selects_view :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {1280, 720},
             layout_preference = .Auto,
-            landscape = {active_section = .Library},
-            portrait = {world_height_ratio = 0.5, active_section = .Settings},
+            landscape = {
+                active_section = .Library,
+            },
+            portrait = {
+                world_height_ratio = 0.5,
+                active_section = .Settings,
+            },
             current_layout_mode = .Landscape,
             active_accordion_section = .Library,
         },
@@ -1384,7 +1578,7 @@ layout_first_portrait_entry_selects_view :: proc(t: ^testing.T) {
 //   Verify returning to landscape preserves portrait edits and restores landscape.
 @(test)
 layout_transition_restores_landscape_state :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
             window = {640, 720},
             layout_preference = .Auto,
@@ -1425,8 +1619,11 @@ scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
     defer free(animation)
     state^.julia_interface^.selected_animation = animation
     state^.ui_runtime.presentation.visible = true
-    state^.ui_runtime.input.press_owner = {active = true, kind = .Scrollbar,
-        id = uipresentation.UI_PRESENTATION_SCROLLBAR_ID}
+    state^.ui_runtime.input.press_owner = {
+        active = true,
+        kind = .Scrollbar,
+        id = uipresentation.UI_PRESENTATION_SCROLLBAR_ID,
+    }
     state^.ui_runtime.presentation.scroll_dragging = true
     state^.ui_runtime.presentation.scroll_drag_off = 12
 
@@ -1444,7 +1641,7 @@ scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
 @(test)
 validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
     // Ensures region validation fails when any panel rectangle has negative width or height.
-    regions := viewmodel.Ui_Regions{}
+    regions: viewmodel.Ui_Regions = {}
     regions.world_rect = geometry.Rectangle{0, 0, -1, 10}
 
     testing.expect(t, !uiregions.validate_ui_regions(regions))
@@ -1467,7 +1664,7 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, y_top, f32(50))
     testing.expect_value(t, y_bottom, f32(150) - thumb_h)
 
-    panel := geometry.Rectangle{10, 20, 200, 120}
+    panel: geometry.Rectangle = {10, 20, 200, 120}
     scrollbar := uiwidgets.build_vertical_scrollbar(
         uiwidgets.Vertical_Scrollbar_Input{geometry.Rectangle(panel), 480, 60, 360},
         8, 24)
@@ -1484,7 +1681,10 @@ scroll_container_update_reserves_track_and_wheel :: proc(t: ^testing.T) {
         id = 1002,
         rect = {10, 20, 100, 80},
         content_height = 240,
-        mouse_input = {mouse_position = {106, 30}, mouse_wheel_delta = -1},
+        mouse_input = {
+            mouse_position = {106, 30},
+            mouse_wheel_delta = -1,
+        },
         interaction_space_rect = {10, 20, 100, 80},
         wheel_step = 20,
         press_owner = &owner,
@@ -1515,12 +1715,23 @@ scroll_container_update_coalesces_input_sources :: proc(t: ^testing.T) {
     id := uisemantics.semantic_control_id(.Presentation, 7)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = id, kind = .Scroll_Page, amount = 1}))
+        target = id,
+        kind = .Scroll_Page,
+        amount = 1,
+    }))
     result := uiwidgets.scroll_container_update({
-        id = 1002, rect = {10, 20, 100, 80}, content_height = 240,
-        mouse_input = {mouse_position = {20, 30}, mouse_wheel_delta = -1},
-        interaction_space_rect = {10, 20, 100, 80}, wheel_step = 20,
-        press_owner = &owner, semantic_focus = semantic, semantic_id = id,
+        id = 1002,
+        rect = {10, 20, 100, 80},
+        content_height = 240,
+        mouse_input = {
+            mouse_position = {20, 30},
+            mouse_wheel_delta = -1,
+        },
+        interaction_space_rect = {10, 20, 100, 80},
+        wheel_step = 20,
+        press_owner = &owner,
+        semantic_focus = semantic,
+        semantic_id = id,
     })
     testing.expect_value(t, result.scroll_y_out, f32(80))
     testing.expect(t, .Pointer in result.sources)
@@ -1545,10 +1756,15 @@ scroll_container_drag_test_update :: proc(
     mouse_input: input.Input_Frame,
     scroll_y: f32 = 0) -> uiwidgets.Scroll_Container_Update_Result {
     return uiwidgets.scroll_container_update({
-        id = 1002, rect = {10, 20, 100, 80}, scroll_y_in = scroll_y,
-        content_height = 240, mouse_input = mouse_input,
-        interaction_space_rect = {10, 20, 100, 80}, wheel_step = 20,
-        press_owner = owner, state_in = state,
+        id = 1002,
+        rect = {10, 20, 100, 80},
+        scroll_y_in = scroll_y,
+        content_height = 240,
+        mouse_input = mouse_input,
+        interaction_space_rect = {10, 20, 100, 80},
+        wheel_step = 20,
+        press_owner = owner,
+        state_in = state,
     })
 }
 
@@ -1557,20 +1773,27 @@ scroll_container_drag_test_update :: proc(
 scroll_container_update_retains_drag_outside_track :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     pressed := scroll_container_drag_test_update(&owner, {}, {
-        mouse_position = {106, 21}, mouse_pressed = {.Left},
+        mouse_position = {106, 21},
+        mouse_pressed = {.Left},
         mouse_down = {.Left},
     })
     testing.expect(t, pressed.state_out.is_dragging_thumb)
     testing.expect(t, pressed.pointer_reserved)
 
     dragged := scroll_container_drag_test_update(&owner, pressed.state_out,
-        {mouse_position = {200, 95}, mouse_down = {.Left}})
+        {
+            mouse_position = {200, 95},
+            mouse_down = {.Left},
+        })
     testing.expect(t, dragged.state_out.is_dragging_thumb)
     testing.expect(t, dragged.pointer_reserved)
     testing.expect_value(t, dragged.scroll_y_out, f32(160))
 
     released := scroll_container_drag_test_update(&owner, dragged.state_out,
-        {mouse_position = {200, 95}, mouse_released = {.Left}},
+        {
+            mouse_position = {200, 95},
+            mouse_released = {.Left},
+        },
         dragged.scroll_y_out)
     testing.expect(t, !released.state_out.is_dragging_thumb)
     testing.expect(t, !owner.active)
@@ -1579,7 +1802,9 @@ scroll_container_update_retains_drag_outside_track :: proc(t: ^testing.T) {
 // Verify Terminal wheel policy gives track and Shift override priority over the child.
 @(test)
 terminal_scroll_wheel_routes_to_one_owner :: proc(t: ^testing.T) {
-    frame := input.Input_Frame{mouse_wheel_delta = -2}
+    frame: input.Input_Frame = {
+        mouse_wheel_delta = -2,
+    }
     testing.expect_value(t,
         uiterminal.terminal_scroll_wheel_delta(frame, false, false), f32(-2))
     testing.expect_value(t,
@@ -1595,7 +1820,7 @@ terminal_scroll_wheel_routes_to_one_owner :: proc(t: ^testing.T) {
 // Verify scrollbar routing blocks all uncaptured Terminal pointer input.
 @(test)
 terminal_scrollbar_filter_blocks_uncaptured_pointer :: proc(t: ^testing.T) {
-    bounds := geometry.Rectangle{10, 20, 100, 80}
+    bounds: geometry.Rectangle = {10, 20, 100, 80}
     filtered := uiterminal.terminal_filter_content_pointer({
         mouse_position = {106, 30},
         mouse_moved = true,
@@ -1606,7 +1831,10 @@ terminal_scrollbar_filter_blocks_uncaptured_pointer :: proc(t: ^testing.T) {
         terminal_mouse_inside = true,
         terminal_mouse_owned = true,
         terminal_mouse_position_valid = true,
-        terminal_mouse_position = {column = 12, row = 3},
+        terminal_mouse_position = {
+            column = 12,
+            row = 3,
+        },
     }, bounds, false, false)
     testing.expect(t, !filtered.mouse_moved)
     testing.expect(t, card(filtered.mouse_pressed) == 0)
@@ -1623,8 +1851,8 @@ terminal_scrollbar_filter_blocks_uncaptured_pointer :: proc(t: ^testing.T) {
 // Verify local capture retains its real release point but cannot start another press.
 @(test)
 terminal_scrollbar_filter_preserves_local_release :: proc(t: ^testing.T) {
-    bounds := geometry.Rectangle{10, 20, 100, 80}
-    frame := input.Input_Frame{
+    bounds: geometry.Rectangle = {10, 20, 100, 80}
+    frame: input.Input_Frame = {
         mouse_position = {106, 30},
         mouse_pressed = {.Left},
         mouse_released = {.Left},
@@ -1640,7 +1868,7 @@ terminal_scrollbar_filter_preserves_local_release :: proc(t: ^testing.T) {
 // Verify child capture retains routed drag and release data outside content.
 @(test)
 terminal_scrollbar_filter_preserves_child_capture :: proc(t: ^testing.T) {
-    bounds := geometry.Rectangle{10, 20, 100, 80}
+    bounds: geometry.Rectangle = {10, 20, 100, 80}
     filtered := uiterminal.terminal_filter_content_pointer({
         mouse_position = {106, 30},
         mouse_moved = true,
@@ -1650,7 +1878,10 @@ terminal_scrollbar_filter_preserves_child_capture :: proc(t: ^testing.T) {
         mouse_wheel_delta = -1,
         terminal_mouse_owned = true,
         terminal_mouse_position_valid = true,
-        terminal_mouse_position = {column = 12, row = 3},
+        terminal_mouse_position = {
+            column = 12,
+            row = 3,
+        },
     }, bounds, false, true)
     testing.expect(t, filtered.mouse_moved)
     testing.expect(t, card(filtered.mouse_pressed) == 0)
@@ -1680,7 +1911,7 @@ seed_tree_node :: proc(
 @(test)
 tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     // Verifies visible tree row counting respects node expansion state and first-child expansion helper behavior.
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_tail = &nodes[2]
@@ -1709,7 +1940,7 @@ tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
 // Verify search topology retains ancestors and derives expansion without mutation.
 @(test)
 tree_search_policy_retains_ancestors_without_changing_expansion :: proc(t: ^testing.T) {
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
@@ -1728,7 +1959,9 @@ tree_search_policy_retains_ancestors_without_changing_expansion :: proc(t: ^test
     search.visible_id_count = 2
     search.visible_ids[0] = nodes[0].stable_id
     search.visible_ids[1] = nodes[2].stable_id
-    policy := uilibrary.Tree_Visibility_Policy{search = &search}
+    policy: uilibrary.Tree_Visibility_Policy = {
+        search = &search,
+    }
 
     testing.expect_value(t, uilibrary.count_visible_tree_rows_all_roots(&ji, policy), 2)
     testing.expect(t, uilibrary.tree_node_is_effectively_expanded(policy, &nodes[0]))
@@ -1796,14 +2029,22 @@ library_search_suggestion_label_names_target :: proc(t: ^testing.T) {
 // Verify edits debounce, Enter bypasses debounce, and clear restores ordinary state.
 @(test)
 library_search_input_policy_handles_edit_submit_and_clear :: proc(t: ^testing.T) {
-    search := viewmodel.Library_Search_State{query_length = 4, active = true,
-        visible_id_count = 2, suggestion_length = 3}
-    uilibrary.library_search_apply_input(&search, {changed = true})
+    search: viewmodel.Library_Search_State = {
+        query_length = 4,
+        active = true,
+        visible_id_count = 2,
+        suggestion_length = 3,
+    }
+    uilibrary.library_search_apply_input(&search, {
+        changed = true,
+    })
     testing.expect_value(t, search.generation, u64(1))
     testing.expect(t, search.query_dirty && !search.active)
     testing.expect_value(t, search.debounce_remaining_seconds,
         uilibrary.LIBRARY_SEARCH_DEBOUNCE_SECONDS)
-    uilibrary.library_search_apply_input(&search, {submit_requested = true})
+    uilibrary.library_search_apply_input(&search, {
+        submit_requested = true,
+    })
     testing.expect(t, search.submit_requested)
     testing.expect_value(t, search.debounce_remaining_seconds, f32(0))
     uilibrary.library_search_clear_query(&search)
@@ -1815,8 +2056,10 @@ library_search_input_policy_handles_edit_submit_and_clear :: proc(t: ^testing.T)
 // Verify keyboard suggestion activation replaces the full bounded query.
 @(test)
 library_search_suggestion_replaces_query_and_submits :: proc(t: ^testing.T) {
-    search := viewmodel.Library_Search_State{query_length = 3,
-        suggestion_length = len("perpendicular")}
+    search: viewmodel.Library_Search_State = {
+        query_length = 3,
+        suggestion_length = len("perpendicular"),
+    }
     copy(search.query[:], "bad")
     copy(search.suggestion[:], "perpendicular")
     uilibrary.library_search_apply_suggestion(&search)
@@ -1829,26 +2072,44 @@ library_search_suggestion_replaces_query_and_submits :: proc(t: ^testing.T) {
 // Verify Search accepts Right only at a collapsed end caret and never uses Tab.
 @(test)
 library_search_suggestion_key_requires_collapsed_end_caret :: proc(t: ^testing.T) {
-    search := viewmodel.Library_Search_State{
-        query_length = 3, suggestion_length = 4,
-        input = {cursor_byte = 3, anchor_byte = 3},
+    search: viewmodel.Library_Search_State = {
+        query_length = 3,
+        suggestion_length = 4,
+        input = {
+            cursor_byte = 3,
+            anchor_byte = 3,
+        },
     }
     copy(search.query[:], "bad")
     copy(search.suggestion[:], "line")
-    right := [1]input.Input_Event{{kind = .Press, key = .Right}}
-    policy := uiwidgets.Input_Box_Edit_Policy{end_suggestion = "line"}
-    target := uiwidgets.Input_Box_Edit_Target{search.query[:], &search.query_length}
+    right: [1]input.Input_Event = {{
+        kind = .Press,
+        key = .Right,
+    }}
+    policy: uiwidgets.Input_Box_Edit_Policy = {
+        end_suggestion = "line",
+    }
+    target: uiwidgets.Input_Box_Edit_Target = {search.query[:], &search.query_length}
     result := uiwidgets.input_box_apply_edit_keyboard(
-        &search.input, target, {events = right[:]}, "", policy)
+        &search.input, target, {
+            events = right[:],
+        }, "", policy)
     testing.expect(t, result.suggestion_accepted)
     search.input.anchor_byte = 1
     result = uiwidgets.input_box_apply_edit_keyboard(
-        &search.input, target, {events = right[:]}, "", policy)
+        &search.input, target, {
+            events = right[:],
+        }, "", policy)
     testing.expect(t, !result.suggestion_accepted)
     search.input.anchor_byte = search.input.cursor_byte
-    tab := [1]input.Input_Event{{kind = .Press, key = .Tab}}
+    tab: [1]input.Input_Event = {{
+        kind = .Press,
+        key = .Tab,
+    }}
     result = uiwidgets.input_box_apply_edit_keyboard(
-        &search.input, target, {events = tab[:]}, "", policy)
+        &search.input, target, {
+            events = tab[:],
+        }, "", policy)
     testing.expect(t, !result.suggestion_accepted)
 }
 
@@ -1868,15 +2129,27 @@ library_search_unicode_acceptance_debounces_once :: proc(t: ^testing.T) {
     search^.suggestion_length = len("line")
     copy(search^.suggestion[:], "line")
     state^.ui_runtime.input.interaction_frame.effective_focus = {
-        kind = .Input_Box, id = uilibrary.LIBRARY_SEARCH_INPUT_ID}
+        kind = .Input_Box,
+        id = uilibrary.LIBRARY_SEARCH_INPUT_ID,
+    }
     unchanged := uilibrary.prepare_library_search(state, {0, 0, 240, 180}, {})
     testing.expect_value(t, unchanged.input.unicode_completion.text, "α")
     testing.expect_value(t, search^.generation, u64(0))
     testing.expect_value(t, string(search^.query[:search^.query_length]), "\\alpha")
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .Right}, {kind = .Press, key = .Right}}
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Right,
+        },
+        {
+            kind = .Press,
+            key = .Right,
+        },
+    }
     accepted := uilibrary.prepare_library_search(
-        state, {0, 0, 240, 180}, {events = events[:]})
+        state, {0, 0, 240, 180}, {
+            events = events[:],
+        })
     testing.expect(t, accepted.input.changed && !accepted.input.suggestion_accepted)
     testing.expect_value(t, string(search^.query[:search^.query_length]), "α")
     testing.expect_value(t, search^.generation, u64(1))
@@ -1893,14 +2166,24 @@ library_search_keyboard_correction_preserves_submit :: proc(t: ^testing.T) {
     search := &state^.ui_runtime.library.search
     copy(search^.query[:], "bad")
     search^.query_length = 3
-    search^.input = {cursor_byte = 3, anchor_byte = 3}
+    search^.input = {
+        cursor_byte = 3,
+        anchor_byte = 3,
+    }
     copy(search^.suggestion[:], "line")
     search^.suggestion_length = 4
     state^.ui_runtime.input.interaction_frame.effective_focus = {
-        kind = .Input_Box, id = uilibrary.LIBRARY_SEARCH_INPUT_ID}
-    events := [1]input.Input_Event{{kind = .Press, key = .Right}}
+        kind = .Input_Box,
+        id = uilibrary.LIBRARY_SEARCH_INPUT_ID,
+    }
+    events: [1]input.Input_Event = {{
+        kind = .Press,
+        key = .Right,
+    }}
     result := uilibrary.prepare_library_search(
-        state, {0, 0, 240, 180}, {events = events[:]})
+        state, {0, 0, 240, 180}, {
+            events = events[:],
+        })
     testing.expect(t, result.input.suggestion_accepted)
     testing.expect_value(t, string(search^.query[:search^.query_length]), "line")
     testing.expect(t, search^.submit_requested && search^.query_dirty)
@@ -1913,18 +2196,26 @@ integer_slider_applies_semantic_keyboard_step :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        semantic_focus = semantic,
+    }
     value := 2
     id := uisemantics.semantic_control_id(.Gif_Control, 6201)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect(t, uisemantics.semantic_append_command(semantic, {
-        target = id, kind = .Increment}))
+        target = id,
+        kind = .Increment,
+    }))
     result := uiwidgets.update_settings_integer_slider({
-        panel = {0, 0, 200, 100}, row_y = 0,
+        panel = {0, 0, 200, 100},
+        row_y = 0,
         press_owner = &runtime.input.press_owner,
         semantic_focus = runtime.semantic_focus,
-        press_id = 6201, label = "Output scale",
-        value = value, min_value = 1, max_value = 4,
+        press_id = 6201,
+        label = "Output scale",
+        value = value,
+        min_value = 1,
+        max_value = 4,
         semantic_domain = .Gif_Control,
     })
     testing.expect_value(t, result.value, 3)
@@ -1946,7 +2237,7 @@ integer_slider_applies_semantic_keyboard_step :: proc(t: ^testing.T) {
 //   Verify tree row lookup follows visible depth-first order across roots.
 @(test)
 tree_visible_row_follows_draw_order :: proc(t: ^testing.T) {
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [4]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
@@ -1986,29 +2277,10 @@ tree_semantic_hierarchy_fixture :: proc(
     seed_tree_node(&nodes[1], &nodes[0], nil, nil, false)
 }
 
-// Verify the Library tree publishes one Tab stop with UUID-backed descendants.
-@(test)
-tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
-    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
-    defer free(semantic, context.allocator)
-    defer viewmodel.ui_semantic_focus_destroy(semantic)
-    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
-    ji := bridgemodel.Euclid_Julia_Interface{}
-    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
-    tree_semantic_hierarchy_fixture(&ji, &nodes)
-    runtime.library.tree.selected_item_id = nodes[0].stable_id
-    scroll_y: f32
-
-    testing.expect(t, uisemantics.semantic_begin(semantic))
-    prepared: uilibrary.Tree_List_Preparation
-    uilibrary.prepare_tree_list_panel({ji = &ji, ui_runtime = &runtime,
-        list_panel = {0, 0, 200, 100}, scroll_y = &scroll_y}, &prepared)
-    testing.expect_value(t, runtime.library.tree.projection.items[1].first_child, 2)
-    testing.expect(t, runtime.library.tree.projection.items[1].expanded)
-    testing.expect_value(t, prepared.layout.count, 3)
-    testing.expect_value(t,
-        uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
-    snapshot := uisemantics.semantic_snapshot(semantic)
+// Verify committed tree relations, traversal ownership, and child position metadata.
+tree_semantic_expect_composite_hierarchy :: proc(
+    t: ^testing.T, snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    nodes: ^[2]bridgemodel.Euclid_Julia_Animation_Interface) {
     testing.expect_value(t, snapshot^.node_count, 4)
     tree_index := uisemantics.semantic_node_index(snapshot, uilibrary.tree_semantic_id())
     testing.expect(t, tree_index >= 0)
@@ -2025,6 +2297,38 @@ tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     testing.expect_value(t, child.position_in_set, u32(1))
     testing.expect_value(t, child.set_size, u32(1))
     testing.expect(t, .Tab_Stop not_in child.states)
+}
+
+// Verify the Library tree publishes one Tab stop with UUID-backed descendants.
+@(test)
+tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        semantic_focus = semantic,
+    }
+    ji: bridgemodel.Euclid_Julia_Interface = {}
+    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
+    tree_semantic_hierarchy_fixture(&ji, &nodes)
+    runtime.library.tree.selected_item_id = nodes[0].stable_id
+    scroll_y: f32
+
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    prepared: uilibrary.Tree_List_Preparation
+    uilibrary.prepare_tree_list_panel({
+        ji = &ji,
+        ui_runtime = &runtime,
+        list_panel = {0, 0, 200, 100},
+        scroll_y = &scroll_y,
+    }, &prepared)
+    testing.expect_value(t, runtime.library.tree.projection.items[1].first_child, 2)
+    testing.expect(t, runtime.library.tree.projection.items[1].expanded)
+    testing.expect_value(t, prepared.layout.count, 3)
+    testing.expect_value(t,
+        uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    tree_semantic_expect_composite_hierarchy(
+        t, uisemantics.semantic_snapshot(semantic), &nodes)
 }
 
 // Build the semantic tree fixture used by the command-routing test.
@@ -2047,8 +2351,12 @@ tree_semantic_commands_fixture :: proc(
     seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
     seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
     seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
-    return uilibrary.Tree_List_Params{ji = ji, ui_runtime = runtime,
-        list_panel = {0, 0, 200, theme.TREE_ROW_HEIGHT}, scroll_y = scroll_y}
+    return uilibrary.Tree_List_Params{
+        ji = ji,
+        ui_runtime = runtime,
+        list_panel = {0, 0, 200, theme.TREE_ROW_HEIGHT},
+        scroll_y = scroll_y,
+    }
 }
 
 // Verify routed tree commands move, reveal, and select through existing state.
@@ -2057,8 +2365,10 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        semantic_focus = semantic,
+    }
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     scroll_y: f32
     params := tree_semantic_commands_fixture(
@@ -2071,7 +2381,12 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
     semantic^.logical_focus = uilibrary.tree_semantic_id()
 
     _ = uisemantics.semantic_route_keyboard(semantic,
-        {events = {{kind = .Press, key = .End}}})
+        {
+            events = {{
+                kind = .Press,
+                key = .End,
+            }},
+        })
     testing.expect(t, uisemantics.semantic_begin(semantic))
     uilibrary.prepare_tree_list_panel(params, &prepared)
     testing.expect_value(t, semantic^.active_tree_item, nodes[2].stable_id)
@@ -2080,7 +2395,12 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
         uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
 
     _ = uisemantics.semantic_route_keyboard(semantic,
-        {events = {{kind = .Press, key = .Enter}}})
+        {
+            events = {{
+                kind = .Press,
+                key = .Enter,
+            }},
+        })
     testing.expect(t, uisemantics.semantic_begin(semantic))
     uilibrary.prepare_tree_list_panel(params, &prepared)
     testing.expect_value(t, ji.selected_animation, &nodes[2])
@@ -2093,8 +2413,10 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        semantic_focus = semantic,
+    }
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
@@ -2109,11 +2431,17 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
     seed_tree_node(&nodes[2], &nodes[1], nil, nil, false)
     semantic^.active_tree_item = nodes[0].stable_id
     semantic^.commands[0] = {
-        target = uilibrary.tree_item_semantic_id(&nodes[1]), kind = .Toggle}
+        target = uilibrary.tree_item_semantic_id(&nodes[1]),
+        kind = .Toggle,
+    }
     semantic^.command_count = 1
     scroll_y: f32
-    params := uilibrary.Tree_List_Params{ji = &ji, ui_runtime = &runtime,
-        list_panel = {0, 0, 200, theme.TREE_ROW_HEIGHT}, scroll_y = &scroll_y}
+    params: uilibrary.Tree_List_Params = {
+        ji = &ji,
+        ui_runtime = &runtime,
+        list_panel = {0, 0, 200, theme.TREE_ROW_HEIGHT},
+        scroll_y = &scroll_y,
+    }
     testing.expect(t, uilibrary.tree_projection_prepare(params))
 
     active := uilibrary.tree_apply_semantic_commands(params)
@@ -2129,8 +2457,10 @@ tree_keyboard_active_descendant_is_visible :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
-    node := bridgemodel.Euclid_Julia_Animation_Interface{}
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        semantic_focus = semantic,
+    }
+    node: bridgemodel.Euclid_Julia_Animation_Interface = {}
     node.stable_id[0] = 1
     semantic^.window_focused = true
     semantic^.focus_origin = .Keyboard
@@ -2154,7 +2484,9 @@ presentation_semantics_reconcile_compilation_generation :: proc(t: ^testing.T) {
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
-    state^.ui_runtime.input.interaction.logical_focus = {kind = .Presentation}
+    state^.ui_runtime.input.interaction.logical_focus = {
+        kind = .Presentation,
+    }
     state^.dynview.compile_cache.compiled_revision = 12
 
     testing.expect(t, uisemantics.semantic_begin(semantic))
@@ -2182,20 +2514,24 @@ terminal_editable_descriptor_exposes_only_committed_input :: proc(t: ^testing.T)
     defer free(state, context.allocator)
     bytes: [16]u8
     copy(bytes[:], "x=α")
-    history := termhist.Termhist_State{
-        text = bytes[:], text_len = len("x=α"), cursor = len("x=α"),
+    history: termhist.Termhist_State = {
+        text = bytes[:],
+        text_len = len("x=α"),
+        cursor = len("x=α"),
         anchor = len("x=α"),
         content_revision = 9,
     }
     state^.terminal.history = &history
     state^.terminal.completion_preview_insertion = " + preview"
-    scroll := uiwidgets.Scroll_Container_Update_Result{
+    scroll: uiwidgets.Scroll_Container_Update_Result = {
         view_rect = {10, 20, 200, 100},
         control_geometry = {{10, 20, 200, 100}, {5, 6, 220, 130}},
         scroll_y_out = 12,
     }
     descriptor, text_geometry := uiterminal.terminal_editable_text_adapter(state, {
-        padded_bounds = {14, 24, 192, 92}, line_height = 18, line_count = 3,
+        padded_bounds = {14, 24, 192, 92},
+        line_height = 18,
+        line_count = 3,
     }, scroll)
     testing.expect_value(t, descriptor.text, "x=α")
     testing.expect_value(t, descriptor.cursor_byte, len("x=α"))
@@ -2244,25 +2580,37 @@ tree_reveal_scroll_is_minimal_and_clamped :: proc(t: ^testing.T) {
 //   Verify a stable reveal request scrolls, cancels dragging, and is consumed.
 @(test)
 pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
     nodes[0].next_in_registry = &nodes[1]
     nodes[0].stable_id[0] = 1
     nodes[1].stable_id[0] = 2
-    ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
-        library = {tree = {reveal_pending = true,
-            reveal_stable_id = nodes[1].stable_id,
-            scroll_dragging = true, scroll_drag_off = 5}},
-        input = {press_owner = {
-            active = true, kind = .Scrollbar, id = 1003}},
+    ui_runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        library = {
+            tree = {
+                reveal_pending = true,
+                reveal_stable_id = nodes[1].stable_id,
+                scroll_dragging = true,
+                scroll_drag_off = 5,
+            },
+        },
+        input = {
+            press_owner = {
+                active = true,
+                kind = .Scrollbar,
+                id = 1003,
+            },
+        },
     }
     scroll_y: f32
     uilibrary.apply_pending_tree_reveal(uilibrary.Tree_List_Params{
         ji = &ji,
         ui_runtime = &ui_runtime,
-        list_panel = {height = theme.TREE_ROW_HEIGHT},
+        list_panel = {
+            height = theme.TREE_ROW_HEIGHT,
+        },
         scroll_y = &scroll_y,
     }, theme.TREE_ROW_HEIGHT * 2)
 
@@ -2276,7 +2624,9 @@ pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
     uilibrary.apply_pending_tree_reveal(uilibrary.Tree_List_Params{
         ji = &ji,
         ui_runtime = &ui_runtime,
-        list_panel = {height = theme.TREE_ROW_HEIGHT},
+        list_panel = {
+            height = theme.TREE_ROW_HEIGHT,
+        },
         scroll_y = &scroll_y,
     }, theme.TREE_ROW_HEIGHT * 2)
     testing.expect(t, ui_runtime.library.tree.reveal_pending)
@@ -2285,7 +2635,7 @@ pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
 // Verify accordion headers retain order while the active child consumes free height.
 @(test)
 accordion_layout_places_active_content_after_selected_header :: proc(t: ^testing.T) {
-    panel := geometry.Rectangle{10, 20, 300, 500}
+    panel: geometry.Rectangle = {10, 20, 300, 500}
     sections := uiaccordion.accordion_landscape_sections()
     layout := uiaccordion.accordion_layout(geometry.Rectangle(panel), sections, .Save_Gif)
     testing.expect_value(t, layout.headers[0].y, f32(26))
@@ -2370,8 +2720,10 @@ accordion_user_data_error_layout_test :: proc(
 
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     testing.expect(t, uisemantics.semantic_begin(semantic))
-    ctx := uiaccordion.Accordion_Context{
-        panel = {10, 20, 300, 500}, semantic_focus = semantic}
+    ctx: uiaccordion.Accordion_Context = {
+        panel = {10, 20, 300, 500},
+        semantic_focus = semantic,
+    }
     id := uiaccordion.register_accordion_header(
         ctx, sections.items[settings_index], header, .Library, settings_index)
     testing.expect_value(t, uisemantics.semantic_publish(semantic),
@@ -2392,7 +2744,7 @@ accordion_user_data_error_indicator_persists_and_is_accessible :: proc(t: ^testi
     state^.preferences_runtime.user_data_failure_unresolved = true
     state^.ui_runtime.preferences.save_status =
         preferencesmodel.Settings_Save_Status.Failed
-    modes := [2]viewmodel.Ui_Layout_Mode{.Landscape, .Portrait}
+    modes: [2]viewmodel.Ui_Layout_Mode = {.Landscape, .Portrait}
     for mode in modes {
         accordion_user_data_error_layout_test(t, state, mode)
     }
@@ -2418,7 +2770,7 @@ accordion_user_data_error_indicator_persists_and_is_accessible :: proc(t: ^testi
 // Verify portrait places View content after its first header and keeps four headers.
 @(test)
 accordion_portrait_layout_places_view_first :: proc(t: ^testing.T) {
-    panel := geometry.Rectangle{10, 20, 300, 500}
+    panel: geometry.Rectangle = {10, 20, 300, 500}
     sections := uiaccordion.accordion_portrait_sections("Proposition I")
     layout := uiaccordion.accordion_layout(geometry.Rectangle(panel), sections, .View)
     testing.expect_value(t, layout.content.y,
@@ -2435,9 +2787,10 @@ accordion_portrait_layout_places_view_first :: proc(t: ^testing.T) {
 selected_animation_title_tracks_current_selection :: proc(t: ^testing.T) {
     state := make_shell_test_state(t)
     defer destroy_shell_test_state(state)
-    ji := bridgemodel.Euclid_Julia_Interface{}
-    animation := bridgemodel.Euclid_Julia_Animation_Interface{
-        name = "Proclus's Commentary"}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
+    animation: bridgemodel.Euclid_Julia_Animation_Interface = {
+        name = "Proclus's Commentary",
+    }
     state^.julia_interface = &ji
     testing.expect_value(t, uilibrary.selected_animation_title(state), "Animation")
     ji.selected_animation = &animation
@@ -2455,23 +2808,32 @@ accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     active := viewmodel.Ui_Accordion_Section.Library
-    panel := geometry.Rectangle{10, 20, 300, 500}
+    panel: geometry.Rectangle = {10, 20, 300, 500}
     sections := uiaccordion.accordion_landscape_sections()
     settings_index := uiaccordion.accordion_section_index(sections, .Settings)
     settings := uiaccordion.accordion_layout(
         geometry.Rectangle(panel), sections, .Library).headers[settings_index]
-    mouse_position := input.Input_Position{settings.x + 2, settings.y + 2}
-    pressed_context := uiaccordion.Accordion_Context{panel = geometry.Rectangle(panel),
-        mouse_input = {mouse_position = mouse_position,
-            mouse_pressed = {.Left}, mouse_down = {.Left}},
-        press_owner = &owner, semantic_focus = semantic, active = active}
+    mouse_position: input.Input_Position = {settings.x + 2, settings.y + 2}
+    pressed_context: uiaccordion.Accordion_Context = {
+        panel = geometry.Rectangle(panel),
+        mouse_input = {
+            mouse_position = mouse_position,
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+        },
+        press_owner = &owner,
+        semantic_focus = semantic,
+        active = active,
+    }
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = uiaccordion.prepare_accordion(pressed_context, sections, &active)
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Library)
 
     released_context := pressed_context
     released_context.mouse_input = {
-        mouse_position = mouse_position, mouse_released = {.Left}}
+        mouse_position = mouse_position,
+        mouse_released = {.Left},
+    }
     prepared := uiaccordion.prepare_accordion(released_context, sections, &active)
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
     testing.expect_value(t, prepared.layout.content.y,
@@ -2488,7 +2850,7 @@ accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Library
     sections := uiaccordion.accordion_landscape_sections()
-    ctx := uiaccordion.Accordion_Context{
+    ctx: uiaccordion.Accordion_Context = {
         panel = {10, 20, 300, 500},
         press_owner = &owner,
         semantic_focus = semantic,
@@ -2500,7 +2862,10 @@ accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
         uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
     semantic^.logical_focus = uiaccordion.accordion_semantic_id(.Settings)
     _ = uisemantics.semantic_route_keyboard(semantic, {
-        events = {{kind = .Press, key = .Space}},
+        events = {{
+            kind = .Press,
+            key = .Space,
+        }},
     })
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = uiaccordion.prepare_accordion(ctx, sections, &active)
@@ -2513,22 +2878,48 @@ ime_routing_preserves_order_and_explicit_traversal :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    events := []input.Input_Event{
-        {kind = .Text_Preedit, text_length = 1},
-        {kind = .Press, key = .Tab},
-        {kind = .Press, key = .Enter},
-        {kind = .Press, key = .Escape},
-        {kind = .Press, key = .Tab, modifiers = {.Control}},
-        {kind = .Text_Commit, text_length = 1},
-        {kind = .Press, key = .Enter},
+    events: []input.Input_Event = {
+        {
+            kind = .Text_Preedit,
+            text_length = 1,
+        },
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+        {
+            kind = .Press,
+            key = .Escape,
+        },
+        {
+            kind = .Press,
+            key = .Tab,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Text_Commit,
+            text_length = 1,
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+        },
     }
     claims := uisemantics.semantic_route_keyboard(
-        semantic, {events = events}, true)
+        semantic, {
+            events = events,
+        }, true)
     testing.expect(t, claims.claimed[1] && claims.claimed[2] && claims.claimed[3])
     testing.expect(t, !claims.claimed[0] && !claims.claimed[4] &&
         !claims.claimed[5] && !claims.claimed[6])
     claims = uisemantics.semantic_route_keyboard(
-        semantic, {events = events[1:4]}, true, true)
+        semantic, {
+            events = events[1:4],
+        }, true, true)
     testing.expect(t, claims.claimed[0] && claims.claimed[1] && claims.claimed[2])
 }
 
@@ -2541,7 +2932,7 @@ accordion_header_external_expand_selects_section :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Library
     sections := uiaccordion.accordion_landscape_sections()
-    ctx := uiaccordion.Accordion_Context{
+    ctx: uiaccordion.Accordion_Context = {
         panel = {10, 20, 300, 500},
         press_owner = &owner,
         semantic_focus = semantic,
@@ -2569,14 +2960,20 @@ accordion_publishes_controlled_content_panel :: proc(t: ^testing.T) {
     active := viewmodel.Ui_Accordion_Section.Settings
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = uiaccordion.prepare_accordion({
-        panel = {10, 20, 300, 500}, press_owner = &owner,
-        semantic_focus = semantic, active = active,
+        panel = {10, 20, 300, 500},
+        press_owner = &owner,
+        semantic_focus = semantic,
+        active = active,
     }, uiaccordion.accordion_landscape_sections(), &active)
     child_id := uisemantics.semantic_control_id(.Settings_Control, 99)
     _ = uisemantics.semantic_register_control(semantic, {
-        id = child_id, role = .Button, states = {.Visible, .Enabled},
-        region = .Accordion_Content, bounds = {20, 80, 100, 24},
-        clip_bounds = {10, 20, 300, 500}, label = "Child",
+        id = child_id,
+        role = .Button,
+        states = {.Visible, .Enabled},
+        region = .Accordion_Content,
+        bounds = {20, 80, 100, 24},
+        clip_bounds = {10, 20, 300, 500},
+        label = "Child",
     })
     staging := uisemantics.semantic_staging_snapshot(semantic)
     header_index := uisemantics.semantic_node_index(
@@ -2596,7 +2993,7 @@ accordion_publishes_controlled_content_panel :: proc(t: ^testing.T) {
 @(test)
 tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
     // Verifies row counting guard limits recursive traversal depth to prevent runaway tree walks.
-    ji := bridgemodel.Euclid_Julia_Interface{}
+    ji: bridgemodel.Euclid_Julia_Interface = {}
     nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_tail = &nodes[1]

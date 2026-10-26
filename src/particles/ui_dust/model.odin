@@ -76,7 +76,7 @@ Ui_Dust_Arrival_Style :: enum u8 {
 // UI_DUST_ARRIVAL_STYLE is the fixed product arrival style. The other policies stay
 // implemented and tested for comparison; debug scenarios may override the style for
 // one presentation runtime, but no preference or persisted setting selects it.
-UI_DUST_ARRIVAL_STYLE : Ui_Dust_Arrival_Style : .Falling_Ink
+UI_DUST_ARRIVAL_STYLE: Ui_Dust_Arrival_Style : .Falling_Ink
 
 // Ui_Dust_Reveal_Bin accumulates the horizontal ink extent of one vertical bin.
 // A bin is empty while `left > right`.

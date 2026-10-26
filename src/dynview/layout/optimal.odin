@@ -42,7 +42,10 @@ document_break_collect_candidates :: proc(
     if len(candidates) < 1 {
         return 0, .Candidate_Limit
     }
-    candidates[0] = {raw_end = 0, next_start = 0}
+    candidates[0] = {
+        raw_end = 0,
+        next_start = 0,
+    }
     count := 1
     for node, index in nodes {
         if !document_node_allows_break(node) {
@@ -64,7 +67,10 @@ document_break_collect_candidates :: proc(
             return 0, .Candidate_Limit
         }
         candidates[count] = {
-            raw_end = len(nodes), next_start = len(nodes), terminal = true}
+            raw_end = len(nodes),
+            next_start = len(nodes),
+            terminal = true,
+        }
         count += 1
     } else {
         candidates[count-1].terminal = true
@@ -95,7 +101,10 @@ document_break_quality :: proc(
     ragged: bool) -> Document_Break_Quality {
 
     if ragged {
-        return {fitness = .Decent, overfull = width > available_width}
+        return {
+            fitness = .Decent,
+            overfull = width > available_width,
+        }
     }
     delta := available_width-width
     ratio: f32
@@ -115,8 +124,10 @@ document_break_quality :: proc(
         fitness = .Loose
     }
     return {
-        ratio = ratio, badness = badness,
-        fitness = fitness, overfull = ratio < -1,
+        ratio = ratio,
+        badness = badness,
+        fitness = fitness,
+        overfull = ratio < -1,
     }
 }
 
@@ -174,14 +185,17 @@ document_break_update_state :: proc(
             continue
         }
         ctx.states[target_state] = {
-            demerits = demerits, previous_state = source_state,
+            demerits = demerits,
+            previous_state = source_state,
             candidate_index = transition.target,
             line_start = transition.measurement.line_start,
             line_end = transition.measurement.line_end,
             width = transition.measurement.width,
             adjusted_width = transition.adjusted_width,
-            adjustment_ratio = quality.ratio, fitness = quality.fitness,
-            overfull = quality.overfull, active = true,
+            adjustment_ratio = quality.ratio,
+            fitness = quality.fitness,
+            overfull = quality.overfull,
+            active = true,
         }
     }
     return .None
@@ -213,8 +227,11 @@ document_break_consider_transition :: proc(
     adjusted_width += quality.ratio*measure.stretch if quality.ratio >= 0 else
         max(quality.ratio, -1)*measure.shrink
     return document_break_update_state(ctx, {
-        source = source, target = target, measurement = measure,
-        quality = quality, adjusted_width = adjusted_width,
+        source = source,
+        target = target,
+        measurement = measure,
+        quality = quality,
+        adjusted_width = adjusted_width,
     })
 }
 
@@ -247,11 +264,15 @@ document_break_search :: proc(
         return -1, .State_Limit
     }
     states[int(Document_Break_Fitness.Decent)] = {
-        active = true, fitness = .Decent, candidate_index = 0,
+        active = true,
+        fitness = .Decent,
+        candidate_index = 0,
         previous_state = -1,
     }
-    ctx := Document_Break_Search_Context{
-        nodes = nodes, candidates = candidates, states = states,
+    ctx: Document_Break_Search_Context = {
+        nodes = nodes,
+        candidates = candidates,
+        states = states,
         available_width = width.available,
         first_line_indent = width.first_line_indent,
         work_limit = work_limit,
@@ -340,15 +361,23 @@ document_break_allocate_scratch :: proc(
     candidates, candidate_error := make(
         []Document_Break_Candidate, candidate_capacity, allocator)
     if candidate_error != nil {
-        return {status = .Allocation_Failed}
+        return {
+            status = .Allocation_Failed,
+        }
     }
     state_capacity := min(limits.states, candidate_capacity*4,
         dynviewmodel.DYNVIEW_MAX_DOCUMENT_BREAK_STATES)
     states, state_error := make([]Document_Break_State, state_capacity, allocator)
     if state_error != nil {
-        return {status = .Allocation_Failed}
+        return {
+            status = .Allocation_Failed,
+        }
     }
-    return {candidates = candidates, states = states, status = .Ok}
+    return {
+        candidates = candidates,
+        states = states,
+        status = .Ok,
+    }
 }
 
 // Break one paragraph optimally within explicit storage and work bounds.

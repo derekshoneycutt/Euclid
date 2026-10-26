@@ -60,7 +60,8 @@ ui_dust_slots_wrap_in_emission_order :: proc(t: ^testing.T) {
     first: Ui_Dust_Slot_Ref
     for ordinal in 0..<count {
         reference := ui_dust_slot_emit(system, {
-            phase = .Airborne_Departure, pos_x = f32(ordinal),
+            phase = .Airborne_Departure,
+            pos_x = f32(ordinal),
         })
         if ordinal == 0 {
             first = reference
@@ -91,11 +92,13 @@ ui_dust_slots_reuse_holes_before_eviction :: proc(t: ^testing.T) {
     system := new(Ui_Dust_System, context.allocator)
     defer free(system, context.allocator)
     for _ in 0..<UI_DUST_TOTAL_PARTICLES {
-        _ = ui_dust_slot_emit(system, {phase = .Airborne_Departure})
+        _ = ui_dust_slot_emit(system, {
+            phase = .Airborne_Departure,
+        })
     }
-    oldest := Ui_Dust_Slot_Ref{0, system^.order[0].generation}
+    oldest: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
     for index in ([3]int{7, 19, 3}) {
-        reference := Ui_Dust_Slot_Ref{index, system^.order[index].generation}
+        reference: Ui_Dust_Slot_Ref = {index, system^.order[index].generation}
         testing.expect(t, ui_dust_slot_retire(system, reference))
         testing.expect(t, !ui_dust_slot_retire(system, reference))
         testing.expect(t, !ui_dust_slot_valid(system, reference))
@@ -103,7 +106,8 @@ ui_dust_slots_reuse_holes_before_eviction :: proc(t: ^testing.T) {
     ui_dust_test_slot_invariants(t, system)
     for index in ([3]int{3, 19, 7}) {
         reference := ui_dust_slot_emit(system, {
-            phase = .Fresh_Arrival, target_x = 80,
+            phase = .Fresh_Arrival,
+            target_x = 80,
         })
         testing.expect_value(t, reference.index, index)
         testing.expect_value(t, reference.generation, u64(2))
@@ -111,7 +115,9 @@ ui_dust_slots_reuse_holes_before_eviction :: proc(t: ^testing.T) {
     }
     testing.expect_value(t, system^.initialized_slots, UI_DUST_TOTAL_PARTICLES)
     ui_dust_test_slot_invariants(t, system)
-    replacement := ui_dust_slot_emit(system, {phase = .Resting_Departure})
+    replacement := ui_dust_slot_emit(system, {
+        phase = .Resting_Departure,
+    })
     testing.expect_value(t, replacement.index, oldest.index)
     testing.expect(t, !ui_dust_slot_valid(system, oldest))
 }
@@ -122,11 +128,17 @@ ui_dust_slots_reassignment_preserves_original_age :: proc(t: ^testing.T) {
     system := new(Ui_Dust_System, context.allocator)
     defer free(system, context.allocator)
     oldest := ui_dust_slot_emit(system, {
-        phase = .Fresh_Arrival, target_x = 20, target_y = 30,
-        duration = 0.4, age = 0.2, color = {1, 2, 3, 255},
+        phase = .Fresh_Arrival,
+        target_x = 20,
+        target_y = 30,
+        duration = 0.4,
+        age = 0.2,
+        color = {1, 2, 3, 255},
     })
     for _ in 1..<UI_DUST_TOTAL_PARTICLES {
-        _ = ui_dust_slot_emit(system, {phase = .Resting_Departure})
+        _ = ui_dust_slot_emit(system, {
+            phase = .Resting_Departure,
+        })
     }
     original_order := system^.order[oldest.index]
     testing.expect(t, ui_dust_slot_reassign(system, oldest, .Airborne_Departure))
@@ -139,7 +151,9 @@ ui_dust_slots_reassignment_preserves_original_age :: proc(t: ^testing.T) {
     testing.expect_value(t, system^.particles.age[oldest.index], f32(0.2))
     testing.expect_value(t, system^.particles.color[oldest.index].a, u8(255))
     testing.expect_value(t, system^.arrival_count, 1)
-    replacement := ui_dust_slot_emit(system, {phase = .Airborne_Departure})
+    replacement := ui_dust_slot_emit(system, {
+        phase = .Airborne_Departure,
+    })
     testing.expect_value(t, replacement.index, oldest.index)
     testing.expect_value(t, system^.arrival_count, 0)
     testing.expect_value(t, system^.particles.target_x[replacement.index], f32(0))
@@ -152,22 +166,29 @@ ui_dust_slots_expiry_and_clear_preserve_generations :: proc(t: ^testing.T) {
     system := ui_dust_test_system({0, 0, 100, 120})
     defer free(system, context.allocator)
     expired := ui_dust_slot_emit(system, {
-        phase = .Resting_Departure, life = 0.1,
+        phase = .Resting_Departure,
+        life = 0.1,
     })
     retained := ui_dust_slot_emit(system, {
-        phase = .Resting_Departure, life = 1, pos_x = 50,
+        phase = .Resting_Departure,
+        life = 1,
+        pos_x = 50,
     })
     ui_dust_advance(system, 0.2)
     testing.expect(t, !ui_dust_slot_valid(system, expired))
     testing.expect(t, ui_dust_slot_valid(system, retained))
-    reused := ui_dust_slot_emit(system, {phase = .Airborne_Departure})
+    reused := ui_dust_slot_emit(system, {
+        phase = .Airborne_Departure,
+    })
     testing.expect_value(t, reused.index, expired.index)
     testing.expect_value(t, system^.initialized_slots, 2)
     ui_dust_settle(system)
     testing.expect_value(t, system^.live_count, 0)
     ui_dust_test_slot_invariants(t, system)
     for _ in 0..<2 {
-        _ = ui_dust_slot_emit(system, {phase = .Airborne_Departure})
+        _ = ui_dust_slot_emit(system, {
+            phase = .Airborne_Departure,
+        })
     }
     testing.expect(t, !ui_dust_slot_valid(system, retained))
     testing.expect(t, !ui_dust_slot_valid(system, reused))
@@ -187,7 +208,7 @@ ui_dust_slots_arrival_eviction_keeps_handoff_bounded :: proc(t: ^testing.T) {
         testing.expect(t, ui_dust_emit_arrival(
             system, {f32(index), 50}, {20, 40, 60, 255}, 255))
     }
-    first := Ui_Dust_Slot_Ref{0, system^.order[0].generation}
+    first: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
     testing.expect_value(t, system^.arrival_count, UI_DUST_MAX_ARRIVAL_PARTICLES)
     _ = ui_dust_test_emit_line(system, UI_DUST_MAX_ARRIVAL_PARTICLES + 1)
     testing.expect(t, !ui_dust_slot_valid(system, first))
@@ -208,10 +229,12 @@ ui_dust_slots_cancel_arrival_preserves_departure_holes :: proc(t: ^testing.T) {
     system := ui_dust_test_system({0, 0, 200, 200})
     defer free(system, context.allocator)
     departure := ui_dust_slot_emit(system, {
-        phase = .Airborne_Departure, pos_x = 20, pos_y = 30,
+        phase = .Airborne_Departure,
+        pos_x = 20,
+        pos_y = 30,
     })
     testing.expect(t, ui_dust_test_formation(system, 7, {80, 90}))
-    arrival := Ui_Dust_Slot_Ref{1, system^.order[1].generation}
+    arrival: Ui_Dust_Slot_Ref = {1, system^.order[1].generation}
     testing.expect(t, ui_dust_slot_reassign(system, arrival, .Reclaimed_Arrival))
     ui_dust_advance(system, 0.01)
     testing.expect_value(t, system^.particles.age[arrival.index], f32(0.01))
@@ -221,7 +244,9 @@ ui_dust_slots_cancel_arrival_preserves_departure_holes :: proc(t: ^testing.T) {
     testing.expect_value(t, system^.live_count, 1)
     testing.expect_value(t, system^.arrival_count, 0)
     testing.expect_value(t, system^.particles[arrival.index], Ui_Dust_Particle{})
-    replacement := ui_dust_slot_emit(system, {phase = .Resting_Departure})
+    replacement := ui_dust_slot_emit(system, {
+        phase = .Resting_Departure,
+    })
     testing.expect_value(t, replacement.index, arrival.index)
     testing.expect(t, !ui_dust_slot_retire(system, arrival))
     ui_dust_test_slot_invariants(t, system)

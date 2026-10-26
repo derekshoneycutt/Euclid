@@ -80,7 +80,8 @@ tex_semantic_builder_enforces_exact_display_row_capacity :: proc(t: ^testing.T) 
     testing.expect(t, tex_semantic_output_init(output))
     for index in 0..<TEX_DOCUMENT_DISPLAY_ROW_CAPACITY {
         testing.expect(t, tex_semantic_append_document_display_row(output, {
-            source = {index, 1}, primary_program = index,
+            source = {index, 1},
+            primary_program = index,
         }) >= 0)
     }
     testing.expect_value(t, output.document_display_row_count,

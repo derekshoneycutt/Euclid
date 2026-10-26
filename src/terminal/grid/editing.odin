@@ -11,7 +11,9 @@ grid_fill_blank_range :: proc(
     bounded_start := clamp(start, 0, grid.columns)
     bounded_end := clamp(end, bounded_start, grid.columns)
     for column in bounded_start..<bounded_end {
-        row.cells[column] = {style = grid.style}
+        row.cells[column] = {
+            style = grid.style,
+        }
     }
     grid_mark_dirty(row, bounded_start, bounded_end)
 }

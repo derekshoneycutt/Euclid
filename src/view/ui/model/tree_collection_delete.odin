@@ -85,7 +85,10 @@ ui_tree_collection_retire_identity :: proc(
         semantic.active_tree_item = replacement
     }
     if semantic.logical_focus.stable_id == removed {
-        semantic.logical_focus = {domain = .Animation_Tree, local_id = 1}
+        semantic.logical_focus = {
+            domain = .Animation_Tree,
+            local_id = 1,
+        }
         semantic.active_tree_item = replacement
         semantic.last_region = .Accordion_Content
         semantic.last_traversal_order = 3

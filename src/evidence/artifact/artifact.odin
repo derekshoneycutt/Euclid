@@ -38,11 +38,11 @@ Reason :: enum u8 {
 // readers can reject incompatible schemas before decoding any event.
 Trace_Header :: struct {
     // File identity; canonical bundles write the ASCII bytes "EUCL".
-    magic : [4]u8,
+    magic: [4]u8,
 
     // Trace vocabulary version and serialized record width.
-    schema_version : u16,
-    event_size : u16,
+    schema_version: u16,
+    event_size: u16,
 }
 
 #assert(size_of(Trace_Header) == 8)
@@ -53,24 +53,24 @@ Trace_Header :: struct {
 // artifact writer serializes it but does not reinterpret or authorize the outcome.
 Manifest :: struct {
     // Overall scenario outcome and its stable explanation.
-    result : Result,
-    reason : Reason,
-    failed_step : int,
+    result: Result,
+    reason: Reason,
+    failed_step: int,
 
     // Completeness and final sequence metadata for the exported trace snapshot.
-    trace_complete : bool,
-    last_trace_sequence : u64,
+    trace_complete: bool,
+    last_trace_sequence: u64,
 }
 
 // Borrowed and scalar evidence required to write one canonical bundle.
 Bundle :: struct {
-    manifest : Manifest,
-    events : []trace.Event,
-    state : observe.Display,
-    julia_host : observe.Julia_Host,
-    simulation : observe.Simulation,
-    allocations : allocation_evidence.Snapshot,
-    arena_baselines : allocation_evidence.Arena_Baselines,
+    manifest: Manifest,
+    events: []trace.Event,
+    state: observe.Display,
+    julia_host: observe.Julia_Host,
+    simulation: observe.Simulation,
+    allocations: allocation_evidence.Snapshot,
+    arena_baselines: allocation_evidence.Arena_Baselines,
     library_storage: observe.Library_Storage,
 }
 
@@ -572,9 +572,12 @@ artifact_path_safe :: proc(path: string) -> bool {
 //     "inconclusive".
 artifact_result_name :: proc(result: Result) -> string {
     switch result {
-    case .Passed: return "passed"
-    case .Failed: return "failed"
-    case .Inconclusive: return "inconclusive"
+    case .Passed:
+        return "passed"
+    case .Failed:
+        return "failed"
+    case .Inconclusive:
+        return "inconclusive"
     }
     return "inconclusive"
 }
@@ -588,11 +591,16 @@ artifact_result_name :: proc(result: Result) -> string {
 //   - A static lowercase snake-case name; unknown backing values map to "none".
 artifact_reason_name :: proc(reason: Reason) -> string {
     switch reason {
-    case .None: return "none"
-    case .Wait_Timeout: return "wait_timeout"
-    case .Assertion_Failed: return "assertion_failed"
-    case .Required_Evidence_Lost: return "required_evidence_lost"
-    case .Capture_Failed: return "capture_failed"
+    case .None:
+        return "none"
+    case .Wait_Timeout:
+        return "wait_timeout"
+    case .Assertion_Failed:
+        return "assertion_failed"
+    case .Required_Evidence_Lost:
+        return "required_evidence_lost"
+    case .Capture_Failed:
+        return "capture_failed"
     }
     return "none"
 }

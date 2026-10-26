@@ -16,8 +16,10 @@ ui_dust_reclaim_benchmark :: proc(t: ^testing.T) {
         total, worst := f64(0), f64(0)
         for iteration in 0..<110 {
             ui_dust_settle(system)
-            ui_dust_validate_context(system,
-                {visible = true, viewport = {0, 0, 400, 400}})
+            ui_dust_validate_context(system, {
+                visible = true,
+                viewport = {0, 0, 400, 400},
+            })
             ui_dust_test_fill_reclaim_capacity(system)
             start := time.tick_now()
             ui_dust_form_targets(system)

@@ -160,21 +160,35 @@ document_store_find :: proc(
     key: Dynview_Document_Key) -> Dynview_Document_Lookup {
     if store == nil || !store.initialized || store.memory == nil ||
         store.generation == 0 || store.memory.generation != store.generation {
-        return {status = .Illegal_State}
+        return {
+            status = .Illegal_State,
+        }
     }
     if !document_store_key_valid(source, key) {
-        return {status = .Invalid_Argument}
+        return {
+            status = .Invalid_Argument,
+        }
     }
     probe := document_store_probe(store, source, key)
     if probe.found {
         handle, status := document_store_hit(store, probe.index)
-        return {probe = probe, handle = handle, status = status}
+        return {
+            probe = probe,
+            handle = handle,
+            status = status,
+        }
     }
     if probe.index < 0 {
         store.quota_rejections += 1
-        return {probe = probe, status = .Out_Of_Capacity}
+        return {
+            probe = probe,
+            status = .Out_Of_Capacity,
+        }
     }
-    return {probe = probe, status = .Not_Found}
+    return {
+        probe = probe,
+        status = .Not_Found,
+    }
 }
 
 //   Build one bounded math result without touching document-store state.
@@ -249,7 +263,7 @@ document_store_commit_at :: proc(
     source: string,
     result: ^Dynview_Parse_Result,
     index: int) -> (dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
-    build := Dynview_Document_Build{
+    build: Dynview_Document_Build = {
         source = source,
         key = result.key,
         parse_status = result.output.status,
@@ -274,7 +288,7 @@ document_store_resolve :: proc(
     }
     entry := &store.entries[index]
     bytes := document_store_blob_bytes(entry)
-    document := Dynview_Document{
+    document: Dynview_Document = {
         source = string(bytes[:int(entry.source_length)]),
         root_program = entry.root_program,
         plain_text = {entry.plain_text_offset, entry.plain_text_length},
@@ -295,7 +309,7 @@ document_store_diagnostics :: proc(
     if store == nil {
         return {}
     }
-    arena := storage.Arena_Owner_Diagnostics{}
+    arena: storage.Arena_Owner_Diagnostics = {}
     if store.memory != nil {
         arena = animation_model.animation_memory_diagnostics(store.memory)
     }
@@ -370,14 +384,21 @@ document_store_probe :: proc(
         index := (start + attempt)%len(store.entries)
         entry := &store.entries[index]
         if !entry.occupied {
-            return {index = index}
+            return {
+                index = index,
+            }
         }
         if document_store_entry_matches(entry, source, key) {
-            return {index = index, found = true}
+            return {
+                index = index,
+                found = true,
+            }
         }
         store.collision_count += 1
     }
-    return {index = -1}
+    return {
+        index = -1,
+    }
 }
 
 //   Compare one complete parse key, including exact retained source bytes.
@@ -408,7 +429,10 @@ document_store_hit :: proc(
         store.negative_cache_hits += 1
         status = .Rejected
     }
-    return {generation = store.generation, index = u32(index)}, status
+    return {
+        generation = store.generation,
+        index = u32(index),
+    }, status
 }
 
 //   Dispatch one source through the selected bounded native grammar.
@@ -468,7 +492,9 @@ document_store_insert :: proc(
     index: int,
     build: ^Dynview_Document_Build) -> (
         dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
-    build.layout = {byte_count = len(build.source)}
+    build.layout = {
+        byte_count = len(build.source),
+    }
     if build.parse_status == .Ok {
         build.layout = document_store_blob_layout(len(build.source), build.output)
     }
@@ -483,7 +509,7 @@ document_store_insert :: proc(
     store.blob_bytes += build.layout.byte_count
     store.peak_entry_count = max(store.peak_entry_count, store.entry_count)
     store.peak_blob_bytes = max(store.peak_blob_bytes, store.blob_bytes)
-    handle := dynviewmodel.Dynview_Document_Handle{
+    handle: dynviewmodel.Dynview_Document_Handle = {
         generation = store.generation,
         index = u32(index),
     }
@@ -513,7 +539,7 @@ document_store_allocate_blob :: proc(
 document_store_build_entry :: proc(
     build: ^Dynview_Document_Build,
     blob: []u64) -> dynviewmodel.Dynview_Document_Entry {
-    entry := dynviewmodel.Dynview_Document_Entry{
+    entry: dynviewmodel.Dynview_Document_Entry = {
         source_hash = build.key.source_hash,
         source_length = build.key.source_length,
         grammar_revision = build.key.grammar_revision,

@@ -128,7 +128,7 @@ animation_control_layout_slots :: proc(
         theme.ANIMATION_CONTROL_BUTTON_SIZE * 3 + theme.ANIMATION_CONTROL_BUTTON_GAP * 2
     panel_height :=
         theme.ANIMATION_CONTROL_PADDING * 2 + theme.ANIMATION_CONTROL_BUTTON_SIZE
-    panel := geometry.Rectangle{
+    panel: geometry.Rectangle = {
         world_rect.x + theme.ANIMATION_CONTROL_EDGE_INSET,
         world_rect.y + world_rect.height -
             theme.ANIMATION_CONTROL_EDGE_INSET - panel_height,
@@ -136,11 +136,15 @@ animation_control_layout_slots :: proc(
         panel_height,
     }
     button_y := panel.y + theme.ANIMATION_CONTROL_PADDING
-    refresh := geometry.Rectangle{panel.x + theme.ANIMATION_CONTROL_PADDING, button_y,
+    refresh: geometry.Rectangle = {panel.x + theme.ANIMATION_CONTROL_PADDING, button_y,
         theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE}
     pause := refresh
     pause.x += theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
-    result := Animation_Control_Slots{panel = panel, refresh = refresh, pause = pause}
+    result: Animation_Control_Slots = {
+        panel = panel,
+        refresh = refresh,
+        pause = pause,
+    }
     result.speed = pause
     result.speed.x +=
         theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
@@ -221,12 +225,12 @@ animation_control_hit_test :: proc(
 animation_control_hover_geometry :: proc(
     rectangle: geometry.Rectangle) -> Animation_Control_Hover_Geometry {
     radius := min(rectangle.width, rectangle.height) * 0.22
-    shape := Animation_Control_Hover_Geometry{
+    shape: Animation_Control_Hover_Geometry = {
         center = {rectangle.x + rectangle.width * 0.5,
             rectangle.y + rectangle.height * 0.5},
         radius = radius,
     }
-    corners := [4]geometry.Vector2{
+    corners: [4]geometry.Vector2 = {
         {rectangle.x + radius, rectangle.y + radius},
         {rectangle.x + rectangle.width - radius, rectangle.y + radius},
         {rectangle.x + rectangle.width - radius,
@@ -258,7 +262,7 @@ animation_control_button_params :: #force_inline proc(
     descriptor: Animation_Control_Descriptor,
     mouse_input: input.Input_Frame,
     clip: geometry.Rectangle, enabled := true) -> uiwidgets.Icon_Button_Params {
-    states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable, .Tab_Stop}
+    states: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable, .Tab_Stop}
     if descriptor.toggle {
         states += {.Checked}
     }
@@ -432,7 +436,9 @@ animation_favorite_make_mutation :: proc(
     animation_id: uuid.Identifier,
     entry_id: uuid.Identifier,
     active: bool) -> (collections.Mutation, bool) {
-    mutation := collections.Mutation{animation_id = animation_id}
+    mutation: collections.Mutation = {
+        animation_id = animation_id,
+    }
     if active {
         mutation.kind = .Remove_Favorite
         mutation.entry_id = entry_id
@@ -476,11 +482,19 @@ prepare_animation_controls :: proc(
         favorite_visible, membership_visible)
     eye := prepare_animation_visibility_control(state, slots, mouse_input)
     if ui_runtime^.playback.controls_hidden {
-        return {visible = true, slots = slots, eye = eye}
+        return {
+            visible = true,
+            slots = slots,
+            eye = eye,
+        }
     }
-    prepared := Animation_Control_Preparation{
-        visible = true, overlay_visible = true, slots = slots, eye = eye,
-        favorite_visible = favorite_visible, membership_visible = membership_visible,
+    prepared: Animation_Control_Preparation = {
+        visible = true,
+        overlay_visible = true,
+        slots = slots,
+        eye = eye,
+        favorite_visible = favorite_visible,
+        membership_visible = membership_visible,
     }
     prepare_animation_overlay(state, mouse_input, favorite_target, &prepared)
     return prepared
@@ -499,7 +513,7 @@ prepare_animation_overlay :: proc(
         state, favorite_target, slots, mouse_input)
     membership := prepare_animation_membership_control(
         state, slots, mouse_input, prepared.membership_visible)
-    hit := Animation_Control_Hit{
+    hit: Animation_Control_Hit = {
         refresh.action.activated,
         pause.action.activated,
         speed.action.activated,
@@ -596,8 +610,10 @@ prepare_animation_speed_control :: proc(
     } else {
         switch state.ui_runtime.playback.rate {
         case .Normal:
-        case .Double: label = .Animation_Speed_Double
-        case .Quadruple: label = .Animation_Speed_Quadruple
+        case .Double:
+            label = .Animation_Speed_Double
+        case .Quadruple:
+            label = .Animation_Speed_Quadruple
         }
     }
     result := prepare_animation_control_button(&state.ui_runtime, {
@@ -650,11 +666,11 @@ cancel_gif_capture_if_paused_mid_capture :: proc(
 draw_encoded_refresh_glyph :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle,
     draw_color: color.Color_RGBA8) {
-    center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
+    center: geometry.Vector2 = {rectangle.x + rectangle.width * 0.5,
         rectangle.y + rectangle.height * 0.5}
     radius := min(rectangle.width, rectangle.height) * 0.34
-    starts := [2]f32{math.PI / 3.0, math.PI * (4.0 / 3.0)}
-    ends := [2]f32{math.PI * (10.0 / 9.0), math.PI * (19.0 / 9.0)}
+    starts: [2]f32 = {math.PI / 3.0, math.PI * (4.0 / 3.0)}
+    ends: [2]f32 = {math.PI * (10.0 / 9.0), math.PI * (19.0 / 9.0)}
     for arc_index in 0..<2 {
         previous := center +
             geometry.Vector2{
@@ -669,9 +685,9 @@ draw_encoded_refresh_glyph :: proc(
             _ = native.draw_encoder_line(encoder, previous, current, 1.6, draw_color)
             previous = current
         }
-        radial := geometry.Vector2{f32(math.cos(f64(ends[arc_index]))),
+        radial: geometry.Vector2 = {f32(math.cos(f64(ends[arc_index]))),
             f32(math.sin(f64(ends[arc_index])))}
-        tangent := geometry.Vector2{-radial.y, radial.x}
+        tangent: geometry.Vector2 = {-radial.y, radial.x}
         head_base := previous - tangent * (radius * 0.32)
         head_wing := radial * (radius * 0.24)
         _ = native.draw_encoder_line(
@@ -720,7 +736,7 @@ draw_encoded_favorite_star :: proc(
     rectangle: geometry.Rectangle,
     outline_color: color.Color_RGBA8,
     active: bool) {
-    center := geometry.Vector2{
+    center: geometry.Vector2 = {
         rectangle.x + rectangle.width * 0.5,
         rectangle.y + rectangle.height * 0.5,
     }
@@ -772,7 +788,9 @@ draw_encoded_animation_control_hover :: proc(
         indices[index * 3 + 2] = u32((index + 1) % len(shape.boundary) + 1)
     }
     _ = native.draw_encoder_commit(
-        encoder, positions[:], indices[:], draw_color, {pipeline = .Colored})
+        encoder, positions[:], indices[:], draw_color, {
+            pipeline = .Colored,
+        })
 }
 
 // Draw the animation-control backing state below its existing glyph.
@@ -833,10 +851,10 @@ draw_encoded_animation_transport :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Animation_Control_Preparation) {
     draw_encoded_animation_control_panel(encoder, prepared.slots.panel)
-    results := [2]uiwidgets.Icon_Button_Result{prepared.refresh, prepared.pause}
-    icons := [2]uiwidgets.Icon_Button_Id{.Refresh,
+    results: [2]uiwidgets.Icon_Button_Result = {prepared.refresh, prepared.pause}
+    icons: [2]uiwidgets.Icon_Button_Id = {.Refresh,
         state^.ui_runtime.playback.simulation_paused ? .Play : .Pause}
-    slots := [2]geometry.Rectangle{prepared.slots.refresh, prepared.slots.pause}
+    slots: [2]geometry.Rectangle = {prepared.slots.refresh, prepared.slots.pause}
     for index in 0..<2 {
         toggle_active := index == 1 && state^.ui_runtime.playback.simulation_paused
         draw_color := draw_encoded_animation_control_backing(
@@ -889,11 +907,11 @@ draw_encoded_playback_badge :: proc(
     encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
     tint: color.Color_RGBA8, rate: animationmodel.Playback_Rate) {
     radius := min(rect.width, rect.height)*0.25
-    center := geometry.Vector2{rect.x + rect.width*0.75, rect.y + rect.height*0.75}
+    center: geometry.Vector2 = {rect.x + rect.width*0.75, rect.y + rect.height*0.75}
     ink := theme.UI_COMPONENT_BACKGROUND_COLOR
     _ = native.draw_encoder_circle(encoder, center, radius + 1, ink)
     _ = native.draw_encoder_circle(encoder, center, radius, tint)
-    points := [6]geometry.Vector2{
+    points: [6]geometry.Vector2 = {
         {-0.32, -0.48}, {0.32, -0.48}, {0.32, 0},
         {-0.32, 0}, {-0.32, 0.48}, {0.32, 0.48},
     }
@@ -916,13 +934,13 @@ draw_encoded_animation_eye :: proc(
     tint := draw_encoded_animation_control_backing(encoder,
         result.control_geometry.bounds, result.hovered, result.pressed, false)
     rect := result.icon_drawn_rect
-    center := geometry.Vector2{rect.x + rect.width*0.5, rect.y + rect.height*0.5}
+    center: geometry.Vector2 = {rect.x + rect.width*0.5, rect.y + rect.height*0.5}
     for side in 0..<2 {
-        previous := geometry.Vector2{rect.x + rect.width*0.12, center.y}
+        previous: geometry.Vector2 = {rect.x + rect.width*0.12, center.y}
         for step in 1..=16 {
             t := f32(step)/16
             sign := f32(-1) if side == 0 else f32(1)
-            current := geometry.Vector2{
+            current: geometry.Vector2 = {
                 rect.x + rect.width*(0.12 + 0.76*t),
                 center.y + sign*rect.height*0.25*f32(math.sin(f64(t)*math.PI)),
             }

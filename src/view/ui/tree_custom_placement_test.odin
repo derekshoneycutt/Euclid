@@ -23,7 +23,7 @@ tree_custom_placement_fixture :: proc(
     fixture^.set = new(collections.Set, context.allocator)
     collections.initialize(fixture^.set)
     fixture^.first_collection[0], fixture^.second_collection[0] = 51, 52
-    ids := [2]uuid.Identifier{fixture^.first_collection, fixture^.second_collection}
+    ids: [2]uuid.Identifier = {fixture^.first_collection, fixture^.second_collection}
     for id in ids {
         mutation, failure := collections.make_collection_create_mutation(
             fixture^.set, id, "Custom")
@@ -66,7 +66,9 @@ tree_custom_placement_destroy :: proc(fixture: ^Tree_Custom_Placement_Fixture) {
 tree_custom_placement_params :: proc(
     fixture: ^Tree_Custom_Placement_Fixture) -> uilibrary.Tree_List_Params {
     return {
-        ji = &fixture.ji, ui_runtime = &fixture.runtime, collections = fixture.set,
+        ji = &fixture.ji,
+        ui_runtime = &fixture.runtime,
+        collections = fixture.set,
         collections_revision = 1,
     }
 }
@@ -175,7 +177,7 @@ tree_custom_placement_aliases_and_moves_are_collection_qualified :: proc(
     first_id, missing_id, second_id :=
         uuid.Identifier{}, uuid.Identifier{}, uuid.Identifier{}
     first_id[0], missing_id[0], second_id[0] = 71, 72, 73
-    missing_animation := uuid.Identifier{}
+    missing_animation: uuid.Identifier = {}
     missing_animation[0] = 99
     params := tree_custom_placement_params(&fixture)
     testing.expect(t, uilibrary.tree_projection_prepare(params))
@@ -254,16 +256,23 @@ tree_custom_placement_projection_preserves_stored_group_hierarchy :: proc(
     group_id, child_id := uuid.Identifier{}, uuid.Identifier{}
     group_id[0], child_id[0] = 81, 82
     testing.expect_value(t, collections.append_entry(fixture.set, {
-        id = group_id, collection_id = fixture.first_collection,
-        sibling_order = 0, kind = .Group,
+        id = group_id,
+        collection_id = fixture.first_collection,
+        sibling_order = 0,
+        kind = .Group,
     }), collections.Policy_Error.None)
     testing.expect_value(t, collections.append_entry(fixture.set, {
-        id = child_id, collection_id = fixture.first_collection,
-        parent_entry_id = group_id, sibling_order = 0,
-        kind = .Animation, animation_id = fixture.nodes[0].stable_id,
+        id = child_id,
+        collection_id = fixture.first_collection,
+        parent_entry_id = group_id,
+        sibling_order = 0,
+        kind = .Animation,
+        animation_id = fixture.nodes[0].stable_id,
     }), collections.Policy_Error.None)
-    params := uilibrary.Tree_List_Params{
-        ji = &fixture.ji, ui_runtime = &fixture.runtime, collections = fixture.set,
+    params: uilibrary.Tree_List_Params = {
+        ji = &fixture.ji,
+        ui_runtime = &fixture.runtime,
+        collections = fixture.set,
         collections_revision = 1,
     }
     testing.expect(t, uilibrary.tree_projection_prepare(params))
@@ -291,7 +300,7 @@ tree_custom_placement_expect_group_reconciliation :: proc(
     child := uilibrary.tree_projection_find(projection, child_id)
     group_node := projection.items[group]
     child_node := projection.items[child]
-    added_id := uuid.Identifier{}
+    added_id: uuid.Identifier = {}
     added_id[0] = 83
     mutation, failure := collections.make_collection_animation_add_mutation(
         fixture.set, fixture.first_collection, added_id, fixture.nodes[1].stable_id)

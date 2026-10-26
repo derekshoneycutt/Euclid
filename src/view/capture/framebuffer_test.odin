@@ -63,8 +63,12 @@ framebuffer_test_load :: proc(user_data: rawptr) -> capturemodel.Framebuffer_Pix
        return {}
     }
     copy(pixels, state^.source)
-    return {pixels = pixels, width = state^.width, height = state^.height,
-        pitch_bytes = state^.pitch_bytes}
+    return {
+        pixels = pixels,
+        width = state^.width,
+        height = state^.height,
+        pitch_bytes = state^.pitch_bytes,
+    }
 }
 
 // Complete one test capture domain; individual allocations are already released.
@@ -110,7 +114,9 @@ framebuffer_test_operations :: proc(
 framebuffer_test_source :: proc(
     pixels: []u8, width, height: int) -> Framebuffer_Capture_Test_State {
     return {
-        source = pixels, width = width, height = height,
+        source = pixels,
+        width = width,
+        height = height,
         pitch_bytes = width * FRAMEBUFFER_PIXEL_BYTES,
         allocator = context.allocator,
     }
@@ -223,7 +229,7 @@ framebuffer_capture_rejects_overlapping_acquisition :: proc(t: ^testing.T) {
 @(test)
 framebuffer_capture_rejects_invalid_images :: proc(t: ^testing.T) {
     source: [16]u8
-    invalid_states := [3]Framebuffer_Capture_Test_State{
+    invalid_states: [3]Framebuffer_Capture_Test_State = {
         framebuffer_test_source(nil, 2, 2),
         framebuffer_test_source(source[:], 0, 2),
         framebuffer_test_source(source[:], 2, 2),
@@ -244,7 +250,7 @@ framebuffer_capture_rejects_invalid_images :: proc(t: ^testing.T) {
 // Verify crop and nearest-neighbor resize preserve exact top-left RGBA pixels.
 @(test)
 framebuffer_capture_mutations_refresh_metadata :: proc(t: ^testing.T) {
-    source := [4 * 2 * FRAMEBUFFER_PIXEL_BYTES]u8{
+    source: [4 * 2 * FRAMEBUFFER_PIXEL_BYTES]u8 = {
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
         17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
     }
@@ -349,9 +355,14 @@ gif_capture_stages_and_commits_fixed_step_intervals :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     state^.gif_capture = {
         operations = gif_capture_test_encoder_operations(&encoder),
-        active = true, source_width = 2, source_height = 1,
-        output_width = 2, output_height = 1, active_downsample_factor = 1,
-        active_frame_step = 2, active_timing_mode = .Animation,
+        active = true,
+        source_width = 2,
+        source_height = 1,
+        output_width = 2,
+        output_height = 1,
+        active_downsample_factor = 1,
+        active_frame_step = 2,
+        active_timing_mode = .Animation,
     }
     operations := framebuffer_test_operations(&framebuffer)
 

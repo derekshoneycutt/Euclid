@@ -48,20 +48,31 @@ scenario_runtime_test_add_tree_item :: proc(
 scenario_reorder_sampling_is_bounded_and_monotonic :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "middle"))
-    state^.ui_runtime.library.actions.reorder = {active = true, start_seconds = 10}
+    state^.ui_runtime.library.actions.reorder = {
+        active = true,
+        start_seconds = 10,
+    }
     testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "unknown"))
     testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "start"))
-    frame := viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 20})
+    frame := viewscenario.scenario_pointer_frame(&runtime, {
+        sample_time_seconds = 20,
+    })
     testing.expect_value(t, frame.sample_time_seconds, f64(10))
     testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "middle"))
     testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "start"))
     testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "resume"))
-    frame = viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 10})
+    frame = viewscenario.scenario_pointer_frame(&runtime, {
+        sample_time_seconds = 10,
+    })
     testing.expect_value(t, frame.sample_time_seconds,
         10 + uiaccordion.INTERFACE_TRANSITION_SECONDS * 0.5)
-    frame = viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 20})
+    frame = viewscenario.scenario_pointer_frame(&runtime, {
+        sample_time_seconds = 20,
+    })
     testing.expect_value(t, frame.sample_time_seconds, f64(20))
 }
 
@@ -71,7 +82,7 @@ scenario_favorites_pointer_edges_are_one_shot :: proc(t: ^testing.T) {
     runtime: viewscenario.Scenario_Runtime
     testing.expect(t,
         !viewscenario.scenario_favorites_pointer(&runtime, {}, "press"))
-    bounds := geometry.Rectangle{10, 20, 30, 40}
+    bounds: geometry.Rectangle = {10, 20, 30, 40}
     testing.expect(t,
         !viewscenario.scenario_favorites_pointer(&runtime, bounds, "unknown"))
     testing.expect(t,
@@ -106,7 +117,9 @@ scenario_favorites_unpublished_actions_are_rejected :: proc(t: ^testing.T) {
     ji.animation_head = &node
     ji.animation_count = 1
     state^.julia_interface = &ji
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     testing.expect(t, !viewscenario.scenario_favorite_control(&runtime, "press"))
     testing.expect(t, !viewscenario.scenario_library_placement(
         &runtime, "press:favorite:Point"))
@@ -154,7 +167,9 @@ scenario_favorites_hidden_and_disabled_rows_reject_input :: proc(t: ^testing.T) 
         next_sibling = viewmodel.UI_TREE_NO_ITEM,
     }))
     item := state^.ui_runtime.library.tree.projection.items[0]
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     scenario_runtime_test_reject_hidden_tree_row(
         t, focus, &runtime, item, true)
     scenario_runtime_test_reject_hidden_tree_row(
@@ -192,11 +207,15 @@ scenario_runtime_settings_use_control_owner :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     particles := &state^.particle_system
     state^.ui_runtime.preferences.values = setting_model.default_preferences()
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
-    command := scenario.Command{kind = .Set_Setting,
+    command: scenario.Command = {
+        kind = .Set_Setting,
         setting_id = .Drawing_Dust_Limit,
-        setting_value = setting_model.integer_value(1400)}
+        setting_value = setting_model.integer_value(1400),
+    }
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &command, &identity)
     testing.expect(t, handled && accepted)
@@ -276,14 +295,22 @@ scenario_runtime_focus_assertion_uses_committed_snapshot :: proc(t: ^testing.T) 
     semantic^.logical_focus = {.Terminal, 0, {}, 4}
     testing.expect(t, uisemantics.semantic_begin(semantic))
     testing.expect_value(t, uisemantics.semantic_register_node(semantic, {
-        node = {id = semantic^.logical_focus, role = .Terminal,
-            states = {.Visible, .Enabled, .Focusable}}}),
+        node = {
+            id = semantic^.logical_focus,
+            role = .Terminal,
+            states = {.Visible, .Enabled, .Focusable},
+        },
+    }),
         viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, uisemantics.semantic_publish(semantic),
         viewmodel.Ui_Semantic_Status.Ok)
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
-    command := scenario.Command{kind = .Assert_Focus}
+    command: scenario.Command = {
+        kind = .Assert_Focus,
+    }
     command.text, _ = scenario.text_copy("terminal")
 
     handled, accepted := viewscenario.scenario_issue_generic_action(
@@ -307,11 +334,13 @@ scenario_runtime_key_injection_is_display_wide :: proc(t: ^testing.T) {
     defer free(state)
     input_runtime := new(input.Input_Runtime, context.allocator)
     defer free(input_runtime)
-    runtime := viewscenario.Scenario_Runtime{
+    runtime: viewscenario.Scenario_Runtime = {
         state = state,
         input_runtime = input_runtime,
     }
-    command := scenario.Command{kind = .Key}
+    command: scenario.Command = {
+        kind = .Key,
+    }
     command.text, _ = scenario.text_copy("space")
 
     testing.expect(t, viewscenario.scenario_issue_key(&runtime, &command))
@@ -343,10 +372,18 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     state^.evidence_session.enabled = true
     state^.evidence_session.required_evidence_complete = true
 
-    program := scenario.Program{count = 3}
-    program.commands[0] = {kind = .Pause_Simulation}
-    program.commands[1] = {kind = .Resume_Simulation}
-    program.commands[2] = {kind = .Shutdown}
+    program: scenario.Program = {
+        count = 3,
+    }
+    program.commands[0] = {
+        kind = .Pause_Simulation,
+    }
+    program.commands[1] = {
+        kind = .Resume_Simulation,
+    }
+    program.commands[2] = {
+        kind = .Shutdown,
+    }
     runtime: viewscenario.Scenario_Runtime
     viewscenario.scenario_runtime_init(&runtime, state, program)
 
@@ -355,7 +392,7 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     testing.expect(t, !state^.ui_runtime.playback.simulation_paused)
     testing.expect(t, runtime.shutdown_requested)
 
-    failed := viewscenario.Scenario_Runtime{
+    failed: viewscenario.Scenario_Runtime = {
         state = state,
         terminal_reason = artifact.Reason.Assertion_Failed,
     }
@@ -374,10 +411,16 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
 scenario_runtime_animation_pause_uses_display_owned_state :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
-    pause := scenario.Command{kind = .Pause_Animation}
-    resume := scenario.Command{kind = .Resume_Animation}
+    pause: scenario.Command = {
+        kind = .Pause_Animation,
+    }
+    resume: scenario.Command = {
+        kind = .Resume_Animation,
+    }
 
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &pause, &identity)
@@ -400,12 +443,19 @@ scenario_runtime_dust_emission_queues_particle_request :: proc(t: ^testing.T) {
     defer free(executor)
     particle_system^.use_max_dust_particles = 100
     state^.simulation_executor = executor
-    runtime := viewscenario.Scenario_Runtime{state = state}
-    command := scenario.Command{
-        kind = .Emit_Dust, dust_distribution = .Grid, dust_count = 50,
-        value = 0.5, secondary_value = 0.4, tertiary_value = 0.2,
-        dust_seed = 9}
-    identity := evidence_trace.Identity{.Scenario_Action, 12, 1}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
+    command: scenario.Command = {
+        kind = .Emit_Dust,
+        dust_distribution = .Grid,
+        dust_count = 50,
+        value = 0.5,
+        secondary_value = 0.4,
+        tertiary_value = 0.2,
+        dust_seed = 9,
+    }
+    identity: evidence_trace.Identity = {.Scenario_Action, 12, 1}
 
     handled, accepted := viewscenario.scenario_issue_generic_action(
         &runtime, &command, &identity)
@@ -429,11 +479,16 @@ scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
     executor := new(core.Simulation_Executor, context.allocator)
     defer free(executor)
     state^.simulation_executor = executor
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
 
-    contact := scenario.Command{
-        kind = .Contact_Dust, value = 0.25, secondary_value = 0.75}
+    contact: scenario.Command = {
+        kind = .Contact_Dust,
+        value = 0.25,
+        secondary_value = 0.75,
+    }
     handled, accepted := viewscenario.scenario_issue_generic_action(
         &runtime, &contact, &identity)
     testing.expect(t, handled && accepted)
@@ -441,7 +496,9 @@ scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
     testing.expect_value(t, particle_system^.dust_tool_contacts[0].source,
         particlemodel.Dust_Tool_Contact_Source.Scenario)
 
-    kick := scenario.Command{kind = .Kick_Dust}
+    kick: scenario.Command = {
+        kind = .Kick_Dust,
+    }
     handled, accepted = viewscenario.scenario_issue_generic_action(
         &runtime, &kick, &identity)
     testing.expect(t, handled && accepted)
@@ -458,8 +515,10 @@ scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
     particle_system^.low_particles[0].alive = true
     particle_system^.low_particles[0].life = 1
     before_velocity := particle_system^.low_particles.vel_z[0]
-    data := core.Simulation_Task_Data{
-        state = state, scenario_dust_kick_requested = true}
+    data: core.Simulation_Task_Data = {
+        state = state,
+        scenario_dust_kick_requested = true,
+    }
 
     viewsimulation.consume_scenario_dust_requests(&data)
 
@@ -482,8 +541,14 @@ scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
     data^.state = state
     data^.dust_emission_queue.count = 1
     data^.dust_emission_queue.items[0] = {
-        distribution = .Point, count = 8, x = 0.5, y = 0.5,
-        seed = 3, correlation = 14, generation = 1}
+        distribution = .Point,
+        count = 8,
+        x = 0.5,
+        y = 0.5,
+        seed = 3,
+        correlation = 14,
+        generation = 1,
+    }
     evidence_trace.ring_init(&data^.evidence_ring, .Particle_Worker)
 
     viewsimulation.consume_scenario_dust_requests(data)
@@ -518,10 +583,15 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     }
     state^.ui_runtime.layout.vertical_split_x = 900
     state^.ui_runtime.layout.horizontal_split_y = 500
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
 
-    scroll := scenario.Command{kind = .Set_View_Scroll, value = 90}
+    scroll: scenario.Command = {
+        kind = .Set_View_Scroll,
+        value = 90,
+    }
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &scroll, &identity)
     testing.expect(t, handled && accepted)
@@ -529,8 +599,11 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
     testing.expect_value(t, state^.ui_runtime.presentation.text_scroll_y, f32(90))
 
-    splitters := scenario.Command{
-        kind = .Set_Splitters, value = 0, secondary_value = 720}
+    splitters: scenario.Command = {
+        kind = .Set_Splitters,
+        value = 0,
+        secondary_value = 720,
+    }
     handled, accepted = viewscenario.scenario_issue_display_action(
         &runtime, &splitters, &identity)
     testing.expect(t, handled && accepted)
@@ -553,11 +626,16 @@ scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.
     state^.ui_runtime.layout.vertical_split_x = 320
     state^.ui_runtime.layout.horizontal_split_y = 580
     state^.ui_runtime.layout.current_layout_mode = .Portrait
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
     landscape := state^.ui_runtime.layout.landscape
-    splitters := scenario.Command{
-        kind = .Set_Splitters, value = 1000, secondary_value = 360}
+    splitters: scenario.Command = {
+        kind = .Set_Splitters,
+        value = 1000,
+        secondary_value = 360,
+    }
     handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &splitters, &identity)
     testing.expect(t, handled && accepted)
@@ -572,8 +650,12 @@ scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.
 // Verify portrait startup resolves directly to the selected-title View section.
 @(test)
 runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
-    settings := core.Euclid_Run_Settings{
-        window = {width = 640, height = 720, layout = .Portrait},
+    settings: core.Euclid_Run_Settings = {
+        window = {
+            width = 640,
+            height = 720,
+            layout = .Portrait,
+        },
     }
     runtime: viewmodel.Euclid_Ui_Runtime_State
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
@@ -601,8 +683,13 @@ scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
 
     path, copied := scenario.text_copy(".build/test-artifacts/frame.png")
     testing.expect(t, copied)
-    program := scenario.Program{count = 1}
-    program.commands[0] = {kind = .Request_Screenshot, text = path}
+    program: scenario.Program = {
+        count = 1,
+    }
+    program.commands[0] = {
+        kind = .Request_Screenshot,
+        text = path,
+    }
     runtime: viewscenario.Scenario_Runtime
     viewscenario.scenario_runtime_init(&runtime, state, program)
 
@@ -630,8 +717,13 @@ scenario_runtime_records_post_present_capture_failure :: proc(t: ^testing.T) {
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
     path, copied := scenario.text_copy(".build/test-artifacts/failed-frame.png")
     testing.expect(t, copied)
-    program := scenario.Program{count = 1}
-    program.commands[0] = {kind = .Request_Screenshot, text = path}
+    program: scenario.Program = {
+        count = 1,
+    }
+    program.commands[0] = {
+        kind = .Request_Screenshot,
+        text = path,
+    }
     runtime: viewscenario.Scenario_Runtime
     viewscenario.scenario_runtime_init(&runtime, state, program)
     testing.expect_value(t,
@@ -671,8 +763,13 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
     ji.animation_count = len(nodes)
     command_text, copied := scenario.text_copy("Target")
     testing.expect(t, copied)
-    command := scenario.Command{kind = .Select_Animation, text = command_text}
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    command: scenario.Command = {
+        kind = .Select_Animation,
+        text = command_text,
+    }
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
 
     handled, accepted := viewscenario.scenario_issue_julia_action(
@@ -694,8 +791,12 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
     defer free(service)
     state^.julia_runtime_service = service
     service^.runtime_generation = 7
-    command := scenario.Command{kind = .Reload_Runtime}
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    command: scenario.Command = {
+        kind = .Reload_Runtime,
+    }
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     identity: evidence_trace.Identity
 
     handled, accepted := viewscenario.scenario_issue_julia_action(
@@ -711,11 +812,17 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
 // Verify correlated set and suggestion actions mutate ordinary search state.
 scenario_expect_library_search_mutations :: proc(
     t: ^testing.T, runtime: ^viewscenario.Scenario_Runtime) {
-    identity := evidence_trace.Identity{
-        kind = .Scenario_Action, id = 17, generation = 1}
+    identity: evidence_trace.Identity = {
+        kind = .Scenario_Action,
+        id = 17,
+        generation = 1,
+    }
     query, copied := scenario.text_copy("perpendiculr")
     testing.expect(t, copied)
-    set_command := scenario.Command{kind = .Set_Library_Search, text = query}
+    set_command: scenario.Command = {
+        kind = .Set_Library_Search,
+        text = query,
+    }
 
     handled, accepted := viewscenario.scenario_issue_library_search_action(
         runtime, &set_command, &identity)
@@ -729,10 +836,14 @@ scenario_expect_library_search_mutations :: proc(
 
     copy(search^.suggestion[:], "perpendicular")
     search^.suggestion_length = len("perpendicular")
-    correction := evidence_trace.Identity{
-        kind = .Scenario_Action, id = 18, generation = 1}
-    suggestion_command := scenario.Command{
-        kind = .Apply_Library_Search_Suggestion}
+    correction: evidence_trace.Identity = {
+        kind = .Scenario_Action,
+        id = 18,
+        generation = 1,
+    }
+    suggestion_command: scenario.Command = {
+        kind = .Apply_Library_Search_Suggestion,
+    }
     handled, accepted = viewscenario.scenario_issue_library_search_action(
         runtime, &suggestion_command, &correction)
     testing.expect(t, handled && accepted)
@@ -745,9 +856,14 @@ scenario_expect_library_search_mutations :: proc(
 scenario_expect_library_search_clear :: proc(
     t: ^testing.T, runtime: ^viewscenario.Scenario_Runtime) {
     search := &runtime^.state^.ui_runtime.library.search
-    clear := evidence_trace.Identity{
-        kind = .Scenario_Action, id = 19, generation = 1}
-    clear_command := scenario.Command{kind = .Clear_Library_Search}
+    clear: evidence_trace.Identity = {
+        kind = .Scenario_Action,
+        id = 19,
+        generation = 1,
+    }
+    clear_command: scenario.Command = {
+        kind = .Clear_Library_Search,
+    }
     handled, accepted := viewscenario.scenario_issue_library_search_action(
         runtime, &clear_command, &clear)
     testing.expect(t, handled && accepted)
@@ -774,7 +890,9 @@ scenario_library_search_actions_are_correlated :: proc(t: ^testing.T) {
     state^.evidence_session.required_evidence_complete = true
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
     state^.ui_runtime.library.search.worker_available = true
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     scenario_expect_library_search_mutations(t, &runtime)
     scenario_expect_library_search_clear(t, &runtime)
 }
@@ -845,11 +963,19 @@ scenario_view_content_submits_typed_owner_request :: proc(t: ^testing.T) {
     service^.animation_generation = 9
     source, copied := scenario.text_copy("$A_1$")
     testing.expect(t, copied)
-    command := scenario.Command{kind = .Set_View_Content,
-        view_content_mime = .Text_Latex, text = source}
-    runtime_state := viewscenario.Scenario_Runtime{state = state}
-    identity := evidence_trace.Identity{
-        kind = .Scenario_Action, id = 4, generation = 1}
+    command: scenario.Command = {
+        kind = .Set_View_Content,
+        view_content_mime = .Text_Latex,
+        text = source,
+    }
+    runtime_state: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
+    identity: evidence_trace.Identity = {
+        kind = .Scenario_Action,
+        id = 4,
+        generation = 1,
+    }
 
     handled, accepted := viewscenario.scenario_issue_julia_action(
         &runtime_state, &command, &identity)

@@ -69,8 +69,9 @@ scenario_collection_create_control :: proc(
         return true
     }
     focus := runtime^.state^.ui_runtime.semantic_focus
-    id := viewmodel.Ui_Node_Id{
-        domain = .Library_Action, local_id = uilibrary.TREE_COLLECTION_CREATE,
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = uilibrary.TREE_COLLECTION_CREATE,
         stable_id = item^.key,
         generation = runtime^.state^.julia_interface^.content_generation,
     }
@@ -94,15 +95,19 @@ scenario_collection_delete_control :: proc(
         return false
     }
     focus := runtime.state.ui_runtime.semantic_focus
-    id := viewmodel.Ui_Node_Id{
-        domain = .Library_Action, local_id = uilibrary.TREE_COLLECTION_DELETE,
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = uilibrary.TREE_COLLECTION_DELETE,
         stable_id = item.key,
         generation = runtime.state.julia_interface.content_generation,
     }
     if operation == "delete_focus" || operation == "delete_activate" {
         kind := viewmodel.Ui_Focus_Command_Kind.Focus if
             operation == "delete_focus" else viewmodel.Ui_Focus_Command_Kind.Activate
-        return scenario_library_queue_command(runtime, {target = id, kind = kind})
+        return scenario_library_queue_command(runtime, {
+            target = id,
+            kind = kind,
+        })
     }
     snapshot := uisemantics.semantic_snapshot(focus)
     index := uisemantics.semantic_node_index(snapshot, id)

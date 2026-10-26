@@ -29,10 +29,13 @@ tree_projection_add_custom_heads :: proc(
         return false
     }
     for index in projection^.order_workspace[:count] {
-        if tree_projection_add(projection, previous, {
-            key = set^.collections[index].id, kind = .Collection,
-            parent = root, selectable = true,
-        }) == TREE_NO_ITEM {
+        if tree_projection_add(projection, previous,
+            {
+                key = set^.collections[index].id,
+                kind = .Collection,
+                parent = root,
+                selectable = true,
+            }) == TREE_NO_ITEM {
             return false
         }
     }
@@ -168,9 +171,13 @@ tree_projection_stage_custom_head_nodes :: proc(
             continue
         }
         node, ok := viewmodel.ui_tree_projection_make_node({
-            key = id, kind = .Collection, selectable = true,
-            parent = root, first_child = TREE_NO_ITEM,
-            last_child = TREE_NO_ITEM, next_sibling = TREE_NO_ITEM,
+            key = id,
+            kind = .Collection,
+            selectable = true,
+            parent = root,
+            first_child = TREE_NO_ITEM,
+            last_child = TREE_NO_ITEM,
+            next_sibling = TREE_NO_ITEM,
         }, "", allocator)
         if !ok {
             tree_projection_reconcile_free_nodes(projection, nodes, node_count)

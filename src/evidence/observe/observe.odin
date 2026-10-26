@@ -29,13 +29,13 @@ import animationmodel "../../core/animation"
 // next_sequence includes sequence identities consumed by dropped events.
 Trace_State :: struct {
     // Producer identity and sticky required-evidence health.
-    producer : evidence_trace.Producer,
-    evidence_complete : bool,
+    producer: evidence_trace.Producer,
+    evidence_complete: bool,
 
     // Current retained records, unreported drops, and next local identity.
-    event_count : int,
-    pending_drops : u64,
-    next_sequence : u64,
+    event_count: int,
+    pending_drops: u64,
+    next_sequence: u64,
 }
 
 // Pointer-free snapshot of pane-local Dynview presentation dust.
@@ -96,117 +96,117 @@ Display :: struct {
     presentation_visible: bool,
     presentation_effects: Presentation_Effects,
     // Fixed-step simulation clock and display-owned pause control.
-    fixed_step : u64,
-    simulation_time : f32,
-    simulation_paused : bool,
-    animation_policy_paused : bool,
-    animation_controls_hidden : bool,
-    animation_playback_rate : animationmodel.Playback_Rate,
-    animation_effective_rate : animationmodel.Playback_Rate,
+    fixed_step: u64,
+    simulation_time: f32,
+    simulation_paused: bool,
+    animation_policy_paused: bool,
+    animation_controls_hidden: bool,
+    animation_playback_rate: animationmodel.Playback_Rate,
+    animation_effective_rate: animationmodel.Playback_Rate,
 
     // Julia runtime lifecycle, active request, and submission pressure.
-    runtime_lifecycle : bridgemodel.Julia_Lifecycle_State,
-    runtime_generation : u64,
-    active_runtime_request_id : u64,
-    failed_runtime_request_count : u64,
-    runtime_request_saturation_count : u64,
-    terminal_ready : bool,
-    terminal_idle : bool,
-    terminal_continuation : bool,
-    terminal_completion_ready : bool,
+    runtime_lifecycle: bridgemodel.Julia_Lifecycle_State,
+    runtime_generation: u64,
+    active_runtime_request_id: u64,
+    failed_runtime_request_count: u64,
+    runtime_request_saturation_count: u64,
+    terminal_ready: bool,
+    terminal_idle: bool,
+    terminal_continuation: bool,
+    terminal_completion_ready: bool,
 
     // Terminal graphics transfer, publication, residency, and playback state.
-    graphics_transfer_admission_count : u64,
-    graphics_transfer_rejection_count : u64,
-    graphics_decode_count : u64,
-    graphics_failure_count : u64,
-    graphics_cancellation_count : u64,
-    graphics_publication_count : u64,
-    graphics_stale_completion_count : u64,
-    graphics_eviction_count : u64,
-    graphics_draw_count : u64,
-    graphics_draw_rejection_count : u64,
-    graphics_cpu_byte_count : int,
-    graphics_gpu_byte_count : int,
-    graphics_animation_decode_byte_count : int,
-    graphics_animated_attachment_count : int,
-    graphics_animation_admission_count : u64,
-    graphics_animation_rejection_count : u64,
-    graphics_gif_preflight_acceptance_count : u64,
-    graphics_gif_preflight_rejection_count : u64,
-    graphics_queue_full_count : u64,
-    graphics_playback_transition_count : u64,
-    graphics_playback_completion_count : u64,
-    graphics_playback_upload_failure_count : u64,
-    graphics_playback_stale_count : u64,
-    graphics_visibility_pause_count : u64,
-    graphics_visibility_resume_count : u64,
+    graphics_transfer_admission_count: u64,
+    graphics_transfer_rejection_count: u64,
+    graphics_decode_count: u64,
+    graphics_failure_count: u64,
+    graphics_cancellation_count: u64,
+    graphics_publication_count: u64,
+    graphics_stale_completion_count: u64,
+    graphics_eviction_count: u64,
+    graphics_draw_count: u64,
+    graphics_draw_rejection_count: u64,
+    graphics_cpu_byte_count: int,
+    graphics_gpu_byte_count: int,
+    graphics_animation_decode_byte_count: int,
+    graphics_animated_attachment_count: int,
+    graphics_animation_admission_count: u64,
+    graphics_animation_rejection_count: u64,
+    graphics_gif_preflight_acceptance_count: u64,
+    graphics_gif_preflight_rejection_count: u64,
+    graphics_queue_full_count: u64,
+    graphics_playback_transition_count: u64,
+    graphics_playback_completion_count: u64,
+    graphics_playback_upload_failure_count: u64,
+    graphics_playback_stale_count: u64,
+    graphics_visibility_pause_count: u64,
+    graphics_visibility_resume_count: u64,
 
     // Animation publication identity and display-side tick state.
-    animation_generation : u64,
-    animation_tick_sequence : u64,
-    animation_last_committed_sequence : u64,
-    animation_tick_pending : bool,
-    animation_ticks_dropped : u64,
+    animation_generation: u64,
+    animation_tick_sequence: u64,
+    animation_last_committed_sequence: u64,
+    animation_tick_pending: bool,
+    animation_ticks_dropped: u64,
 
     // Current initialized prefixes of display-visible model storage.
-    point_count : int,
-    constraint_count : int,
-    particle_count : int,
+    point_count: int,
+    constraint_count: int,
+    particle_count: int,
 
     // Particle-owned dust settling and bounded contact diagnostics.
-    dust_live_count : int,
-    dust_airborne_count : int,
-    dust_grounded_count : int,
-    dust_peak_speed_sq : f32,
-    dust_kinetic_measure : f32,
-    dust_field_solve_node_count : int,
-    dust_tool_contact_overflow_count : int,
-    dust_tool_contact_coalesced_count : u64,
-    dust_tool_contact_sample_count : u64,
-    dust_tool_contact_field_node_visit_count : u64,
-    dust_rendered_count : int,
+    dust_live_count: int,
+    dust_airborne_count: int,
+    dust_grounded_count: int,
+    dust_peak_speed_sq: f32,
+    dust_kinetic_measure: f32,
+    dust_field_solve_node_count: int,
+    dust_tool_contact_overflow_count: int,
+    dust_tool_contact_coalesced_count: u64,
+    dust_tool_contact_sample_count: u64,
+    dust_tool_contact_field_node_visit_count: u64,
+    dust_rendered_count: int,
 
     // Dynamic-view activation and pending invalidation work.
-    dynview_enabled : bool,
-    dynview_pending_invalidation_mask : u32,
+    dynview_enabled: bool,
+    dynview_pending_invalidation_mask: u32,
 
     // Effective display-owned presentation viewport state.
-    view_text_scroll_y : f32,
-    view_text_scroll_max : f32,
-    vertical_split_x : f32,
-    horizontal_split_y : f32,
+    view_text_scroll_y: f32,
+    view_text_scroll_max: f32,
+    vertical_split_x: f32,
+    horizontal_split_y: f32,
     // Last presented colored mesh and projected curve-reduction metrics.
-    colored_vertex_count : u32,
-    colored_index_count : u32,
-    curve_candidate_point_count : u32,
-    curve_retained_point_count : u32,
-    curve_retention_ratio : f32,
-    colored_primitive_overflow_count : u32,
+    colored_vertex_count: u32,
+    colored_index_count: u32,
+    curve_candidate_point_count: u32,
+    curve_retained_point_count: u32,
+    curve_retention_ratio: f32,
+    colored_primitive_overflow_count: u32,
 
     // GIF capture lifecycle and completed frame count.
-    gif_capture_active : bool,
-    gif_capture_phase : capturemodel.Gif_Capture_Phase,
-    gif_captured_frames : int,
+    gif_capture_active: bool,
+    gif_capture_phase: capturemodel.Gif_Capture_Phase,
+    gif_captured_frames: int,
 
     // Library-search request completion and accepted-result state.
-    library_search_idle : bool,
-    library_search_has_matches : bool,
+    library_search_idle: bool,
+    library_search_has_matches: bool,
 
     // Display-owned tooltip visibility after the last prepared frame.
-    tooltip_visible : bool,
+    tooltip_visible: bool,
 
     // Aggregate required-evidence health and display producer state.
-    required_evidence_complete : bool,
-    trace : Trace_State,
+    required_evidence_complete: bool,
+    trace: Trace_State,
 }
 
 // Borrowed owner-model components used to assemble one display observation.
 //
 // Callers must keep every non-nil component stable for the duration of display.
 Display_Source :: struct {
-    fixed_step : u64,
-    simulation_time : f32,
+    fixed_step: u64,
+    simulation_time: f32,
     ui_layout: ^viewmodel.Ui_Layout_State,
     ui_library: ^viewmodel.Ui_Library_State,
     ui_presentation: ^viewmodel.Ui_Presentation_Interaction_State,
@@ -217,15 +217,15 @@ Display_Source :: struct {
     presentation_effects: Presentation_Effects,
     preferences_runtime: ^preferencesmodel.Settings_Save_Runtime,
     telemetry: ^telemetrymodel.Runtime,
-    gif_capture : ^capturemodel.Gif_Capture_Session,
+    gif_capture: ^capturemodel.Gif_Capture_Session,
     gif_capture_status: ^capturemodel.Gif_Capture_Status,
-    terminal : ^viewterminalmodel.Terminal_State,
-    dynview : ^dynviewmodel.Dynview_System,
-    shape_world : ^shapemodel.Shape_World,
-    particle_system : ^particlemodel.Particle_System,
-    julia_service : ^bridgemodel.Julia_Runtime_Service,
-    required_evidence_complete : bool,
-    evidence_ring : ^evidence_trace.Ring,
+    terminal: ^viewterminalmodel.Terminal_State,
+    dynview: ^dynviewmodel.Dynview_System,
+    shape_world: ^shapemodel.Shape_World,
+    particle_system: ^particlemodel.Particle_System,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
+    required_evidence_complete: bool,
+    evidence_ring: ^evidence_trace.Ring,
 }
 
 // Pointer-free snapshot of state authoritative to the Julia host owner.
@@ -235,45 +235,45 @@ Display_Source :: struct {
 // outcomes without exposing the service's mutable queues.
 Julia_Host :: struct {
     // Runtime lifecycle, active request identity, and submission outcomes.
-    lifecycle : bridgemodel.Julia_Lifecycle_State,
-    runtime_generation : u64,
-    active_request_id : u64,
-    active_request_kind : bridgemodel.Julia_Request_Kind,
-    failed_request_count : u64,
-    request_saturation_count : u64,
+    lifecycle: bridgemodel.Julia_Lifecycle_State,
+    runtime_generation: u64,
+    active_request_id: u64,
+    active_request_kind: bridgemodel.Julia_Request_Kind,
+    failed_request_count: u64,
+    request_saturation_count: u64,
 
     // Animation publication identity, pending state, and lifetime outcomes.
-    animation_generation : u64,
-    animation_tick_sequence : u64,
-    animation_last_committed_sequence : u64,
-    animation_tick_pending : bool,
-    animation_ticks_submitted : u64,
-    animation_ticks_committed : u64,
-    animation_ticks_coalesced : u64,
-    animation_ticks_stale : u64,
-    animation_ticks_dropped : u64,
+    animation_generation: u64,
+    animation_tick_sequence: u64,
+    animation_last_committed_sequence: u64,
+    animation_tick_pending: bool,
+    animation_ticks_submitted: u64,
+    animation_ticks_committed: u64,
+    animation_ticks_coalesced: u64,
+    animation_ticks_stale: u64,
+    animation_ticks_dropped: u64,
 
     // Julia-host producer evidence state.
-    trace : Trace_State,
+    trace: Trace_State,
 }
 
 // Producer-ring summaries made stable by simulation and preparation joins.
 Simulation :: struct {
     // Fixed-step worker evidence.
-    particle : Trace_State,
-    constraint : Trace_State,
+    particle: Trace_State,
+    constraint: Trace_State,
 
     // Frame-preparation worker evidence.
-    shape_cache : Trace_State,
-    dynview : Trace_State,
+    shape_cache: Trace_State,
+    dynview: Trace_State,
 }
 
 // Borrowed producer rings made stable by simulation and preparation joins.
 Simulation_Source :: struct {
-    particle : ^evidence_trace.Ring,
-    constraint : ^evidence_trace.Ring,
-    shape_cache : ^evidence_trace.Ring,
-    dynview : ^evidence_trace.Ring,
+    particle: ^evidence_trace.Ring,
+    constraint: ^evidence_trace.Ring,
+    shape_cache: ^evidence_trace.Ring,
+    dynview: ^evidence_trace.Ring,
 }
 
 // Stable scenario lifecycle independent of parser and runner storage.
@@ -296,17 +296,17 @@ Scenario_Lifecycle :: enum u8 {
 // active monotonic wait deadline, or zero when no bounded wait is active.
 Scenario :: struct {
     // Current lifecycle and command progress.
-    lifecycle : Scenario_Lifecycle,
-    current_step : u32,
-    step_count : u32,
+    lifecycle: Scenario_Lifecycle,
+    current_step: u32,
+    step_count: u32,
 
     // Cumulative verification outcomes.
-    assertion_count : u32,
-    failure_count : u32,
+    assertion_count: u32,
+    failure_count: u32,
 
     // Active wait bound and sticky required-evidence health.
-    deadline_ns : u64,
-    required_evidence_complete : bool,
+    deadline_ns: u64,
+    required_evidence_complete: bool,
 }
 
 //   Copy one ring's scalar state at its owner or synchronized boundary.
@@ -541,7 +541,7 @@ display :: proc(source: ^Display_Source) -> Display {
     if source == nil {
         return {}
     }
-    result := Display{
+    result: Display = {
         fixed_step = source.fixed_step,
         simulation_time = source.simulation_time,
         required_evidence_complete = source.required_evidence_complete &&

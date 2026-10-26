@@ -486,7 +486,7 @@ userdata_rollback_failure_marks_store_unusable :: proc(t: ^testing.T) {
 // Prove a collection replay error rolls back an earlier settings write.
 userdata_test_expect_combined_rollback :: proc(
     t: ^testing.T, store: ^Store, changes: settings.Change_Set) {
-    invalid := collections.Mutation{
+    invalid: collections.Mutation = {
         kind = .Remove_Favorite,
         placement = userdata_test_favorite_identity(userdata_test_id(71)),
         entry_id = userdata_test_id(71),
@@ -559,7 +559,7 @@ userdata_test_expect_favorites_order :: proc(
 // Seed a durable Favorites sequence and return its immutable add operations.
 userdata_test_seed_favorites :: proc(
     t: ^testing.T, store: ^Store) -> [3]collections.Mutation {
-    additions := [3]collections.Mutation{
+    additions: [3]collections.Mutation = {
         userdata_test_add_favorite(userdata_test_id(31), userdata_test_id(41)),
         userdata_test_add_favorite(userdata_test_id(32), userdata_test_id(42)),
         userdata_test_add_favorite(userdata_test_id(33), userdata_test_id(43)),
@@ -608,7 +608,7 @@ userdata_collection_mutation_rollback_is_atomic :: proc(t: ^testing.T) {
     changes: settings.Change_Set
     testing.expect(t, settings.change_set_set(
         &changes, .Rendering_Vsync, settings.boolean_value(false)))
-    move := collections.Mutation{
+    move: collections.Mutation = {
         kind = .Reorder_Siblings,
         placement = additions[0].placement,
         entry_id = additions[0].entry_id,
@@ -631,21 +631,21 @@ userdata_test_commit_reordered_favorites :: proc(
         &changes, .Rendering_Vsync, settings.boolean_value(false)))
     d := userdata_test_add_favorite(
         userdata_test_id(34), userdata_test_id(44))
-    move_a_down_b := collections.Mutation{
+    move_a_down_b: collections.Mutation = {
         kind = .Reorder_Siblings,
         placement = a.placement,
         entry_id = a.entry_id,
         sibling_entry_id = b.entry_id,
         direction = .Down,
     }
-    move_a_down_c := collections.Mutation{
+    move_a_down_c: collections.Mutation = {
         kind = .Reorder_Siblings,
         placement = a.placement,
         entry_id = a.entry_id,
         sibling_entry_id = c.entry_id,
         direction = .Down,
     }
-    remove_b := collections.Mutation{
+    remove_b: collections.Mutation = {
         kind = .Remove_Favorite,
         placement = b.placement,
         entry_id = b.entry_id,
@@ -670,7 +670,7 @@ userdata_collection_mutation_moves_round_trip_after_reopen :: proc(
         store_open(&store, fixture.path).kind, Store_Error_Kind.None)
     additions := userdata_test_seed_favorites(t, &store)
     a, b, c := additions[0], additions[1], additions[2]
-    d := collections.Mutation{
+    d: collections.Mutation = {
         entry_id = userdata_test_id(34),
         animation_id = userdata_test_id(44),
     }
@@ -829,7 +829,7 @@ userdata_collection_entry_name_batch_rolls_back_atomically :: proc(t: ^testing.T
     userdata_test_open_favorites_entry(t, &store, fixture.path, entry_id)
     identity := userdata_test_favorite_identity(entry_id)
     set_name, _ := collections.make_placement_name_mutation(identity, "Custom")
-    invalid := collections.Mutation{
+    invalid: collections.Mutation = {
         kind = .Remove_Favorite,
         placement = userdata_test_favorite_identity(userdata_test_id(99)),
         entry_id = userdata_test_id(99),
@@ -1107,7 +1107,7 @@ userdata_test_collection_snapshot :: proc(t: ^testing.T) -> ^collections.Set {
 
 // Add Favorites and named collection metadata to the persistence fixture.
 userdata_test_collection_records :: proc(t: ^testing.T, snapshot: ^collections.Set) {
-    name := [4]u8{'W', 'o', 'r', 'k'}
+    name: [4]u8 = {'W', 'o', 'r', 'k'}
     testing.expect_value(t, collections.append_collection(snapshot, {
         id = userdata_test_id(41),
         role = .User,
@@ -1253,7 +1253,7 @@ userdata_test_fill_large_favorites :: proc(
             custom_name = transmute([]u8)custom_label
             custom_name_length = len(custom_name)
         }
-        entry := collections.Entry{
+        entry: collections.Entry = {
             id = userdata_test_index_id(u32(index + 1)),
             collection_id = collections.FAVORITES_COLLECTION_ID,
             sibling_order = i64(index),

@@ -9,7 +9,7 @@ draw_encoded_focus_ring :: proc(
     encoder: ^native.Draw_Encoder, bounds: geometry.Rectangle) {
     _ = native.draw_encoder_rectangle_outline(
         encoder, bounds, 2, theme.draw_color(encoder, .Text))
-    inner := geometry.Rectangle{
+    inner: geometry.Rectangle = {
         bounds.x + 2, bounds.y + 2, max(0, bounds.width - 4), max(0, bounds.height - 4)}
     _ = native.draw_encoder_rectangle_outline(
         encoder, inner, 1, theme.draw_color(encoder, .Selection_Text))

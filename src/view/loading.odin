@@ -169,7 +169,7 @@ loading_runtime_session :: proc(
     service: ^bridgemodel.Julia_Runtime_Service,
     content_service: ^viewcontent.Content_Service,
     startup_inputs: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
-    session := Euclid_Runtime_Session{
+    session: Euclid_Runtime_Session = {
         state = state,
         julia_service = service,
         content_service = content_service,

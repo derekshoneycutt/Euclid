@@ -24,7 +24,7 @@ import viewevidence "evidence"
 
 //   Enable all typed evidence lanes on one lightweight test state.
 init_test_evidence :: proc(state: ^app_core.Euclid_General_State) {
-    testing_config := evidence_session.Config{
+    testing_config: evidence_session.Config = {
         enabled = true,
         output_mode = .Sink,
         lanes = {.Lifecycle, .Domain, .Transport, .Presentation, .Scenario, .Diagnostic},
@@ -152,7 +152,7 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
 expect_single_point_checkpoint :: proc(
     t: ^testing.T, state: ^app_core.Euclid_General_State,
     event: evidence_trace.Event) {
-    handle := evidence_checkpoint.Handle{
+    handle: evidence_checkpoint.Handle = {
         slot = event.payload.handle.slot,
         generation = event.payload.handle.generation,
     }
@@ -214,8 +214,11 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     point, point_status := shapes.world_create_point(
         &state^.shape_world, {0, 0, -1}, {})
     testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
-    _, constraint_status := shapes.world_create_floor_constraint(
-        &state^.shape_world, {point = point.entity, height = 0, enabled = true})
+    _, constraint_status := shapes.world_create_floor_constraint(&state^.shape_world, {
+        point = point.entity,
+        height = 0,
+        enabled = true,
+    })
     testing.expect_value(t, constraint_status, shapemodel.Shape_World_Status.Ok)
 
     executor := viewsimulation.create_simulation_executor(state)
@@ -247,8 +250,12 @@ parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T)
     defer viewsimulation.destroy_simulation_executor(executor)
     executor^.particle_task.dust_emission_queue.count = 1
     executor^.particle_task.dust_emission_queue.items[0] = {
-        distribution = .Point, count = 16, x = 0.51, y = 0.51,
-        seed = 23}
+        distribution = .Point,
+        count = 16,
+        x = 0.51,
+        y = 0.51,
+        seed = 23,
+    }
 
     for _ in 0..<360 {
         viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
@@ -258,10 +265,13 @@ parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T)
     testing.expect_value(t, settled.dust_grounded_count, 16)
     velocity_before := state^.particle_system.low_particles.vel_x[0]
     for index in 0..<16 {
-        testing.expect(t, particles.queue_dust_tool_contact(
-            particle_system, {endpoint = {
+        testing.expect(t, particles.queue_dust_tool_contact(particle_system, {
+            endpoint = {
                 state^.particle_system.low_particles.pos_x[index],
-                state^.particle_system.low_particles.pos_y[index], 0}}))
+                state^.particle_system.low_particles.pos_y[index],
+                0,
+            },
+        }))
     }
 
     viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
@@ -380,9 +390,15 @@ dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     buffer^.command_count = 2
     buffer^.text_bytes_len = 1
     buffer^.text_bytes[0] = 'x'
-    buffer^.commands[0] = {kind = .Begin_Block, block_id = 1}
+    buffer^.commands[0] = {
+        kind = .Begin_Block,
+        block_id = 1,
+    }
     buffer^.commands[1] = {
-        kind = .Text_Run, block_id = 1, text_offset = 0, text_len = 1,
+        kind = .Text_Run,
+        block_id = 1,
+        text_offset = 0,
+        text_len = 1,
     }
     viewsimulation.run_parallel_frame_preparation(state, 0, {})
 

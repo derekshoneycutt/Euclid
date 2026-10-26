@@ -78,11 +78,18 @@ windows_test_tree_input :: proc(
 // windows_test_restart_controls returns one representative owner button.
 windows_test_restart_controls :: proc() -> [1]Adapter_Control_Input {
     return {{
-        identity = {domain = .Ui, owner_domain = 1, local_id = 2101},
+        identity = {
+            domain = .Ui,
+            owner_domain = 1,
+            local_id = 2101,
+        },
         control = {
-            role = .Button, bounds = {10, 10, 170, 42},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true,
+            role = .Button,
+            bounds = {10, 10, 170, 42},
+            label = "Restart animation",
+            actions = {.Focus, .Activate},
+            enabled = true,
+            focusable = true,
         },
     }}
 }
@@ -144,7 +151,9 @@ windows_adapter_admission_failures_are_terminal_and_typed :: proc(t: ^testing.T)
     testing.expect(t, !windows_adapter_admit_with_operations(nil, nil, {}))
     controls := windows_test_restart_controls()
     input := windows_test_tree_input(controls[:])
-    fixture := Windows_Test_Fixture{create_succeeds = true}
+    fixture: Windows_Test_Fixture = {
+        create_succeeds = true,
+    }
     windows_test_expect_missing_hwnd(t, input, &fixture)
     windows_test_expect_invalid_publication(t, input, &fixture)
     windows_test_expect_constructor_failure(t, input)
@@ -176,7 +185,7 @@ windows_test_expect_updates :: proc(
 windows_test_expect_action_and_teardown :: proc(
     t: ^testing.T, fixture: ^Windows_Test_Fixture, owner: ^Adapter,
     operations: Windows_Adapter_Operations) {
-    request := accesskit.Action_Request{
+    request: accesskit.Action_Request = {
         action = .Click,
         target_node = accesskit.Node_Id(2),
     }
@@ -196,7 +205,7 @@ windows_test_expect_action_and_teardown :: proc(
 // Verify one session owns updates, actions, events, and idempotent teardown.
 @(test)
 windows_adapter_lifecycle_owns_updates_actions_and_teardown :: proc(t: ^testing.T) {
-    fixture := Windows_Test_Fixture{
+    fixture: Windows_Test_Fixture = {
         create_succeeds = true,
         events_present = true,
     }

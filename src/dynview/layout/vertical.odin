@@ -353,7 +353,9 @@ document_place_block_contents :: proc(
         {block.content_width, first_line_indent, block.content_origin})
     for line, relative_index in lines {
         if !document_place_line_contents(
-            ctx.builders, block.line_start+relative_index, line) {return false}
+            ctx.builders, block.line_start+relative_index, line) {
+            return false
+        }
     }
     return true
 }
@@ -364,7 +366,9 @@ document_list_label_has_adjacent_body :: proc(
     source_index: int) -> bool {
 
     if source_index < 0 || source_index >= len(blocks)-1 ||
-        blocks[source_index].kind != .List_Item {return false}
+        blocks[source_index].kind != .List_Item {
+        return false
+    }
     label := blocks[source_index]
     body := blocks[source_index+1]
     return body.kind != .List_Item && body.item_first_block &&
@@ -382,9 +386,11 @@ document_place_vertical_layout :: proc(
     if !style_ok || cache^.last_cell_height <= 0 {
         return .Invalid_Argument
     }
-    ctx := Document_Vertical_Context{
-        runtime = runtime, builders = builders,
-        style = style, available_width = available_width,
+    ctx: Document_Vertical_Context = {
+        runtime = runtime,
+        builders = builders,
+        style = style,
+        available_width = available_width,
     }
     row_cursor := 0
     for block_index in 0..<builders^.blocks.count {

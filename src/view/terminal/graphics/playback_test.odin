@@ -30,9 +30,21 @@ playback_test_upload :: proc(
 // Return one deterministic two-frame animation timeline for playback tests.
 playback_test_animation :: proc(
     infinite: bool = false, repeat_count: u32 = 0) -> termattachment.Animation_View {
-    @(static) frames := [2]termattachment.Animation_Frame{
-        {pixels = {offset = 0, count = 4}, duration_ns = 20},
-        {pixels = {offset = 4, count = 4}, duration_ns = 30},
+    @(static) frames: [2]termattachment.Animation_Frame = {
+        {
+            pixels = {
+                offset = 0,
+                count = 4,
+            },
+            duration_ns = 20,
+        },
+        {
+            pixels = {
+                offset = 4,
+                count = 4,
+            },
+            duration_ns = 30,
+        },
     }
     return {
         frames = frames[:],
@@ -53,7 +65,10 @@ playback_test_publish_store_animation :: proc(
         metadata = {
             kind = .Raster,
             origin = .Iterm2,
-            metrics = {width = 1, height = 1},
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
         frame_count = 2,
         payload_byte_count = 8,
@@ -65,11 +80,17 @@ playback_test_publish_store_animation :: proc(
     testing.expect(t, found)
     preparation.pixels[4] = 77
     preparation.frames[0] = {
-        pixels = {offset = 0, count = 4},
+        pixels = {
+            offset = 0,
+            count = 4,
+        },
         duration_ns = 20_000_000,
     }
     preparation.frames[1] = {
-        pixels = {offset = 4, count = 4},
+        pixels = {
+            offset = 4,
+            count = 4,
+        },
         duration_ns = 30_000_000,
     }
     testing.expect_value(t,
@@ -98,8 +119,12 @@ playback_test_resource_baseline :: proc(t: ^testing.T) {
     testing.expect(t, found)
     entry, valid := playback_begin(id, animation, 0)
     testing.expect(t, valid)
-    service := Service{store = &store}
-    upload := Playback_Test_Upload{accept = true}
+    service: Service = {
+        store = &store,
+    }
+    upload: Playback_Test_Upload = {
+        accept = true,
+    }
 
     for update in 1..=1_000 {
         playback_update_entry(&service, &entry, u64(update) * 50_000_000,
@@ -122,7 +147,10 @@ playback_test_resource_baseline :: proc(t: ^testing.T) {
 @(test)
 playback_test_timeline_boundaries :: proc(t: ^testing.T) {
     animation := playback_test_animation(repeat_count = 1)
-    id := termattachment.Attachment_Id{slot = 1, generation = 2}
+    id: termattachment.Attachment_Id = {
+        slot = 1,
+        generation = 2,
+    }
     entry, valid := playback_begin(id, animation, 100)
     testing.expect(t, valid)
     testing.expect_value(t, entry.deadline_ns, u64(120))
@@ -144,7 +172,10 @@ playback_test_timeline_boundaries :: proc(t: ^testing.T) {
 @(test)
 playback_test_pause_resume :: proc(t: ^testing.T) {
     animation := playback_test_animation(infinite = true)
-    entry, valid := playback_begin({slot = 0, generation = 1}, animation, 100)
+    entry, valid := playback_begin({
+        slot = 0,
+        generation = 1,
+    }, animation, 100)
     testing.expect(t, valid)
     playback_pause(&entry, 110)
     testing.expect(t, entry.paused)
@@ -162,7 +193,10 @@ playback_test_pause_resume :: proc(t: ^testing.T) {
     @(test)
     playback_test_visibility_epoch :: proc(t: ^testing.T) {
         animation := playback_test_animation(infinite = true)
-        entry, valid := playback_begin({slot = 0, generation = 1}, animation, 100)
+        entry, valid := playback_begin({
+            slot = 0,
+            generation = 1,
+        }, animation, 100)
         testing.expect(t, valid)
 
         playback_visibility_commit(&entry, 1, 110)
@@ -180,14 +214,24 @@ playback_test_pause_resume :: proc(t: ^testing.T) {
 // Verify service epochs share visibility by exact generation across placements.
 @(test)
 playback_test_service_visibility_epochs :: proc(t: ^testing.T) {
-    id := termattachment.Attachment_Id{slot = 0, generation = 2}
+    id: termattachment.Attachment_Id = {
+        slot = 0,
+        generation = 2,
+    }
     animation := playback_test_animation(infinite = true)
     entry, valid := playback_begin(id, animation, 100)
     testing.expect(t, valid)
-    service := Service{playbacks = {0 = entry}}
+    service: Service = {
+        playbacks = {
+            0 = entry,
+        },
+    }
 
     playback_visibility_begin_frame(&service, 100)
-    playback_visibility_record(&service, {slot = 0, generation = 1})
+    playback_visibility_record(&service, {
+        slot = 0,
+        generation = 1,
+    })
     playback_visibility_record(&service, id)
     playback_visibility_begin_frame(&service, 110)
     testing.expect(t, !service.playbacks[0].paused)
@@ -200,9 +244,14 @@ playback_test_service_visibility_epochs :: proc(t: ^testing.T) {
 // Verify epoch wrap clears stale marks before opening the replacement epoch.
 @(test)
 playback_test_visibility_epoch_wrap :: proc(t: ^testing.T) {
-    service := Service{visibility_epoch = max(u64)}
+    service: Service = {
+        visibility_epoch = max(u64),
+    }
     service.playbacks[0] = {
-        attachment_id = {slot = 0, generation = 1},
+        attachment_id = {
+            slot = 0,
+            generation = 1,
+        },
         visible_epoch = max(u64),
         active = true,
     }
@@ -216,20 +265,43 @@ playback_test_visibility_epoch_wrap :: proc(t: ^testing.T) {
 // Verify only partial or complete viewport intersections qualify as visible.
 @(test)
 playback_test_raster_visibility_intersection :: proc(t: ^testing.T) {
-    clip := termattachment.Render_Rectangle{x = 10, y = 10, width = 20, height = 20}
+    clip: termattachment.Render_Rectangle = {
+        x = 10,
+        y = 10,
+        width = 20,
+        height = 20,
+    }
     testing.expect(t, raster_rectangles_intersect(
-        {x = 0, y = 0, width = 11, height = 11}, clip))
+        {
+            x = 0,
+            y = 0,
+            width = 11,
+            height = 11,
+        }, clip))
     testing.expect(t, !raster_rectangles_intersect(
-        {x = -20, y = 10, width = 20, height = 20}, clip))
+        {
+            x = -20,
+            y = 10,
+            width = 20,
+            height = 20,
+        }, clip))
     testing.expect(t, !raster_rectangles_intersect(
-        {x = 30, y = 10, width = 20, height = 20}, clip))
+        {
+            x = 30,
+            y = 10,
+            width = 20,
+            height = 20,
+        }, clip))
 }
 
 // Verify transition work remains bounded under an extreme overdue timestamp.
 @(test)
 playback_test_transition_bound :: proc(t: ^testing.T) {
     animation := playback_test_animation(infinite = true)
-    entry, valid := playback_begin({slot = 0, generation = 1}, animation, 0)
+    entry, valid := playback_begin({
+        slot = 0,
+        generation = 1,
+    }, animation, 0)
     testing.expect(t, valid)
 
     planned := playback_plan(entry, animation, max(u64))
@@ -281,7 +353,10 @@ playback_test_upload_failure_holds_state :: proc(t: ^testing.T) {
     testing.expect(t, valid)
     ring: trace.Ring
     trace.ring_init(&ring, .Display)
-    service := Service{store = &store, trace_ring = &ring}
+    service: Service = {
+        store = &store,
+        trace_ring = &ring,
+    }
     upload: Playback_Test_Upload
 
     playback_test_expect_failed_upload(t, &service, &entry, &upload)
@@ -306,9 +381,15 @@ playback_test_lazy_payload_uses_current_generation :: proc(t: ^testing.T) {
         &store, service_test_limits(), context.allocator))
     defer termattachment.store_destroy(&store)
     id := playback_test_publish_store_animation(t, &store)
-    service := Service{store = &store, monotonic_ns = 100}
+    service: Service = {
+        store = &store,
+        monotonic_ns = 100,
+    }
     service.playbacks[id.slot] = {
-        attachment_id = {slot = id.slot, generation = id.generation + 1},
+        attachment_id = {
+            slot = id.slot,
+            generation = id.generation + 1,
+        },
         frame_index = 1,
         active = true,
     }
@@ -332,9 +413,14 @@ playback_test_stale_generation_clears_entry :: proc(t: ^testing.T) {
     testing.expect(t, termattachment.store_init(
         &store, service_test_limits(), context.allocator))
     defer termattachment.store_destroy(&store)
-    service := Service{store = &store}
-    entry := Playback_Entry{
-        attachment_id = {slot = 0, generation = 99},
+    service: Service = {
+        store = &store,
+    }
+    entry: Playback_Entry = {
+        attachment_id = {
+            slot = 0,
+            generation = 99,
+        },
         active = true,
     }
 
@@ -353,8 +439,12 @@ playback_test_kitty_control_states :: proc(t: ^testing.T) {
         &store, service_test_limits(), context.allocator))
     defer termattachment.store_destroy(&store)
     id := playback_test_publish_store_animation(t, &store)
-    service := Service{store = &store}
-    upload := Playback_Test_Upload{accept = true}
+    service: Service = {
+        store = &store,
+    }
+    upload: Playback_Test_Upload = {
+        accept = true,
+    }
 
     playback_apply_command(&service, {
         attachment_id = id,
@@ -390,7 +480,9 @@ playback_test_kitty_control_upload_failure_rolls_back :: proc(t: ^testing.T) {
     testing.expect(t, found)
     entry, valid := playback_begin(id, animation, 100)
     testing.expect(t, valid)
-    service := Service{store = &store}
+    service: Service = {
+        store = &store,
+    }
     service.playbacks[id.slot] = entry
     upload: Playback_Test_Upload
 
@@ -410,7 +502,10 @@ playback_test_kitty_control_upload_failure_rolls_back :: proc(t: ^testing.T) {
 playback_test_loading_holds_final_frame :: proc(t: ^testing.T) {
     animation := playback_test_animation(infinite = true)
     entry, valid := playback_begin(
-        {slot = 0, generation = 1}, animation, 100)
+        {
+            slot = 0,
+            generation = 1,
+        }, animation, 100)
     testing.expect(t, valid)
     entry.frame_index = 1
     entry.deadline_ns = 130

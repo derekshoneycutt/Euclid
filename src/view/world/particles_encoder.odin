@@ -74,7 +74,7 @@ build_native_dust_hypocycloid :: proc(
             coverage := 0
             for sample_y in 0..<DUST_HYPOCYCLOID_SUPERSAMPLE_GRID {
                 for sample_x in 0..<DUST_HYPOCYCLOID_SUPERSAMPLE_GRID {
-                    point := geometry.Vector2{
+                    point: geometry.Vector2 = {
                         (f32(x) + (f32(sample_x) + 0.5) /
                             DUST_HYPOCYCLOID_SUPERSAMPLE_GRID - center) / center,
                         (f32(y) + (f32(sample_y) + 0.5) /
@@ -140,10 +140,13 @@ initialize_native_dust_atlas :: proc(
     }
     if !native.texture_operation_enqueue_upload(
         &runtime^.texture_operations, {
-            kind = .Create, texture = candidate, format = .Rgba8,
-            source = pixels, identity = 1, generation = 1,
-        }) ||
-        !native.sdl_draw_submit_texture_operations(platform, runtime) {
+            kind = .Create,
+            texture = candidate,
+            format = .Rgba8,
+            source = pixels,
+            identity = 1,
+            generation = 1,
+        }) || !native.sdl_draw_submit_texture_operations(platform, runtime) {
         native.sdl_sampled_texture_release(platform, &candidate)
         return false
     }

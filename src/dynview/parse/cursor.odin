@@ -49,7 +49,10 @@ tex_cursor_init :: proc(
     if cursor == nil {
         return .Unexpected_Token
     }
-    cursor^ = {source = source, limits = limits}
+    cursor^ = {
+        source = source,
+        limits = limits,
+    }
     if len(source) > limits.source_bytes {
         return tex_cursor_fail(cursor, .Source_Too_Large, 0)
     }

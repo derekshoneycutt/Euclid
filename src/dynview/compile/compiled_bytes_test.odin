@@ -27,7 +27,7 @@ semantic_documents_publish_without_command_layout :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&cache_arena)
     runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime, context.allocator)
-    documents := [1]dynviewmodel.Dynview_Document{{}}
+    documents: [1]dynviewmodel.Dynview_Document = {{}}
     runtime^.content.documents = documents[:]
 
     semantic_status := compile_derived_views(runtime, &cache_arena, {}, {})
@@ -58,9 +58,18 @@ compiled_bytes_publish_sealed_plain_text :: proc(t: ^testing.T) {
     copy(buffer^.text_bytes[:], "draw")
     buffer^.text_bytes_len = 4
     buffer^.command_count = 3
-    buffer^.commands[0] = {kind = .Begin_Block, block_id = 7}
-    buffer^.commands[1] = {kind = .Text_Run, text_offset = 0, text_len = 4}
-    buffer^.commands[2] = {kind = .End_Block}
+    buffer^.commands[0] = {
+        kind = .Begin_Block,
+        block_id = 7,
+    }
+    buffer^.commands[1] = {
+        kind = .Text_Run,
+        text_offset = 0,
+        text_len = 4,
+    }
+    buffer^.commands[2] = {
+        kind = .End_Block,
+    }
 
     status := rebuild_compiled_plain_text(runtime, &arena)
 
@@ -79,7 +88,10 @@ compiled_bytes_reject_incomplete_stream_without_publication :: proc(t: ^testing.
     runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime, context.allocator)
     runtime^.command_buffer.command_count = 1
-    runtime^.command_buffer.commands[0] = {kind = .Begin_Block, block_id = 1}
+    runtime^.command_buffer.commands[0] = {
+        kind = .Begin_Block,
+        block_id = 1,
+    }
 
     status := rebuild_compiled_plain_text(runtime, &arena)
 
@@ -97,11 +109,24 @@ compiled_bytes_consume_published_content_views :: proc(t: ^testing.T) {
     defer free(runtime, context.allocator)
     buffer := &runtime^.command_buffer
     buffer^.command_count = 1
-    buffer^.commands[0] = {kind = .Begin_Block, block_id = 99}
-    commands := [3]dynviewmodel.Dynview_Command{
-        {kind = .Begin_Block, block_id = 7},
-        {kind = .Text_Run, block_id = 7, text_len = 4},
-        {kind = .End_Block, block_id = 7},
+    buffer^.commands[0] = {
+        kind = .Begin_Block,
+        block_id = 99,
+    }
+    commands: [3]dynviewmodel.Dynview_Command = {
+        {
+            kind = .Begin_Block,
+            block_id = 7,
+        },
+        {
+            kind = .Text_Run,
+            block_id = 7,
+            text_len = 4,
+        },
+        {
+            kind = .End_Block,
+            block_id = 7,
+        },
     }
     text: string = "view"
     buffer^.command_view = commands[:]
@@ -125,7 +150,7 @@ compiled_bytes_reject_plain_text_overflow_without_publication :: proc(t: ^testin
     defer storage.arena_owner_destroy(&arena)
     cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
-    state := Dynview_Compile_State{}
+    state: Dynview_Compile_State = {}
     testing.expect_value(t, storage.bounded_byte_builder_init(
         &state.plain_text_builder, dynviewmodel.DYNVIEW_MAX_TEXT_BYTES, &arena),
         storage.Bounded_Builder_Status.Ok)

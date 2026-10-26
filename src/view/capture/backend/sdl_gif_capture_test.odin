@@ -27,7 +27,7 @@ sdl_gif_capture_test_setup :: proc(
     testing.expect(t, temp_error == nil)
     directory_name := fmt.aprintf(
         "euclid-sdl-gif-capture-lifecycle-%d", sync.current_thread_id(),
-        allocator=context.temp_allocator)
+        allocator = context.temp_allocator)
     directory, directory_error := filepath.join(
         []string{temp_directory, directory_name}, context.allocator)
     testing.expect(t, directory_error == nil)
@@ -76,12 +76,18 @@ sdl_gif_capture_test_publish :: proc(
         delete(output.final_path, context.allocator)
         return "", false
     }
-    pixels := [8]u8{255, 0, 0, 255, 0, 255, 0, 255}
+    pixels: [8]u8 = {255, 0, 0, 255, 0, 255, 0, 255}
     durations := [?]u64{40, 80}
     for duration in durations {
-        if !sdl_gif_capture_stage_frame(rawptr(owner), {
-            pixels = pixels[:], width = 2, height = 1, pitch_bytes = 8,
-        }) || !sdl_gif_capture_commit_frame(rawptr(owner), duration) {
+        if !sdl_gif_capture_stage_frame(
+            rawptr(owner), {
+                pixels = pixels[:],
+                width = 2,
+                height = 1,
+                pitch_bytes = 8,
+            }) ||
+            !sdl_gif_capture_commit_frame(rawptr(owner), duration) {
+
             sdl_gif_capture_abort(rawptr(owner))
             delete(output.final_path, context.allocator)
             return "", false
@@ -100,14 +106,17 @@ sdl_gif_capture_stage_failure_and_cancellation_abort :: proc(t: ^testing.T) {
     owner: Sdl_Gif_Capture_Context
     session: capturemodel.Gif_Capture_Session
     directory := sdl_gif_capture_test_setup(t, &owner, &session)
-    pixels := [8]u8{255, 0, 0, 255, 0, 255, 0, 255}
+    pixels: [8]u8 = {255, 0, 0, 255, 0, 255, 0, 255}
     failed_stage := sdl_gif_capture_test_reserve(
         &owner, directory, "failed-stage.gif")
     testing.expect(t, failed_stage.reserved)
-    testing.expect(t, sdl_gif_capture_begin_transaction(
-        &owner, failed_stage.transaction, 2, 1))
+    testing.expect(t,
+        sdl_gif_capture_begin_transaction(&owner, failed_stage.transaction, 2, 1))
     testing.expect(t, !sdl_gif_capture_stage_frame(rawptr(&owner), {
-        pixels = pixels[:], width = 1, height = 1, pitch_bytes = 4,
+        pixels = pixels[:],
+        width = 1,
+        height = 1,
+        pitch_bytes = 4,
     }))
     sdl_gif_capture_abort(rawptr(&owner))
     testing.expect(t, !os.exists(failed_stage.temporary_path))
@@ -121,7 +130,10 @@ sdl_gif_capture_stage_failure_and_cancellation_abort :: proc(t: ^testing.T) {
     testing.expect(t, sdl_gif_capture_begin_transaction(
         &owner, cancelled.transaction, 2, 1))
     testing.expect(t, sdl_gif_capture_stage_frame(rawptr(&owner), {
-        pixels = pixels[:], width = 2, height = 1, pitch_bytes = 8,
+        pixels = pixels[:],
+        width = 2,
+        height = 1,
+        pitch_bytes = 8,
     }))
     sdl_gif_capture_abort(rawptr(&owner))
     testing.expect(t, !os.exists(cancelled.temporary_path))

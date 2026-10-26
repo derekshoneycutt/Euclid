@@ -7,7 +7,14 @@ ui_interaction_target :: #force_inline proc(
     kind: Ui_Interaction_Target_Kind,
     focus: Ui_Focus_Kind = .None,
     id: int = 0) -> Ui_Interaction_Target {
-    return {kind = kind, focus = {kind = focus, id = id}, id = id}
+    return {
+        kind = kind,
+        focus = {
+            kind = focus,
+            id = id,
+        },
+        id = id,
+    }
 }
 
 // Refresh narrow surface eligibility after static or layout-dependent routing.

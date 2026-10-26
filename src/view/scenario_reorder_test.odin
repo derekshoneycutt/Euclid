@@ -19,7 +19,7 @@ scenario_favorites_order_ignores_backing_storage_order :: proc(t: ^testing.T) {
     nodes[0].stable_id[0] = 1
     nodes[1].stable_id[0] = 2
     nodes[0].next_in_registry = &nodes[1]
-    ji := bridgemodel.Euclid_Julia_Interface{
+    ji: bridgemodel.Euclid_Julia_Interface = {
         animation_head = &nodes[0],
         animation_count = 2,
     }
@@ -31,7 +31,9 @@ scenario_favorites_order_ignores_backing_storage_order :: proc(t: ^testing.T) {
     testing.expect_value(t, collections.favorites_add(
         set, nodes[1].stable_id, nodes[1].stable_id), collections.Policy_Error.None)
     set^.entries[0].sibling_order = 2
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     testing.expect(t, viewscenario.scenario_favorites_order(&runtime, "Line:Point"))
     testing.expect(t, !viewscenario.scenario_favorites_order(&runtime, "Point:Line"))
 }
@@ -73,12 +75,19 @@ scenario_favorites_assertion_destroy :: proc(
 // Reject missing baselines and distinguish stable placements from replacements.
 @(test)
 scenario_favorites_identity_assertions :: proc(t: ^testing.T) {
-    node := bridgemodel.Euclid_Julia_Animation_Interface{name = "Point"}
+    node: bridgemodel.Euclid_Julia_Animation_Interface = {
+        name = "Point",
+    }
     node.stable_id[0] = 1
-    ji := bridgemodel.Euclid_Julia_Interface{animation_head = &node, animation_count = 1}
+    ji: bridgemodel.Euclid_Julia_Interface = {
+        animation_head = &node,
+        animation_count = 1,
+    }
     state := scenario_favorites_assertion_fixture(&ji)
     defer scenario_favorites_assertion_destroy(state)
-    runtime := viewscenario.Scenario_Runtime{state = state}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
     testing.expect(t,
         !viewscenario.scenario_assert_favorites(
             &runtime, "same_placement:favorite:Point"))
@@ -98,13 +107,23 @@ scenario_favorites_identity_assertions :: proc(t: ^testing.T) {
 // Treat a closing drawer tail as closed rather than exposing inactive controls.
 @(test)
 scenario_favorites_drawer_assertions :: proc(t: ^testing.T) {
-    node := bridgemodel.Euclid_Julia_Animation_Interface{name = "Point"}
+    node: bridgemodel.Euclid_Julia_Animation_Interface = {
+        name = "Point",
+    }
     node.stable_id[0] = 1
-    ji := bridgemodel.Euclid_Julia_Interface{animation_head = &node, animation_count = 1}
+    ji: bridgemodel.Euclid_Julia_Interface = {
+        animation_head = &node,
+        animation_count = 1,
+    }
     state := scenario_favorites_assertion_fixture(&ji)
     defer scenario_favorites_assertion_destroy(state)
-    runtime := viewscenario.Scenario_Runtime{state = state}
-    state^.ui_runtime.library.actions.drawer = {entry_id = node.stable_id, open = true}
+    runtime: viewscenario.Scenario_Runtime = {
+        state = state,
+    }
+    state^.ui_runtime.library.actions.drawer = {
+        entry_id = node.stable_id,
+        open = true,
+    }
     testing.expect(t, viewscenario.scenario_assert_favorites(
         &runtime, "actions_open:favorite:Point"))
     testing.expect(t, !viewscenario.scenario_assert_favorites(

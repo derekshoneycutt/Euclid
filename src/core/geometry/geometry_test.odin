@@ -6,8 +6,8 @@ import "core:testing"
 // Verify Euclid vectors retain native arithmetic and linalg compatibility.
 @(test)
 geometry_vectors_support_math :: proc(t: ^testing.T) {
-    first := Vector3{1, 2, 3}
-    second := Vector3{4, 6, 8}
+    first: Vector3 = {1, 2, 3}
+    second: Vector3 = {4, 6, 8}
     testing.expect_value(t, first + second, Vector3{5, 8, 11})
     testing.expect_value(t, (second - first) * 0.5, Vector3{1.5, 2, 2.5})
     testing.expect_value(t, linalg.dot(first, second), f32(40))
@@ -19,7 +19,7 @@ geometry_vectors_support_math :: proc(t: ^testing.T) {
 // Verify rectangle edge and visible-overlap semantics.
 @(test)
 geometry_rectangles_preserve_boundaries :: proc(t: ^testing.T) {
-    rectangle := Rectangle{10, 20, 30, 40}
+    rectangle: Rectangle = {10, 20, 30, 40}
     testing.expect(t, rectangle_contains(rectangle, {10, 20}))
     testing.expect(t, rectangle_contains(rectangle, {40, 60}))
     testing.expect(t, !rectangle_contains(rectangle, {40.01, 60}))

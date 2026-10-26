@@ -88,5 +88,8 @@ sqlite_make_error :: proc(
 // Describe one substrate-side validation failure without fabricating an SQLite code.
 sqlite_make_validation_error :: proc(
     operation: Operation, validation: Validation_Error) -> Error {
-    return Error{operation = operation, validation = validation}
+    return {
+        operation = operation,
+        validation = validation,
+    }
 }

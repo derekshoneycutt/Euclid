@@ -27,7 +27,10 @@ queue_tool_dust_contact :: proc(
         return
     }
     accepted := particles.queue_dust_tool_contact(
-        &state^.particle_system, {endpoint = endpoint, source = .Point})
+        &state^.particle_system, {
+            endpoint = endpoint,
+            source = .Point,
+        })
     assert(accepted)
 }
 

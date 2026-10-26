@@ -15,11 +15,15 @@ import "core:testing"
 // The packaged authored dataset, not just a synthetic fixture, preserves every baseline byte.
 @(test)
 content_packaged_messages_match_native_output_baselines :: proc(t: ^testing.T) {
-    config := files.Asset_Root_Config{asset_root_override = "bin"}
+    config: files.Asset_Root_Config = {
+        asset_root_override = "bin",
+    }
     asset, resolved := files.packaged_content_asset_with_config(
         &config, context.allocator)
     testing.expect(t, resolved)
-    if !resolved { return }
+    if !resolved {
+        return
+    }
     defer delete(asset.database_path, context.allocator)
     defer delete(asset.corpus_fingerprint, context.allocator)
     generation := new(Content_Generation, context.allocator)
@@ -31,11 +35,15 @@ content_packaged_messages_match_native_output_baselines :: proc(t: ^testing.T) {
     opened := content_database_open(
         &database, asset.database_path, asset.corpus_fingerprint, generation)
     testing.expect(t, opened)
-    if !opened { return }
+    if !opened {
+        return
+    }
     defer _ = content_database_close(&database)
     templates := contentdata.CONTENT_MESSAGE_TEST_TEMPLATES
     for id in contentdata.Content_Message_Id {
-        if id == .Invalid { continue }
+        if id == .Invalid {
+            continue
+        }
         view, status := contentdata.content_message_lookup(generation, id)
         testing.expect_value(t, status, contentdata.Content_Message_Status.Ok)
         testing.expect_value(t, view.template, templates[view.ordinal])

@@ -77,9 +77,12 @@ ui_tree_projection_prepare_collection :: proc(
     }
     allocator := storage.tlsf_owner_allocator(&projection.allocator)
     node, ok := ui_tree_projection_make_node({
-        key = mutation.collection_id, kind = .Collection,
-        parent = root, first_child = UI_TREE_NO_ITEM,
-        last_child = UI_TREE_NO_ITEM, next_sibling = UI_TREE_NO_ITEM,
+        key = mutation.collection_id,
+        kind = .Collection,
+        parent = root,
+        first_child = UI_TREE_NO_ITEM,
+        last_child = UI_TREE_NO_ITEM,
+        next_sibling = UI_TREE_NO_ITEM,
         selectable = true,
     }, "", allocator)
     if !ok {

@@ -86,7 +86,7 @@ compute_ui_regions :: proc(
     mode: viewmodel.Ui_Layout_Mode,
     window_width, window_height: f32,
     vertical_split_x, horizontal_split_y: f32) -> viewmodel.Ui_Regions {
-    regions := viewmodel.Ui_Regions{}
+    regions: viewmodel.Ui_Regions = {}
     width := max(f32(0), window_width)
     height := max(f32(0), window_height)
     split_y := layout_clamp_split(horizontal_split_y, height,

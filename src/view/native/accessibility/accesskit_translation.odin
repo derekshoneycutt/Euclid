@@ -131,15 +131,24 @@ accesskit_tree_update :: proc(
 accesskit_ordinary_control_role :: proc(
     role: portable.Publication_Role) -> (accesskit.Role, bool) {
     #partial switch role {
-    case .Checkbox: return .Check_Box, true
-    case .Slider: return .Slider, true
-    case .Status: return .Status, true
-    case .Button: return .Button, true
-    case .Accordion_Header: return .Disclosure_Triangle, true
-    case .Panel: return .Pane, true
-    case .Label: return .Label, true
-    case .Menu: return .Menu, true
-    case .Menu_Item: return .Menu_Item, true
+    case .Checkbox:
+        return .Check_Box, true
+    case .Slider:
+        return .Slider, true
+    case .Status:
+        return .Status, true
+    case .Button:
+        return .Button, true
+    case .Accordion_Header:
+        return .Disclosure_Triangle, true
+    case .Panel:
+        return .Pane, true
+    case .Label:
+        return .Label, true
+    case .Menu:
+        return .Menu, true
+    case .Menu_Item:
+        return .Menu_Item, true
     }
     return .Unknown, false
 }
@@ -151,11 +160,16 @@ accesskit_control_role :: proc(role: portable.Publication_Role) -> accesskit.Rol
        return mapped
     }
     #partial switch role {
-    case .Search_Input: return .Search_Input
-    case .Text_Run: return .Text_Run
-    case .Tree: return .Tree
-    case .Tree_Item: return .Tree_Item
-    case: return .Unknown
+    case .Search_Input:
+        return .Search_Input
+    case .Text_Run:
+        return .Text_Run
+    case .Tree:
+        return .Tree
+    case .Tree_Item:
+        return .Tree_Item
+    case:
+        return .Unknown
     }
 }
 

@@ -13,7 +13,9 @@ Ui_Dust_Crisp_Visibility :: struct {
 
 // ui_dust_crisp_visibility freezes the ordinary drawing's currently revealed portion.
 ui_dust_crisp_visibility :: proc(system: ^Ui_Dust_System) -> Ui_Dust_Crisp_Visibility {
-    result := Ui_Dust_Crisp_Visibility{alpha = ui_dust_incoming_alpha(system)}
+    result: Ui_Dust_Crisp_Visibility = {
+        alpha = ui_dust_incoming_alpha(system),
+    }
     if ui_dust_reveal_active(system) {
         result.row_count = system^.reveal_row_count
         result.rows = system^.reveal_rows

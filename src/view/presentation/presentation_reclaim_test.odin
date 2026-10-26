@@ -14,8 +14,11 @@ presentation_test_reclaim_init :: proc(
     testing.expect(t,
         viewfont.cache_ink_capture_init(&state^.font_cache, context.allocator))
     state^.ui_runtime.presentation.visible = true
-    uidust.ui_dust_validate_context(&runtime^.dust,
-        {visible = true, viewport = {0, 0, 200, 200}, visual_signature = 1})
+    uidust.ui_dust_validate_context(&runtime^.dust, {
+        visible = true,
+        viewport = {0, 0, 200, 200},
+        visual_signature = 1,
+    })
 }
 
 // Verify the first-new-ink gate transfers live dust only after a valid target frame.
@@ -31,8 +34,10 @@ presentation_reclaims_only_new_published_ink :: proc(t: ^testing.T) {
     presentation_test_publish_ink(state, {{10, 10}})
     uidust.ui_dust_begin_arrival(&runtime^.dust, 5, .Falling_Ink)
     runtime^.arrival_ink_serial = viewfont.cache_visible_ink_serial(&state^.font_cache)
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = {0, 0, 200, 200}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = {0, 0, 200, 200},
+        },
     }
     presentation_effects_update(state, runtime, 0, frame, 1)
     testing.expect(t, runtime^.dust.incoming_awaiting_targets)
@@ -69,8 +74,10 @@ presentation_context_change_precedes_reclamation :: proc(t: ^testing.T) {
     uidust.ui_dust_begin_arrival(&runtime^.dust, 5, .Falling_Ink)
     runtime^.arrival_ink_serial = viewfont.cache_visible_ink_serial(&state^.font_cache)
     presentation_test_publish_ink(state, {{80, 90}})
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = {0, 0, 100, 100}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = {0, 0, 100, 100},
+        },
     }
     presentation_effects_update(state, runtime, 0, frame, 1)
     testing.expect_value(t, runtime^.dust.live_count, 0)
@@ -124,8 +131,10 @@ presentation_replacement_without_ink_preserves_forming_material :: proc(
         runtime^.dust.particles.phase[0], uidust.Ui_Dust_Phase.Airborne_Departure)
     testing.expect_value(t, runtime^.dust.live_count, 1)
     state^.ui_runtime.presentation.visible = false
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = geometry.Rectangle{0, 0, 200, 200}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = geometry.Rectangle{0, 0, 200, 200},
+        },
     }
     presentation_effects_update(state, runtime, 0, frame, 1)
     testing.expect_value(t, runtime^.dust.live_count, 0)

@@ -86,7 +86,7 @@ This standard incorporates and specializes:
 | Odin indentation | Tabs for indentation; spaces for alignment. | **Four spaces; tabs forbidden.** |
 | Odin vet flags | Includes `-vet-tabs`. | Uses strict flags but omits `-vet-tabs`. |
 | Odin naming | Ada types; snake values; screaming constants. | Adopted; bridge names remain symmetric. |
-| Odin initialization | Prefer inference and complete initializers. | Adopted with boundary exceptions. |
+| Odin initialization | Prefer inference and complete initializers. | Preserve inference; put direct compound-literal types on declarations. |
 | Julia indentation | Four spaces. | Adopted. |
 | Julia naming | Lowercase; `!` for argument mutation. | Adopted; use `snake_case` when needed. |
 | Julia typing | Generic unless dispatch requires constraints. | Adopted; ABI wrappers use exact types. |
@@ -97,6 +97,98 @@ Odin build uses `-vet -strict-style`, `-disallow-do`, and
 `-warnings-as-errors`. Explicit types remain appropriate where ABI layout or
 numeric width is part of the contract.
 
+### Odin Control Bodies
+
+Odin `if`/`else` branches and all `for` forms MUST use braced bodies whose
+opening and closing braces occupy different source lines. This includes empty
+bodies; a wrapped condition does not excuse same-line body braces. Ordinary
+`else if` chaining is allowed, with each actual branch body checked separately.
+
+`do` bodies are forbidden regardless of line breaks. The analyzer rules
+`ODIN-SINGLE-LINE-CONTROL-BODY` and `ODIN-DO-CONTROL-BODY` are both configured
+as `Fail` in Euclid, independently of the compiler's existing `-disallow-do`
+safeguard. Both apply to test and production source. They do not independently
+restrict `when`, `switch`, `defer`, standalone blocks, or procedure literals;
+covered conditionals and loops nested inside those constructs are still checked.
+
+Existing-source cleanup is deferred when introducing these rules. Existing
+violations remain blocking findings, not grandfathered exceptions.
+
+Switch case body code MUST start after the physical line of the terminating
+colon, including default cases and ordinary, type, and `#partial` switches.
+Wrapped labels are checked against the colon's line, not the `case` keyword's
+line. An explicit opening `{` MAY share the colon's line if actual code starts
+on a later line; empty cases and empty blocks are allowed. Nested explicit
+blocks do not hide inline code: `case X: { return }` is forbidden. Comments
+are allowed, and this rule adds no indentation requirement.
+
+`ODIN-CASE-BODY-PLACEMENT` is configured as `Fail` in Euclid and applies to test
+and production source. Each offending case points to its first inline actual
+statement. Existing-source cleanup is deferred; findings remain blocking.
+
+### Odin Compound-Literal Declarations
+
+A single mutable binding initialized directly by a typed compound literal MUST
+put the type on the declaration: use `value: Type = {...}`, not
+`value := Type{...}`. This includes empty, positional, and named literals, in
+production and test source and at package scope. Transparent initializer
+parentheses do not exempt the declaration.
+
+The rule covers structs, aliases and distinct types, imported and anonymous types,
+polymorphic instantiations, explicit-length arrays, slices, matrices, bit sets,
+maps, and dynamic arrays where those literals are legal. Dynamic literals still
+require the compiler's feature opt-in and do not bypass allocation policy.
+
+Preserve ordinary inference for calls, conversions, references, scalar values,
+and computed expressions. Constants and multiple-binding declarations are outside
+this rule, as are assignments, arguments, returns, field defaults, and literals
+nested within other expressions. Address-taking, indexing, and selecting a field
+from a literal are expressions, not direct literal initializers.
+
+Inferred-length array types such as `[?]int` MUST remain attached to their literals.
+Do not replace inferred lengths with manually counted sizes to satisfy style.
+Nested inferred array types are exempt from this style finding without making
+invalid types legal. Inferred arrays inside a self-contained type computation
+or a struct's field value do not exempt the outer declaration.
+
+```odin
+point: Vector2 = {1, 2}
+buffer: [4]u8 = {0, 1, 2, 3}
+options: Options = {}
+values := [?]int{1, 2, 3}
+result := calculate()
+```
+
+`ODIN-COMPOUND-LITERAL-DECLARATION` is configured as `Fail` in Euclid; the engine
+default is enabled `Report`. It is independent of named-field layout and
+function-line aggregation. Existing-source cleanup is deferred: existing
+violations remain blocking findings, not grandfathered exceptions.
+
+### Odin Named Initializers
+
+Nonempty named-field initializers MUST use multiline layout: initializer code
+starts after the opening `{` line, each field starts on its own line one four-space
+block deeper, every field ends with a comma, and the closing `}` returns to the
+opening line's indentation. Values may wrap with deeper continuation indentation.
+Comments, blank lines, and surrounding expressions are allowed. Empty `{}` and
+positional literals are exempt.
+
+`ODIN-NAMED-INITIALIZER-LAYOUT` is configured as `Fail`, including in tests.
+Euclid also selects `odin_line_count_mode=:aggregate_initializers` for function-length
+enforcement. Correctly formatted named initializers of simple values count as one line;
+substantive surrounding code on both sides makes the shell two lines. Calls and
+operations retain their code-bearing RHS lines, starting after `=`; a wrapped
+field label alone adds none. Nested initializers reduce recursively without hiding
+computation. Positional struct, array, and slice initializers use the same reduction,
+without requiring named-field layout or one element per line; inline matrix rows
+remain declarative data. Computed positional elements retain their code-bearing
+expression lines. Ordinary source statistics and complexity density do not change.
+
+The analyzer engine defaults remain `Report` layout enforcement and `:physical`
+code-bearing-line counting. Euclid deliberately enables both stricter layout and
+reduced counting together. Existing-source cleanup is deferred; findings remain
+blocking rather than grandfathered.
+
 ## Fast Compliance Checklist
 
 Before marking work complete, verify all items below:
@@ -105,6 +197,9 @@ Before marking work complete, verify all items below:
 - No hidden per-frame allocation growth in host-side hot paths.
 - Odin and Julia bridge changes are symmetric and documented.
 - Ownership is explicit: who allocates, mutates, and frees.
+- Worker scratch is reclaimed at its operation boundary; task results do not
+  escape through scratch, and owner helping preserves caller allocations
+  ([scratch contract](MemoryArchitecture.md#temporary-storage-and-joined-work)).
 - Functions stay within size/complexity limits or include justification.
 - Return shapes use one value or, when genuinely clearer, a two-item tuple.
 - No Odin or Julia closing parenthesis begins its own continuation line.
@@ -259,6 +354,40 @@ line and parameter count remain review signals in both languages. Exceptions are
 reviewed entries in `tools/analysis_settings.jl` with drift detection rather than
 inline markers.
 
+#### Odin Flat-Switch Exception
+
+Euclid enables the analyzer's opt-in flat-switch policy. An eligible Odin procedure
+is exempt from executable-line and cyclomatic-complexity threshold findings when:
+
+- Its body contains exactly one top-level switch, ordinary or type-based, including
+  `#partial` forms.
+- Each case, including the default, contains zero or one actual simple statement:
+  a return, assignment, declaration, or call. Explicit blocks are transparent and
+  MUST NOT conceal additional statements. Empty statements and blocks do not count.
+- At most six executable source lines occur outside the switch. Procedure headers,
+  comments, blank lines, and structural-only lines do not count. Multiline setup
+  counts by source lines, not initializer-reduced enforcement lines.
+- No nested control flow, additional switch, fallthrough, conditional expression,
+  or short-circuit boolean operation occurs in the switch header, labels, cases,
+  or surrounding code. Called procedures and nested procedure-literal bodies are
+  separate scopes, not inspected as part of this procedure's eligibility.
+
+Case statements are counted structurally: a multiline aggregate return is one
+statement, while two statements on one line are still two statements. Existing
+formatting rules remain independent, including case-body placement.
+
+The exemption is automatic and is lost as soon as the procedure no longer meets
+the shape or outside-line limit. Raw NLOC, cyclomatic complexity, and repository
+statistics remain unchanged; reports identify active exemptions. Parameter,
+allocation, documentation, naming, and all other rules still apply. This exception
+does not justify unrelated responsibility or dispatch refactoring merely to qualify.
+
+The policy is configured through `FunctionMetricSettings` using
+`odin_flat_switch_enabled=true` and `odin_flat_switch_max_outside_lines=6`.
+It is independent of Odin's aggregate-initializer line-count mode. A named metric
+waiver made redundant by the policy MUST be removed rather than bypassing drift
+detection.
+
 The analyzer also classifies every allocation call site by allocator source. An
 allocation it cannot classify is a **blocking** analysis failure; an implicit or
 explicit default-heap allocator (`context.allocator`, `heap.allocator()`) produces
@@ -383,11 +512,25 @@ Names SHOULD communicate domain role and units where ambiguity is possible:
 | --- | --- |
 | Indentation | Four spaces per level; tabs are forbidden, including alignment. |
 | Braces | Opening brace remains on the declaration or control-flow line. |
-| Binding spacing | `value: int` and `value := 5`; never `value : int` or `value:=5`. |
+| Binding spacing | `value: int`, `value := 5`, `NAME :: 5`; use policy-defined spaces around separators and keep composite punctuation adjacent. |
 | Wrapping | Indent continuation lines by four spaces; align further only when it aids scanning. |
 | Delimiter close | Keep `)` with the final parameter or argument in declarations and calls. |
 | Return/brace | Do not isolate `->` or `{` from the header it completes. |
 | Blank lines | Separate conceptual blocks, not every statement. |
+
+Odin separator spacing is enforced by four independently configurable rules.
+Declaration colons use zero spaces before and one after; equals signs,
+inferred declarations (`:=`), and constant declarations (`::`) use one space
+on both sides. The `:=` and `::` punctuation remains adjacent. A typed constant
+uses the declaration-colon policy for its type separator and the constant
+policy for its value separator.
+
+Each side may be configured as an exact nonnegative number of ASCII spaces or
+unrestricted horizontal whitespace. A side is exempt when its adjacent token
+is separated by a line wrap or comment. The baseline analyzer reports these
+findings; Euclid configures all four rules as `Fail`. Existing-source cleanup
+is deferred, so existing findings remain blocking rather than receiving
+automatic exceptions.
 
 ```odin
 build_scene_batch :: proc(

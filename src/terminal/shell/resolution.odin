@@ -89,7 +89,7 @@ Shell_Resolver :: struct {
 //   - A self-contained command on success, or the first semantic/capacity error.
 shell_resolve :: proc(template: ^Command_Template,
     interpolations: []Shell_Interpolation_Value) -> Shell_Resolution_Result {
-    resolver := Shell_Resolver{
+    resolver: Shell_Resolver = {
         template = template,
         interpolations = interpolations,
     }
@@ -355,5 +355,8 @@ shell_resolver_commit_argument :: proc(
 shell_resolver_fail :: proc(resolver: ^Shell_Resolver,
     kind: Shell_Resolution_Error_Kind, span: Source_Span) {
     resolver.result.kind = .Error
-    resolver.result.error = {kind = kind, source_span = span}
+    resolver.result.error = {
+        kind = kind,
+        source_span = span,
+    }
 }

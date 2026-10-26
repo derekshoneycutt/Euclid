@@ -261,7 +261,10 @@ search_compile_item :: proc(
 // Compile admitted typed items into the only FTS5 expression shape used at runtime.
 search_parsed_query_compile :: proc(
     parsed: Search_Parsed_Query) -> Search_Compiled_Query {
-    result := Search_Compiled_Query{status = .Success, parsed = parsed}
+    result: Search_Compiled_Query = {
+        status = .Success,
+        parsed = parsed,
+    }
     positive_written := 0
     for &item, index in result.parsed.items[:result.parsed.item_count] {
         if item.kind == .Negative_Term || item.kind == .Negative_Phrase {
@@ -297,7 +300,10 @@ search_query_compile :: proc(source: string) -> Search_Compiled_Query {
     parsed: Search_Parsed_Query
     status := search_query_parse(source, &parsed)
     if status != .Success {
-        return {status = status, parsed = parsed}
+        return {
+            status = status,
+            parsed = parsed,
+        }
     }
     return search_parsed_query_compile(parsed)
 }

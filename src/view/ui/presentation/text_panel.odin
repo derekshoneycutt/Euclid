@@ -50,16 +50,29 @@ prepare_presentation_visual :: proc(
     wrap_advance := theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent)
     content_height := dynlayout.presentation_content_height_or_fallback(
         &state^.dynview, text_panel, {
-            text_padding = text_padding, wrap_advance = wrap_advance,
-            row_height = row_height, text = text})
+            text_padding = text_padding,
+            wrap_advance = wrap_advance,
+            row_height = row_height,
+            text = text,
+        })
     step := dynlayout.presentation_scroll_step_or_fallback(
         &state^.dynview, row_height)
     scroll := uiwidgets.scroll_container_visual(
         text_panel, content_height, state^.ui_runtime.presentation.text_scroll_y, step)
-    return {active = true, text_panel = text_panel, view_text = text, scroll = scroll,
-        selection_view = {panel = text_panel, scroll_y = scroll.scroll_y_out,
-            text_padding = text_padding, row_height = row_height,
-            wrap_advance = wrap_advance, fallback_text = text}}
+    return {
+        active = true,
+        text_panel = text_panel,
+        view_text = text,
+        scroll = scroll,
+        selection_view = {
+            panel = text_panel,
+            scroll_y = scroll.scroll_y_out,
+            text_padding = text_padding,
+            row_height = row_height,
+            wrap_advance = wrap_advance,
+            fallback_text = text,
+        },
+    }
 }
 
 // presentation_semantic_id identifies one compiled document generation.
@@ -68,8 +81,10 @@ presentation_semantic_id :: #force_inline proc(
     if state == nil {
         return {}
     }
-    return {domain = .Presentation,
-        generation = state^.dynview.compile_cache.compiled_revision}
+    return {
+        domain = .Presentation,
+        generation = state^.dynview.compile_cache.compiled_revision,
+    }
 }
 
 // register_presentation_semantics publishes the focused document surface.
@@ -79,15 +94,23 @@ register_presentation_semantics :: proc(
     scroll: uiwidgets.Scroll_Container_Update_Result) {
     id := presentation_semantic_id(state)
     _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
-        id = id, role = .Document,
+        id = id,
+        role = .Document,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Select, .Copy, .Scroll, .Show_Context_Menu},
         region = .Presentation,
-        traversal_order = 0, bounds = geometry.Rectangle(panel),
+        traversal_order = 0,
+        bounds = geometry.Rectangle(panel),
         clip_bounds = geometry.Rectangle(
             uiaccordion.ui_presentation_clip(&state^.ui_runtime.layout, panel)),
-        numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
-            f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
+        numeric_range = {
+            f64(scroll.minimum),
+            f64(scroll.maximum),
+            f64(scroll.scroll_y_out),
+            f64(scroll.step),
+            scroll.orientation,
+            true,
+        },
         label = viewmessages.shell_message(state, .Presentation_Accessible_Label),
     })
     semantic := state^.ui_runtime.semantic_focus
@@ -132,10 +155,10 @@ draw_encoded_presentation_text :: proc(
     }
     _ = native.draw_encoder_push_scissor(
         encoder, geometry.Rectangle(presentation.scroll.view_rect))
-    fallback := ui_dynview.Fallback_Text_Content{
+    fallback: ui_dynview.Fallback_Text_Content = {
         presentation.view_text, theme.draw_color(encoder, .Text)}
     text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
-    params := ui_dynview.Presentation_Draw_Params{
+    params: ui_dynview.Presentation_Draw_Params = {
         encoder = encoder,
         panel = geometry.Rectangle(presentation.text_panel),
         scroll_y = state^.ui_runtime.presentation.text_scroll_y,
@@ -150,7 +173,7 @@ draw_encoded_presentation_text :: proc(
     }
     ui_dynview.draw_presentation_styled_or_fallback(
         state, &state^.ui_runtime, fallback, params)
-    selected := ui_dynview.Presentation_Selection_Draw{
+    selected: ui_dynview.Presentation_Selection_Draw = {
         state, &state^.ui_runtime, fallback, params}
     ui_dynview.draw_presentation_selection(&selected, {
         encoder = encoder,
@@ -196,16 +219,20 @@ prepare_presentation_scroll :: proc(
     scroll_step: f32,
     mouse_input: input.Input_Frame) -> uiwidgets.Scroll_Container_Update_Result {
     ui_runtime := &state^.ui_runtime
-    scroll := uiwidgets.scroll_container_update({id = UI_PRESENTATION_SCROLLBAR_ID,
-        rect = text_panel, scroll_y_in = ui_runtime^.presentation.text_scroll_y,
-        content_height = content_height, mouse_input = mouse_input,
+    scroll := uiwidgets.scroll_container_update({
+        id = UI_PRESENTATION_SCROLLBAR_ID,
+        rect = text_panel,
+        scroll_y_in = ui_runtime^.presentation.text_scroll_y,
+        content_height = content_height,
+        mouse_input = mouse_input,
         interaction_space_rect = text_panel,
         wheel_step = scroll_step * theme.WHEEL_SCROLL_MULTIPLIER,
         press_owner = &ui_runtime^.input.press_owner,
         state_in = {ui_runtime^.presentation.scroll_dragging,
             ui_runtime^.presentation.scroll_drag_off},
         semantic_focus = ui_runtime^.semantic_focus,
-        semantic_id = presentation_semantic_id(state)})
+        semantic_id = presentation_semantic_id(state),
+    })
     ui_runtime^.presentation.text_scroll_y = scroll.scroll_y_out
     ui_runtime^.presentation.scroll_dragging = scroll.state_out.is_dragging_thumb
     ui_runtime^.presentation.scroll_drag_off = scroll.state_out.drag_offset_y
@@ -217,21 +244,28 @@ prepare_presentation_content_interaction :: proc(
     state: ^core.Euclid_General_State,
     request: Presentation_Content_Interaction) -> ui_dynview.Dynview_Selection_View {
     ui_runtime := &state^.ui_runtime
-    selection_view := ui_dynview.Dynview_Selection_View{
+    selection_view: ui_dynview.Dynview_Selection_View = {
         panel = geometry.Rectangle(request.scroll.view_rect),
-        scroll_y = request.scroll.scroll_y_out, text_padding = theme.TEXT_PADDING,
-        row_height = theme.TEXT_ROW_HEIGHT, wrap_advance = theme.TEXT_WRAP_ADVANCE,
-        fallback_text = request.view_text}
+        scroll_y = request.scroll.scroll_y_out,
+        text_padding = theme.TEXT_PADDING,
+        row_height = theme.TEXT_ROW_HEIGHT,
+        wrap_advance = theme.TEXT_WRAP_ADVANCE,
+        fallback_text = request.view_text,
+    }
     content := ui_dynview.dynview_selection_content(
         &state^.dynview, request.view_text)
     selection := &ui_runtime^.presentation.selection
     ui_dynview.dynview_selection_reconcile(selection, content)
-    ui_dynview.dynview_selection_update_mouse({runtime = &state^.dynview,
-        selection = selection, press_owner = &ui_runtime^.input.press_owner,
-        content = content, view = selection_view, frame = request.mouse_input})
+    ui_dynview.dynview_selection_update_mouse({
+        runtime = &state^.dynview,
+        selection = selection,
+        press_owner = &ui_runtime^.input.press_owner,
+        content = content,
+        view = selection_view,
+        frame = request.mouse_input,
+    })
     if request.keyboard_enabled {
-        ui_dynview.dynview_selection_update_keyboard(
-            &state^.dynview, selection, content,
+        ui_dynview.dynview_selection_update_keyboard(&state^.dynview, selection, content,
             request.view_text, request.mouse_input)
     }
     return selection_view
@@ -256,17 +290,30 @@ prepare_presentation_interaction :: proc(
     text_panel := uiwidgets.text_content_panel(panel)
     view_text := julia.current_view_snapshot_text(state)
     content_h := dynlayout.presentation_content_height_or_fallback(&state.dynview,
-        geometry.Rectangle(text_panel), {text_padding = theme.TEXT_PADDING,
-            wrap_advance = theme.TEXT_WRAP_ADVANCE, row_height = theme.TEXT_ROW_HEIGHT,
-            text = view_text})
+        geometry.Rectangle(text_panel), {
+            text_padding = theme.TEXT_PADDING,
+            wrap_advance = theme.TEXT_WRAP_ADVANCE,
+            row_height = theme.TEXT_ROW_HEIGHT,
+            text = view_text,
+        })
     state^.ui_runtime.presentation.text_scroll_max =
         max(0, content_h - text_panel.height)
     scroll_step := dynlayout.presentation_scroll_step_or_fallback(
         &state.dynview, theme.TEXT_ROW_HEIGHT)
     scroll := prepare_presentation_scroll(
         state, text_panel, content_h, scroll_step, mouse_input)
-    selection_view := prepare_presentation_content_interaction(
-        state, {scroll, view_text, mouse_input, keyboard_enabled})
+    selection_view := prepare_presentation_content_interaction(state, {
+        scroll = scroll,
+        view_text = view_text,
+        mouse_input = mouse_input,
+        keyboard_enabled = keyboard_enabled,
+    })
     register_presentation_semantics(state, scroll.view_rect, scroll)
-    return {true, scroll.view_rect, view_text, scroll, selection_view}
+    return {
+        active = true,
+        text_panel = scroll.view_rect,
+        view_text = view_text,
+        scroll = scroll,
+        selection_view = selection_view,
+    }
 }

@@ -4,8 +4,12 @@ import "core:testing"
 
 // Build a complete live-input identity for bounded protocol fixtures.
 highlight_test_identity :: proc() -> Highlight_Identity {
-    return {request_id = 7, animation_generation = 3,
-        source_revision = 2, face_generation = 1}
+    return {
+        request_id = 7,
+        animation_generation = 3,
+        source_revision = 2,
+        face_generation = 1,
+    }
 }
 
 // Verify pointer-free layouts agree with Julia's isbits transport records.
@@ -23,12 +27,24 @@ highlight_transport_layout_matches_julia :: proc(t: ^testing.T) {
 // Verify complete coverage, color bounds, UTF-8 alignment, and explicit modes.
 @(test)
 highlight_protocol_rejects_partial_or_invalid_results :: proc(t: ^testing.T) {
-    runs := [2]Highlight_Run{
-        {start_byte = 0, end_byte = 2, foreground_kind = .Ansi, foreground = 1},
-        {start_byte = 2, end_byte = 3, foreground_kind = .Rgb, foreground = 0x123456},
+    runs: [2]Highlight_Run = {
+        {
+            start_byte = 0,
+            end_byte = 2,
+            foreground_kind = .Ansi,
+            foreground = 1,
+        },
+        {
+            start_byte = 2,
+            end_byte = 3,
+            foreground_kind = .Rgb,
+            foreground = 0x123456,
+        },
     }
-    result := Highlight_Result{
-        identity = highlight_test_identity(), source = "αx", runs = runs[:],
+    result: Highlight_Result = {
+        identity = highlight_test_identity(),
+        source = "αx",
+        runs = runs[:],
     }
     testing.expect(t, highlight_result_valid(result))
     runs[0].end_byte = 1
@@ -49,14 +65,19 @@ highlight_protocol_rejects_partial_or_invalid_results :: proc(t: ^testing.T) {
     result.source = "\xffxx"
     testing.expect(t, !highlight_result_valid(result))
     testing.expect(t, highlight_result_valid({
-        identity = highlight_test_identity(), source = "", runs = nil,
+        identity = highlight_test_identity(),
+        source = "",
+        runs = nil,
     }))
 }
 
 // Verify malformed targets and unsupported native style values cannot be published.
 @(test)
 highlight_protocol_validates_identity_and_style_vocabulary :: proc(t: ^testing.T) {
-    request := Highlight_Requested{identity = highlight_test_identity(), source = "x"}
+    request: Highlight_Requested = {
+        identity = highlight_test_identity(),
+        source = "x",
+    }
     testing.expect(t, highlight_request_valid(request))
     request.identity.target_kind = .History_Entry
     testing.expect(t, !highlight_request_valid(request))
@@ -64,8 +85,12 @@ highlight_protocol_validates_identity_and_style_vocabulary :: proc(t: ^testing.T
     testing.expect(t, highlight_request_valid(request))
     request.identity.face_generation = 0
     testing.expect(t, !highlight_request_valid(request))
-    testing.expect(t, !highlight_run_style_valid({weight = Highlight_Weight(255)}))
-    testing.expect(t, !highlight_run_style_valid({underline = Highlight_Underline(255)}))
+    testing.expect(t, !highlight_run_style_valid({
+        weight = Highlight_Weight(255),
+    }))
+    testing.expect(t, !highlight_run_style_valid({
+        underline = Highlight_Underline(255),
+    }))
     testing.expect(t, !highlight_run_style_valid({
         foreground_kind = Highlight_Color_Kind(255),
     }))

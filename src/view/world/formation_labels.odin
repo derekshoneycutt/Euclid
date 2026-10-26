@@ -141,7 +141,7 @@ formation_cached_label_draw :: proc(
 formation_label_draw_opacity :: proc(
     state: ^core.Euclid_General_State,
     item: ^shapemodel.Shapes_Label_Draw) -> f32 {
-    owner := shapemodel.Shape_Entity{
+    owner: shapemodel.Shape_Entity = {
         slot = u32(item^.source_index + 1),
         generation = item^.source_generation,
     }

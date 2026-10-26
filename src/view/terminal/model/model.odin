@@ -35,12 +35,30 @@ Terminal_State :: struct {
     animation_generation: u64,
     initialized: bool,
 
-    // Editor/history. Published history points to history_storage, not a separate owner.
+    // Editor and asynchronous history-navigation state.
     history_storage: termhist.Termhist_State,
     history: ^termhist.Termhist_State,
     input_mode: protocol.Evaluation_Mode,
     input_mode_backup: protocol.Evaluation_Mode,
     collecting_continuation: bool,
+    provisional_submission_id: u64,
+    provisional_desired_revision: u64,
+    provisional_committed_revision: u64,
+    provisional_recording_valid: bool,
+    history_unavailable_notified: bool,
+    history_navigation_epoch: u64,
+    history_navigation_anchor_id: u64,
+    history_navigation_request_id: u64,
+    history_source_request_id: u64,
+    history_navigation_pending_id: u64,
+    history_navigation_admission_reported: bool,
+    history_source_admission_reported: bool,
+    history_write_completion_serial: u64,
+    history_navigation_intents: [8]int,
+    history_navigation_intent_count: int,
+    history_navigation_active: bool,
+    history_navigation_draft_mode: protocol.Evaluation_Mode,
+    history_navigation_read_source: [protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES]u8,
 
     // Output grids and interpretation. Interpreter bindings borrow these embedded grids;
     // checkpoints and service pointers below refer to generation-allocated storage.

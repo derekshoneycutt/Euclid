@@ -18,16 +18,26 @@ sdl_query_system_contrast :: proc(
     workspace := intrinsics.objc_send(
         ^Sdl_Contrast_Workspace, Sdl_Contrast_Workspace, "sharedWorkspace")
     if workspace == nil {
-        return {status = .Failed, complete = true}
+        return {
+            status = .Failed,
+            complete = true,
+        }
     }
     selector := objc.sel_registerName("accessibilityDisplayShouldIncreaseContrast")
     if !bool(objc.class_respondsToSelector(
         objc.object_getClass(cast(objc.id)workspace), selector)) {
-        return {status = .Unavailable, complete = true}
+        return {
+            status = .Unavailable,
+            complete = true,
+        }
     }
     requested := intrinsics.objc_send(
         objc.BOOL, workspace, "accessibilityDisplayShouldIncreaseContrast")
-    return {requested = bool(requested), status = .Supported, complete = true}
+    return {
+        requested = bool(requested),
+        status = .Supported,
+        complete = true,
+    }
 }
 
 // macOS contrast acquisition has no asynchronous resources to retire.

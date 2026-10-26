@@ -119,7 +119,10 @@ world_shape_append_transform :: proc(
     entity := world_shape_append_entity(world)
     status := shapemodel.shape_component_insert(
         &world.transforms, &world.registry, entity,
-        shapemodel.Shape_Transform{position = position, previous_position = position})
+        shapemodel.Shape_Transform{
+            position = position,
+            previous_position = position,
+        })
     assert(status == .Ok)
     return entity
 }
@@ -132,8 +135,11 @@ world_shape_publish_host :: proc(
     geometry: shapemodel.Shape_Geometry) {
     style_status := shapemodel.shape_component_insert(
         &world.render_styles, &world.registry, entity,
-        shapemodel.Shape_Render_Style{color = style.color,
-            brush_size = style.brush_size, visible = false})
+        shapemodel.Shape_Render_Style{
+            color = style.color,
+            brush_size = style.brush_size,
+            visible = false,
+        })
     geometry_status := shapemodel.shape_component_insert(
         &world.geometries, &world.registry, entity, geometry)
     assert(style_status == .Ok && geometry_status == .Ok)
@@ -148,14 +154,20 @@ world_create_point :: proc(
     if world == nil {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{
-        entities = 1, transforms = 1, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
     entity := world_shape_append_transform(world, position)
     world_shape_publish_host(world, entity, style, {.Point, {}})
-    return {entity = entity}, .Ok
+    return {
+        entity = entity,
+    }, .Ok
 }
 
 // Create one immutable single-line label after validating and preflighting its source.
@@ -170,8 +182,13 @@ world_create_label :: proc(
     if status != .Ok {
         return {}, status
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 1, transforms = 1,
-        render_styles = 1, labels = 1, label_bytes = len(input.source)}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        render_styles = 1,
+        labels = 1,
+        label_bytes = len(input.source),
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -184,7 +201,9 @@ world_create_label :: proc(
         &world.labels, &world.registry, entity, label)
     assert(status == .Ok)
     world_shape_publish_style(world, entity, input.style)
-    return {entity = entity}, .Ok
+    return {
+        entity = entity,
+    }, .Ok
 }
 
 // Publish presentation for one preflighted entity without geometry.
@@ -194,8 +213,11 @@ world_shape_publish_style :: proc(
     style: Shape_Style) {
     status := shapemodel.shape_component_insert(
         &world.render_styles, &world.registry, entity,
-        shapemodel.Shape_Render_Style{color = style.color,
-            brush_size = style.brush_size, visible = false})
+        shapemodel.Shape_Render_Style{
+            color = style.color,
+            brush_size = style.brush_size,
+            visible = false,
+        })
     assert(status == .Ok)
 }
 
@@ -207,18 +229,31 @@ world_create_line :: proc(
     if world == nil {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{
-        entities = 3, transforms = 2, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 3,
+        transforms = 2,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
     shape := world_shape_append_entity(world)
     first := world_shape_append_transform(world, first_position)
     second := world_shape_append_transform(world, second_position)
-    geometry := shapemodel.Shape_Geometry{kind = .Line}
-    geometry.payload.line = {first = first, second = second}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Line,
+    }
+    geometry.payload.line = {
+        first = first,
+        second = second,
+    }
     world_shape_publish_host(world, shape, style, geometry)
-    return {shape = shape, first = first, second = second}, .Ok
+    return {
+        shape = shape,
+        first = first,
+        second = second,
+    }, .Ok
 }
 
 // Create one arc variant whose host transform is its center.
@@ -227,17 +262,24 @@ world_create_arc_kind :: proc(
     input: Arc_Input,
     kind: shapemodel.Shape_Geometry_Kind) -> (
         shapemodel.Shape_Arc_Handle, shapemodel.Shape_World_Status) {
-    needs := shapemodel.Shape_Construction_Needs{
-        entities = 1, transforms = 1, arcs = 1, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        arcs = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
     if world == nil || kind != .Arc && kind != .Filled_Arc {
         return {}, .Invalid_Argument
     }
-    arc := shapemodel.Shape_Arc{radius = input.radius,
+    arc: shapemodel.Shape_Arc = {
+        radius = input.radius,
         start_theta = input.start_theta,
         sweep_theta = input.sweep_theta,
         previous_radius = input.radius,
         previous_start_theta = input.start_theta,
-        previous_sweep_theta = input.sweep_theta}
+        previous_sweep_theta = input.sweep_theta,
+    }
     if !shapemodel.shape_arc_is_valid(arc) {
         return {}, .Invalid_Argument
     }
@@ -245,12 +287,16 @@ world_create_arc_kind :: proc(
         return {}, .Out_Of_Capacity
     }
     shape := world_shape_append_transform(world, input.center)
-    geometry := shapemodel.Shape_Geometry{kind = kind}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = kind,
+    }
     arc_status := shapemodel.shape_component_insert(
         &world.arcs, &world.registry, shape, arc)
     assert(arc_status == .Ok)
     world_shape_publish_host(world, shape, input.style, geometry)
-    return {shape = shape}, .Ok
+    return {
+        shape = shape,
+    }, .Ok
 }
 
 // Create one outlined arc with direct transform references.
@@ -273,16 +319,19 @@ world_circle_region_input_is_valid :: proc(input: Circle_Region_Input) -> bool {
     distance_squared := delta.x * delta.x + delta.y * delta.y
     distance := f32(math.sqrt(distance_squared))
     radius_delta := math.abs(input.first_radius - input.second_radius)
-    return shapemodel.shape_circle_region_is_valid({operation = input.operation,
-        first_radius = input.first_radius, second_radius = input.second_radius}) &&
-        shapemodel.shape_scalar_is_finite(input.first_center.x) &&
+    return shapemodel.shape_circle_region_is_valid({
+        operation = input.operation,
+        first_radius = input.first_radius,
+        second_radius = input.second_radius,
+    }) && shapemodel.shape_scalar_is_finite(input.first_center.x) &&
         shapemodel.shape_scalar_is_finite(input.first_center.y) &&
         shapemodel.shape_scalar_is_finite(input.first_center.z) &&
         shapemodel.shape_scalar_is_finite(input.second_center.x) &&
         shapemodel.shape_scalar_is_finite(input.second_center.y) &&
         shapemodel.shape_scalar_is_finite(input.second_center.z) &&
         input.first_center.z == input.second_center.z &&
-        distance > radius_delta && distance < input.first_radius + input.second_radius
+        distance > radius_delta &&
+        distance < input.first_radius + input.second_radius
 }
 
 // Create one analytic two-circle filled region after complete capacity preflight.
@@ -293,21 +342,37 @@ world_create_circle_region :: proc(
     if world == nil || !world_circle_region_input_is_valid(input) {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
-        render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 3,
+        transforms = 2,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
     shape := world_shape_append_entity(world)
     first := world_shape_append_transform(world, input.first_center)
     second := world_shape_append_transform(world, input.second_center)
-    value := shapemodel.Shape_Circle_Region{operation = input.operation,
-        first_radius = input.first_radius, second_radius = input.second_radius}
-    geometry := shapemodel.Shape_Geometry{kind = .Circle_Region}
+    value: shapemodel.Shape_Circle_Region = {
+        operation = input.operation,
+        first_radius = input.first_radius,
+        second_radius = input.second_radius,
+    }
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Circle_Region,
+    }
     geometry.payload.circle_region = {
-        first_center = first, second_center = second, value = value}
+        first_center = first,
+        second_center = second,
+        value = value,
+    }
     world_shape_publish_host(world, shape, input.style, geometry)
-    return {shape = shape, first_center = first, second_center = second}, .Ok
+    return {
+        shape = shape,
+        first_center = first,
+        second_center = second,
+    }, .Ok
 }
 
 // Create the intersection of two properly overlapping circles.
@@ -335,23 +400,35 @@ world_create_trochoid :: proc(
     world: ^shapemodel.Shape_World,
     input: Trochoid_Input) -> (
         shapemodel.Shape_Trochoid_Handle, shapemodel.Shape_World_Status) {
-    value := shapemodel.Shape_Trochoid{mode = input.mode,
-        fixed_radius = input.fixed_radius, rolling_radius = input.rolling_radius,
-        tracer_distance = input.tracer_distance, tracer_phase = input.tracer_phase,
-        rotation = input.rotation, parameter_start = input.parameter_start,
-        parameter_finish = input.parameter_finish, draw_parameter = input.draw_parameter,
+    value: shapemodel.Shape_Trochoid = {
+        mode = input.mode,
+        fixed_radius = input.fixed_radius,
+        rolling_radius = input.rolling_radius,
+        tracer_distance = input.tracer_distance,
+        tracer_phase = input.tracer_phase,
+        rotation = input.rotation,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish,
+        draw_parameter = input.draw_parameter,
         previous_fixed_radius = input.fixed_radius,
         previous_rolling_radius = input.rolling_radius,
         previous_tracer_distance = input.tracer_distance,
-        previous_tracer_phase = input.tracer_phase, previous_rotation = input.rotation,
+        previous_tracer_phase = input.tracer_phase,
+        previous_rotation = input.rotation,
         previous_parameter_start = input.parameter_start,
         previous_parameter_finish = input.parameter_finish,
-        previous_draw_parameter = input.draw_parameter}
+        previous_draw_parameter = input.draw_parameter,
+    }
     if world == nil || !shapemodel.shape_trochoid_is_valid(value) {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 1, transforms = 1,
-        trochoids = 1, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        trochoids = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -360,7 +437,9 @@ world_create_trochoid :: proc(
         &world.trochoids, &world.registry, shape, value)
     assert(status == .Ok)
     world_shape_publish_host(world, shape, input.style, {.Trochoid, {}})
-    return {shape = shape}, .Ok
+    return {
+        shape = shape,
+    }, .Ok
 }
 
 // Create one two-ring guide whose host transform is its fixed center.
@@ -368,19 +447,29 @@ world_create_trochoid_tool :: proc(
     world: ^shapemodel.Shape_World,
     input: Trochoid_Tool_Input) -> (
         shapemodel.Shape_Trochoid_Tool_Handle, shapemodel.Shape_World_Status) {
-    value := shapemodel.Shape_Trochoid_Tool{mode = input.mode,
-        fixed_radius = input.fixed_radius, rolling_radius = input.rolling_radius,
-        parameter = input.parameter, rotation = input.rotation,
+    value: shapemodel.Shape_Trochoid_Tool = {
+        mode = input.mode,
+        fixed_radius = input.fixed_radius,
+        rolling_radius = input.rolling_radius,
+        parameter = input.parameter,
+        rotation = input.rotation,
         orientation_phase = input.orientation_phase,
         previous_fixed_radius = input.fixed_radius,
         previous_rolling_radius = input.rolling_radius,
-        previous_parameter = input.parameter, previous_rotation = input.rotation,
-        previous_orientation_phase = input.orientation_phase}
+        previous_parameter = input.parameter,
+        previous_rotation = input.rotation,
+        previous_orientation_phase = input.orientation_phase,
+    }
     if world == nil || !shapemodel.shape_trochoid_tool_is_valid(value) {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 1, transforms = 1,
-        trochoid_tools = 1, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        trochoid_tools = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -389,7 +478,9 @@ world_create_trochoid_tool :: proc(
         &world.trochoid_tools, &world.registry, shape, value)
     assert(status == .Ok)
     world_shape_publish_host(world, shape, input.style, {.Trochoid_Tool, {}})
-    return {shape = shape}, .Ok
+    return {
+        shape = shape,
+    }, .Ok
 }
 
 // Create one cycloid host with two authoritative endpoint transforms.
@@ -397,23 +488,32 @@ world_create_cycloid :: proc(
     world: ^shapemodel.Shape_World,
     input: Cycloid_Input) -> (
         shapemodel.Shape_Cycloid_Handle, shapemodel.Shape_World_Status) {
-    value := shapemodel.Shape_Cycloid{rolling_radius = input.rolling_radius,
-        tracer_distance = input.tracer_distance, tracer_phase = input.tracer_phase,
+    value: shapemodel.Shape_Cycloid = {
+        rolling_radius = input.rolling_radius,
+        tracer_distance = input.tracer_distance,
+        tracer_phase = input.tracer_phase,
         parameter_start = input.parameter_start,
-        parameter_finish = input.parameter_finish, draw_parameter = input.draw_parameter,
+        parameter_finish = input.parameter_finish,
+        draw_parameter = input.draw_parameter,
         previous_rolling_radius = input.rolling_radius,
         previous_tracer_distance = input.tracer_distance,
         previous_tracer_phase = input.tracer_phase,
         previous_parameter_start = input.parameter_start,
         previous_parameter_finish = input.parameter_finish,
-        previous_draw_parameter = input.draw_parameter}
+        previous_draw_parameter = input.draw_parameter,
+    }
     if world == nil || !shapemodel.shape_cycloid_is_valid(value) ||
         !shapemodel.shape_cycloid_line_is_valid(input.first, input.second,
             input.rolling_radius, input.parameter_start, input.parameter_finish) {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
-        cycloids = 1, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 3,
+        transforms = 2,
+        cycloids = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -423,10 +523,19 @@ world_create_cycloid :: proc(
     status := shapemodel.shape_component_insert(
         &world.cycloids, &world.registry, shape, value)
     assert(status == .Ok)
-    geometry := shapemodel.Shape_Geometry{kind = .Cycloid}
-    geometry.payload.cycloid = {first = first, second = second}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Cycloid,
+    }
+    geometry.payload.cycloid = {
+        first = first,
+        second = second,
+    }
     world_shape_publish_host(world, shape, input.style, geometry)
-    return {shape = shape, first = first, second = second}, .Ok
+    return {
+        shape = shape,
+        first = first,
+        second = second,
+    }, .Ok
 }
 
 // Create the permanent cycloid guide with its own endpoint transforms.
@@ -434,22 +543,30 @@ world_create_cycloid_tool :: proc(
     world: ^shapemodel.Shape_World,
     input: Cycloid_Tool_Input) -> (
         shapemodel.Shape_Cycloid_Tool_Handle, shapemodel.Shape_World_Status) {
-    value := shapemodel.Shape_Cycloid_Tool{rolling_radius = input.rolling_radius,
+    value: shapemodel.Shape_Cycloid_Tool = {
+        rolling_radius = input.rolling_radius,
         parameter_start = input.parameter_start,
-        parameter_finish = input.parameter_finish, parameter = input.parameter,
+        parameter_finish = input.parameter_finish,
+        parameter = input.parameter,
         orientation_phase = input.orientation_phase,
         previous_rolling_radius = input.rolling_radius,
         previous_parameter_start = input.parameter_start,
         previous_parameter_finish = input.parameter_finish,
         previous_parameter = input.parameter,
-        previous_orientation_phase = input.orientation_phase}
+        previous_orientation_phase = input.orientation_phase,
+    }
     if world == nil || !shapemodel.shape_cycloid_tool_is_valid(value) ||
         !shapemodel.shape_cycloid_line_is_valid(input.first, input.second,
             input.rolling_radius, input.parameter_start, input.parameter_finish) {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
-        cycloid_tools = 1, render_styles = 1, geometries = 1}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 3,
+        transforms = 2,
+        cycloid_tools = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -459,10 +576,19 @@ world_create_cycloid_tool :: proc(
     status := shapemodel.shape_component_insert(
         &world.cycloid_tools, &world.registry, shape, value)
     assert(status == .Ok)
-    geometry := shapemodel.Shape_Geometry{kind = .Cycloid_Tool}
-    geometry.payload.cycloid_tool = {first = first, second = second}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Cycloid_Tool,
+    }
+    geometry.payload.cycloid_tool = {
+        first = first,
+        second = second,
+    }
     world_shape_publish_host(world, shape, input.style, geometry)
-    return {shape = shape, first = first, second = second}, .Ok
+    return {
+        shape = shape,
+        first = first,
+        second = second,
+    }, .Ok
 }
 
 // Append ordered transform entities for one preflighted polygon.
@@ -486,9 +612,13 @@ world_create_polygon_into :: proc(
     if world == nil || len(positions) < 3 || len(vertices) != len(positions) {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = len(positions) + 1,
-        transforms = len(positions), render_styles = 1, geometries = 1,
-        vertex_references = len(positions)}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = len(positions) + 1,
+        transforms = len(positions),
+        render_styles = 1,
+        geometries = 1,
+        vertex_references = len(positions),
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -498,10 +628,14 @@ world_create_polygon_into :: proc(
     status := shapemodel.shape_vertex_references_append(
         world, vertices, &polygon)
     assert(status == .Ok)
-    geometry := shapemodel.Shape_Geometry{kind = .Polygon}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Polygon,
+    }
     geometry.payload.polygon = polygon
     world_shape_publish_host(world, shape, style, geometry)
-    return {shape = shape}, .Ok
+    return {
+        shape = shape,
+    }, .Ok
 }
 
 // Create one triangle as a typed three-vertex polygon convenience.
@@ -517,8 +651,12 @@ world_create_triangle :: proc(
     if status != .Ok {
         return {}, status
     }
-    return {shape = polygon.shape, first = vertices[0], second = vertices[1],
-        third = vertices[2]}, .Ok
+    return {
+        shape = polygon.shape,
+        first = vertices[0],
+        second = vertices[1],
+        third = vertices[2],
+    }, .Ok
 }
 
 // Create one square as a typed four-vertex polygon convenience.
@@ -534,7 +672,10 @@ world_create_square :: proc(
     if status != .Ok {
         return {}, status
     }
-    return {shape = polygon.shape, vertices = vertices}, .Ok
+    return {
+        shape = polygon.shape,
+        vertices = vertices,
+    }, .Ok
 }
 
 // Create one pentagon as a typed five-vertex polygon convenience.
@@ -550,7 +691,10 @@ world_create_pentagon :: proc(
     if status != .Ok {
         return {}, status
     }
-    return {shape = polygon.shape, vertices = vertices}, .Ok
+    return {
+        shape = polygon.shape,
+        vertices = vertices,
+    }, .Ok
 }
 
 // Append the five direct-target constraints owned by one preflighted pen.
@@ -560,16 +704,28 @@ world_append_pen_constraints :: proc(
     length: f32) -> [5]u16 {
     indices: [5]u16
     indices[0], _ = world_create_distance_constraint(world, {
-        first = joint1, second = joint2, length = length,
-        movement = .Move_Both, enabled = true})
+        first = joint1,
+        second = joint2,
+        length = length,
+        movement = .Move_Both,
+        enabled = true,
+    })
     indices[1], _ = world_create_floor_constraint(world, {
-        point = joint1, enabled = true})
+        point = joint1,
+        enabled = true,
+    })
     indices[2], _ = world_create_floor_constraint(world, {
-        point = joint2, enabled = true})
+        point = joint2,
+        enabled = true,
+    })
     indices[3], _ = world_create_snap_point_constraint(world, {
-        point = joint1, enabled = false})
+        point = joint1,
+        enabled = false,
+    })
     indices[4], _ = world_create_snap_point_constraint(world, {
-        point = joint2, enabled = false})
+        point = joint2,
+        enabled = false,
+    })
     return indices
 }
 
@@ -581,23 +737,42 @@ world_create_pen :: proc(
     if world == nil {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
-        render_styles = 1, active_features = 1, geometries = 1, constraints = 5}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 3,
+        transforms = 2,
+        render_styles = 1,
+        active_features = 1,
+        geometries = 1,
+        constraints = 5,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
     shape := world_shape_append_entity(world)
     joint1 := world_shape_append_transform(world, input.joint1)
     joint2 := world_shape_append_transform(world, input.joint2)
-    geometry := shapemodel.Shape_Geometry{kind = .Pen}
-    geometry.payload.pen = {joint1 = joint1, joint2 = joint2}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Pen,
+    }
+    geometry.payload.pen = {
+        joint1 = joint1,
+        joint2 = joint2,
+    }
     world_shape_publish_host(world, shape, input.style, geometry)
     feature_status := shapemodel.shape_component_insert(&world.active_features,
         &world.registry, shape, shapemodel.Shape_Active_Feature{})
     assert(feature_status == .Ok)
     indices := world_append_pen_constraints(world, joint1, joint2, input.length)
-    return {shape, joint1, joint2,
-        indices[0], indices[1], indices[2], indices[3], indices[4]}, .Ok
+    return {
+        shape,
+        joint1,
+        joint2,
+        indices[0],
+        indices[1],
+        indices[2],
+        indices[3],
+        indices[4],
+    }, .Ok
 }
 
 // Append the eight direct-target constraints owned by one preflighted compass.
@@ -607,23 +782,41 @@ world_append_compass_constraints :: proc(
     limb_length: f32) -> [8]u16 {
     indices: [8]u16
     indices[0], _ = world_create_center_pivot_constraint(world, {
-        first = joint1, pivot = pivot, second = joint2,
-        limb_length = limb_length, enabled = true})
+        first = joint1,
+        pivot = pivot,
+        second = joint2,
+        limb_length = limb_length,
+        enabled = true,
+    })
     indices[1], _ = world_create_distance_constraint(world, {
-        first = joint1, second = pivot, length = limb_length,
-        movement = .Move_Second, enabled = true})
+        first = joint1,
+        second = pivot,
+        length = limb_length,
+        movement = .Move_Second,
+        enabled = true,
+    })
     indices[2], _ = world_create_distance_constraint(world, {
-        first = pivot, second = joint2, length = limb_length,
-        movement = .Move_First, enabled = true})
-    floor_targets := [3]shapemodel.Shape_Entity{joint1, pivot, joint2}
+        first = pivot,
+        second = joint2,
+        length = limb_length,
+        movement = .Move_First,
+        enabled = true,
+    })
+    floor_targets: [3]shapemodel.Shape_Entity = {joint1, pivot, joint2}
     for target, offset in floor_targets {
         indices[3 + offset], _ = world_create_floor_constraint(world, {
-            point = target, enabled = true})
+            point = target,
+            enabled = true,
+        })
     }
     indices[6], _ = world_create_snap_point_constraint(world, {
-        point = joint1, enabled = false})
+        point = joint1,
+        enabled = false,
+    })
     indices[7], _ = world_create_snap_point_constraint(world, {
-        point = joint2, enabled = false})
+        point = joint2,
+        enabled = false,
+    })
     return indices
 }
 
@@ -635,8 +828,14 @@ world_create_compass :: proc(
     if world == nil {
         return {}, .Invalid_Argument
     }
-    needs := shapemodel.Shape_Construction_Needs{entities = 4, transforms = 3,
-        render_styles = 1, active_features = 1, geometries = 1, constraints = 8}
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 4,
+        transforms = 3,
+        render_styles = 1,
+        active_features = 1,
+        geometries = 1,
+        constraints = 8,
+    }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
@@ -644,14 +843,32 @@ world_create_compass :: proc(
     joint1 := world_shape_append_transform(world, input.joint1)
     pivot := world_shape_append_transform(world, input.pivot)
     joint2 := world_shape_append_transform(world, input.joint2)
-    geometry := shapemodel.Shape_Geometry{kind = .Compass}
-    geometry.payload.compass = {joint1 = joint1, pivot = pivot, joint2 = joint2}
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Compass,
+    }
+    geometry.payload.compass = {
+        joint1 = joint1,
+        pivot = pivot,
+        joint2 = joint2,
+    }
     world_shape_publish_host(world, shape, input.style, geometry)
     feature_status := shapemodel.shape_component_insert(&world.active_features,
         &world.registry, shape, shapemodel.Shape_Active_Feature{})
     assert(feature_status == .Ok)
     indices := world_append_compass_constraints(
         world, joint1, pivot, joint2, input.limb_length)
-    return {shape, joint1, pivot, joint2, indices[0], indices[1], indices[2],
-        indices[3], indices[4], indices[5], indices[6], indices[7]}, .Ok
+    return {
+        shape = shape,
+        joint1 = joint1,
+        pivot = pivot,
+        joint2 = joint2,
+        center_pivot_constraint = indices[0],
+        limb1_length_constraint = indices[1],
+        limb2_length_constraint = indices[2],
+        joint1_floor_constraint = indices[3],
+        pivot_floor_constraint = indices[4],
+        joint2_floor_constraint = indices[5],
+        joint1_lock_constraint = indices[6],
+        joint2_lock_constraint = indices[7],
+    }, .Ok
 }

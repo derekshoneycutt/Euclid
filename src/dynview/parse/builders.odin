@@ -17,7 +17,10 @@ tex_semantic_begin_program :: proc(output: ^Tex_Semantic_Output) -> int {
         return -1
     }
     index := output.program_count
-    output.programs[index] = {first_op = -1, last_op = -1}
+    output.programs[index] = {
+        first_op = -1,
+        last_op = -1,
+    }
     output.program_count += 1
     return index
 }
@@ -30,7 +33,10 @@ tex_semantic_append_text :: proc(
         tex_semantic_fail(output, .Work_Limit, 0)
         return {}, false
     }
-    span := Tex_Text_Span{offset = output.text_count, length = len(text)}
+    span: Tex_Text_Span = {
+        offset = output.text_count,
+        length = len(text),
+    }
     copy(output.text[span.offset:span.offset + span.length], transmute([]u8)text)
     output.text_count += span.length
     return span, true

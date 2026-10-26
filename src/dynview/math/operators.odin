@@ -156,9 +156,13 @@ math_operator_geometry :: proc(
             glyph.width, glyph.ascent, glyph.descent}
     }
     geometry := math_script_geometry({
-        constants = input.constants, generation = input.generation,
-        font_size = input.font_size, style = input.style, base = glyph,
-        superscript = input.superscript, subscript = input.subscript,
+        constants = input.constants,
+        generation = input.generation,
+        font_size = input.font_size,
+        style = input.style,
+        base = glyph,
+        superscript = input.superscript,
+        subscript = input.subscript,
         italic_correction = input.variant.italic_correction,
         has_superscript = input.has_superscript,
         has_subscript = input.has_subscript,

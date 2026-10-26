@@ -14,11 +14,21 @@ input_box_semantics_use_owner_control_relation :: proc(t: ^testing.T) {
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     owner: viewmodel.Ui_Press_Owner_State
     input_state: viewmodel.Ui_Input_Box_State
-    target := viewmodel.Ui_Node_Id{domain = .Gif_Control, local_id = 8}
-    params := Input_Box_Params{
-        rect = {0, 0, 120, 24}, clip_rect = {0, 0, 120, 24},
-        descriptor = {id = target, text = "saved.gif", mode = .Read_Only},
-        semantic_focus = semantic, state = &input_state, column_advance = 8,
+    target: viewmodel.Ui_Node_Id = {
+        domain = .Gif_Control,
+        local_id = 8,
+    }
+    params: Input_Box_Params = {
+        rect = {0, 0, 120, 24},
+        clip_rect = {0, 0, 120, 24},
+        descriptor = {
+            id = target,
+            text = "saved.gif",
+            mode = .Read_Only,
+        },
+        semantic_focus = semantic,
+        state = &input_state,
+        column_advance = 8,
     }
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = input_box_prepare(params, &owner)
@@ -29,7 +39,10 @@ input_box_semantics_use_owner_control_relation :: proc(t: ^testing.T) {
         return
     }
     testing.expect_value(t, snapshot^.nodes[index].controls, viewmodel.Ui_Node_Id{})
-    params.controls = {domain = .Animation_Tree, local_id = 73}
+    params.controls = {
+        domain = .Animation_Tree,
+        local_id = 73,
+    }
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = input_box_prepare(params, &owner)
     snapshot = uisemantics.semantic_staging_snapshot(semantic)
@@ -42,13 +55,18 @@ input_box_semantics_use_owner_control_relation :: proc(t: ^testing.T) {
 
 // input_box_test_frame creates one ordered keyboard frame for pure widget tests.
 input_box_test_frame :: proc(events: []input.Input_Event) -> input.Input_Frame {
-    return {events = events}
+    return {
+        events = events,
+    }
 }
 
 // Verify content publication resets selection to the UTF-8 text end exactly once.
 @(test)
 input_box_content_revision_reconciles_to_end :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 1, anchor_byte = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 1,
+        anchor_byte = 1,
+    }
     testing.expect(t, input_box_reconcile_content(&state, "aé", 4))
     testing.expect_value(t, state.cursor_byte, len("aé"))
     testing.expect_value(t, state.anchor_byte, len("aé"))
@@ -59,11 +77,20 @@ input_box_content_revision_reconciles_to_end :: proc(t: ^testing.T) {
 @(test)
 input_box_keyboard_navigation_is_utf8_safe :: proc(t: ^testing.T) {
     text := "aéz"
-    state := viewmodel.Ui_Input_Box_State{
-        cursor_byte = len(text), anchor_byte = len(text)}
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .Left},
-        {kind = .Repeat, key = .Left, modifiers = {.Shift}},
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = len(text),
+        anchor_byte = len(text),
+    }
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Left,
+        },
+        {
+            kind = .Repeat,
+            key = .Left,
+            modifiers = {.Shift},
+        },
     }
     _ = input_box_apply_keyboard(&state, text, input_box_test_frame(events[:]))
     testing.expect_value(t, state.anchor_byte, len("aé"))
@@ -75,9 +102,17 @@ input_box_keyboard_navigation_is_utf8_safe :: proc(t: ^testing.T) {
 input_box_keyboard_select_all_and_copy :: proc(t: ^testing.T) {
     text := "/tmp/euclid.gif"
     state: viewmodel.Ui_Input_Box_State
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .A, modifiers = {.Control}},
-        {kind = .Press, key = .C, modifiers = {.Control}},
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .A,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Press,
+            key = .C,
+            modifiers = {.Control},
+        },
     }
     update := input_box_apply_keyboard(
         &state, text, input_box_test_frame(events[:]))
@@ -89,11 +124,23 @@ input_box_keyboard_select_all_and_copy :: proc(t: ^testing.T) {
 // Verify text and mutation events cannot alter read-only input-box state.
 @(test)
 input_box_keyboard_rejects_mutation :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 2, anchor_byte = 1}
-    events := [3]input.Input_Event{
-        {kind = .Text, codepoint = 'x'},
-        {kind = .Press, key = .Backspace},
-        {kind = .Press, key = .Delete},
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 2,
+        anchor_byte = 1,
+    }
+    events: [3]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+        {
+            kind = .Press,
+            key = .Backspace,
+        },
+        {
+            kind = .Press,
+            key = .Delete,
+        },
     }
     _ = input_box_apply_keyboard(
         &state, "path", input_box_test_frame(events[:]))
@@ -107,10 +154,19 @@ input_box_edit_keyboard_preserves_utf8_boundaries :: proc(t: ^testing.T) {
     buffer: [8]u8
     copy(buffer[:], "aéz")
     text_length := len("aéz")
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = len("aé"), anchor_byte = 1}
-    events := [2]input.Input_Event{
-        {kind = .Text, codepoint = 'β'},
-        {kind = .Press, key = .Backspace},
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = len("aé"),
+        anchor_byte = 1,
+    }
+    events: [2]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'β',
+        },
+        {
+            kind = .Press,
+            key = .Backspace,
+        },
     }
     update := input_box_apply_edit_keyboard(&state,
         {buffer[:], &text_length}, input_box_test_frame(events[:]))
@@ -125,21 +181,43 @@ input_box_ime_preedit_and_commit_are_atomic :: proc(t: ^testing.T) {
     buffer: [16]u8
     copy(buffer[:], "ab")
     text_length := 2
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 2, anchor_byte = 1}
-    target := Input_Box_Edit_Target{buffer[:], &text_length}
-    preedit := input.Input_Event{
-        kind = .Text_Preedit, text_length = 3,
-        preedit_start = 0, preedit_length = 1,
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 2,
+        anchor_byte = 1,
+    }
+    target: Input_Box_Edit_Target = {buffer[:], &text_length}
+    preedit: input.Input_Event = {
+        kind = .Text_Preedit,
+        text_length = 3,
+        preedit_start = 0,
+        preedit_length = 1,
     }
     copy(preedit.text[:3], "仮")
     _ = input_box_apply_edit_keyboard(
         &state, target, input_box_test_frame([]input.Input_Event{preedit}))
     testing.expect_value(t, string(buffer[:text_length]), "ab")
     testing.expect(t, state.preedit_active)
-    blocked := []input.Input_Event{
-        {kind = .Press, key = .Enter}, {kind = .Press, key = .Tab},
-        {kind = .Press, key = .Backspace}, {kind = .Press, key = .Left},
-        {kind = .Press, key = .Escape},
+    blocked: []input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+        {
+            kind = .Press,
+            key = .Tab,
+        },
+        {
+            kind = .Press,
+            key = .Backspace,
+        },
+        {
+            kind = .Press,
+            key = .Left,
+        },
+        {
+            kind = .Press,
+            key = .Escape,
+        },
     }
     blocked_update := input_box_apply_edit_keyboard(
         &state, target, input_box_test_frame(blocked))
@@ -147,10 +225,16 @@ input_box_ime_preedit_and_commit_are_atomic :: proc(t: ^testing.T) {
         !blocked_update.tab_requested)
     testing.expect_value(t, state.cursor_byte, 2)
     testing.expect_value(t, state.anchor_byte, 1)
-    commit := input.Input_Event{kind = .Text_Commit, text_length = 6}
+    commit: input.Input_Event = {
+        kind = .Text_Commit,
+        text_length = 6,
+    }
     copy(commit.text[:6], "確定")
-    enter := input.Input_Event{kind = .Press, key = .Enter}
-    ordered_events := [2]input.Input_Event{commit, enter}
+    enter: input.Input_Event = {
+        kind = .Press,
+        key = .Enter,
+    }
+    ordered_events: [2]input.Input_Event = {commit, enter}
     update := input_box_apply_edit_keyboard(
         &state, target, input_box_test_frame(ordered_events[:]))
     testing.expect(t, update.changed)
@@ -165,28 +249,40 @@ input_box_ime_target_retirement_and_blur :: proc(t: ^testing.T) {
     buffer: [8]u8
     copy(buffer[:], "ab")
     text_length := 2
-    state := viewmodel.Ui_Input_Box_State{
-        cursor_byte = 2, anchor_byte = 2, preedit_active = true,
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 2,
+        anchor_byte = 2,
+        preedit_active = true,
         preedit_length = 3,
     }
     copy(state.preedit[:3], "仮")
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{
-        rect = {0, 0, 100, 24}, clip_rect = {0, 0, 100, 24},
+    params: Input_Box_Params = {
+        rect = {0, 0, 100, 24},
+        clip_rect = {0, 0, 100, 24},
         descriptor = {
-            id = {domain = .Library_Control, local_id = 7},
-            text = "ab", mode = .Editable,
+            id = {
+                domain = .Library_Control,
+                local_id = 7,
+            },
+            text = "ab",
+            mode = .Editable,
         },
-        state = &state, column_advance = 8,
+        state = &state,
+        column_advance = 8,
     }
     _ = input_box_prepare(params, &owner)
     testing.expect(t, !state.preedit_active)
 
     params.focused = true
     params.edit_target = {buffer[:], &text_length}
-    commit := input.Input_Event{
-        kind = .Text_Commit, text_length = 3,
-        text_target = {kind = .Input_Box, id = 8},
+    commit: input.Input_Event = {
+        kind = .Text_Commit,
+        text_length = 3,
+        text_target = {
+            kind = .Input_Box,
+            id = 8,
+        },
     }
     copy(commit.text[:3], "確")
     params.frame = input_box_test_frame([]input.Input_Event{commit})
@@ -201,11 +297,25 @@ input_box_edit_keyboard_reports_cut_paste_and_submit :: proc(t: ^testing.T) {
     buffer: [6]u8
     copy(buffer[:], "abcd")
     text_length := 4
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 3, anchor_byte = 1}
-    events := [3]input.Input_Event{
-        {kind = .Press, key = .X, modifiers = {.Control}},
-        {kind = .Press, key = .V, modifiers = {.Control}},
-        {kind = .Press, key = .Enter},
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 3,
+        anchor_byte = 1,
+    }
+    events: [3]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .X,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Press,
+            key = .V,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+        },
     }
     update := input_box_apply_edit_keyboard(&state,
         {buffer[:], &text_length}, input_box_test_frame(events[:]), "ééé")
@@ -225,7 +335,10 @@ input_box_edit_rejection_preserves_state :: proc(t: ^testing.T) {
     buffer: [4]u8
     copy(buffer[:], "abcd")
     length := 4
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 2, anchor_byte = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 2,
+        anchor_byte = 1,
+    }
     before := buffer
     update: Input_Box_Update
     testing.expect(t, !input_box_replace_selection(
@@ -252,7 +365,10 @@ input_box_edit_rejects_partial_grapheme_selection :: proc(t: ^testing.T) {
     source := "e\u0301x"
     copy(buffer[:], source)
     length := len(source)
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = len("e\u0301"), anchor_byte = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = len("e\u0301"),
+        anchor_byte = 1,
+    }
     before := buffer
     update: Input_Box_Update
     testing.expect(t, !input_box_replace_selection(
@@ -267,8 +383,16 @@ input_box_edit_rejects_partial_grapheme_selection :: proc(t: ^testing.T) {
 // Verify an ordinary arrow collapses a selection before further navigation.
 @(test)
 input_box_keyboard_collapses_selection :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{cursor_byte = 1, anchor_byte = 4}
-    left := [1]input.Input_Event{{kind = .Press, key = .Left}}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 1,
+        anchor_byte = 4,
+    }
+    left: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Left,
+        },
+    }
     _ = input_box_apply_keyboard(&state, "path", input_box_test_frame(left[:]))
     testing.expect_value(t, state.cursor_byte, 1)
     testing.expect_value(t, state.anchor_byte, 1)
@@ -277,18 +401,37 @@ input_box_keyboard_collapses_selection :: proc(t: ^testing.T) {
 // Verify pointer capture creates an ordered selection across a drag.
 @(test)
 input_box_pointer_drag_selects_borrowed_text :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{rect = {10, 10, 80, 24},
-        descriptor = {id = {domain = .Library_Control, local_id = 8},
-            text = "abcdef", mode = .Editable, content_revision = 1},
-        state = &state, pointer_routed = true,
-        column_advance = 10, frame = {mouse_position = {24, 15},
-            mouse_pressed = {.Left}, mouse_down = {.Left}}}
+    params: Input_Box_Params = {
+        rect = {10, 10, 80, 24},
+        descriptor = {
+            id = {
+                domain = .Library_Control,
+                local_id = 8,
+            },
+            text = "abcdef",
+            mode = .Editable,
+            content_revision = 1,
+        },
+        state = &state,
+        pointer_routed = true,
+        column_advance = 10,
+        frame = {
+            mouse_position = {24, 15},
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+        },
+    }
     _ = input_box_prepare(params, &owner)
     testing.expect(t, owner.active && state.dragging)
     testing.expect_value(t, state.anchor_byte, 1)
-    params.frame = {mouse_position = {44, 15}, mouse_released = {.Left}}
+    params.frame = {
+        mouse_position = {44, 15},
+        mouse_released = {.Left},
+    }
     _ = input_box_prepare(params, &owner)
     testing.expect_value(t, state.cursor_byte, 3)
     testing.expect(t, !owner.active && !state.dragging)
@@ -299,13 +442,28 @@ input_box_pointer_drag_selects_borrowed_text :: proc(t: ^testing.T) {
 input_box_scroll_tracks_caret_navigation :: proc(t: ^testing.T) {
     state: viewmodel.Ui_Input_Box_State
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{rect = {0, 0, 28, 24},
-        descriptor = {id = {domain = .Library_Control, local_id = 9},
-            text = "abcdef", mode = .Read_Only, content_revision = 1},
-        state = &state, column_advance = 10}
+    params: Input_Box_Params = {
+        rect = {0, 0, 28, 24},
+        descriptor = {
+            id = {
+                domain = .Library_Control,
+                local_id = 9,
+            },
+            text = "abcdef",
+            mode = .Read_Only,
+            content_revision = 1,
+        },
+        state = &state,
+        column_advance = 10,
+    }
     _ = input_box_prepare(params, &owner)
     testing.expect_value(t, state.scroll_x, f32(41))
-    home := [1]input.Input_Event{{kind = .Press, key = .Home}}
+    home: [1]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Home,
+        },
+    }
     params.focused = true
     params.frame = input_box_test_frame(home[:])
     _ = input_box_prepare(params, &owner)
@@ -315,15 +473,27 @@ input_box_scroll_tracks_caret_navigation :: proc(t: ^testing.T) {
 // Verify compact padding aligns click mapping, Unicode selection, and caret geometry.
 @(test)
 input_box_compact_padding_aligns_utf8_pointer_selection :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{
-        rect = {10, 20, 28, 24}, clip_rect = {0, 0, 80, 60},
-        descriptor = {text = "a界z", mode = .Editable, content_revision = 1},
-        state = &state, pointer_routed = true, padding = .Compact,
+    params: Input_Box_Params = {
+        rect = {10, 20, 28, 24},
+        clip_rect = {0, 0, 80, 60},
+        descriptor = {
+            text = "a界z",
+            mode = .Editable,
+            content_revision = 1,
+        },
+        state = &state,
+        pointer_routed = true,
+        padding = .Compact,
         column_advance = 10,
-        frame = {mouse_position = {23, 32},
-            mouse_pressed = {.Left}, mouse_down = {.Left}},
+        frame = {
+            mouse_position = {23, 32},
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+        },
     }
     pressed := input_box_prepare(params, &owner)
     testing.expect_value(t, state.anchor_byte, len("a"))
@@ -331,7 +501,10 @@ input_box_compact_padding_aligns_utf8_pointer_selection :: proc(t: ^testing.T) {
         geometry.Rectangle{12, 20, 24, 24})
     testing.expect_value(t, pressed.caret.x, f32(22))
 
-    params.frame = {mouse_position = {33, 32}, mouse_released = {.Left}}
+    params.frame = {
+        mouse_position = {33, 32},
+        mouse_released = {.Left},
+    }
     released := input_box_prepare(params, &owner)
     testing.expect_value(t, state.cursor_byte, len("a界"))
     testing.expect_value(t, released.text_geometry.anchor_column, 1)
@@ -346,10 +519,16 @@ input_box_compact_padding_aligns_utf8_pointer_selection :: proc(t: ^testing.T) {
 input_box_compact_padding_reveals_caret_with_compact_inset :: proc(t: ^testing.T) {
     state: viewmodel.Ui_Input_Box_State
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{
-        rect = {0, 0, 28, 24}, descriptor = {text = "abcdef",
-            mode = .Read_Only, content_revision = 1},
-        state = &state, padding = .Compact, column_advance = 10,
+    params: Input_Box_Params = {
+        rect = {0, 0, 28, 24},
+        descriptor = {
+            text = "abcdef",
+            mode = .Read_Only,
+            content_revision = 1,
+        },
+        state = &state,
+        padding = .Compact,
+        column_advance = 10,
     }
     prepared := input_box_prepare(params, &owner)
     testing.expect_value(t, state.scroll_x, f32(37))
@@ -360,16 +539,27 @@ input_box_compact_padding_reveals_caret_with_compact_inset :: proc(t: ^testing.T
 // Verify compact double-click hit testing selects the intended UTF-8 run.
 @(test)
 input_box_compact_padding_maps_double_click_run :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{
+    params: Input_Box_Params = {
         rect = {10, 20, 28, 24},
-        descriptor = {text = "界+z", mode = .Editable, content_revision = 1},
-        state = &state, pointer_routed = true, padding = .Compact,
+        descriptor = {
+            text = "界+z",
+            mode = .Editable,
+            content_revision = 1,
+        },
+        state = &state,
+        pointer_routed = true,
+        padding = .Compact,
         column_advance = 10,
-        frame = {mouse_position = {13, 32},
-            mouse_pressed = {.Left}, mouse_down = {.Left},
-            mouse_left_clicks = 2},
+        frame = {
+            mouse_position = {13, 32},
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+            mouse_left_clicks = 2,
+        },
     }
     prepared := input_box_prepare(params, &owner)
     testing.expect_value(t, state.anchor_byte, 0)
@@ -381,12 +571,21 @@ input_box_compact_padding_maps_double_click_run :: proc(t: ^testing.T) {
 // Verify default padding preserves the existing Library and GIF inset geometry.
 @(test)
 input_box_default_padding_preserves_existing_inset :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{
-        cursor_byte = len("aé"), anchor_byte = len("a"), content_revision = 1}
-    params := Input_Box_Params{
-        rect = {10, 20, 80, 24}, clip_rect = {5, 6, 100, 90},
-        descriptor = {text = "aéz", mode = .Read_Only, content_revision = 1},
-        state = &state, column_advance = 10,
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = len("aé"),
+        anchor_byte = len("a"),
+        content_revision = 1,
+    }
+    params: Input_Box_Params = {
+        rect = {10, 20, 80, 24},
+        clip_rect = {5, 6, 100, 90},
+        descriptor = {
+            text = "aéz",
+            mode = .Read_Only,
+            content_revision = 1,
+        },
+        state = &state,
+        column_advance = 10,
     }
     prepared := input_box_draw_result(params, false)
     testing.expect_value(t, params.padding, Input_Box_Padding.Default)
@@ -400,15 +599,28 @@ input_box_default_padding_preserves_existing_inset :: proc(t: ^testing.T) {
 // Verify prepared descriptors expose UTF-8 byte boundaries and codepoint columns.
 @(test)
 input_box_descriptor_projects_utf8_selection_geometry :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{
-        cursor_byte = len("aé"), anchor_byte = len("a"), content_revision = 3}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = len("aé"),
+        anchor_byte = len("a"),
+        content_revision = 3,
+    }
     owner: viewmodel.Ui_Press_Owner_State
     result := input_box_prepare({
-        rect = {10, 20, 80, 24}, clip_rect = {5, 6, 100, 90},
-        descriptor = {id = {domain = .Library_Control, local_id = 10},
-            text = "aéz", mode = .Read_Only, cursor_byte = len("aé"),
-            anchor_byte = len("a"), content_revision = 3},
-        state = &state, column_advance = 10,
+        rect = {10, 20, 80, 24},
+        clip_rect = {5, 6, 100, 90},
+        descriptor = {
+            id = {
+                domain = .Library_Control,
+                local_id = 10,
+            },
+            text = "aéz",
+            mode = .Read_Only,
+            cursor_byte = len("aé"),
+            anchor_byte = len("a"),
+            content_revision = 3,
+        },
+        state = &state,
+        column_advance = 10,
     }, &owner)
     testing.expect_value(t, result.descriptor.cursor_byte, len("aé"))
     testing.expect_value(t, result.descriptor.anchor_byte, len("a"))
@@ -425,23 +637,45 @@ input_box_semantic_text_actions_preserve_utf8_boundaries :: proc(t: ^testing.T) 
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    id := viewmodel.Ui_Node_Id{domain = .Library_Control, local_id = 11}
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Control,
+        local_id = 11,
+    }
     buffer: [16]u8
     copy(buffer[:], "aβc")
     length := len("aβc")
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1,
-        cursor_byte = length, anchor_byte = length}
-    semantic^.commands[0] = {target = id, kind = .Set_Text_Selection,
-        selection_anchor = 1, selection_focus = 2}
-    semantic^.commands[1] = {target = id, kind = .Replace_Selected_Text,
-        payload_length = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+        cursor_byte = length,
+        anchor_byte = length,
+    }
+    semantic^.commands[0] = {
+        target = id,
+        kind = .Set_Text_Selection,
+        selection_anchor = 1,
+        selection_focus = 2,
+    }
+    semantic^.commands[1] = {
+        target = id,
+        kind = .Replace_Selected_Text,
+        payload_length = 1,
+    }
     semantic^.commands[1].payload[0] = 'x'
     semantic^.command_count = 2
     owner: viewmodel.Ui_Press_Owner_State
-    result := input_box_prepare({rect = {0, 0, 100, 24},
-        descriptor = {id = id, text = string(buffer[:length]), mode = .Editable,
-            content_revision = 1}, state = &state, semantic_focus = semantic,
-        edit_target = {buffer[:], &length}, column_advance = 10}, &owner)
+    result := input_box_prepare({
+        rect = {0, 0, 100, 24},
+        descriptor = {
+            id = id,
+            text = string(buffer[:length]),
+            mode = .Editable,
+            content_revision = 1,
+        },
+        state = &state,
+        semantic_focus = semantic,
+        edit_target = {buffer[:], &length},
+        column_advance = 10,
+    }, &owner)
     testing.expect(t, result.changed)
     testing.expect_value(t, string(buffer[:length]), "axc")
     testing.expect_value(t, state.cursor_byte, 2)
@@ -454,21 +688,39 @@ input_box_semantic_full_text_action_replaces_all :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    id := viewmodel.Ui_Node_Id{domain = .Library_Control, local_id = 11}
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Control,
+        local_id = 11,
+    }
     buffer: [16]u8
     copy(buffer[:], "old")
     length := 3
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1,
-        cursor_byte = 2, anchor_byte = 1}
-    semantic^.commands[0] = {target = id, kind = .Replace_Text,
-        payload_length = 3}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+        cursor_byte = 2,
+        anchor_byte = 1,
+    }
+    semantic^.commands[0] = {
+        target = id,
+        kind = .Replace_Text,
+        payload_length = 3,
+    }
     copy(semantic^.commands[0].payload[:], "new")
     semantic^.command_count = 1
     owner: viewmodel.Ui_Press_Owner_State
-    result := input_box_prepare({rect = {0, 0, 100, 24},
-        descriptor = {id = id, text = string(buffer[:length]), mode = .Editable,
-            content_revision = 1}, state = &state, semantic_focus = semantic,
-        edit_target = {buffer[:], &length}, column_advance = 10}, &owner)
+    result := input_box_prepare({
+        rect = {0, 0, 100, 24},
+        descriptor = {
+            id = id,
+            text = string(buffer[:length]),
+            mode = .Editable,
+            content_revision = 1,
+        },
+        state = &state,
+        semantic_focus = semantic,
+        edit_target = {buffer[:], &length},
+        column_advance = 10,
+    }, &owner)
     testing.expect(t, result.changed)
     testing.expect_value(t, string(buffer[:length]), "new")
 }
@@ -479,14 +731,31 @@ input_box_descriptor_rejects_read_only_mutation :: proc(t: ^testing.T) {
     buffer: [8]u8
     copy(buffer[:], "path")
     length := 4
-    state := viewmodel.Ui_Input_Box_State{
-        cursor_byte = 4, anchor_byte = 4, content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 4,
+        anchor_byte = 4,
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
-    events := [1]input.Input_Event{{kind = .Text, codepoint = 'x'}}
+    events: [1]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+    }
     result := input_box_prepare({
-        descriptor = {id = {domain = .Gif_Control, local_id = 11},
-            text = "path", mode = .Read_Only, content_revision = 1},
-        state = &state, focused = true, frame = input_box_test_frame(events[:]),
+        descriptor = {
+            id = {
+                domain = .Gif_Control,
+                local_id = 11,
+            },
+            text = "path",
+            mode = .Read_Only,
+            content_revision = 1,
+        },
+        state = &state,
+        focused = true,
+        frame = input_box_test_frame(events[:]),
         edit_target = {buffer[:], &length},
     }, &owner)
     testing.expect(t, !result.changed)
@@ -501,7 +770,10 @@ input_box_test_pointer_params :: proc(
         rect = {0, 0, 120, 24},
         clip_rect = {0, 0, 120, 24},
         descriptor = {
-            id = {domain = .Library_Control, local_id = 8},
+            id = {
+                domain = .Library_Control,
+                local_id = 8,
+            },
             text = text,
             mode = .Editable,
             content_revision = 1,
@@ -550,7 +822,9 @@ input_box_double_click_hits_character_cells :: proc(t: ^testing.T) {
         {43, 3, 4}, {44, 4, 7}, {114, 4, 7},
     }
     for item in cases {
-        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        state: viewmodel.Ui_Input_Box_State = {
+            content_revision = 1,
+        }
         owner: viewmodel.Ui_Press_Owner_State
         params := input_box_test_pointer_params(&state, "one two", 2, item.x)
         _ = input_box_prepare(params, &owner)
@@ -562,7 +836,10 @@ input_box_double_click_hits_character_cells :: proc(t: ^testing.T) {
 // Verify scrolling maps a double click to the visible UTF-8 word without allocation.
 @(test)
 input_box_double_click_accounts_for_scroll :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1, scroll_x = 40}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+        scroll_x = 40,
+    }
     owner: viewmodel.Ui_Press_Owner_State
     params := input_box_test_pointer_params(&state, "one αβ_界9 end", 2, 13)
     params.rect.width = 54
@@ -578,7 +855,9 @@ input_box_double_click_accounts_for_scroll :: proc(t: ^testing.T) {
 input_box_multi_click_preserves_selection_until_release :: proc(t: ^testing.T) {
     click_counts := [?]u8{2, 3, 4}
     for clicks in click_counts {
-        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        state: viewmodel.Ui_Input_Box_State = {
+            content_revision = 1,
+        }
         owner: viewmodel.Ui_Press_Owner_State
         params := input_box_test_pointer_params(&state, "one two", clicks, 49)
         _ = input_box_prepare(params, &owner)
@@ -586,12 +865,19 @@ input_box_multi_click_preserves_selection_until_release :: proc(t: ^testing.T) {
         testing.expect_value(t, state.anchor_byte, first)
         testing.expect_value(t, state.cursor_byte, 7)
         testing.expect(t, state.dragging && state.fixed_selection && owner.active)
-        params.frame = {mouse_position = {14, 12}, mouse_down = {.Left}}
+        params.frame = {
+            mouse_position = {14, 12},
+            mouse_down = {.Left},
+        }
         _ = input_box_prepare(params, &owner)
         testing.expect_value(t, state.anchor_byte, first)
         testing.expect_value(t, state.cursor_byte, 7)
-        params.frame = {mouse_position = {-10, 12}, mouse_released = {.Left},
-            window_focus_changed = true, window_focused = false}
+        params.frame = {
+            mouse_position = {-10, 12},
+            mouse_released = {.Left},
+            window_focus_changed = true,
+            window_focused = false,
+        }
         _ = input_box_prepare(params, &owner)
         testing.expect_value(t, state.anchor_byte, first)
         testing.expect_value(t, state.cursor_byte, 7)
@@ -606,7 +892,10 @@ input_box_triple_click_selects_complete_content :: proc(t: ^testing.T) {
     texts := [?]string{"αβ hidden text", ""}
     for mode in modes {
         for text in texts {
-            state := viewmodel.Ui_Input_Box_State{content_revision = 1, scroll_x = 20}
+            state: viewmodel.Ui_Input_Box_State = {
+                content_revision = 1,
+                scroll_x = 20,
+            }
             owner: viewmodel.Ui_Press_Owner_State
             params := input_box_test_pointer_params(&state, text, 3, 14)
             params.descriptor.mode = mode
@@ -626,14 +915,19 @@ input_box_triple_click_selects_complete_content :: proc(t: ^testing.T) {
 input_box_single_click_metadata_preserves_dragging :: proc(t: ^testing.T) {
     click_counts := [?]u8{0, 1}
     for clicks in click_counts {
-        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        state: viewmodel.Ui_Input_Box_State = {
+            content_revision = 1,
+        }
         owner: viewmodel.Ui_Press_Owner_State
         params := input_box_test_pointer_params(&state, "one two", clicks, 33)
         _ = input_box_prepare(params, &owner)
         testing.expect_value(t, state.anchor_byte, 3)
         testing.expect_value(t, state.cursor_byte, 3)
         testing.expect(t, !state.fixed_selection)
-        params.frame = {mouse_position = {64, 12}, mouse_released = {.Left}}
+        params.frame = {
+            mouse_position = {64, 12},
+            mouse_released = {.Left},
+        }
         _ = input_box_prepare(params, &owner)
         testing.expect_value(t, state.anchor_byte, 3)
         testing.expect_value(t, state.cursor_byte, 6)
@@ -644,8 +938,11 @@ input_box_single_click_metadata_preserves_dragging :: proc(t: ^testing.T) {
 @(test)
 input_box_multi_click_respects_pointer_admission :: proc(t: ^testing.T) {
     for denied in 0..<3 {
-        state := viewmodel.Ui_Input_Box_State{content_revision = 1,
-            anchor_byte = 1, cursor_byte = 1}
+        state: viewmodel.Ui_Input_Box_State = {
+            content_revision = 1,
+            anchor_byte = 1,
+            cursor_byte = 1,
+        }
         owner: viewmodel.Ui_Press_Owner_State
         params := input_box_test_pointer_params(&state, "one two", 3, 14)
         if denied == 0 {
@@ -653,7 +950,11 @@ input_box_multi_click_respects_pointer_admission :: proc(t: ^testing.T) {
         } else if denied == 1 {
             params.frame.mouse_position.x = -10
         } else {
-            owner = {active = true, kind = .Input_Box, id = 99}
+            owner = {
+                active = true,
+                kind = .Input_Box,
+                id = 99,
+            }
         }
         _ = input_box_prepare(params, &owner)
         testing.expect_value(t, state.anchor_byte, 1)
@@ -665,7 +966,9 @@ input_box_multi_click_respects_pointer_admission :: proc(t: ^testing.T) {
 // Verify content publication clears a captured multi-click gesture's interaction state.
 @(test)
 input_box_revision_clears_multi_click_state :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
     params := input_box_test_pointer_params(&state, "one two", 2, 14)
     _ = input_box_prepare(params, &owner)
@@ -684,14 +987,24 @@ input_box_multi_click_selection_supports_edits :: proc(t: ^testing.T) {
         buffer: [32]u8
         copy(buffer[:], "αβ end")
         length := len("αβ end")
-        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        state: viewmodel.Ui_Input_Box_State = {
+            content_revision = 1,
+        }
         owner: viewmodel.Ui_Press_Owner_State
         params := input_box_test_pointer_params(&state, string(buffer[:length]), 2, 14)
         _ = input_box_prepare(params, &owner)
-        events := [1]input.Input_Event{{kind = .Press, key = key}}
+        events: [1]input.Input_Event = {
+            {
+                kind = .Press,
+                key = key,
+            },
+        }
         expected := " end"
         if key == .Space {
-            events[0] = {kind = .Text, codepoint = '界'}
+            events[0] = {
+                kind = .Text,
+                codepoint = '界',
+            }
             expected = "界 end"
         }
         update := input_box_apply_edit_keyboard(&state, {buffer[:], &length},
@@ -705,14 +1018,24 @@ input_box_multi_click_selection_supports_edits :: proc(t: ^testing.T) {
 // Verify read-only word selection permits copy/navigation but rejects text mutation.
 @(test)
 input_box_read_only_double_click_supports_copy_navigation :: proc(t: ^testing.T) {
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
     params := input_box_test_pointer_params(&state, "αβ end", 2, 14)
     params.descriptor.mode = .Read_Only
     _ = input_box_prepare(params, &owner)
-    events := [2]input.Input_Event{
-        {kind = .Text, codepoint = 'x'},
-        {kind = .Press, key = .C, modifiers = {.Control}}}
+    events: [2]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+        {
+            kind = .Press,
+            key = .C,
+            modifiers = {.Control},
+        },
+    }
     update := input_box_apply_keyboard(&state, params.descriptor.text,
         input_box_test_frame(events[:]))
     testing.expect(t, update.copy_requested)
@@ -729,7 +1052,9 @@ input_box_multi_click_publishes_semantic_selection :: proc(t: ^testing.T) {
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
     params := input_box_test_pointer_params(&state, "αβ end", 2, 14)
     params.semantic_focus = semantic
@@ -753,13 +1078,24 @@ input_box_triple_click_supports_cut_paste :: proc(t: ^testing.T) {
     buffer: [32]u8
     copy(buffer[:], "αβ end")
     length := len("αβ end")
-    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    state: viewmodel.Ui_Input_Box_State = {
+        content_revision = 1,
+    }
     owner: viewmodel.Ui_Press_Owner_State
     params := input_box_test_pointer_params(&state, string(buffer[:length]), 3, 14)
     _ = input_box_prepare(params, &owner)
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .X, modifiers = {.Control}},
-        {kind = .Press, key = .V, modifiers = {.Control}}}
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .X,
+            modifiers = {.Control},
+        },
+        {
+            kind = .Press,
+            key = .V,
+            modifiers = {.Control},
+        },
+    }
     update := input_box_apply_edit_keyboard(&state, {buffer[:], &length},
         input_box_test_frame(events[:]), "replacement")
     testing.expect(t, update.changed && update.copy_requested)

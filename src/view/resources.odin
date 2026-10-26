@@ -141,7 +141,7 @@ sdl_font_texture_upload :: proc(
         return false
     }
     texture := request.texture
-    sampled := native.Sampled_Texture{texture.handle, texture.width, texture.height}
+    sampled: native.Sampled_Texture = {texture.handle, texture.width, texture.height}
     queued := native.texture_operation_enqueue_upload(
         &owner.runtime^.texture_operations, {
             kind = .Create,
@@ -169,7 +169,7 @@ sdl_font_texture_release :: proc(
     if owner == nil {
         return
     }
-    sampled := native.Sampled_Texture{
+    sampled: native.Sampled_Texture = {
         texture.handle,
         texture.width,
         texture.height,

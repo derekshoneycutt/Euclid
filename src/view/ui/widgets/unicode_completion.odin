@@ -108,9 +108,10 @@ input_box_accept_completion :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
     candidate: Unicode_Completion, result: ^Input_Box_Update) {
     text_length := clamp(target.length^, 0, len(target.bytes))
-    result^.changed = input_box_replace_range(
-        state, target, {first = candidate.start, last = text_length},
-        candidate.text, result) || result^.changed
+    result^.changed = input_box_replace_range(state, target, {
+        first = candidate.start,
+        last = text_length,
+    }, candidate.text, result) || result^.changed
 }
 
 // input_box_accept_end_suggestion rejects stale frame-borrowed spelling corrections.
@@ -120,9 +121,10 @@ input_box_accept_end_suggestion :: proc(
     if result^.changed || len(policy.end_suggestion) == 0 {
         return false
     }
-    result^.changed = input_box_replace_range(
-        state, target, {first = 0, last = target.length^}, policy.end_suggestion,
-        result) || result^.changed
+    result^.changed = input_box_replace_range(state, target, {
+        first = 0,
+        last = target.length^,
+    }, policy.end_suggestion, result) || result^.changed
     result^.suggestion_accepted = !result^.edit_rejected
     return true
 }

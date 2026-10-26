@@ -15,7 +15,9 @@ ui_tree_projection_init :: proc(projection: ^Ui_Tree_Projection) -> bool {
         return len(projection.items) > 0 && len(projection.index) > 0
     }
     projection^ = {}
-    heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+    heap_allocator: runtime.Allocator = {
+        procedure = runtime.heap_allocator_proc,
+    }
     if storage.tlsf_owner_init(&projection.allocator, heap_allocator) != .Ok {
         return false
     }

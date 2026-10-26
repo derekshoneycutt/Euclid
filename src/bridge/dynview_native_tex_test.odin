@@ -84,7 +84,10 @@ presentation_source_mode_uses_mime_and_outer_delimiters :: proc(t: ^testing.T) {
 @(test)
 presentation_literal_source_preserves_exact_bytes :: proc(t: ^testing.T) {
     bytes := [?]u8{'A', 0, '\n', '\\', 'x'}
-    content := presentation_model.Presented_Text{mime = .Text_Latex, bytes = bytes[:]}
+    content: presentation_model.Presented_Text = {
+        mime = .Text_Latex,
+        bytes = bytes[:],
+    }
     literal := presentation_literal_source(content)
     testing.expect_value(t, len(literal), len(bytes))
     testing.expect(t, literal[0] == 'A' && literal[1] == 0)
@@ -361,7 +364,7 @@ dynview_native_math_request_preserves_styles :: proc(t: ^testing.T) {
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
     state.dynview.command_buffer.stream_open_block_id = 13
-    styles := Dynview_Native_Math_Styles{
+    styles: Dynview_Native_Math_Styles = {
         text = dyncore.DYNVIEW_STYLE_ERROR,
         math = dyncore.DYNVIEW_STYLE_MEDIUM,
         regular = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -388,7 +391,7 @@ dynview_native_math_preserves_mathbb_style :: proc(t: ^testing.T) {
     state.saved_context = context
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
-    styles := Dynview_Native_Math_Styles{
+    styles: Dynview_Native_Math_Styles = {
         text = dyncore.DYNVIEW_STYLE_OUTPUT,
         math = dyncore.DYNVIEW_STYLE_MEDIUM,
         regular = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -412,7 +415,7 @@ dynview_native_math_maps_large_operator_script_programs :: proc(t: ^testing.T) {
     state.saved_context = context
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
-    styles := Dynview_Native_Math_Styles{
+    styles: Dynview_Native_Math_Styles = {
         text = dyncore.DYNVIEW_STYLE_OUTPUT,
         math = dyncore.DYNVIEW_STYLE_ITALIC,
         regular = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -453,7 +456,7 @@ dynview_native_math_repeats_reported_formula :: proc(t: ^testing.T) {
             "\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4" +
             "\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}",
     }
-    styles := Dynview_Native_Math_Styles{
+    styles: Dynview_Native_Math_Styles = {
         text = dyncore.DYNVIEW_STYLE_OUTPUT,
         math = dyncore.DYNVIEW_STYLE_ITALIC,
         regular = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -478,7 +481,7 @@ dynview_native_math_maps_stretch_delimiter_modes :: proc(t: ^testing.T) {
     state.saved_context = context
     state.dynview.enabled = true
     state.dynview.command_buffer.stream_open_block = true
-    styles := Dynview_Native_Math_Styles{
+    styles: Dynview_Native_Math_Styles = {
         text = dyncore.DYNVIEW_STYLE_OUTPUT,
         math = dyncore.DYNVIEW_STYLE_MEDIUM,
         regular = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -532,7 +535,7 @@ dynview_native_matrix_snapshot_is_valid :: proc(t: ^testing.T) {
     state.dynview.command_buffer.stream_open_block_id = 15
     source := "\\sum \\left\\{\\begin{matrix}1&2&3&4\\\\5&6&7&8" +
         "\\end{matrix}\\right\\}"
-    styles := Dynview_Native_Math_Styles{
+    styles: Dynview_Native_Math_Styles = {
         text = dyncore.DYNVIEW_STYLE_OUTPUT,
         math = dyncore.DYNVIEW_STYLE_ITALIC,
         regular = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |

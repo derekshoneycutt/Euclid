@@ -45,7 +45,12 @@ library_search_record_commit :: proc(
             tick = search^.generation,
             revision = search^.index_generation,
             flags = flags,
-            payload = {counts = {first = returned_count, second = total_count}},
+            payload = {
+                counts = {
+                    first = returned_count,
+                    second = total_count,
+                },
+            },
         })
     search^.committed_generation = search^.generation
     search^.scenario_correlation = 0

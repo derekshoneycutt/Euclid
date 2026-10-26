@@ -67,7 +67,10 @@ terminal_highlight_append_presentation :: proc(
     }
     next := run
     if p.scratch_count == len(p.scratch) - 1 && int(run.end_byte) < source_length {
-        next = {start_byte = run.start_byte, end_byte = u32(source_length)}
+        next = {
+            start_byte = run.start_byte,
+            end_byte = u32(source_length),
+        }
         p.degraded = true
         if !p.degradation_reported {
             log.warn(
@@ -108,7 +111,8 @@ terminal_highlight_map_presentation :: proc(
     p.degraded = false
     terminal_highlight_map_interval(p, 0, prefix, 0, len(source))
     terminal_highlight_append_presentation(p, {
-        start_byte = u32(prefix), end_byte = u32(len(source) - suffix),
+        start_byte = u32(prefix),
+        end_byte = u32(len(source) - suffix),
     }, len(source))
     terminal_highlight_map_interval(p, len(old) - suffix, len(old),
         len(source) - len(old), len(source))
@@ -139,7 +143,8 @@ terminal_highlight_observe_presentation :: proc(
     p.reset_revision = reset_revision
     p.identity = {
         animation_generation = term.animation_generation,
-        source_revision = revision, face_generation = term.highlighting.face_generation,
+        source_revision = revision,
+        face_generation = term.highlighting.face_generation,
     }
 }
 

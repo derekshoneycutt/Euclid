@@ -78,7 +78,9 @@ collections_head_rename_allocation_failure_is_atomic :: proc(t: ^testing.T) {
     mutation, _ := make_collection_name_mutation(
         set, collections_test_id(1), string(name[:]))
     backing := set^.allocator.backing_allocator
-    set^.allocator.backing_allocator = {procedure = collections_test_reject_backing}
+    set^.allocator.backing_allocator = {
+        procedure = collections_test_reject_backing,
+    }
     ballast: [256][]u8
     count := collections_test_exhaust_name_storage(set, ballast[:])
     before := storage.tlsf_owner_diagnostics(&set^.allocator)

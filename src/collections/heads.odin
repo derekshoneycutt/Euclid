@@ -29,8 +29,9 @@ make_collection_name_mutation :: proc(
     if !collection_name_bytes_are_valid(transmute([]u8)name, len(name)) {
         return {}, .Invalid_Name
     }
-    mutation := Mutation{
-        kind = .Set_Collection_Name, collection_id = id,
+    mutation: Mutation = {
+        kind = .Set_Collection_Name,
+        collection_id = id,
         collection_name_length = len(name),
     }
     copy(mutation.collection_name[:], transmute([]u8)name)
@@ -79,8 +80,10 @@ make_collection_move :: proc(
         return {}, failure
     }
     return {
-        kind = .Reorder_Collections, collection_id = id,
-        sibling_collection_id = sibling, direction = direction,
+        kind = .Reorder_Collections,
+        collection_id = id,
+        sibling_collection_id = sibling,
+        direction = direction,
     }, .None
 }
 

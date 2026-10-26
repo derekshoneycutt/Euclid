@@ -9,8 +9,8 @@ import termpalette "../palette"
 // Verify DECRQSS construction depends only on the explicit query snapshot.
 @(test)
 emulator_test_query_context_decrqss :: proc(t: ^testing.T) {
-    producer := termmodel.Terminal_Producer{.Terminal_Session, 7, 2}
-    query_context := Query_Context{
+    producer: termmodel.Terminal_Producer = {.Terminal_Session, 7, 2}
+    query_context: Query_Context = {
         style = {
             foreground = termpalette.terminal_color_indexed(3),
             background = termpalette.terminal_color_direct(0x010203ff),
@@ -41,11 +41,12 @@ emulator_test_query_context_decrqss :: proc(t: ^testing.T) {
 // Verify XTGETTCAP construction is transactional and producer-correlated.
 @(test)
 emulator_test_query_context_xtgetcap :: proc(t: ^testing.T) {
-    producer := termmodel.Terminal_Producer{.Julia_Evaluation, 11, 4}
+    producer: termmodel.Terminal_Producer = {.Julia_Evaluation, 11, 4}
     responses: [3]termmodel.Terminal_Response
     candidate := "544e;436f;524742"
-    count, valid := query_prepare_xtgetcap_responses(
-        {producer = producer}, transmute([]u8)candidate, responses[:])
+    count, valid := query_prepare_xtgetcap_responses({
+        producer = producer,
+    }, transmute([]u8)candidate, responses[:])
     testing.expect(t, valid)
     testing.expect_value(t, count, 3)
     for response in responses[:count] {
@@ -75,8 +76,9 @@ emulator_test_interpreter_query_context_snapshot :: proc(t: ^testing.T) {
     }
     retained.modify_other_keys_level = 2
     interpreter: Interpreter
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &retained,
+    }))
     interpreter.input_mode.bracketed_paste = true
     interpreter.cursor_visible = false
     snapshot := interpreter_query_context(&interpreter)

@@ -89,7 +89,7 @@ shell_test_interpolation_parts_and_spans :: proc(t: ^testing.T) {
 // Verify each reserved unquoted operator fails at its exact source location.
 @(test)
 shell_test_reserved_operators_are_rejected :: proc(t: ^testing.T) {
-    sources := [8]string{
+    sources: [8]string = {
         "echo | value", "echo < value", "echo > value", "echo >> value",
         "echo & value", "echo && value", "echo || value", "echo ; value",
     }
@@ -118,10 +118,10 @@ shell_test_reserved_operators_can_be_literal_data :: proc(t: ^testing.T) {
 // Verify malformed quotes, escapes, and interpolation fail without partial success.
 @(test)
 shell_test_malformed_input_is_specific :: proc(t: ^testing.T) {
-    fixtures := [5]struct {
+    fixtures: [5]struct {
         source: string,
         expected: Shell_Parse_Error_Kind,
-    }{
+    } = {
         {"'open", .Unterminated_Single_Quote},
         {"\"open", .Unterminated_Double_Quote},
         {"tail\\", .Trailing_Escape},
@@ -138,7 +138,7 @@ shell_test_malformed_input_is_specific :: proc(t: ^testing.T) {
 // Verify invalid UTF-8, mismatched delimiters, and nesting pressure fail explicitly.
 @(test)
 shell_test_interpolation_structural_failures_are_bounded :: proc(t: ^testing.T) {
-    invalid_utf8 := [1]u8{0xff}
+    invalid_utf8: [1]u8 = {0xff}
     result := shell_parse(string(invalid_utf8[:]))
     testing.expect_value(t, result.error.kind, Shell_Parse_Error_Kind.Invalid_Utf8)
 
@@ -197,7 +197,7 @@ shell_test_empty_and_capacity_limits :: proc(t: ^testing.T) {
 // Sweep deterministic arbitrary byte strings and validate every successful template.
 @(test)
 shell_test_arbitrary_inputs_preserve_template_invariants :: proc(t: ^testing.T) {
-    alphabet := [18]u8{
+    alphabet: [18]u8 = {
         'a', 'Z', '0', ' ', '\t', '\\', '\'', '"', '$', '(', ')', '[', ']',
         '{', '}', '|', ';', 0xff,
     }

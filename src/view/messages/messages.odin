@@ -24,19 +24,29 @@ shell_content_generation :: proc(
 shell_messages_refresh :: proc(
     runtime: ^messagesmodel.Label_Cache,
     generation: ^contentdata.Content_Generation) -> contentdata.Content_Message_Status {
-    if generation == nil { return .Invalid_State }
-    if runtime.shell_message_generation == generation.generation { return .Ok }
+    if generation == nil {
+        return .Invalid_State
+    }
+    if runtime.shell_message_generation == generation.generation {
+        return .Ok
+    }
     bytes: [contentdata.CONTENT_MESSAGE_CAPACITY][128]u8
     lengths: [contentdata.CONTENT_MESSAGE_CAPACITY]u16
     required := contentdata.CONTENT_REQUIRED_MESSAGES
     for identity, ordinal in required {
         id := contentdata.Content_Message_Id(identity.native_id)
         view, status := contentdata.content_message_lookup(generation, id)
-        if status != .Ok { return status }
-        if view.message.argument_count != 0 { continue }
+        if status != .Ok {
+            return status
+        }
+        if view.message.argument_count != 0 {
+            continue
+        }
         text, formatted := contentdata.content_message_format(
             generation, id, nil, bytes[ordinal][:])
-        if formatted != .Ok { return formatted }
+        if formatted != .Ok {
+            return formatted
+        }
         lengths[ordinal] = u16(len(text))
     }
     runtime.shell_message_bytes = bytes
@@ -55,7 +65,9 @@ shell_message :: proc(
     }
     status := shell_messages_refresh(&state.message_labels, generation)
     _, ordinal := contentdata.content_message_identity(id)
-    if status == .Ok && ordinal < 0 { status = .Missing_Key }
+    if status == .Ok && ordinal < 0 {
+        status = .Missing_Key
+    }
     if status == .Ok && state.message_labels.shell_message_lengths[ordinal] == 0 {
         status = .Signature_Mismatch
     }

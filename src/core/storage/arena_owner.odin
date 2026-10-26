@@ -25,22 +25,22 @@ Arena_Owner_Init_Proc :: proc(arena: ^vmem.Arena, reservation: uint) -> bool
 //   - Current measurements are zero after destruction; lifetime peaks remain available.
 Arena_Owner_Diagnostics :: struct {
     // Lifecycle state and the retained first-block reservation established at init.
-    initialized : bool,
-    initial_reservation : uint,
+    initialized: bool,
+    initial_reservation: uint,
 
     // Live aggregate usage across the arena's current block chain.
-    current_used : uint,
-    current_reserved : uint,
-    current_committed : uint,
+    current_used: uint,
+    current_reserved: uint,
+    current_committed: uint,
 
     // Lifetime high-water marks sampled before reset, destruction, and observation.
-    peak_used : uint,
-    peak_reserved : uint,
-    peak_committed : uint,
+    peak_used: uint,
+    peak_reserved: uint,
+    peak_committed: uint,
 
     // Successful bulk lifecycle transitions performed by this owner.
-    reset_count : u64,
-    destroy_count : u64,
+    reset_count: u64,
+    destroy_count: u64,
 }
 
 // Own one growing virtual arena, its allocator, and terminal lifecycle diagnostics.
@@ -50,19 +50,19 @@ Arena_Owner_Diagnostics :: struct {
 //   - The owner must not be copied after successful initialization.
 Arena_Owner :: struct {
     // Live virtual-memory arena and allocator published from that arena.
-    arena : vmem.Arena,
-    allocator : runtime.Allocator,
+    arena: vmem.Arena,
+    allocator: runtime.Allocator,
 
     // Configured first-block reservation and lifetime usage high-water marks in bytes.
-    initial_reservation : uint,
-    peak_used : uint,
-    peak_reserved : uint,
-    peak_committed : uint,
+    initial_reservation: uint,
+    peak_used: uint,
+    peak_reserved: uint,
+    peak_committed: uint,
 
     // Completed bulk transitions and the guard for access to live arena storage.
-    reset_count : u64,
-    destroy_count : u64,
-    initialized : bool,
+    reset_count: u64,
+    destroy_count: u64,
+    initialized: bool,
 }
 
 //   Initialize one growing arena with an explicit first-block reservation.

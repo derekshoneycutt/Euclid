@@ -59,10 +59,15 @@ tree_projection_add_custom_entry :: proc(
     retained := tree_projection_find(previous, entry.id)
     expanded := retained != TREE_NO_ITEM && previous^.items[retained].expanded
     return viewmodel.ui_tree_projection_add_node(projection, {
-        key = entry.id, target_animation_id = entry.animation_id,
-        kind = kind, parent = TREE_NO_ITEM,
-        first_child = TREE_NO_ITEM, last_child = TREE_NO_ITEM,
-        next_sibling = TREE_NO_ITEM, selectable = true, expanded = expanded,
+        key = entry.id,
+        target_animation_id = entry.animation_id,
+        kind = kind,
+        parent = TREE_NO_ITEM,
+        first_child = TREE_NO_ITEM,
+        last_child = TREE_NO_ITEM,
+        next_sibling = TREE_NO_ITEM,
+        selectable = true,
+        expanded = expanded,
     }, canonical_name) != TREE_NO_ITEM
 }
 
@@ -78,8 +83,9 @@ tree_projection_link_custom_entries :: proc(
         head := tree_projection_find(projection, collection.id)
         if head == TREE_NO_ITEM ||
             !tree_projection_link_custom_siblings(
-                projection, set, {collection_id = collection.id}, head,
-                update_revision) {
+                projection, set, {
+                    collection_id = collection.id,
+                }, head, update_revision) {
             return false
         }
     }
@@ -92,9 +98,10 @@ tree_projection_link_custom_entries :: proc(
         parent := tree_projection_find(projection, entry.id)
         if parent == TREE_NO_ITEM ||
             !tree_projection_link_custom_siblings(
-                projection, set,
-                {collection_id = entry.collection_id, parent_entry_id = entry.id}, parent,
-                update_revision) {
+                projection, set, {
+                    collection_id = entry.collection_id,
+                    parent_entry_id = entry.id,
+                }, parent, update_revision) {
             return false
         }
     }
@@ -318,10 +325,14 @@ tree_projection_stage_custom_entry :: proc(
         entry.kind == .Animation else .Group
     allocator := storage.tlsf_owner_allocator(&projection^.allocator)
     node, ok := viewmodel.ui_tree_projection_make_node({
-        key = entry.id, target_animation_id = entry.animation_id,
-        kind = kind, parent = TREE_NO_ITEM,
-        first_child = TREE_NO_ITEM, last_child = TREE_NO_ITEM,
-        next_sibling = TREE_NO_ITEM, selectable = true,
+        key = entry.id,
+        target_animation_id = entry.animation_id,
+        kind = kind,
+        parent = TREE_NO_ITEM,
+        first_child = TREE_NO_ITEM,
+        last_child = TREE_NO_ITEM,
+        next_sibling = TREE_NO_ITEM,
+        selectable = true,
     }, canonical_name, allocator)
     if !ok {
         return false

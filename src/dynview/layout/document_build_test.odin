@@ -19,33 +19,97 @@ Document_Layout_Test_Fixture :: struct {
 // Initialize the semantic records shared by document layout tests.
 document_layout_test_semantics :: proc(fixture: ^Document_Layout_Test_Fixture) {
     fixture^.blocks[0] = {
-        kind = .Paragraph, inline_start = 0, inline_count = 6,
-        source_offset = 0, source_count = 18, alignment = .Left,
+        kind = .Paragraph,
+        inline_start = 0,
+        inline_count = 6,
+        source_offset = 0,
+        source_count = 18,
+        alignment = .Left,
     }
     fixture^.inlines = {
-        {kind = .Text, source_offset = 0, source_count = 4,
-            text_offset = 0, text_count = 4},
-        {kind = .Space, source_offset = 4, source_count = 1,
-            text_offset = 4, text_count = 1, space_kind = .Breakable},
-        {kind = .Math, source_offset = 5, source_count = 4,
-            math_program_id = 0},
-        {kind = .Penalty, source_offset = 9, penalty = 50},
-        {kind = .Forced_Break, source_offset = 9, source_count = 2},
-        {kind = .Shape, source_offset = 11, source_count = 7,
-            shape = {present = true, kind = .Circle, width = 2, height = 3}},
+        {
+            kind = .Text,
+            source_offset = 0,
+            source_count = 4,
+            text_offset = 0,
+            text_count = 4,
+        },
+        {
+            kind = .Space,
+            source_offset = 4,
+            source_count = 1,
+            text_offset = 4,
+            text_count = 1,
+            space_kind = .Breakable,
+        },
+        {
+            kind = .Math,
+            source_offset = 5,
+            source_count = 4,
+            math_program_id = 0,
+        },
+        {
+            kind = .Penalty,
+            source_offset = 9,
+            penalty = 50,
+        },
+        {
+            kind = .Forced_Break,
+            source_offset = 9,
+            source_count = 2,
+        },
+        {
+            kind = .Shape,
+            source_offset = 11,
+            source_count = 7,
+            shape = {
+                present = true,
+                kind = .Circle,
+                width = 2,
+                height = 3,
+            },
+        },
     }
     fixture^.runs = {
-        {inline_index = 0, text_offset = 0, text_count = 4,
-            glyph_start = 0, glyph_count = 2, base_pixel_size = 16,
-            width = 40, ascent = 12, descent = 3},
-        {inline_index = 1, text_offset = 4, text_count = 1,
-            glyph_start = 2, glyph_count = 1, base_pixel_size = 16,
-            width = 10, ascent = 12, descent = 3},
+        {
+            inline_index = 0,
+            text_offset = 0,
+            text_count = 4,
+            glyph_start = 0,
+            glyph_count = 2,
+            base_pixel_size = 16,
+            width = 40,
+            ascent = 12,
+            descent = 3,
+        },
+        {
+            inline_index = 1,
+            text_offset = 4,
+            text_count = 1,
+            glyph_start = 2,
+            glyph_count = 1,
+            base_pixel_size = 16,
+            width = 10,
+            ascent = 12,
+            descent = 3,
+        },
     }
     fixture^.glyphs = {
-        {glyph_id = 1, cluster = 0, x_advance = 1280},
-        {glyph_id = 2, cluster = 2, x_advance = 1280},
-        {glyph_id = 3, cluster = 0, x_advance = 640},
+        {
+            glyph_id = 1,
+            cluster = 0,
+            x_advance = 1280,
+        },
+        {
+            glyph_id = 2,
+            cluster = 2,
+            x_advance = 1280,
+        },
+        {
+            glyph_id = 3,
+            cluster = 0,
+            x_advance = 640,
+        },
         {},
     }
 }
@@ -72,15 +136,24 @@ document_layout_test_runtime :: proc(
     cache^.last_panel_width = 96
     cache^.math_program_count = 1
     cache^.math_programs[0] = {
-        valid = true, draw_width = 70, ascent = 18, descent = 6}
+        valid = true,
+        draw_width = 70,
+        ascent = 18,
+        descent = 6,
+    }
     return runtime
 }
 
 // Verify semantic shapes retain legacy authored units and fill-only point styling.
 @(test)
 document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
-    point := dynviewmodel.Dynview_Document_Shape{
-        present = true, kind = .Point, width = 1, height = 1, thickness = 1}
+    point: dynviewmodel.Dynview_Document_Shape = {
+        present = true,
+        kind = .Point,
+        width = 1,
+        height = 1,
+        thickness = 1,
+    }
     point_command, point_ok := document_shape_command(point)
     point_geometry, point_geometry_ok := document_shape_geometry(point, 8)
     testing.expect(t, point_ok && point_geometry_ok)
@@ -88,9 +161,16 @@ document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
     testing.expect_value(t, point_geometry.draw_width, f32(16))
     testing.expect_value(t, point_geometry.draw_height, f32(16))
 
-    line := dynviewmodel.Dynview_Document_Inline{
-        kind = .Shape, shape = {present = true, kind = .Line,
-            width = 3, height = 1, thickness = 4}}
+    line: dynviewmodel.Dynview_Document_Inline = {
+        kind = .Shape,
+        shape = {
+            present = true,
+            kind = .Line,
+            width = 3,
+            height = 1,
+            thickness = 4,
+        },
+    }
     cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
     cache^.last_cell_width = 8
@@ -100,9 +180,16 @@ document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
     testing.expect_value(t, line_node.ascent, f32(2))
     testing.expect_value(t, line_node.descent, f32(2))
 
-    pie := dynviewmodel.Dynview_Document_Shape{
-        present = true, kind = .Angle, width = 2, height = 1,
-        thickness = 1, filled = true, start_angle = 0, end_angle = 90}
+    pie: dynviewmodel.Dynview_Document_Shape = {
+        present = true,
+        kind = .Angle,
+        width = 2,
+        height = 1,
+        thickness = 1,
+        filled = true,
+        start_angle = 0,
+        end_angle = 90,
+    }
     pie_geometry, pie_ok := document_shape_geometry(pie, 8)
     testing.expect(t, pie_ok)
     testing.expect(t, pie_geometry.draw_width > 16)
@@ -208,16 +295,33 @@ document_layout_reflows_from_pixel_width :: proc(t: ^testing.T) {
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
     defer storage.arena_owner_destroy(&runtime_owner)
     fixture.blocks[0].inline_count = 3
-    fixture.inlines[2] = {kind = .Text, text_offset = 5, text_count = 4}
+    fixture.inlines[2] = {
+        kind = .Text,
+        text_offset = 5,
+        text_count = 4,
+    }
     fixture.runs[1].inline_index = 1
-    third_run := dynviewmodel.Dynview_Document_Shaped_Run{
-        inline_index = 2, text_offset = 5, text_count = 4,
-        glyph_start = 3, glyph_count = 1, base_pixel_size = 16,
-        width = 40, ascent = 12, descent = 3}
-    runs := [3]dynviewmodel.Dynview_Document_Shaped_Run{
-        fixture.runs[0], fixture.runs[1], third_run}
+    third_run: dynviewmodel.Dynview_Document_Shaped_Run = {
+        inline_index = 2,
+        text_offset = 5,
+        text_count = 4,
+        glyph_start = 3,
+        glyph_count = 1,
+        base_pixel_size = 16,
+        width = 40,
+        ascent = 12,
+        descent = 3,
+    }
+    runs: [3]dynviewmodel.Dynview_Document_Shaped_Run = {
+        fixture.runs[0],
+        fixture.runs[1],
+        third_run,
+    }
     runtime^.compile_cache.document_shaped_runs = runs[:]
-    fixture.glyphs[3] = {glyph_id = 4, x_advance = 2560}
+    fixture.glyphs[3] = {
+        glyph_id = 4,
+        x_advance = 2560,
+    }
     runtime^.compile_cache.document_shaped_glyphs = fixture.glyphs[:]
     testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
     defer storage.arena_owner_destroy(&cache_owner)
@@ -296,30 +400,82 @@ document_layout_list_item_fixture :: proc(
     runs: ^[2]dynviewmodel.Dynview_Document_Shaped_Run,
     glyphs: ^[2]fontmodel.Shaped_Glyph) {
     blocks^ = {
-        {kind = .List_Item, inline_start = 0, inline_count = 1,
-            source_count = 5, alignment = .Left, container_kind = .Itemize,
-            container_depth = 1, left_margin_levels = 1, list_kind = .Itemize,
-            list_id = 1, item_ordinal = 1},
-        {kind = .Paragraph, inline_start = 1, inline_count = 1,
-            source_offset = 5, source_count = 4, alignment = .Left,
-            no_indent = true, container_kind = .Itemize, container_depth = 1,
-            left_margin_levels = 1, list_kind = .Itemize, list_id = 1,
-            item_ordinal = 1, item_first_block = true},
+        {
+            kind = .List_Item,
+            inline_start = 0,
+            inline_count = 1,
+            source_count = 5,
+            alignment = .Left,
+            container_kind = .Itemize,
+            container_depth = 1,
+            left_margin_levels = 1,
+            list_kind = .Itemize,
+            list_id = 1,
+            item_ordinal = 1,
+        },
+        {
+            kind = .Paragraph,
+            inline_start = 1,
+            inline_count = 1,
+            source_offset = 5,
+            source_count = 4,
+            alignment = .Left,
+            no_indent = true,
+            container_kind = .Itemize,
+            container_depth = 1,
+            left_margin_levels = 1,
+            list_kind = .Itemize,
+            list_id = 1,
+            item_ordinal = 1,
+            item_first_block = true,
+        },
     }
     inlines^ = {
-        {kind = .Text, source_count = 5, text_count = 1},
-        {kind = .Text, source_offset = 5, source_count = 4,
-            text_offset = 1, text_count = 4},
+        {
+            kind = .Text,
+            source_count = 5,
+            text_count = 1,
+        },
+        {
+            kind = .Text,
+            source_offset = 5,
+            source_count = 4,
+            text_offset = 1,
+            text_count = 4,
+        },
     }
     runs^ = {
-        {inline_index = 0, text_count = 1, glyph_count = 1,
-            base_pixel_size = 16, width = 8, ascent = 12, descent = 3},
-        {inline_index = 1, text_offset = 1, text_count = 4,
-            glyph_start = 1, glyph_count = 1, base_pixel_size = 16,
-            width = 40, ascent = 12, descent = 3},
+        {
+            inline_index = 0,
+            text_count = 1,
+            glyph_count = 1,
+            base_pixel_size = 16,
+            width = 8,
+            ascent = 12,
+            descent = 3,
+        },
+        {
+            inline_index = 1,
+            text_offset = 1,
+            text_count = 4,
+            glyph_start = 1,
+            glyph_count = 1,
+            base_pixel_size = 16,
+            width = 40,
+            ascent = 12,
+            descent = 3,
+        },
     }
     glyphs^ = {
-        {glyph_id = 1, x_advance = 512}, {glyph_id = 2, x_advance = 2560}}
+        {
+            glyph_id = 1,
+            x_advance = 512,
+        },
+        {
+            glyph_id = 2,
+            x_advance = 2560,
+        },
+    }
 }
 
 // Verify list labels occupy the gutter beside a hanging-indented body.
@@ -356,9 +512,13 @@ document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
 // Verify description items share a label column and wide labels move above the body.
 @(test)
 document_layout_resolves_description_label_columns :: proc(t: ^testing.T) {
-    narrow := dynviewmodel.Dynview_Document_Block{
-        kind = .List_Item, container_kind = .Description,
-        left_margin_levels = 1, list_kind = .Description, list_id = 1}
+    narrow: dynviewmodel.Dynview_Document_Block = {
+        kind = .List_Item,
+        container_kind = .Description,
+        left_margin_levels = 1,
+        list_kind = .Description,
+        list_id = 1,
+    }
     body := narrow
     body.kind = .Paragraph
     wide := narrow
@@ -476,21 +636,64 @@ document_layout_places_display_blocks_on_outer_grid :: proc(t: ^testing.T) {
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
     defer storage.arena_owner_destroy(&runtime_owner)
-    blocks := [3]dynviewmodel.Dynview_Document_Block{
-        {kind = .Paragraph, inline_start = 0, inline_count = 1,
-            source_count = 1, alignment = .Left},
-        {kind = .Display, inline_start = 1, inline_count = 1,
-            source_offset = 1, source_count = 1, alignment = .Left},
-        {kind = .Paragraph, inline_start = 2, inline_count = 1,
-            source_offset = 2, source_count = 1, alignment = .Right},
+    blocks: [3]dynviewmodel.Dynview_Document_Block = {
+        {
+            kind = .Paragraph,
+            inline_start = 0,
+            inline_count = 1,
+            source_count = 1,
+            alignment = .Left,
+        },
+        {
+            kind = .Display,
+            inline_start = 1,
+            inline_count = 1,
+            source_offset = 1,
+            source_count = 1,
+            alignment = .Left,
+        },
+        {
+            kind = .Paragraph,
+            inline_start = 2,
+            inline_count = 1,
+            source_offset = 2,
+            source_count = 1,
+            alignment = .Right,
+        },
     }
-    inlines := [3]dynviewmodel.Dynview_Document_Inline{
-        {kind = .Shape, source_count = 1,
-            shape = {present = true, kind = .Point, width = 1, height = 1}},
-        {kind = .Shape, source_offset = 1, source_count = 1,
-            shape = {present = true, kind = .Circle, width = 2, height = 2}},
-        {kind = .Shape, source_offset = 2, source_count = 1,
-            shape = {present = true, kind = .Box, width = 1, height = 1}},
+    inlines: [3]dynviewmodel.Dynview_Document_Inline = {
+        {
+            kind = .Shape,
+            source_count = 1,
+            shape = {
+                present = true,
+                kind = .Point,
+                width = 1,
+                height = 1,
+            },
+        },
+        {
+            kind = .Shape,
+            source_offset = 1,
+            source_count = 1,
+            shape = {
+                present = true,
+                kind = .Circle,
+                width = 2,
+                height = 2,
+            },
+        },
+        {
+            kind = .Shape,
+            source_offset = 2,
+            source_count = 1,
+            shape = {
+                present = true,
+                kind = .Box,
+                width = 1,
+                height = 1,
+            },
+        },
     }
     runtime^.content.document_blocks = blocks[:]
     runtime^.content.document_inlines = inlines[:]
@@ -512,17 +715,42 @@ document_layout_aligns_technical_display_columns :: proc(t: ^testing.T) {
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
     defer storage.arena_owner_destroy(&runtime_owner)
-    block := [1]dynviewmodel.Dynview_Document_Block{{kind = .Display,
-        inline_count = 4, display_kind = .Align, display_row_count = 2}}
-    rows := [2]dynviewmodel.Dynview_Document_Display_Row{
-        {primary_program_id = 0, secondary_program_id = 1,
-            alignment = .Center, number = 1},
-        {primary_program_id = 2, secondary_program_id = 3,
-            alignment = .Center},
+    block: [1]dynviewmodel.Dynview_Document_Block = {{
+        kind = .Display,
+        inline_count = 4,
+        display_kind = .Align,
+        display_row_count = 2,
+    }}
+    rows: [2]dynviewmodel.Dynview_Document_Display_Row = {
+        {
+            primary_program_id = 0,
+            secondary_program_id = 1,
+            alignment = .Center,
+            number = 1,
+        },
+        {
+            primary_program_id = 2,
+            secondary_program_id = 3,
+            alignment = .Center,
+        },
     }
-    inlines := [4]dynviewmodel.Dynview_Document_Inline{
-        {kind = .Math, math_program_id = 0}, {kind = .Math, math_program_id = 1},
-        {kind = .Math, math_program_id = 2}, {kind = .Math, math_program_id = 3},
+    inlines: [4]dynviewmodel.Dynview_Document_Inline = {
+        {
+            kind = .Math,
+            math_program_id = 0,
+        },
+        {
+            kind = .Math,
+            math_program_id = 1,
+        },
+        {
+            kind = .Math,
+            math_program_id = 2,
+        },
+        {
+            kind = .Math,
+            math_program_id = 3,
+        },
     }
     runtime^.content.document_blocks = block[:]
     runtime^.content.document_inlines = inlines[:]
@@ -532,7 +760,11 @@ document_layout_aligns_technical_display_columns :: proc(t: ^testing.T) {
     widths := [?]f32{20, 30, 40, 10}
     for width, index in widths {
         cache^.math_programs[index] = {
-            valid = true, draw_width = width, ascent = 12, descent = 4}
+            valid = true,
+            draw_width = width,
+            ascent = 12,
+            descent = 4,
+        }
     }
     testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
     defer storage.arena_owner_destroy(&cache_owner)
@@ -564,17 +796,43 @@ document_layout_places_narrow_numbered_multline :: proc(t: ^testing.T) {
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
     defer storage.arena_owner_destroy(&runtime_owner)
-    block := [1]dynviewmodel.Dynview_Document_Block{{kind = .Display,
-        inline_count = 3, display_kind = .Multline, display_row_count = 3}}
-    rows := [3]dynviewmodel.Dynview_Document_Display_Row{
-        {primary_program_id = 0, secondary_program_id = -1, alignment = .Left},
-        {primary_program_id = 1, secondary_program_id = -1, alignment = .Center},
-        {primary_program_id = 2, secondary_program_id = -1,
-            alignment = .Right, number = 1},
+    block: [1]dynviewmodel.Dynview_Document_Block = {{
+        kind = .Display,
+        inline_count = 3,
+        display_kind = .Multline,
+        display_row_count = 3,
+    }}
+    rows: [3]dynviewmodel.Dynview_Document_Display_Row = {
+        {
+            primary_program_id = 0,
+            secondary_program_id = -1,
+            alignment = .Left,
+        },
+        {
+            primary_program_id = 1,
+            secondary_program_id = -1,
+            alignment = .Center,
+        },
+        {
+            primary_program_id = 2,
+            secondary_program_id = -1,
+            alignment = .Right,
+            number = 1,
+        },
     }
-    inlines := [3]dynviewmodel.Dynview_Document_Inline{
-        {kind = .Math, math_program_id = 0}, {kind = .Math, math_program_id = 1},
-        {kind = .Math, math_program_id = 2},
+    inlines: [3]dynviewmodel.Dynview_Document_Inline = {
+        {
+            kind = .Math,
+            math_program_id = 0,
+        },
+        {
+            kind = .Math,
+            math_program_id = 1,
+        },
+        {
+            kind = .Math,
+            math_program_id = 2,
+        },
     }
     runtime^.content.document_blocks = block[:]
     runtime^.content.document_inlines = inlines[:]
@@ -585,9 +843,13 @@ document_layout_places_narrow_numbered_multline :: proc(t: ^testing.T) {
     widths := [?]f32{20, 30, 70}
     for width, index in widths {
         cache^.math_programs[index] = {
-            valid = true, draw_width = width, ascent = 12, descent = 4}
+            valid = true,
+            draw_width = width,
+            ascent = 12,
+            descent = 4,
+        }
     }
-    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2 * uint(mem.Megabyte)))
     defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)

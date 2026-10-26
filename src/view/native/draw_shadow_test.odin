@@ -109,7 +109,7 @@ draw_shadow_test_mesh_is_bounded_deterministic_and_welded :: proc(t: ^testing.T)
     testing.expect(t, draw_encoder_begin(&encoder_b,
         {vertices_b[:], indices_b[:], batches_b[:], commands_b[:], nil},
         {100, 100}, {200, 200}))
-    bounds := geometry.Rectangle{10, 12, 30, 20}
+    bounds: geometry.Rectangle = {10, 12, 30, 20}
     testing.expect(t, draw_encoder_shadow(
         &encoder_a, bounds, draw_shadow_test_style()))
     testing.expect(t, draw_encoder_shadow(
@@ -155,7 +155,7 @@ draw_shadow_test_capacity_failure :: proc(
     batches: [1]Draw_Batch
     commands: [1]Draw_Command
     encoder: Draw_Encoder
-    storage := Draw_Storage{
+    storage: Draw_Storage = {
         vertices = vertices[:vertex_capacity],
         indices = indices[:index_capacity],
         batches = batches[:batch_capacity],

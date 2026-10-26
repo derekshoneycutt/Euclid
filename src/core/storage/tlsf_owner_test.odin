@@ -105,7 +105,9 @@ storage_test_tlsf_owner_resize_is_failure_atomic :: proc(t: ^testing.T) {
 // Keep a committed allocation intact when growth for its replacement fails.
 @(test)
 storage_test_tlsf_owner_failed_resize_keeps_old_allocation :: proc(t: ^testing.T) {
-    state := Tlsf_Owner_Test_Allocator_State{remaining_allocations = 10}
+    state: Tlsf_Owner_Test_Allocator_State = {
+        remaining_allocations = 10,
+    }
     backing_allocator := tlsf_owner_test_allocator(&state)
     owner: Tlsf_Owner
     testing.expect_value(t, tlsf_owner_init(
@@ -137,7 +139,9 @@ storage_test_tlsf_owner_failed_resize_keeps_old_allocation :: proc(t: ^testing.T
 // Leave the current owner usable when pool metadata allocation fails.
 @(test)
 storage_test_tlsf_owner_metadata_failure_keeps_committed_pool :: proc(t: ^testing.T) {
-    state := Tlsf_Owner_Test_Allocator_State{remaining_allocations = 10}
+    state: Tlsf_Owner_Test_Allocator_State = {
+        remaining_allocations = 10,
+    }
     backing_allocator := tlsf_owner_test_allocator(&state)
     owner: Tlsf_Owner
     testing.expect_value(t, tlsf_owner_init(
@@ -161,7 +165,9 @@ storage_test_tlsf_owner_metadata_failure_keeps_committed_pool :: proc(t: ^testin
 // Release provisional pool metadata when backing acquisition fails.
 @(test)
 storage_test_tlsf_owner_backing_failure_releases_metadata :: proc(t: ^testing.T) {
-    state := Tlsf_Owner_Test_Allocator_State{remaining_allocations = 10}
+    state: Tlsf_Owner_Test_Allocator_State = {
+        remaining_allocations = 10,
+    }
     backing_allocator := tlsf_owner_test_allocator(&state)
     owner: Tlsf_Owner
     testing.expect_value(t, tlsf_owner_init(
@@ -216,7 +222,10 @@ storage_test_tlsf_owner_rejects_unsupported_request :: proc(t: ^testing.T) {
 // Fail deterministic backing requests while forwarding frees to the test heap.
 tlsf_owner_test_allocator :: proc(
     state: ^Tlsf_Owner_Test_Allocator_State) -> runtime.Allocator {
-    return {procedure = tlsf_owner_test_allocator_proc, data = state}
+    return {
+        procedure = tlsf_owner_test_allocator_proc,
+        data = state,
+    }
 }
 
 // Count allocations while preserving normal allocator alignment and release behavior.

@@ -51,7 +51,10 @@ tree_reorder_capture :: proc(
         if !row.logical || !tree_reorder_row_in_scope(projection, row.item, custom) {
             continue
         }
-        result^.rows[result^.count] = {id = row.item^.key, from_y = row.content_y}
+        result^.rows[result^.count] = {
+            id = row.item^.key,
+            from_y = row.content_y,
+        }
         result^.count += 1
     }
     result^.active = result^.count > 1

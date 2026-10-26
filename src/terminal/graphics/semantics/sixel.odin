@@ -250,8 +250,10 @@ graphics_sixel_apply_command :: proc(
         index^ += 1
         return graphics_sixel_apply_data(
             semantics, byte, repeat, &pen.x, &pen.y)
-    case '$': pen.x = 0
-    case '-': pen.x, pen.y = 0, pen.y + 6
+    case '$':
+        pen.x = 0
+    case '-':
+        pen.x, pen.y = 0, pen.y + 6
     case '"':
         parameters := graphics_sixel_parse_parameters(bytes, index)
         if !parameters.valid || parameters.count != 4 ||
@@ -264,7 +266,8 @@ graphics_sixel_apply_command :: proc(
         parameters := graphics_sixel_parse_parameters(bytes, index)
         return parameters.valid && graphics_sixel_apply_palette(
             semantics, parameters.values, parameters.count)
-    case: return false
+    case:
+        return false
     }
     return true
 }
@@ -285,7 +288,9 @@ graphics_sixel_apply_command :: proc(
 //     indexed raster; Phase 5 decoding owns expansion.
 graphics_parse_sixel :: proc(
     bytes, header: []u8, limits: termattachment.Limits) -> Sixel_Semantics {
-    semantics := Sixel_Semantics{valid = true}
+    semantics: Sixel_Semantics = {
+        valid = true,
+    }
     if len(header) >= 3 && header[2] == '2' {
         semantics.transparent_background = true
     }
@@ -330,21 +335,30 @@ graphics_queue_sixel_decode :: proc(
     if status != .Ok {
         return false 
     }
-    request := gfxprotocol.Graphics_Decode_Request{
-        kind = .Sixel, producer = frame.producer, transfer_id = frame.transfer_id,
-        attachment_id = attachment_id, width = semantics.width, height = semantics.height,
+    request: gfxprotocol.Graphics_Decode_Request = {
+        kind = .Sixel,
+        producer = frame.producer,
+        transfer_id = frame.transfer_id,
+        attachment_id = attachment_id,
+        width = semantics.width,
+        height = semantics.height,
         place = true,
         geometry = {
-            screen = anchor.screen, logical_row = anchor.logical_row,
-            column = anchor.column, pixel_width = semantics.width,
-            pixel_height = semantics.height, sizing = .Explicit_Pixels,
+            screen = anchor.screen,
+            logical_row = anchor.logical_row,
+            column = anchor.column,
+            pixel_width = semantics.width,
+            pixel_height = semantics.height,
+            sizing = .Explicit_Pixels,
             cursor = .Advance,
         },
-        palette = semantics.palette, palette_count = semantics.palette_count,
+        palette = semantics.palette,
+        palette_count = semantics.palette_count,
         transparent_background = semantics.transparent_background,
     }
     _, placement_outcome := termattachment.placement_admit(state.store, {
-        attachment_id = attachment_id, geometry = request.geometry,
+        attachment_id = attachment_id,
+        geometry = request.geometry,
         lifecycle = .Cursor_Anchored,
     })
     if placement_outcome == .Admitted &&
@@ -415,7 +429,10 @@ graphics_apply_sixel_frame :: proc(
             pixel_width = semantics.width,
             pixel_height = semantics.height,
             sizing = .Explicit_Pixels,
-        }, {width = semantics.width, height = semantics.height})
+        }, {
+            width = semantics.width,
+            height = semantics.height,
+        })
     graphics_sixel_apply_cursor_effects(
         semantics_context, rows, semantics.width,
         anchor.sixel_scrolling_mode, anchor.sixel_cursor_right_mode)

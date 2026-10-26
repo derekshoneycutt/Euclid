@@ -15,10 +15,12 @@ import theme "../theme"
 layout_draw_test_increased_defaults_preserve_authored_color :: proc(t: ^testing.T) {
     encoder: native.Draw_Encoder
     theme.prepare_draw_colors(&encoder, true)
-    ctx := Layout_Draw_Context{encoder = &encoder}
+    ctx: Layout_Draw_Context = {
+        encoder = &encoder,
+    }
     testing.expect_value(t, document_selected_draw_color(ctx, {}),
         theme.appearance_color(true, .Text))
-    authored := dynviewmodel.Dynview_Document_Color{true, dyncore.UI_TEXT_COLOR}
+    authored: dynviewmodel.Dynview_Document_Color = {true, dyncore.UI_TEXT_COLOR}
     testing.expect_value(t, document_selected_draw_color(ctx, authored), authored.value)
     for entry in dyncore.STYLE_TABLE {
         style := layout_draw_style(ctx, entry.id)
@@ -34,7 +36,9 @@ layout_draw_test_increased_defaults_preserve_authored_color :: proc(t: ^testing.
 // Verify selection changes only the foreground of stock styles, not typography or authored colors.
 @(test)
 layout_draw_test_selection_preserves_style_and_authored_colors :: proc(t: ^testing.T) {
-    ctx := Layout_Draw_Context{selected_text = true}
+    ctx: Layout_Draw_Context = {
+        selected_text = true,
+    }
     for entry in dyncore.STYLE_TABLE {
         selected := layout_draw_style(ctx, entry.id)
         testing.expect_value(t, selected.color, theme.UI_TEXT_SELECTION_FOREGROUND_COLOR)
@@ -49,8 +53,10 @@ layout_draw_test_selection_preserves_style_and_authored_colors :: proc(t: ^testi
             document_selected_draw_color(ctx, {true, authored}), authored)
     }
     testing.expect_value(t, document_selected_draw_color({}, {}), dyncore.UI_TEXT_COLOR)
-    item := dynviewmodel.Dynview_Layout_Item{
-        has_brush_color = true, brush_color = dyncore.UI_TEXT_COLOR}
+    item: dynviewmodel.Dynview_Layout_Item = {
+        has_brush_color = true,
+        brush_color = dyncore.UI_TEXT_COLOR,
+    }
     selected_style := layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT)
     params := text_run_draw_params(ctx, selected_style, item, {}, 0)
     testing.expect_value(t, params.text_color, item.brush_color)
@@ -70,13 +76,19 @@ layout_draw_test_selected_fraction_rule_keeps_geometry :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    item := dynviewmodel.Dynview_Layout_Item{
-        fraction_rule_left = 0, fraction_rule_right = 30,
-        fraction_rule_center = 0, fraction_rule_thickness = 2,
-        accent_style_id = dyncore.DYNVIEW_STYLE_DEFAULT}
-    states := [2]bool{false, true}
+    item: dynviewmodel.Dynview_Layout_Item = {
+        fraction_rule_left = 0,
+        fraction_rule_right = 30,
+        fraction_rule_center = 0,
+        fraction_rule_thickness = 2,
+        accent_style_id = dyncore.DYNVIEW_STYLE_DEFAULT,
+    }
+    states: [2]bool = {false, true}
     for selected in states {
-        ctx := Layout_Draw_Context{encoder = &encoder, selected_text = selected}
+        ctx: Layout_Draw_Context = {
+            encoder = &encoder,
+            selected_text = selected,
+        }
         style := layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT)
         draw_fraction_divider(ctx, style, item, 10, 20)
     }
@@ -92,7 +104,7 @@ layout_draw_test_selected_fraction_rule_keeps_geometry :: proc(t: ^testing.T) {
 //   Verify stacked limits remain inside the large operator's measured box.
 @(test)
 layout_draw_test_large_op_limit_tops_match_measured_stack :: proc(t: ^testing.T) {
-    metrics := Large_Op_Metrics{
+    metrics: Large_Op_Metrics = {
         glyph_ascent = 20,
         glyph_descent = 8,
         sup_height = 6,
@@ -110,7 +122,7 @@ layout_draw_test_large_op_limit_tops_match_measured_stack :: proc(t: ^testing.T)
 //   Verify delimiter children retain scoped text style during recursive drawing.
 @(test)
 layout_draw_test_stretch_delimiter_preserves_child_style :: proc(t: ^testing.T) {
-    item := dynviewmodel.Dynview_Layout_Item{
+    item: dynviewmodel.Dynview_Layout_Item = {
         math_style_level = u8(dynmath.Math_Style_Level.Text),
         math_style_cramped = true,
     }
@@ -123,18 +135,18 @@ layout_draw_test_stretch_delimiter_preserves_child_style :: proc(t: ^testing.T) 
 layout_draw_test_stretch_glyphs_require_same_raster_identity :: proc(
     t: ^testing.T) {
 
-    first := font.Resolved_Glyph{
+    first: font.Resolved_Glyph = {
         raster_slot_index = 3,
         raster_slot_incarnation = 12,
         raster_pixel_height = 18,
     }
     same_instance := first
-    different_slot := font.Resolved_Glyph{
+    different_slot: font.Resolved_Glyph = {
         raster_slot_index = 4,
         raster_slot_incarnation = 12,
         raster_pixel_height = 18,
     }
-    recycled_slot := font.Resolved_Glyph{
+    recycled_slot: font.Resolved_Glyph = {
         raster_slot_index = 3,
         raster_slot_incarnation = 13,
         raster_pixel_height = 18,
@@ -148,9 +160,14 @@ layout_draw_test_stretch_glyphs_require_same_raster_identity :: proc(
 // Verify authoritative document shapes append to the active native encoder.
 @(test)
 layout_draw_test_document_shape_uses_native_encoder :: proc(t: ^testing.T) {
-    inlines := [1]dynviewmodel.Dynview_Document_Inline{{
+    inlines: [1]dynviewmodel.Dynview_Document_Inline = {{
         kind = .Shape,
-        shape = {present = true, kind = .Line, width = 4, thickness = 2},
+        shape = {
+            present = true,
+            kind = .Line,
+            width = 4,
+            thickness = 2,
+        },
     }}
     runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime, context.allocator)
@@ -165,8 +182,12 @@ layout_draw_test_document_shape_uses_native_encoder :: proc(t: ^testing.T) {
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
 
-    draw_document_item({encoder = &encoder, runtime = runtime}, {
-        box_kind = .Shape, inline_index = 0,
+    draw_document_item({
+        encoder = &encoder,
+        runtime = runtime,
+    }, {
+        box_kind = .Shape,
+        inline_index = 0,
     }, {10, 20})
 
     testing.expect_value(t, encoder.vertex_count, 4)
@@ -176,13 +197,17 @@ layout_draw_test_document_shape_uses_native_encoder :: proc(t: ^testing.T) {
 // Verify document box edges retain explicit colors and inherit only when absent.
 @(test)
 layout_draw_test_document_box_encodes_independent_edge_colors :: proc(t: ^testing.T) {
-    fallback := dynviewmodel.Color{10, 20, 30, 255}
-    edge_1 := dynviewmodel.Color{200, 10, 20, 255}
-    edge_2 := dynviewmodel.Color{20, 200, 30, 255}
-    edge_3 := dynviewmodel.Color{30, 40, 200, 255}
-    shape := dynviewmodel.Dynview_Document_Shape{
-        present = true, kind = .Box, color = {true, fallback},
-        width = 4, height = 3, thickness = 2,
+    fallback: dynviewmodel.Color = {10, 20, 30, 255}
+    edge_1: dynviewmodel.Color = {200, 10, 20, 255}
+    edge_2: dynviewmodel.Color = {20, 200, 30, 255}
+    edge_3: dynviewmodel.Color = {30, 40, 200, 255}
+    shape: dynviewmodel.Dynview_Document_Shape = {
+        present = true,
+        kind = .Box,
+        color = {true, fallback},
+        width = 4,
+        height = 3,
+        thickness = 2,
         edge_colors = {{true, edge_1}, {true, edge_2}, {true, edge_3}, {}, {}},
     }
     item, ok := document_shape_draw_item({}, shape, 8)
@@ -209,9 +234,9 @@ layout_draw_test_document_box_encodes_independent_edge_colors :: proc(t: ^testin
 // Verify triangle edge colors follow the documented left, base, right order.
 @(test)
 layout_draw_test_triangle_encodes_independent_edge_colors :: proc(t: ^testing.T) {
-    edge_1 := dynviewmodel.Color{200, 10, 20, 255}
-    edge_2 := dynviewmodel.Color{20, 200, 30, 255}
-    edge_3 := dynviewmodel.Color{30, 40, 200, 255}
+    edge_1: dynviewmodel.Color = {200, 10, 20, 255}
+    edge_2: dynviewmodel.Color = {20, 200, 30, 255}
+    edge_3: dynviewmodel.Color = {30, 40, 200, 255}
     vertices: [12]native.Draw_Vertex
     indices: [18]u32
     batches: [1]native.Draw_Batch
@@ -220,10 +245,14 @@ layout_draw_test_triangle_encodes_independent_edge_colors :: proc(t: ^testing.T)
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    item := dynviewmodel.Dynview_Layout_Item{
-        kind = .Inline_Triangle, draw_width = 20, draw_height = 20,
-        inline_atom_stroke = 2, shape_edge_color_1 = edge_1,
-        shape_edge_color_2 = edge_2, shape_edge_color_3 = edge_3,
+    item: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Inline_Triangle,
+        draw_width = 20,
+        draw_height = 20,
+        inline_atom_stroke = 2,
+        shape_edge_color_1 = edge_1,
+        shape_edge_color_2 = edge_2,
+        shape_edge_color_3 = edge_3,
     }
 
     encode_inline_item(&encoder, item, 10, 20)
@@ -238,11 +267,15 @@ layout_draw_test_triangle_encodes_independent_edge_colors :: proc(t: ^testing.T)
 @(test)
 layout_draw_test_document_perpendicular_encodes_centered_colored_stem :: proc(
     t: ^testing.T) {
-    base_color := dynviewmodel.Color{220, 40, 30, 255}
-    stem_color := dynviewmodel.Color{30, 90, 220, 255}
-    shape := dynviewmodel.Dynview_Document_Shape{
-        present = true, kind = .Perpendicular, fill_color = {true, base_color},
-        width = 2, height = 2, thickness = 2,
+    base_color: dynviewmodel.Color = {220, 40, 30, 255}
+    stem_color: dynviewmodel.Color = {30, 90, 220, 255}
+    shape: dynviewmodel.Dynview_Document_Shape = {
+        present = true,
+        kind = .Perpendicular,
+        fill_color = {true, base_color},
+        width = 2,
+        height = 2,
+        thickness = 2,
         edge_colors = {{true, stem_color}, {}, {}, {}, {}},
     }
     item, ok := document_shape_draw_item({}, shape, 10)
@@ -268,8 +301,8 @@ layout_draw_test_document_perpendicular_encodes_centered_colored_stem :: proc(
 // Verify outlined and filled document arcs append native geometry with their colors.
 @(test)
 layout_draw_test_document_arcs_encode_outline_and_fill :: proc(t: ^testing.T) {
-    fill := dynviewmodel.Color{15, 120, 220, 255}
-    outline := dynviewmodel.Color{230, 80, 25, 255}
+    fill: dynviewmodel.Color = {15, 120, 220, 255}
+    outline: dynviewmodel.Color = {230, 80, 25, 255}
     vertices: [128]native.Draw_Vertex
     indices: [256]u32
     batches: [1]native.Draw_Batch
@@ -278,13 +311,20 @@ layout_draw_test_document_arcs_encode_outline_and_fill :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    item := dynviewmodel.Dynview_Layout_Item{
-        kind = .Inline_Pie_Section, draw_width = 24, draw_height = 24,
-        inline_atom_stroke = 2, inline_outline_stroke = 2,
-        pie_start_angle_degrees = 0, pie_end_angle_degrees = 90,
-        pie_center_offset_x = 2, pie_center_offset_y = 22,
-        has_brush_color = true, brush_color = fill,
-        has_outline_color = true, outline_color = outline,
+    item: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Inline_Pie_Section,
+        draw_width = 24,
+        draw_height = 24,
+        inline_atom_stroke = 2,
+        inline_outline_stroke = 2,
+        pie_start_angle_degrees = 0,
+        pie_end_angle_degrees = 90,
+        pie_center_offset_x = 2,
+        pie_center_offset_y = 22,
+        has_brush_color = true,
+        brush_color = fill,
+        has_outline_color = true,
+        outline_color = outline,
     }
 
     encode_inline_item(&encoder, item, 10, 20)

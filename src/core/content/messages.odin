@@ -288,9 +288,12 @@ Content_Message_Signature :: struct {
 // Freeze native argument names and wire kinds independently of translated prose.
 content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Signature {
     #partial switch id {
-    case .Library_Suggestion_Action: return {"query", .Text}
-    case .Library_Actions_For: return {"name", .Text}
-    case .Library_Unicode_Completion: return {"symbol", .Text}
+    case .Library_Suggestion_Action:
+        return {"query", .Text}
+    case .Library_Actions_For:
+        return {"name", .Text}
+    case .Library_Unicode_Completion:
+        return {"symbol", .Text}
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
          .Gif_Cadence_Multiple:
         return {"count", .Uint32}
@@ -298,7 +301,8 @@ content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Sig
          .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,
          .Gif_Status_Recording:
         return {"count", .Int64}
-    case .Fps_Overlay: return {"fps", .Float32_One_Decimal}
+    case .Fps_Overlay:
+        return {"fps", .Float32_One_Decimal}
     }
     return {}
 }
@@ -396,15 +400,23 @@ content_message_placeholder :: proc(
     closing := opening + 1
     for closing < len(template) && template[closing] != '}' {
         if template[closing] == '{' {
-            return {next = closing}
+            return {
+                next = closing,
+            }
         }
         closing += 1
     }
     if closing == len(template) {
-        return {next = closing}
+        return {
+            next = closing,
+        }
     }
     name := template[opening + 1:closing]
-    return {name, closing + 1, content_message_argument_name_valid(name)}
+    return {
+        name = name,
+        next = closing + 1,
+        closed = content_message_argument_name_valid(name),
+    }
 }
 
 // Check caller names and types against the generation-owned declared signature.
@@ -450,9 +462,13 @@ content_message_validate_value :: proc(
             return .Invalid_Argument
         }
     case i64:
-        if item < 0 { return .Invalid_Argument }
+        if item < 0 {
+            return .Invalid_Argument
+        }
     case f32:
-        if math.is_nan(item) || math.is_inf(item) { return .Invalid_Argument }
+        if math.is_nan(item) || math.is_inf(item) {
+            return .Invalid_Argument
+        }
     case u32:
     case:
         return .Invalid_Argument
@@ -464,10 +480,14 @@ content_message_validate_value :: proc(
 content_message_kind_matches_value :: proc(
     kind: Content_Argument_Kind, value: Content_Message_Value) -> bool {
     switch item in value {
-    case string: return kind == .Text
-    case u32: return kind == .Uint32
-    case i64: return kind == .Int64
-    case f32: return kind == .Float32_One_Decimal
+    case string:
+        return kind == .Text
+    case u32:
+        return kind == .Uint32
+    case i64:
+        return kind == .Int64
+    case f32:
+        return kind == .Float32_One_Decimal
     }
     return false
 }
@@ -476,10 +496,14 @@ content_message_kind_matches_value :: proc(
 content_message_value_text :: proc(
     value: Content_Message_Value, storage: []u8) -> string {
     switch item in value {
-    case string: return item
-    case u32: return fmt.bprintf(storage, "%d", item)
-    case i64: return fmt.bprintf(storage, "%d", item)
-    case f32: return fmt.bprintf(storage, "%.1f", item)
+    case string:
+        return item
+    case u32:
+        return fmt.bprintf(storage, "%d", item)
+    case i64:
+        return fmt.bprintf(storage, "%d", item)
+    case f32:
+        return fmt.bprintf(storage, "%.1f", item)
     }
     return ""
 }
@@ -513,7 +537,7 @@ content_message_expand :: proc(
     destination: []u8) -> (int, Content_Message_Status) {
     seen: [2]bool
     count, index := 0, 0
-    state := Content_Message_Expand_State{
+    state: Content_Message_Expand_State = {
         arguments = arguments,
         destination = destination,
         count = &count,
@@ -530,7 +554,9 @@ content_message_expand :: proc(
         }
     }
     for used in seen[:len(arguments)] {
-        if !used { return 0, .Invalid_Template }
+        if !used {
+            return 0, .Invalid_Template
+        }
     }
     return count, .Ok
 }
@@ -584,13 +610,21 @@ content_message_format :: proc(
     arguments: []Content_Format_Argument, destination: []u8,
     locale := "en-US") -> (string, Content_Message_Status) {
     view, status := content_message_lookup(generation, id, locale)
-    if status != .Ok { return "", status }
+    if status != .Ok {
+        return "", status
+    }
     status = content_message_validate_arguments(generation, view.message, arguments)
-    if status != .Ok { return "", status }
+    if status != .Ok {
+        return "", status
+    }
     scratch: [UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     count, expanded := content_message_expand(view.template, arguments, scratch[:])
-    if expanded != .Ok { return "", expanded }
-    if count > len(destination) { return "", .Output_Capacity }
+    if expanded != .Ok {
+        return "", expanded
+    }
+    if count > len(destination) {
+        return "", .Output_Capacity
+    }
     copy(destination, scratch[:count])
     return string(destination[:count]), .Ok
 }

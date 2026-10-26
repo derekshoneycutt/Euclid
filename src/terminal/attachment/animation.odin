@@ -114,7 +114,11 @@ animation_allocate :: proc(
         delete(pixels, store.payload_allocator)
         return {}
     }
-    return {pixels = pixels, frames = frames, valid = true}
+    return {
+        pixels = pixels,
+        frames = frames,
+        valid = true,
+    }
 }
 
 // Record one rejected animation reservation and return its original outcome.
@@ -177,7 +181,10 @@ animation_preparation_buffer :: proc(
         entry.pin_count <= 0 || len(entry.animation_frames) == 0 {
         return {}, false
     }
-    return {pixels = entry.payload, frames = entry.animation_frames}, true
+    return {
+        pixels = entry.payload,
+        frames = entry.animation_frames,
+    }, true
 }
 
 // Validate one complete full-canvas frame table and calculate its cycle duration.

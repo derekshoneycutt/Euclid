@@ -673,7 +673,10 @@ shape_registry_create :: proc(
         generation = 1
         registry.generations[slot_index] = generation
     }
-    entity^ = {slot = slot_index + 1, generation = generation}
+    entity^ = {
+        slot = slot_index + 1,
+        generation = generation,
+    }
     registry.entity_count += 1
     return .Ok
 }
@@ -954,8 +957,12 @@ shape_label_store_append :: proc(
     offset := store.byte_count
     end := int(offset) + len(source)
     copy(store.bytes[offset:end], transmute([]u8)source)
-    label^ = {mime = mime, byte_offset = offset,
-        byte_count = u16(len(source)), revision = 1}
+    label^ = {
+        mime = mime,
+        byte_offset = offset,
+        byte_count = u16(len(source)),
+        revision = 1,
+    }
     store.byte_count = u16(end)
     return .Ok
 }
@@ -997,7 +1004,10 @@ shape_vertex_references_append :: proc(
     end := int(first) + len(entities)
     copy(store.entities[first:end], entities)
     store.count = u16(end)
-    geometry^ = {first_vertex = first, vertex_count = u16(len(entities))}
+    geometry^ = {
+        first_vertex = first,
+        vertex_count = u16(len(entities)),
+    }
     return .Ok
 }
 

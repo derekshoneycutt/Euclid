@@ -15,8 +15,8 @@ import viewmodel "../../model"
 import core "../../../../core"
 
 Library_Search_Quality_Fixture :: struct {
-    query:        string,
-    expected_id:  string,
+    query: string,
+    expected_id: string,
     display_name: string,
 }
 
@@ -118,7 +118,9 @@ LIBRARY_SEARCH_QUALITY_FIXTURES :: [?]Library_Search_Quality_Fixture{
 
 // search_test_document_key builds one canonical built-in result identity.
 search_test_document_key :: proc(text: string) -> viewcontent.Search_Document_Key {
-    result := viewcontent.Search_Document_Key{source_namespace = .Builtin}
+    result: viewcontent.Search_Document_Key = {
+        source_namespace = .Builtin,
+    }
     copy(result.document_id.bytes[:], text)
     return result
 }
@@ -186,9 +188,13 @@ library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
     search.query_length = 4
     search.generation = 7
     search.index_generation = 11
-    result := viewcontent.Search_Query_Result{generation = 7,
-        index_generation = 11, status = .Ready, total_match_count = 1,
-        returned_count = 1}
+    result: viewcontent.Search_Query_Result = {
+        generation = 7,
+        index_generation = 11,
+        status = .Ready,
+        total_match_count = 1,
+        returned_count = 1,
+    }
     result.document_keys[0] = search_test_document_key(
         "22222222-2222-4222-8222-222222222222")
 
@@ -208,8 +214,11 @@ library_search_commit_rejects_stale_generation :: proc(t: ^testing.T) {
     search.generation = 8
     search.index_generation = 12
     search.visible_id_count = 1
-    result := viewcontent.Search_Query_Result{generation = 7,
-        index_generation = 12, status = .Ready}
+    result: viewcontent.Search_Query_Result = {
+        generation = 7,
+        index_generation = 12,
+        status = .Ready,
+    }
     testing.expect(t, !library_search_commit_result(state, &result))
     testing.expect_value(t, search.visible_id_count, 1)
 }
@@ -229,9 +238,15 @@ library_search_commit_records_typed_evidence :: proc(t: ^testing.T) {
     search^.index_generation = 11
     search^.scenario_correlation = 23
     search^.scenario_correlation_generation = 1
-    result := viewcontent.Search_Query_Result{generation = 7,
-        index_generation = 11, status = .Ready, total_match_count = 81,
-        returned_count = 64, more_available = true, suggestion_length = 3}
+    result: viewcontent.Search_Query_Result = {
+        generation = 7,
+        index_generation = 11,
+        status = .Ready,
+        total_match_count = 81,
+        returned_count = 64,
+        more_available = true,
+        suggestion_length = 3,
+    }
     copy(result.suggestion_bytes[:], "ray")
 
     testing.expect(t, library_search_commit_result(state, &result))
@@ -271,8 +286,11 @@ library_search_invalid_query_clears_without_commit_evidence :: proc(t: ^testing.
     search^.active = true
     search^.visible_id_count = 1
     search^.total_match_count = 9
-    result := viewcontent.Search_Query_Result{generation = 7,
-        index_generation = 11, status = .Invalid_Query}
+    result: viewcontent.Search_Query_Result = {
+        generation = 7,
+        index_generation = 11,
+        status = .Invalid_Query,
+    }
 
     testing.expect(t, library_search_commit_result(state, &result))
     testing.expect(t, search^.invalid_query && !search^.active)
@@ -287,8 +305,11 @@ library_search_invalid_query_clears_without_commit_evidence :: proc(t: ^testing.
 // Verify debounce waits for elapsed time while explicit submit is immediate.
 @(test)
 library_search_debounce_and_submit_timing :: proc(t: ^testing.T) {
-    search := viewmodel.Library_Search_State{query_length = 4,
-        query_dirty = true, debounce_remaining_seconds = 0.175}
+    search: viewmodel.Library_Search_State = {
+        query_length = 4,
+        query_dirty = true,
+        debounce_remaining_seconds = 0.175,
+    }
     testing.expect(t, !library_search_debounce_ready(&search, 0.1))
     testing.expect(t, library_search_debounce_ready(&search, 0.075))
     search.debounce_remaining_seconds = 1
@@ -299,9 +320,14 @@ library_search_debounce_and_submit_timing :: proc(t: ^testing.T) {
 // Content replacement invalidates old projections and immediately reissues retained intent.
 @(test)
 library_search_requeries_after_content_publication :: proc(t: ^testing.T) {
-    search := viewmodel.Library_Search_State{query_length = 4, generation = 8,
-        index_generation = 12, active = true, visible_id_count = 2,
-        suggestion_length = 3}
+    search: viewmodel.Library_Search_State = {
+        query_length = 4,
+        generation = 8,
+        index_generation = 12,
+        active = true,
+        visible_id_count = 2,
+        suggestion_length = 3,
+    }
     copy(search.query[:], "line")
     library_search_content_generation_changed(&search, 13)
     testing.expect_value(t, search.index_generation, u64(13))

@@ -68,13 +68,12 @@ test_expect_cell :: proc(
 @(test)
 termgrid_test_fixed_storage_and_snapshot :: proc(t: ^testing.T) {
     grid: Grid
-    testing.expect(t, grid_init(
-        &grid, 4, 2, allocator = context.allocator))
+    testing.expect(t, grid_init(&grid, 4, 2, allocator = context.allocator))
     testing.expect_value(t, len(grid.cells), 8)
     testing.expect_value(t, len(grid.rows), 2)
     testing.expect(t, raw_data(grid.rows[1].cells) == &grid.cells[4])
 
-    style := Cell_Style{
+    style: Cell_Style = {
         foreground = termpalette.terminal_color_direct(0x11223344),
         font_weight = .Bold,
         italic = true,
@@ -83,11 +82,12 @@ termgrid_test_fixed_storage_and_snapshot :: proc(t: ^testing.T) {
     testing.expect(t, grid_write(&grid, "A"))
 
     snapshot: Snapshot
-    testing.expect(t, snapshot_init(
-        &grid, &snapshot, context.allocator))
+    testing.expect(t, snapshot_init(&grid, &snapshot, context.allocator))
     testing.expect_value(t, snapshot.columns, 4)
     testing.expect_value(t, snapshot.row_count, 2)
-    testing.expect_value(t, snapshot.cursor, Cursor{column = 1})
+    testing.expect_value(t, snapshot.cursor, Cursor{
+        column = 1,
+    })
     testing.expect_value(t, snapshot.cells[0].style, style)
     testing.expect(t, snapshot.rows[0].dirty)
     testing.expect_value(t, snapshot.rows[0].dirty_start, 0)
@@ -102,19 +102,33 @@ termgrid_test_fixed_storage_and_snapshot :: proc(t: ^testing.T) {
 @(test)
 termgrid_test_printable_wrap_and_controls :: proc(t: ^testing.T) {
     grid: Grid
-    testing.expect(t, grid_init(
-        &grid, 4, 2, allocator = context.allocator))
+    testing.expect(t, grid_init(&grid, 4, 2, allocator = context.allocator))
     defer grid_destroy(&grid)
 
     testing.expect(t, grid_write(&grid, "abcdE"))
-    testing.expect_value(t, grid.cursor, Cursor{row = 1, column = 1})
+    testing.expect_value(t, grid.cursor, Cursor{
+        row = 1,
+        column = 1,
+    })
     testing.expect(t, grid.rows[0].wrapped)
-    test_expect_cell(t, &grid, 0, 3, {text = "d", width = 1})
-    test_expect_cell(t, &grid, 1, 0, {text = "E", width = 1})
+    test_expect_cell(t, &grid, 0, 3, {
+        text = "d",
+        width = 1,
+    })
+    test_expect_cell(t, &grid, 1, 0, {
+        text = "E",
+        width = 1,
+    })
 
     testing.expect(t, grid_write(&grid, "\rZ\bY\tQ"))
-    test_expect_cell(t, &grid, 1, 0, {text = "Y", width = 1})
-    test_expect_cell(t, &grid, 1, 3, {text = "Q", width = 1})
+    test_expect_cell(t, &grid, 1, 0, {
+        text = "Y",
+        width = 1,
+    })
+    test_expect_cell(t, &grid, 1, 3, {
+        text = "Q",
+        width = 1,
+    })
 }
 
 // Verify every UTF-8 byte boundary produces the same cells as contiguous input.
@@ -122,17 +136,15 @@ termgrid_test_printable_wrap_and_controls :: proc(t: ^testing.T) {
 termgrid_test_chunked_utf8_matches_contiguous_input :: proc(t: ^testing.T) {
     contiguous: Grid
     chunked: Grid
-    testing.expect(t, grid_init(
-        &contiguous, 8, 2, allocator = context.allocator))
-    testing.expect(t, grid_init(
-        &chunked, 8, 2, allocator = context.allocator))
+    testing.expect(t, grid_init(&contiguous, 8, 2, allocator = context.allocator))
+    testing.expect(t, grid_init(&chunked, 8, 2, allocator = context.allocator))
     defer grid_destroy(&contiguous)
     defer grid_destroy(&chunked)
 
     text := "A界e\u0301🙂Z"
     testing.expect(t, grid_write(&contiguous, text))
     for byte in transmute([]u8)text {
-        part := [1]u8{byte}
+        part: [1]u8 = {byte}
         testing.expect(t, grid_write(&chunked, transmute(string)part[:]))
     }
 
@@ -153,14 +165,30 @@ termgrid_test_wide_and_combining_cells_preserve_invariants :: proc(t: ^testing.T
     defer grid_destroy(&grid)
 
     testing.expect(t, grid_write(&grid, "界e\u0301"))
-    test_expect_cell(t, &grid, 0, 0, {text = "界", width = 2})
-    test_expect_cell(t, &grid, 0, 1, {text = "", width = 0, continuation = true})
-    test_expect_cell(t, &grid, 0, 2, {text = "e\u0301", width = 1})
+    test_expect_cell(t, &grid, 0, 0, {
+        text = "界",
+        width = 2,
+    })
+    test_expect_cell(t, &grid, 0, 1, {
+        text = "",
+        width = 0,
+        continuation = true,
+    })
+    test_expect_cell(t, &grid, 0, 2, {
+        text = "e\u0301",
+        width = 1,
+    })
     testing.expect_value(t, grid.cursor.column, 3)
 
     testing.expect(t, grid_write(&grid, "\rX"))
-    test_expect_cell(t, &grid, 0, 0, {text = "X", width = 1})
-    test_expect_cell(t, &grid, 0, 1, {text = "", width = 0})
+    test_expect_cell(t, &grid, 0, 0, {
+        text = "X",
+        width = 1,
+    })
+    test_expect_cell(t, &grid, 0, 1, {
+        text = "",
+        width = 0,
+    })
 }
 
 // Verify grid resize preserves the left and bottom intersection transactionally.
@@ -173,17 +201,35 @@ termgrid_test_resize_grow_and_bottom_anchored_shrink :: proc(t: ^testing.T) {
 
     grown, grow_result := grid_prepare_resize(&grid, 6, 4, context.allocator)
     testing.expect_value(t, grow_result, Grid_Resize_Result.Prepared)
-    test_expect_cell(t, &grown.grid, 0, 0, {text = "1", width = 1})
-    test_expect_cell(t, &grown.grid, 2, 0, {text = "3", width = 1})
-    test_expect_cell(t, &grown.grid, 3, 0, {text = "", width = 0})
+    test_expect_cell(t, &grown.grid, 0, 0, {
+        text = "1",
+        width = 1,
+    })
+    test_expect_cell(t, &grown.grid, 2, 0, {
+        text = "3",
+        width = 1,
+    })
+    test_expect_cell(t, &grown.grid, 3, 0, {
+        text = "",
+        width = 0,
+    })
     grid_discard_prepared_resize(&grown)
 
     shrunk, shrink_result := grid_prepare_resize(&grid, 3, 2, context.allocator)
     testing.expect_value(t, shrink_result, Grid_Resize_Result.Prepared)
     testing.expect(t, grid_commit_resize(&grid, &shrunk))
-    test_expect_cell(t, &grid, 0, 0, {text = "2", width = 1})
-    test_expect_cell(t, &grid, 1, 0, {text = "3", width = 1})
-    testing.expect_value(t, grid.cursor, Cursor{row = 1, column = 2})
+    test_expect_cell(t, &grid, 0, 0, {
+        text = "2",
+        width = 1,
+    })
+    test_expect_cell(t, &grid, 1, 0, {
+        text = "3",
+        width = 1,
+    })
+    testing.expect_value(t, grid.cursor, Cursor{
+        row = 1,
+        column = 2,
+    })
     for row in grid.rows {
         testing.expect(t, row.dirty)
         testing.expect_value(t, row.dirty_end, 3)
@@ -233,7 +279,10 @@ termgrid_test_resize_repairs_wide_boundary_and_failure_is_atomic :: proc(t: ^tes
     resized, resize_result := grid_prepare_resize(&grid, 3, 2, context.allocator)
     testing.expect_value(t, resize_result, Grid_Resize_Result.Prepared)
     testing.expect(t, grid_commit_resize(&grid, &resized))
-    test_expect_cell(t, &grid, 0, 2, {text = "", width = 0})
+    test_expect_cell(t, &grid, 0, 2, {
+        text = "",
+        width = 0,
+    })
     _, unchanged := grid_prepare_resize(&grid, 3, 2, context.allocator)
     testing.expect_value(t, unchanged, Grid_Resize_Result.Unchanged)
 }
@@ -242,15 +291,20 @@ termgrid_test_resize_repairs_wide_boundary_and_failure_is_atomic :: proc(t: ^tes
 @(test)
 termgrid_test_zwj_sequence_remains_one_cluster :: proc(t: ^testing.T) {
     grid: Grid
-    testing.expect(t, grid_init(
-        &grid, 6, 2, allocator = context.allocator))
+    testing.expect(t, grid_init(&grid, 6, 2, allocator = context.allocator))
     defer grid_destroy(&grid)
 
     testing.expect(t, grid_write(&grid, "👩‍💻"))
 
-    test_expect_cell(t, &grid, 0, 0, {text = "👩‍💻", width = 2})
-    test_expect_cell(
-        t, &grid, 0, 1, {text = "", width = 0, continuation = true})
+    test_expect_cell(t, &grid, 0, 0, {
+        text = "👩‍💻",
+        width = 2,
+    })
+    test_expect_cell(t, &grid, 0, 1, {
+        text = "",
+        width = 0,
+        continuation = true,
+    })
     testing.expect_value(t, grid.cursor.column, 2)
 }
 
@@ -259,18 +313,23 @@ termgrid_test_zwj_sequence_remains_one_cluster :: proc(t: ^testing.T) {
 termgrid_test_ambiguous_width_modes_survive_resize :: proc(t: ^testing.T) {
     narrow: Grid
     wide: Grid
-    testing.expect(t, grid_init(
-        &narrow, 6, 2, allocator = context.allocator))
-    testing.expect(t, grid_init(
-        &wide, 6, 2, allocator = context.allocator,
-        options = {ambiguous_width = .Wide}))
+    testing.expect(t, grid_init(&narrow, 6, 2, allocator = context.allocator))
+    testing.expect(t, grid_init(&wide, 6, 2, allocator = context.allocator, options = {
+        ambiguous_width = .Wide,
+    }))
     defer grid_destroy(&narrow)
     defer grid_destroy(&wide)
 
     testing.expect(t, grid_write(&narrow, "·"))
     testing.expect(t, grid_write(&wide, "·"))
-    test_expect_cell(t, &narrow, 0, 0, {text = "·", width = 1})
-    test_expect_cell(t, &wide, 0, 0, {text = "·", width = 2})
+    test_expect_cell(t, &narrow, 0, 0, {
+        text = "·",
+        width = 1,
+    })
+    test_expect_cell(t, &wide, 0, 0, {
+        text = "·",
+        width = 2,
+    })
 
     resized, result := grid_prepare_resize(&wide, 8, 3, context.allocator)
     testing.expect_value(t, result, Grid_Resize_Result.Prepared)
@@ -300,9 +359,15 @@ termgrid_test_emoji_sequences_preserve_terminal_geometry :: proc(t: ^testing.T) 
         testing.expect(t, grid_init(
             &grid, 8, 2, allocator = context.allocator))
         testing.expect(t, grid_write(&grid, fixture))
-        test_expect_cell(t, &grid, 0, 0, {text = fixture, width = 2})
-        test_expect_cell(
-            t, &grid, 0, 1, {text = "", width = 0, continuation = true})
+        test_expect_cell(t, &grid, 0, 0, {
+            text = fixture,
+            width = 2,
+        })
+        test_expect_cell(t, &grid, 0, 1, {
+            text = "",
+            width = 0,
+            continuation = true,
+        })
         testing.expect_value(t, grid.cursor.column, 2)
         grid_destroy(&grid)
     }
@@ -313,18 +378,24 @@ termgrid_test_emoji_sequences_preserve_terminal_geometry :: proc(t: ^testing.T) 
 termgrid_test_unicode_width_modes_wrap_atomically :: proc(t: ^testing.T) {
     narrow: Grid
     wide: Grid
-    testing.expect(t, grid_init(
-        &narrow, 3, 2, allocator = context.allocator))
-    testing.expect(t, grid_init(
-        &wide, 3, 2, allocator = context.allocator,
-        options = {ambiguous_width = .Wide}))
+    testing.expect(t, grid_init(&narrow, 3, 2, allocator = context.allocator))
+    testing.expect(t,
+        grid_init(&wide, 3, 2, allocator = context.allocator, options = {
+            ambiguous_width = .Wide,
+        }))
     defer grid_destroy(&narrow)
     defer grid_destroy(&wide)
 
     testing.expect(t, grid_write(&narrow, "AB界"))
     testing.expect(t, grid_write(&wide, "AB·"))
-    test_expect_cell(t, &narrow, 1, 0, {text = "界", width = 2})
-    test_expect_cell(t, &wide, 1, 0, {text = "·", width = 2})
+    test_expect_cell(t, &narrow, 1, 0, {
+        text = "界",
+        width = 2,
+    })
+    test_expect_cell(t, &wide, 1, 0, {
+        text = "·",
+        width = 2,
+    })
     testing.expect(t, narrow.rows[0].wrapped)
     testing.expect(t, wide.rows[0].wrapped)
 }
@@ -338,12 +409,24 @@ termgrid_test_keycap_promotion_wraps_complete_cluster :: proc(t: ^testing.T) {
     defer grid_destroy(&grid)
 
     testing.expect(t, grid_write(&grid, "AB1️⃣"))
-    test_expect_cell(t, &grid, 0, 2, {text = "", width = 0})
-    test_expect_cell(t, &grid, 1, 0, {text = "1️⃣", width = 2})
-    test_expect_cell(
-        t, &grid, 1, 1, {text = "", width = 0, continuation = true})
+    test_expect_cell(t, &grid, 0, 2, {
+        text = "",
+        width = 0,
+    })
+    test_expect_cell(t, &grid, 1, 0, {
+        text = "1️⃣",
+        width = 2,
+    })
+    test_expect_cell(t, &grid, 1, 1, {
+        text = "",
+        width = 0,
+        continuation = true,
+    })
     testing.expect(t, grid.rows[0].wrapped)
-    testing.expect_value(t, grid.cursor, Cursor{row = 1, column = 2})
+    testing.expect_value(t, grid.cursor, Cursor{
+        row = 1,
+        column = 2,
+    })
 }
 
 // Verify primary scrolling commits each exact evicted row once before mutation.
@@ -351,12 +434,13 @@ termgrid_test_keycap_promotion_wraps_complete_cluster :: proc(t: ^testing.T) {
 termgrid_test_scrolling_commits_each_evicted_row_once :: proc(t: ^testing.T) {
     history: Scrollback_Test_State
     grid: Grid
-    sink := Scrollback_Sink{
+    sink: Scrollback_Sink = {
         user_data = &history,
         commit = test_scrollback_commit,
     }
-    testing.expect(t, grid_init(
-        &grid, 3, 2, context.allocator, {scrollback = sink}))
+    testing.expect(t, grid_init(&grid, 3, 2, context.allocator, {
+        scrollback = sink,
+    }))
     defer grid_destroy(&grid)
 
     testing.expect(t, grid_write(&grid, "one\r\ntwo\r\nx"))
@@ -366,8 +450,14 @@ termgrid_test_scrolling_commits_each_evicted_row_once :: proc(t: ^testing.T) {
     testing.expect_value(t, cell_text(&history.rows[0][0]), "o")
     testing.expect_value(t, cell_text(&history.rows[0][1]), "n")
     testing.expect_value(t, cell_text(&history.rows[0][2]), "e")
-    test_expect_cell(t, &grid, 0, 0, {text = "t", width = 1})
-    test_expect_cell(t, &grid, 1, 0, {text = "x", width = 1})
+    test_expect_cell(t, &grid, 0, 0, {
+        text = "t",
+        width = 1,
+    })
+    test_expect_cell(t, &grid, 1, 0, {
+        text = "x",
+        width = 1,
+    })
 }
 
 // Verify autowrap provenance survives a grid-to-scrollback boundary.
@@ -376,7 +466,10 @@ termgrid_test_autowrap_retains_semantic_line_provenance :: proc(t: ^testing.T) {
     history: Scrollback_Test_State
     grid: Grid
     testing.expect(t, grid_init(&grid, 3, 2, context.allocator, {
-        scrollback = {user_data = &history, commit = test_scrollback_commit},
+        scrollback = {
+            user_data = &history,
+            commit = test_scrollback_commit,
+        },
     }))
     defer grid_destroy(&grid)
     line_id := grid.rows[0].logical_line_id
@@ -427,7 +520,9 @@ termgrid_test_screen_editing_state_controls_writes :: proc(t: ^testing.T) {
     grid.editing.autowrap_mode = false
     grid_set_cursor(&grid, 0, 11)
     testing.expect(t, grid_write(&grid, "XY"))
-    testing.expect_value(t, grid.cursor, Cursor{column = 11})
+    testing.expect_value(t, grid.cursor, Cursor{
+        column = 11,
+    })
     testing.expect_value(t, cell_text(&grid.rows[0].cells[11]), "Y")
     grid.editing.insert_mode = true
     grid.editing.protected_mode = true
@@ -481,7 +576,9 @@ termgrid_test_dec_grid_region_operations :: proc(t: ^testing.T) {
     testing.expect(t, grid_set_vertical_margins(&grid, 1, 3))
     grid_set_cursor(&grid, 3, 2)
     grid_index_forward(&grid, true)
-    testing.expect_value(t, grid.cursor, Cursor{row = 3})
+    testing.expect_value(t, grid.cursor, Cursor{
+        row = 3,
+    })
     testing.expect_value(t, cell_text(&grid.rows[1].cells[0]), "c")
     grid_set_cursor(&grid, 1, 2)
     grid_index_reverse(&grid)
@@ -509,7 +606,10 @@ termgrid_test_dec_grid_state_and_selective_erase :: proc(t: ^testing.T) {
     grid.editing.autowrap_mode = true
     grid_set_cursor(&grid, 0, 0)
     grid_dec_restore_state(&grid)
-    testing.expect_value(t, grid.cursor, Cursor{row = 1, column = 3})
+    testing.expect_value(t, grid.cursor, Cursor{
+        row = 1,
+        column = 3,
+    })
     testing.expect_value(t, grid.style.foreground,
         termpalette.terminal_color_indexed(2))
     testing.expect(t, grid.editing.origin_mode && !grid.editing.autowrap_mode)
@@ -565,13 +665,16 @@ termgrid_test_dirty_ranges_and_incomplete_utf8_are_explicit :: proc(t: ^testing.
     grid_clear_dirty(&grid)
     testing.expect(t, !grid.rows[0].dirty)
 
-    incomplete := [2]u8{0xe2, 0x82}
+    incomplete: [2]u8 = {0xe2, 0x82}
     testing.expect(t, grid_write(&grid, transmute(string)incomplete[:]))
     testing.expect_value(t, grid.pending_utf8_len, 2)
     grid_finish_input(&grid)
     testing.expect_value(t, grid.pending_utf8_len, 0)
     testing.expect_value(t, grid.invalid_utf8_count, u64(1))
-    test_expect_cell(t, &grid, 0, 2, {text = "�", width = 1})
+    test_expect_cell(t, &grid, 0, 2, {
+        text = "�",
+        width = 1,
+    })
 }
 
 // Verify malformed continuation recovery does not consume the following ASCII byte.
@@ -582,29 +685,71 @@ termgrid_test_invalid_utf8_recovers_across_chunks :: proc(t: ^testing.T) {
         &grid, 4, 2, allocator = context.allocator))
     defer grid_destroy(&grid)
 
-    lead := [1]u8{0xe2}
+    lead: [1]u8 = {0xe2}
     testing.expect(t, grid_write(&grid, transmute(string)lead[:]))
     testing.expect(t, grid_write(&grid, "A"))
 
     testing.expect_value(t, grid.invalid_utf8_count, u64(1))
     testing.expect_value(t, grid.pending_utf8_len, 0)
-    test_expect_cell(t, &grid, 0, 0, {text = "�", width = 1})
-    test_expect_cell(t, &grid, 0, 1, {text = "A", width = 1})
+    test_expect_cell(t, &grid, 0, 0, {
+        text = "�",
+        width = 1,
+    })
+    test_expect_cell(t, &grid, 0, 1, {
+        text = "A",
+        width = 1,
+    })
 }
 
 // Verify every invalid UTF-8 prefix class recovers with deterministic replacements.
 @(test)
 termgrid_test_invalid_utf8_prefix_corpus :: proc(t: ^testing.T) {
     fixtures := [?]Invalid_Utf8_Fixture{
-        {bytes = {0x80, 0, 0, 0}, byte_count = 1, replacement_count = 1},
-        {bytes = {0xc0, 0, 0, 0}, byte_count = 1, replacement_count = 1},
-        {bytes = {0xc1, 0, 0, 0}, byte_count = 1, replacement_count = 1},
-        {bytes = {0xf5, 0, 0, 0}, byte_count = 1, replacement_count = 1},
-        {bytes = {0xff, 0, 0, 0}, byte_count = 1, replacement_count = 1},
-        {bytes = {0xe0, 0x9f, 0, 0}, byte_count = 2, replacement_count = 2},
-        {bytes = {0xed, 0xa0, 0, 0}, byte_count = 2, replacement_count = 2},
-        {bytes = {0xf0, 0x8f, 0, 0}, byte_count = 2, replacement_count = 2},
-        {bytes = {0xf4, 0x90, 0, 0}, byte_count = 2, replacement_count = 2},
+        {
+            bytes = {0x80, 0, 0, 0},
+            byte_count = 1,
+            replacement_count = 1,
+        },
+        {
+            bytes = {0xc0, 0, 0, 0},
+            byte_count = 1,
+            replacement_count = 1,
+        },
+        {
+            bytes = {0xc1, 0, 0, 0},
+            byte_count = 1,
+            replacement_count = 1,
+        },
+        {
+            bytes = {0xf5, 0, 0, 0},
+            byte_count = 1,
+            replacement_count = 1,
+        },
+        {
+            bytes = {0xff, 0, 0, 0},
+            byte_count = 1,
+            replacement_count = 1,
+        },
+        {
+            bytes = {0xe0, 0x9f, 0, 0},
+            byte_count = 2,
+            replacement_count = 2,
+        },
+        {
+            bytes = {0xed, 0xa0, 0, 0},
+            byte_count = 2,
+            replacement_count = 2,
+        },
+        {
+            bytes = {0xf0, 0x8f, 0, 0},
+            byte_count = 2,
+            replacement_count = 2,
+        },
+        {
+            bytes = {0xf4, 0x90, 0, 0},
+            byte_count = 2,
+            replacement_count = 2,
+        },
     }
     for &fixture in fixtures {
         termgrid_test_invalid_utf8_fixture(t, &fixture)
@@ -613,12 +758,15 @@ termgrid_test_invalid_utf8_prefix_corpus :: proc(t: ^testing.T) {
     truncated: Grid
     testing.expect(t, grid_init(
         &truncated, 4, 2, allocator = context.allocator))
-    incomplete := [2]u8{0xe2, 0x82}
+    incomplete: [2]u8 = {0xe2, 0x82}
     testing.expect(t, grid_write(
         &truncated, transmute(string)incomplete[:]))
     grid_finish_input(&truncated)
     testing.expect_value(t, truncated.invalid_utf8_count, u64(1))
-    test_expect_cell(t, &truncated, 0, 0, {text = "�", width = 1})
+    test_expect_cell(t, &truncated, 0, 0, {
+        text = "�",
+        width = 1,
+    })
     grid_destroy(&truncated)
 }
 

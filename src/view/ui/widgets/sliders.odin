@@ -12,21 +12,21 @@ import uisemantics "../semantics"
 //   shared UI/press state, label, value cell, and the allowed range, grouped so
 //   the draw call passes one coherent value.
 Integer_Slider_Params :: struct {
-    panel : geometry.Rectangle,
-    row_y : f32,
-    mouse_input : input.Input_Frame,
+    panel: geometry.Rectangle,
+    row_y: f32,
+    mouse_input: input.Input_Frame,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
     semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
-    press_id : int,
-    label : string,
-    value : int,
-    min_value : int,
-    max_value : int,
-    step : int,
+    press_id: int,
+    label: string,
+    value: int,
+    min_value: int,
+    max_value: int,
+    step: int,
     value_suffix: string,
     text_size_percent: int,
-    font : view_font.Font_Face,
-    font_resolver : view_font.Font_Resolver,
+    font: view_font.Font_Face,
+    font_resolver: view_font.Font_Resolver,
     semantic_domain: viewmodel.Ui_Node_Domain,
     semantic_order: u32,
 }
@@ -47,12 +47,12 @@ Integer_Slider_Result :: struct {
 
 //   Value range and drag inputs for one slider drag update.
 Slider_Drag_Input :: struct {
-    min_value : int,
-    max_value : int,
-    denom : int,
+    min_value: int,
+    max_value: int,
+    denom: int,
     step: int,
-    mouse_input : input.Input_Frame,
-    track : geometry.Rectangle,
+    mouse_input: input.Input_Frame,
+    track: geometry.Rectangle,
 }
 
 // Slider_Value_Result carries resolved pointer value and capture state.
@@ -80,7 +80,7 @@ build_slider_knob :: proc(
     slider_track: geometry.Rectangle,
     ratio: f32) -> (f32, geometry.Rectangle) {
     knob_center_x := slider_track.x + ratio * slider_track.width
-    knob := geometry.Rectangle{
+    knob: geometry.Rectangle = {
         knob_center_x - theme.SETTINGS_KNOB_WIDTH * 0.5,
         slider_track.y - theme.SETTINGS_KNOB_PAD_Y,
         theme.SETTINGS_KNOB_WIDTH,
@@ -317,15 +317,22 @@ update_settings_integer_slider :: proc(
         sources += range_action_source(clamped != before_semantic, .Semantic)
         result := slider_result(params, track, hit, clamped, sources)
         _ = uisemantics.semantic_register_control(params.semantic_focus, {
-            id = id, role = .Slider,
+            id = id,
+            role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound, .Set_Value},
             region = .Accordion_Content,
             traversal_order = params.semantic_order,
             bounds = result.control_geometry.bounds,
             clip_bounds = result.control_geometry.clip_bounds,
-            numeric_range = {f64(result.minimum), f64(result.maximum),
-                f64(result.value), f64(result.step), result.orientation, true},
+            numeric_range = {
+                f64(result.minimum),
+                f64(result.maximum),
+                f64(result.value),
+                f64(result.step),
+                result.orientation,
+                true,
+            },
             label = params.label,
             value = fmt.tprintf("%d%s", clamped, params.value_suffix),
         })

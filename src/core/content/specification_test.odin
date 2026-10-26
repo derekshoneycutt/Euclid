@@ -21,10 +21,17 @@ specification_test_generation :: proc(t: ^testing.T) -> ^Content_Generation {
     generation^.data.availability_count = 2
     for index in 0..<2 {
         generation^.data.availability[index] = Content_Availability{
-            subject_index = u16(index), edition_index = u16(index), is_default = true,
+            subject_index = u16(index),
+            edition_index = u16(index),
+            is_default = true,
         }
     }
-    terminal := Catalog_Record{stable_id = {15 = 1}, node_kind = .Terminal}
+    terminal: Catalog_Record = {
+        stable_id = {
+            15 = 1,
+        },
+        node_kind = .Terminal,
+    }
     specification_test_append(t, generation, "Terminal", &terminal.display_name)
     testing.expect_value(t, content_generation_append_record(generation, terminal),
         Content_Generation_Status.Ok)
@@ -95,10 +102,14 @@ specification_resolution_revision_and_lifetime :: proc(t: ^testing.T) {
 specification_resolution_explicit_errors :: proc(t: ^testing.T) {
     generation := specification_test_generation(t)
     defer specification_test_destroy(generation)
-    output := Animation_Content_Specification{selection_revision = 99}
+    output: Animation_Content_Specification = {
+        selection_revision = 99,
+    }
     baseline := output
-    testing.expect_value(t, resolve_animation_content_specification(
-        generation, {15 = 2}, 0, nil, &output), Animation_Content_Status.Missing_Default)
+    testing.expect_value(t,
+        resolve_animation_content_specification(generation, {
+            15 = 2,
+        }, 0, nil, &output), Animation_Content_Status.Missing_Default)
     testing.expect_value(t, output, baseline)
     generation^.sealed = false
     testing.expect_value(t, resolve_animation_content_specification(
@@ -119,7 +130,9 @@ specification_exact_text_bounds :: proc(t: ^testing.T) {
     generation := specification_test_generation(t)
     defer specification_test_destroy(generation)
     text: [257]u8
-    for &byte in text { byte = 'a' }
+    for &byte in text {
+        byte = 'a'
+    }
     generation^.text_bytes = text[:]
     references := [?]^Content_Text_Ref{
         &generation^.data.locales[0].tag,
@@ -129,7 +142,10 @@ specification_exact_text_bounds :: proc(t: ^testing.T) {
     }
     limits := [?]u32{35, 64, 256, 35}
     for reference, index in references {
-        reference^ = {offset = 0, length = limits[index]}
+        reference^ = {
+            offset = 0,
+            length = limits[index],
+        }
     }
     output: Animation_Content_Specification
     testing.expect_value(t, resolve_animation_content_specification(

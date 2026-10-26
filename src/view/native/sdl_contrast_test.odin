@@ -18,8 +18,9 @@ sdl_contrast_test_refresh :: proc(
     preference := &platform^.contrast
     should_query := sdl_contrast_prepare_query(
         preference, platform^.window_focused, now_seconds)
-    result := Sdl_Contrast_Query_Result{
-        requested = state^.requested, status = state^.status,
+    result: Sdl_Contrast_Query_Result = {
+        requested = state^.requested,
+        status = state^.status,
     }
     if state^.completion_ready {
         state^.completion_ready = false
@@ -39,7 +40,10 @@ sdl_contrast_test_refresh :: proc(
 sdl_contrast_refresh_is_cached_and_focus_sensitive :: proc(t: ^testing.T) {
     platform := new(Sdl_Platform, context.allocator)
     defer free(platform, context.allocator)
-    state := Sdl_Contrast_Test_Query_State{requested = true, status = .Supported}
+    state: Sdl_Contrast_Test_Query_State = {
+        requested = true,
+        status = .Supported,
+    }
     testing.expect(t, sdl_contrast_test_refresh(platform, 0, &state))
     testing.expect(t, sdl_contrast_test_refresh(platform, 1, &state))
     testing.expect_value(t, state.query_count, 1)
@@ -58,7 +62,9 @@ sdl_contrast_refresh_is_cached_and_focus_sensitive :: proc(t: ^testing.T) {
 sdl_contrast_query_failures_preserve_last_success :: proc(t: ^testing.T) {
     platform := new(Sdl_Platform, context.allocator)
     defer free(platform, context.allocator)
-    state := Sdl_Contrast_Test_Query_State{status = .Unavailable}
+    state: Sdl_Contrast_Test_Query_State = {
+        status = .Unavailable,
+    }
     testing.expect(t, !sdl_contrast_test_refresh(platform, 0, &state))
     testing.expect_value(t, platform^.contrast.status, Sdl_Contrast_Status.Unavailable)
     state.status = .Supported
@@ -76,12 +82,17 @@ sdl_contrast_query_failures_preserve_last_success :: proc(t: ^testing.T) {
 sdl_contrast_async_retry_preserves_completed_logging_status :: proc(t: ^testing.T) {
     platform := new(Sdl_Platform, context.allocator)
     defer free(platform, context.allocator)
-    statuses := [2]Sdl_Contrast_Status{.Unavailable, .Failed}
+    statuses: [2]Sdl_Contrast_Status = {.Unavailable, .Failed}
     for status in statuses {
         platform^.contrast = {
-            status = status, requested = true, sampled_seconds = 0,
+            status = status,
+            requested = true,
+            sampled_seconds = 0,
         }
-        state := Sdl_Contrast_Test_Query_State{status = status, pending = true}
+        state: Sdl_Contrast_Test_Query_State = {
+            status = status,
+            pending = true,
+        }
         testing.expect(t, sdl_contrast_test_refresh(platform, 5, &state))
         testing.expect_value(t, platform^.contrast.status, status)
         testing.expect_value(t, state.query_count, 1)
@@ -99,8 +110,10 @@ sdl_contrast_async_retry_preserves_completed_logging_status :: proc(t: ^testing.
 sdl_contrast_initial_async_query_is_pending :: proc(t: ^testing.T) {
     platform := new(Sdl_Platform, context.allocator)
     defer free(platform, context.allocator)
-    state := Sdl_Contrast_Test_Query_State{
-        status = .Supported, requested = true, pending = true,
+    state: Sdl_Contrast_Test_Query_State = {
+        status = .Supported,
+        requested = true,
+        pending = true,
     }
     testing.expect(t, !sdl_contrast_test_refresh(platform, 0, &state))
     testing.expect_value(t, platform^.contrast.status, Sdl_Contrast_Status.Pending)

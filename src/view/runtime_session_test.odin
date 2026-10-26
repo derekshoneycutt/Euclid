@@ -18,7 +18,8 @@ runtime_text_owner_retirement_clears_hidden_compositions :: proc(t: ^testing.T) 
     state^.ui_runtime.library.entry_name.input.preedit_active = true
     state^.ui_runtime.gif_path_input.preedit_active = true
     sdl_frame_retire_preedit(state, {
-        kind = .Input_Box, id = uilibrary.LIBRARY_SEARCH_INPUT_ID,
+        kind = .Input_Box,
+        id = uilibrary.LIBRARY_SEARCH_INPUT_ID,
     })
     testing.expect(t, state^.ui_runtime.library.search.input.preedit_active)
     testing.expect(t, !state^.ui_runtime.library.entry_name.input.preedit_active)
@@ -34,9 +35,13 @@ runtime_text_owner_retirement_clears_hidden_compositions :: proc(t: ^testing.T) 
 runtime_session_fixed_children_are_root_owned :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    settings := core.Euclid_Run_Settings{
+    settings: core.Euclid_Run_Settings = {
         dust_particle_max = 1024,
-        window = {width = 800, height = 600, layout = .Landscape},
+        window = {
+            width = 800,
+            height = 600,
+            layout = .Landscape,
+        },
     }
 
     initialized := init_animations_state_resources(state, nil, &settings)

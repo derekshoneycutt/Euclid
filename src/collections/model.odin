@@ -494,7 +494,7 @@ make_placement_name_mutation :: proc(
     if !entry_name_bytes_are_valid(name_bytes, len(name)) {
         return {}, .Invalid_Name
     }
-    mutation := Mutation{
+    mutation: Mutation = {
         kind = .Set_Entry_Name,
         placement = identity,
         entry_id = identity.entry_id,
@@ -523,7 +523,7 @@ make_collection_create_mutation :: proc(
     if maximum_collection_order(set) == max(i64) {
         return {}, .Order_Overflow
     }
-    mutation := Mutation{
+    mutation: Mutation = {
         kind = .Create_Collection,
         collection_id = id,
         collection_name_length = len(name),
@@ -995,7 +995,9 @@ initialize :: proc(set: ^Set) -> bool {
         return initialize_existing_set(set)
     }
     set^ = {}
-    heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+    heap_allocator: runtime.Allocator = {
+        procedure = runtime.heap_allocator_proc,
+    }
     if storage.tlsf_owner_init(&set^.allocator, heap_allocator) != .Ok {
         return false
     }
@@ -1386,13 +1388,19 @@ sibling_move_apply :: proc(set: ^Set, mutation: Mutation) -> Policy_Error {
 sibling_move_resolve_indexes :: proc(
     set: ^Set, mutation: Mutation) -> Sibling_Move_Resolution {
     if set == nil || !set^.initialized {
-        return {failure = .Invalid_Set}
+        return {
+            failure = .Invalid_Set,
+        }
     }
     if !move_direction_is_valid(mutation.direction) {
-        return {failure = .Invalid_Direction}
+        return {
+            failure = .Invalid_Direction,
+        }
     }
     if mutation.entry_id == mutation.sibling_entry_id {
-        return {failure = .Invalid_Identity}
+        return {
+            failure = .Invalid_Identity,
+        }
     }
     return sibling_move_resolve_records(set, mutation)
 }
@@ -1403,33 +1411,51 @@ sibling_move_resolve_records :: proc(
     entry_index := find_entry(set, mutation.entry_id)
     sibling_index := find_entry(set, mutation.sibling_entry_id)
     if entry_index < 0 {
-        return {failure = .Missing_Entry}
+        return {
+            failure = .Missing_Entry,
+        }
     }
     if sibling_index < 0 {
-        return {failure = .Missing_Sibling}
+        return {
+            failure = .Missing_Sibling,
+        }
     }
     entry := set.entries[entry_index]
     sibling := set.entries[sibling_index]
     if mutation.placement.entry_id != entry.id ||
         mutation.placement.collection_id != entry.collection_id ||
         mutation.placement.parent_entry_id != entry.parent_entry_id {
-        return {failure = .Different_Scope}
+        return {
+            failure = .Different_Scope,
+        }
     }
     if entry.collection_id != sibling.collection_id ||
         entry.parent_entry_id != sibling.parent_entry_id {
-        return {failure = .Different_Scope}
+        return {
+            failure = .Different_Scope,
+        }
     }
     collection_index := find_collection(set, entry.collection_id)
     if collection_index < 0 {
-        return {failure = .Missing_Collection}
+        return {
+            failure = .Missing_Collection,
+        }
     }
     if set.collections[collection_index].is_read_only {
-        return {failure = .Read_Only}
+        return {
+            failure = .Read_Only,
+        }
     }
     if sibling_neighbor_index(set, entry, mutation.direction) != sibling_index {
-        return {failure = .Not_Adjacent}
+        return {
+            failure = .Not_Adjacent,
+        }
     }
-    return {entry_index, sibling_index, .None}
+    return {
+        entry_index = entry_index,
+        sibling_index = sibling_index,
+        failure = .None,
+    }
 }
 
 // Count siblings without depending on their backing-array arrangement.

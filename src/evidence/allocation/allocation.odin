@@ -45,13 +45,13 @@ Arena_Baselines :: struct {
 // because they do not represent live backing allocations.
 Snapshot :: struct {
     // Current tracked ownership.
-    live_allocations : int,
-    current_bytes : i64,
+    live_allocations: int,
+    current_bytes: i64,
 
     // Lifetime pressure and misuse evidence.
-    peak_bytes : i64,
-    total_allocations : i64,
-    bad_frees : int,
+    peak_bytes: i64,
+    total_allocations: i64,
+    bad_frees: int,
 }
 
 // Fixed domain-owned checkpoint used for later allocation-state comparisons.
@@ -60,11 +60,11 @@ Snapshot :: struct {
 // allocation to the domain being measured.
 Baseline :: struct {
     // Inline UTF-8 checkpoint identity and its initialized byte count.
-    name : [ALLOCATION_BASELINE_NAME_CAPACITY]u8,
-    name_count : int,
+    name: [ALLOCATION_BASELINE_NAME_CAPACITY]u8,
+    name_count: int,
 
     // Counters captured when the checkpoint was last stored.
-    snapshot : Snapshot,
+    snapshot: Snapshot,
 }
 
 // Explicit allocator domain with tracking metadata and bounded named baselines.
@@ -73,14 +73,14 @@ Baseline :: struct {
 // domain value itself and remain valid until replacement or destruction.
 Domain :: struct {
     // Allocation accounting and invalid-free evidence managed by core:mem.
-    tracker : mem.Tracking_Allocator,
+    tracker: mem.Tracking_Allocator,
 
     // Fixed checkpoint registry; only the prefix selected by baseline_count is valid.
-    baselines : [ALLOCATION_BASELINE_CAPACITY]Baseline,
-    baseline_count : int,
+    baselines: [ALLOCATION_BASELINE_CAPACITY]Baseline,
+    baseline_count: int,
 
     // Lifecycle guard for allocator access, snapshots, and idempotent destruction.
-    initialized : bool,
+    initialized: bool,
 }
 
 //   Initialize one explicit tracked allocator domain with separate metadata storage.
@@ -283,9 +283,12 @@ baseline_name :: proc(baseline: ^Baseline) -> string {
 //   Resolve one stable scenario allocation-domain name.
 arena_domain_kind :: proc(name: string) -> (Arena_Domain_Kind, bool) {
     switch name {
-    case "animation": return .Animation, true
-    case "snapshot_slots": return .Snapshot_Slots, true
-    case "display_cache": return .Display_Cache, true
+    case "animation":
+        return .Animation, true
+    case "snapshot_slots":
+        return .Snapshot_Slots, true
+    case "display_cache":
+        return .Display_Cache, true
     }
     return {}, false
 }

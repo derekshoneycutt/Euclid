@@ -131,7 +131,9 @@ unix_process_cleanup_release :: proc(entry: ^Process_Cleanup_Entry) -> bool {
     if token.master != posix.FD(-1) {
         posix.close(token.master)
     }
-    token^ = {master = posix.FD(-1)}
+    token^ = {
+        master = posix.FD(-1),
+    }
     return true
 }
 
@@ -167,7 +169,9 @@ unix_terminal_backend_init :: proc(
     if backend == nil {
         return false
     }
-    backend^ = {master = posix.FD(-1)}
+    backend^ = {
+        master = posix.FD(-1),
+    }
     arena_error := vmem.arena_init_static(
         &backend.workspace_arena, UNIX_TERMINAL_WORKSPACE_ARENA_SIZE,
         UNIX_TERMINAL_WORKSPACE_ARENA_SIZE)
@@ -179,7 +183,9 @@ unix_terminal_backend_init :: proc(
         []u8, UNIX_TERMINAL_WORKSPACE_BYTES, allocator)
     if storage_error != nil {
         vmem.arena_destroy(&backend.workspace_arena)
-        backend^ = {master = posix.FD(-1)}
+        backend^ = {
+            master = posix.FD(-1),
+        }
         return false
     }
     backend.workspace_arena_initialized = true
@@ -559,7 +565,7 @@ unix_terminal_backend_start :: proc(
         unix_terminal_backend_release_workspace(backend)
         return .Resource_Unavailable
     }
-    window := Unix_Winsize{
+    window: Unix_Winsize = {
         rows = dimensions.rows,
         columns = dimensions.columns,
     }
@@ -585,7 +591,7 @@ unix_terminal_backend_resize :: proc(
         dimensions.columns == 0 || dimensions.rows == 0 {
         return false
     }
-    size := Unix_Winsize{
+    size: Unix_Winsize = {
         rows = dimensions.rows,
         columns = dimensions.columns,
     }
@@ -725,11 +731,15 @@ unix_terminal_backend_poll_exit :: proc(
                     status = i32(posix.WTERMSIG(status)),
                 }
             } else {
-                backend.exit = {kind = .Infrastructure_Failure}
+                backend.exit = {
+                    kind = .Infrastructure_Failure,
+                }
             }
         } else if result == posix.pid_t(-1) && posix.errno() != .EINTR {
             backend.child_exited = true
-            backend.exit = {kind = .Infrastructure_Failure}
+            backend.exit = {
+                kind = .Infrastructure_Failure,
+            }
         }
     }
     return {
@@ -808,7 +818,9 @@ unix_terminal_backend_destroy :: proc(backend: ^Unix_Terminal_Backend) {
     if backend.workspace_arena_initialized {
         vmem.arena_destroy(&backend.workspace_arena)
     }
-    backend^ = {master = posix.FD(-1)}
+    backend^ = {
+        master = posix.FD(-1),
+    }
 }
 
 //   Bind one Unix PTY state object to the common backend contract.

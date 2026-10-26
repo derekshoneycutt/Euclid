@@ -49,8 +49,10 @@ Library_Search_Preparation :: struct {
 prepare_library_search_visual :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle) -> Library_Search_Preparation {
-    result := Library_Search_Preparation{layout = library_search_layout(
-        panel, state^.ui_runtime.library.search.suggestion_length > 0)}
+    result: Library_Search_Preparation = {
+        layout = library_search_layout(
+            panel, state^.ui_runtime.library.search.suggestion_length > 0),
+    }
     params := library_search_input_params(state, result.layout, {}, panel)
     params.focused = false
     result.input = uiwidgets.input_box_draw_result(params, false)
@@ -60,12 +62,18 @@ prepare_library_search_visual :: proc(
 // library_search_layout reserves correction rows only while a suggestion is visible.
 library_search_layout :: proc(
     panel: geometry.Rectangle, show_suggestion: bool) -> Library_Search_Layout {
-    inner := geometry.Rectangle{panel.x + LIBRARY_SEARCH_INSET,
-        panel.y + LIBRARY_SEARCH_INSET,
-        max(f32(0), panel.width - LIBRARY_SEARCH_INSET * 2),
-        max(f32(0), panel.height - LIBRARY_SEARCH_INSET * 2)}
-    input := geometry.Rectangle{inner.x, inner.y, inner.width,
-        min(LIBRARY_SEARCH_INPUT_HEIGHT, inner.height)}
+    inner: geometry.Rectangle = {
+        x = panel.x + LIBRARY_SEARCH_INSET,
+        y = panel.y + LIBRARY_SEARCH_INSET,
+        width = max(f32(0), panel.width - LIBRARY_SEARCH_INSET * 2),
+        height = max(f32(0), panel.height - LIBRARY_SEARCH_INSET * 2),
+    }
+    input: geometry.Rectangle = {
+        x = inner.x,
+        y = inner.y,
+        width = inner.width,
+        height = min(LIBRARY_SEARCH_INPUT_HEIGHT, inner.height),
+    }
     action_width := min(LIBRARY_SEARCH_ACTION_WIDTH, input.width)
     prompt_y := input.y + input.height
     prompt_height := f32(0)
@@ -78,18 +86,41 @@ library_search_layout :: proc(
     }
     suggestion_y := prompt_y + prompt_height
     suggestion_x := inner.x + uiwidgets.INPUT_BOX_TEXT_INSET * 2
-    suggestion := geometry.Rectangle{suggestion_x, suggestion_y,
-        max(f32(0), inner.width - (suggestion_x - inner.x)), suggestion_height}
+    suggestion: geometry.Rectangle = {
+        x = suggestion_x,
+        y = suggestion_y,
+        width = max(f32(0), inner.width - (suggestion_x - inner.x)),
+        height = suggestion_height,
+    }
     tree_y := suggestion.y + suggestion.height
-    return {input = input,
-        text_input = {input.x, input.y, max(f32(0), input.width - action_width),
-            input.height},
-        action = {input.x + input.width - action_width, input.y,
-            action_width, input.height},
-        suggestion_prompt = {inner.x, prompt_y, inner.width, prompt_height},
+    return {
+        input = input,
+        text_input = {
+            x = input.x,
+            y = input.y,
+            width = max(f32(0), input.width - action_width),
+            height = input.height,
+        },
+        action = {
+            x = input.x + input.width - action_width,
+            y = input.y,
+            width = action_width,
+            height = input.height,
+        },
+        suggestion_prompt = {
+            x = inner.x,
+            y = prompt_y,
+            width = inner.width,
+            height = prompt_height,
+        },
         suggestion = suggestion,
-        tree = {inner.x, tree_y, inner.width,
-            max(f32(0), inner.y + inner.height - tree_y)}}
+        tree = {
+            x = inner.x,
+            y = tree_y,
+            width = inner.width,
+            height = max(f32(0), inner.y + inner.height - tree_y),
+        },
+    }
 }
 
 // library_search_visible reports whether the editable control belongs to composition.
@@ -113,24 +144,28 @@ library_search_input_params :: proc(
     search := &state^.ui_runtime.library.search
     interaction := &state^.ui_runtime.input.interaction_frame
     text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
-    return {rect = layout.text_input,
+    return {
+        rect = layout.text_input,
         clip_rect = clip_rect,
         controls = tree_semantic_id(),
         descriptor = library_search_input_descriptor(state, search),
-        semantic_focus = state^.ui_runtime.semantic_focus, state = &search^.input,
+        semantic_focus = state^.ui_runtime.semantic_focus,
+        state = &search^.input,
         frame = frame,
         focused = interaction^.effective_focus.kind == .Input_Box &&
             interaction^.effective_focus.id == LIBRARY_SEARCH_INPUT_ID,
         pointer_routed = interaction^.pointer_target.focus.kind == .Input_Box &&
             interaction^.pointer_target.id == LIBRARY_SEARCH_INPUT_ID,
-        column_advance = theme.ui_scaled_metric(
-            theme.TEXT_WRAP_ADVANCE, text_percent),
+        column_advance = theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent),
         font_size = theme.ui_font_size(text_percent),
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         resolver = view_font.cache_terminal_resolver(&state^.font_cache),
         edit_target = {search^.query[:], &search^.query_length},
-        edit_policy = {unicode_completion = true,
-            end_suggestion = string(search^.suggestion[:search^.suggestion_length])}}
+        edit_policy = {
+            unicode_completion = true,
+            end_suggestion = string(search^.suggestion[:search^.suggestion_length]),
+        },
+    }
 }
 
 // Snapshot the current query as the editable semantic descriptor.
@@ -235,9 +270,12 @@ prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
     }
     _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
         id = uisemantics.semantic_control_id(.Library_Control, LIBRARY_SEARCH_STATUS_ID),
-        role = .Status, states = {.Visible, .Enabled},
-        region = .Accordion_Content, traversal_order = 4,
-        bounds = {}, clip_bounds = {},
+        role = .Status,
+        states = {.Visible, .Enabled},
+        region = .Accordion_Content,
+        traversal_order = 4,
+        bounds = {},
+        clip_bounds = {},
         label = viewmessages.shell_message(state, .Library_Search_Status_Label),
         value = value,
     })
@@ -256,8 +294,10 @@ prepare_library_unicode_status :: proc(
     _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
         id = uisemantics.semantic_control_id(
             .Library_Control, LIBRARY_SEARCH_UNICODE_STATUS_ID),
-        parent = prepared.descriptor.id, role = .Status,
-        states = {.Visible, .Enabled}, region = .Accordion_Content,
+        parent = prepared.descriptor.id,
+        role = .Status,
+        states = {.Visible, .Enabled},
+        region = .Accordion_Content,
         bounds = prepared.unicode_hint,
         clip_bounds = prepared.control_geometry.clip_bounds,
         label = value,
@@ -270,8 +310,11 @@ prepare_library_clear :: proc(
     frame: input.Input_Frame,
     layout: Library_Search_Layout) -> uiwidgets.Icon_Button_Result {
     search := &state^.ui_runtime.library.search
-    result := uiwidgets.update_icon_button({id = LIBRARY_SEARCH_CLEAR_ID,
-        rect = layout.action, icon_id = .None, mouse = frame,
+    result := uiwidgets.update_icon_button({
+        id = LIBRARY_SEARCH_CLEAR_ID,
+        rect = layout.action,
+        icon_id = .None,
+        mouse = frame,
         interaction_space_rect = panel,
         interaction_enabled = search^.query_length > 0,
         inset_scale = 0.55,
@@ -286,7 +329,8 @@ prepare_library_clear :: proc(
             traversal_order = 1,
             clip_bounds = geometry.Rectangle(panel),
             label = viewmessages.shell_message(state, .Library_Clear_Search),
-        }}, &state^.ui_runtime.input.press_owner)
+        },
+    }, &state^.ui_runtime.input.press_owner)
     if result.action.activated {
         library_search_clear_query(search)
     }
@@ -305,9 +349,13 @@ prepare_library_suggestion :: proc(
     suggestion := string(search^.suggestion[:search^.suggestion_length])
     label_storage: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY + 24]u8
     action_label := library_search_suggestion_label(state, suggestion, label_storage[:])
-    result := uiwidgets.update_text_button({id = LIBRARY_SEARCH_SUGGESTION_ID,
-        rect = layout.suggestion, label = suggestion, enabled = true,
-        mouse = frame, interaction_space_rect = panel,
+    result := uiwidgets.update_text_button({
+        id = LIBRARY_SEARCH_SUGGESTION_ID,
+        rect = layout.suggestion,
+        label = suggestion,
+        enabled = true,
+        mouse = frame,
+        interaction_space_rect = panel,
         interaction_enabled = true,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
@@ -323,8 +371,8 @@ prepare_library_suggestion :: proc(
             clip_bounds = geometry.Rectangle(panel),
             label = action_label,
             value = suggestion,
-        }},
-        &state^.ui_runtime.input.press_owner)
+        },
+    }, &state^.ui_runtime.input.press_owner)
     if result.action.activated {
         library_search_apply_suggestion(search)
     }
@@ -336,8 +384,9 @@ prepare_library_search :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
     frame: input.Input_Frame) -> Library_Search_Preparation {
     search := &state^.ui_runtime.library.search
-    result := Library_Search_Preparation{layout = library_search_layout(
-        panel, search^.suggestion_length > 0)}
+    result: Library_Search_Preparation = {
+        layout = library_search_layout(panel, search^.suggestion_length > 0),
+    }
     params := library_search_input_params(state, result.layout, frame, panel)
     result.input = uiwidgets.input_box_prepare(
         params, &state^.ui_runtime.input.press_owner)
@@ -357,7 +406,7 @@ prepare_library_search :: proc(
 // draw_encoded_search_action draws the passive magnifier or active clear icon.
 draw_encoded_search_action :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, clear: bool) {
-    center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
+    center: geometry.Vector2 = {rectangle.x + rectangle.width * 0.5,
         rectangle.y + rectangle.height * 0.5}
     radius := min(rectangle.width, rectangle.height) * 0.18
     if clear {

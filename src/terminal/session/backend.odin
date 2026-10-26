@@ -150,7 +150,10 @@ process_cleanup_registry_reserve :: proc(
     for index in 0..<registry.entry_count {
         entry := &registry.entries[index]
         if entry.status == .Complete {
-            entry^ = {generation = generation, status = .Pending}
+            entry^ = {
+                generation = generation,
+                status = .Pending,
+            }
             return entry
         }
     }
@@ -158,7 +161,10 @@ process_cleanup_registry_reserve :: proc(
         return nil
     }
     entry := &registry.entries[registry.entry_count]
-    entry^ = {generation = generation, status = .Pending}
+    entry^ = {
+        generation = generation,
+        status = .Pending,
+    }
     registry.entry_count += 1
     return entry
 }

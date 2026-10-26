@@ -446,8 +446,11 @@ search_worker_queue_is_bounded_and_coalesces_newest :: proc(t: ^testing.T) {
 // Verify display-side acceptance rejects stale query and index generations.
 @(test)
 search_result_acceptance_requires_both_current_generations :: proc(t: ^testing.T) {
-    result := Search_Query_Result{
-        generation = 7, index_generation = 11, status = .Ready}
+    result: Search_Query_Result = {
+        generation = 7,
+        index_generation = 11,
+        status = .Ready,
+    }
     testing.expect_value(t, search_result_acceptance(&result, 7, 11),
         Search_Result_Acceptance.Accepted)
     testing.expect_value(t, search_result_acceptance(&result, 8, 11),

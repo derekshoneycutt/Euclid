@@ -431,7 +431,9 @@ ui_tree_projection_repair_custom_removed_identity :: proc(
         }
         if runtime.semantic_focus.logical_focus.stable_id == removed {
             runtime.semantic_focus.logical_focus = {
-                domain = .Animation_Tree, local_id = 1}
+                domain = .Animation_Tree,
+                local_id = 1,
+            }
             runtime.semantic_focus.active_tree_item = replacement
             runtime.semantic_focus.last_region = .Accordion_Content
             runtime.semantic_focus.last_traversal_order = 3

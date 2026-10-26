@@ -19,12 +19,30 @@ Sdl_Stroke_Vertex_Input :: struct {
 // sdl_stroke_vertex_input describes the reflected stroke vertex ABI.
 sdl_stroke_vertex_input :: proc() -> Sdl_Stroke_Vertex_Input {
     return {
-        description = {{slot = 0, pitch = size_of(Stroke_Vertex),
-            input_rate = .VERTEX}},
+        description = {{
+            slot = 0,
+            pitch = size_of(Stroke_Vertex),
+            input_rate = .VERTEX,
+        }},
         attributes = {
-            {location = 0, buffer_slot = 0, format = .FLOAT3, offset = 0},
-            {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 12},
-            {location = 2, buffer_slot = 0, format = .FLOAT4, offset = 20},
+            {
+                location = 0,
+                buffer_slot = 0,
+                format = .FLOAT3,
+                offset = 0,
+            },
+            {
+                location = 1,
+                buffer_slot = 0,
+                format = .FLOAT2,
+                offset = 12,
+            },
+            {
+                location = 2,
+                buffer_slot = 0,
+                format = .FLOAT4,
+                offset = 20,
+            },
         },
     }
 }
@@ -50,7 +68,7 @@ sdl_stroke_pipeline_build :: proc(
     device: ^sdl.GPUDevice, vertex_shader, fragment_shader: ^sdl.GPUShader,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     input := sdl_stroke_vertex_input()
-    targets := [1]sdl.GPUColorTargetDescription{
+    targets: [1]sdl.GPUColorTargetDescription = {
         sdl_stroke_target_description()}
     return sdl.CreateGPUGraphicsPipeline(device, {
         vertex_shader = vertex_shader,
@@ -63,10 +81,13 @@ sdl_stroke_pipeline_build :: proc(
         },
         primitive_type = .TRIANGLELIST,
         rasterizer_state = {
-            fill_mode = .FILL, cull_mode = .NONE,
+            fill_mode = .FILL,
+            cull_mode = .NONE,
             front_face = .COUNTER_CLOCKWISE,
         },
-        multisample_state = {sample_count = sample_count},
+        multisample_state = {
+            sample_count = sample_count,
+        },
         target_info = {
             color_target_descriptions = raw_data(targets[:]),
             num_color_targets = 1,
@@ -170,9 +191,13 @@ sdl_stroke_upload :: proc(
     if copy_pass == nil {
        return false
     }
-    sdl.UploadToGPUBuffer(copy_pass,
-        {transfer_buffer = runtime^.stroke_upload_buffer},
-        {buffer = runtime^.stroke_vertex_buffer, size = byte_count}, true)
+    sdl.UploadToGPUBuffer(copy_pass, {
+        transfer_buffer = runtime^.stroke_upload_buffer,
+    },
+    {
+        buffer = runtime^.stroke_vertex_buffer,
+        size = byte_count,
+    }, true)
     sdl.EndGPUCopyPass(copy_pass)
     return true
 }
@@ -180,7 +205,9 @@ sdl_stroke_upload :: proc(
 // sdl_stroke_bind selects the stroke pipeline and dedicated vertex stream.
 sdl_stroke_bind :: proc(
     runtime: ^Sdl_Draw_Runtime, pass: ^sdl.GPURenderPass) {
-    binding := [1]sdl.GPUBufferBinding{{buffer = runtime^.stroke_vertex_buffer}}
+    binding: [1]sdl.GPUBufferBinding = {{
+        buffer = runtime^.stroke_vertex_buffer,
+    }}
     sdl.BindGPUGraphicsPipeline(pass, runtime^.stroke_pipeline)
     sdl.BindGPUVertexBuffers(pass, 0, raw_data(binding[:]), 1)
 }

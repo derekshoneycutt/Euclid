@@ -145,7 +145,8 @@ Input_Text_Event_Metadata :: struct {
 }
 
 INPUT_TEXT_EVENT_METADATA_DEFAULT :: Input_Text_Event_Metadata{
-    preedit_start = -1, preedit_length = -1,
+    preedit_start = -1,
+    preedit_length = -1,
 }
 
 // SDL3 text events are bounded to a small inline UTF-8 payload.

@@ -246,7 +246,7 @@ numeric_range_is_valid :: proc(value: Numeric_Range) -> bool {
     if !value.present {
         return true
     }
-    values := [4]f64{value.minimum, value.maximum, value.current, value.step}
+    values: [4]f64 = {value.minimum, value.maximum, value.current, value.step}
     for item in values {
         if math.is_nan(item) || math.is_inf(item) {
             return false
@@ -309,8 +309,8 @@ control_node_validate_relation :: proc(
 // control_node_text_ranges_fit rejects negative and overflowing copied-string ranges.
 control_node_text_ranges_fit :: proc(
     value: ^Control_Tree_Publication, node: Control_Publication) -> bool {
-    offsets := [3]int{node.label_offset, node.value_offset, node.placeholder_offset}
-    lengths := [3]int{node.label_length, node.value_length, node.placeholder_length}
+    offsets: [3]int = {node.label_offset, node.value_offset, node.placeholder_offset}
+    lengths: [3]int = {node.label_length, node.value_length, node.placeholder_length}
     for offset, index in offsets {
         if offset < 0 || offset > value^.text_count || lengths[index] < 0 ||
            lengths[index] > value^.text_count - offset {
@@ -559,19 +559,25 @@ control_tree_copy_characters :: proc(
 control_publication_from_input :: proc(
     source: Control_Publication_Input) -> Control_Publication {
     return {
-            native_id = source.native_id,
-            parent_native_id = source.parent_native_id,
-            active_descendant_native_id = source.active_descendant_native_id,
-            controls_native_id = source.controls_native_id,
-            role = source.role,
-            bounds = source.bounds, actions = source.actions, range = source.range,
-            enabled = source.enabled, focusable = source.focusable,
-            focused = source.focused, checked = source.checked,
-            selected = source.selected, expanded = source.expanded,
-            busy = source.busy,
-            level = source.level, position_in_set = source.position_in_set,
-            set_size = source.set_size,
-        }
+        native_id = source.native_id,
+        parent_native_id = source.parent_native_id,
+        active_descendant_native_id = source.active_descendant_native_id,
+        controls_native_id = source.controls_native_id,
+        role = source.role,
+        bounds = source.bounds,
+        actions = source.actions,
+        range = source.range,
+        enabled = source.enabled,
+        focusable = source.focusable,
+        focused = source.focused,
+        checked = source.checked,
+        selected = source.selected,
+        expanded = source.expanded,
+        busy = source.busy,
+        level = source.level,
+        position_in_set = source.position_in_set,
+        set_size = source.set_size,
+    }
 }
 
 // control_tree_append copies one source into the next candidate slot.
@@ -656,7 +662,7 @@ control_tree_build :: proc(
 control_tree_measure :: proc(input: Tree_Publication_Input) -> ([2]int, bool) {
     text_count, character_count := 0, 0
     for source in input.controls {
-        texts := [3]string{source.label, source.value, source.placeholder}
+        texts: [3]string = {source.label, source.value, source.placeholder}
         for text in texts {
             if len(text) > max(int) - text_count {
                 return {}, false
@@ -1038,7 +1044,7 @@ publication_build :: proc(
         return .Invalid_Id
     }
     next_generation := destination^.generation + 1
-    candidate := Static_Publication{
+    candidate: Static_Publication = {
         generation = next_generation,
         root_id = SYNTHETIC_ROOT_ID,
         child_present = true,
@@ -1069,7 +1075,7 @@ publication_build_button :: proc(
     if len(input.label) > len(destination^.label) {
         return .Capacity
     }
-    candidate := Static_Publication{
+    candidate: Static_Publication = {
         generation = destination^.generation + 1,
         root_id = SYNTHETIC_ROOT_ID,
         child_present = true,
@@ -1101,7 +1107,7 @@ publication_build_root :: proc(
     if destination == nil {
         return .Invalid_Id
     }
-    candidate := Static_Publication{
+    candidate: Static_Publication = {
         generation = destination^.generation + 1,
         root_id = SYNTHETIC_ROOT_ID,
         root_bounds = bounds,

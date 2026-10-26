@@ -55,8 +55,10 @@ particle_test_visible_polygon :: proc(
     positions: []Vector3,
     vertices: []shapemodel.Shape_Entity) ->
     (shapemodel.Shape_Entity, bool) {
-    polygon, status := shapes.world_create_polygon_into(
-        world, positions, {color = color.WHITE, brush_size = 1}, vertices)
+    polygon, status := shapes.world_create_polygon_into(world, positions, {
+        color = color.WHITE,
+        brush_size = 1,
+    }, vertices)
     if status != shapemodel.Shape_World_Status.Ok {
         return {}, false
     }
@@ -75,17 +77,23 @@ particle_test_visible_square :: proc(
     world: ^shapemodel.Shape_World,
     z: f32,
     vertices: []shapemodel.Shape_Entity) -> Particle_Test_Polygon {
-    positions := [4]Vector3{
+    positions: [4]Vector3 = {
         {0.2, 0.2, z}, {0.8, 0.2, z},
         {0.8, 0.8, z}, {0.2, 0.8, z},
     }
     entity, prepared := particle_test_visible_polygon(
         world, positions[:], vertices)
     if !prepared {
-        return {entity = entity}
+        return {
+            entity = entity,
+        }
     }
     draw, found := shape_world_cached_polygon_draw(world, entity)
-    return {entity = entity, draw = draw, prepared = found}
+    return {
+        entity = entity,
+        draw = draw,
+        prepared = found,
+    }
 }
 
 // Begin one deterministic region reveal against the accepted animation timeline.
@@ -117,9 +125,17 @@ circle_dust_emission_scales_with_arc_length :: proc(t: ^testing.T) {
     white := color.WHITE
 
     emit_circle_dust(quarter, {
-        center = {}, radius = 0.2, sweep_theta = f32(math.PI/2), color = white})
+        center = {},
+        radius = 0.2,
+        sweep_theta = f32(math.PI/2),
+        color = white,
+    })
     emit_circle_dust(full, {
-        center = {}, radius = 0.2, sweep_theta = f32(2*math.PI), color = white})
+        center = {},
+        radius = 0.2,
+        sweep_theta = f32(2*math.PI),
+        color = white,
+    })
 
     quarter_count := count_live_low_particles(quarter)
     full_count := count_live_low_particles(full)
@@ -134,8 +150,12 @@ filled_circle_dust_emission_samples_sector_interior :: proc(t: ^testing.T) {
     defer free(ps)
     ps.use_max_dust_particles = 1000
 
-    emit_filled_circle_dust(ps, {center = {}, radius = 0.2,
-        sweep_theta = f32(math.PI/3), color = color.WHITE})
+    emit_filled_circle_dust(ps, {
+        center = {},
+        radius = 0.2,
+        sweep_theta = f32(math.PI/3),
+        color = color.WHITE,
+    })
 
     interior_count: int
     for index in 0..<ps.use_max_dust_particles {
@@ -161,9 +181,15 @@ trochoid_dust_emission_scales_with_revealed_length :: proc(t: ^testing.T) {
     defer free(full)
     partial.use_max_dust_particles = 1000
     full.use_max_dust_particles = 1000
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.2,
-        rolling_radius = 0.2, tracer_distance = 0.2, parameter_start = 0,
-        parameter_finish = 2 * math.PI, draw_parameter = math.PI / 2}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 0.2,
+        rolling_radius = 0.2,
+        tracer_distance = 0.2,
+        parameter_start = 0,
+        parameter_finish = 2 * math.PI,
+        draw_parameter = math.PI / 2,
+    }
     vertices: [curve.TROCHOID_MAX_VERTICES]Vector3
     partial_result := curve.trochoid_explicate({}, value, vertices[:])
     emit_curve_polyline_dust(partial, vertices[:partial_result.vertex_count],
@@ -187,9 +213,16 @@ cycloid_tool_hide_is_silent :: proc(t: ^testing.T) {
     defer free(world)
     defer free(particles)
     tool, status := shapes.world_create_cycloid_tool(world, {
-        first = {0, 0, 0}, second = {1, 0, 0}, rolling_radius = 0.05,
-        parameter_start = 0, parameter_finish = 2 * math.PI,
-        parameter = 0, style = {color = color.WHITE, brush_size = 5},
+        first = {0, 0, 0},
+        second = {1, 0, 0},
+        rolling_radius = 0.05,
+        parameter_start = 0,
+        parameter_finish = 2 * math.PI,
+        parameter = 0,
+        style = {
+            color = color.WHITE,
+            brush_size = 5,
+        },
     })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     style, found := shapemodel.shape_component_get_mut(
@@ -262,8 +295,13 @@ expect_dust_systems_match :: proc(
 queue_dust_slot_contacts :: proc(
     t: ^testing.T, ps: ^particlemodel.Particle_System) {
     for index in 0..<ps^.use_max_dust_particles {
-        testing.expect(t, queue_dust_tool_contact(ps, {endpoint = {
-            ps^.low_particles.pos_x[index], ps^.low_particles.pos_y[index], 0}}))
+        testing.expect(t, queue_dust_tool_contact(ps, {
+            endpoint = {
+                ps^.low_particles.pos_x[index],
+                ps^.low_particles.pos_y[index],
+                0,
+            },
+        }))
     }
 }
 
@@ -324,7 +362,8 @@ dust_label_reveal_contact_pushes_from_text :: proc(t: ^testing.T) {
         segment_first = {0.4, 0.6, 0},
         segment_second = {0.6, 0.4, 0},
         has_sweep = true,
-        source = .Label}))
+        source = .Label,
+    }))
 
     apply_dust_tool_contacts_to_field(ps)
 
@@ -343,7 +382,9 @@ dust_label_contact_uses_stronger_push :: proc(t: ^testing.T) {
     ps^.dust_field.density[node] = 1
     ps^.dust_field.support_bounds = {129, 125, 129, 125, true}
     testing.expect(t, queue_dust_tool_contact(ps, {
-        endpoint = {0.5, 0.5, 0}, source = .Label}))
+        endpoint = {0.5, 0.5, 0},
+        source = .Label,
+    }))
 
     apply_dust_tool_contacts_to_field(ps)
 
@@ -355,17 +396,22 @@ dust_label_contact_uses_stronger_push :: proc(t: ^testing.T) {
 dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    first_sweep := particlemodel.Dust_Tool_Contact{
-        endpoint = {0.1, 0.2, 0}, segment_first = {0.1, 0.2, 0},
-        segment_second = {0.4, 0.2, 0}, has_sweep = true,
+    first_sweep: particlemodel.Dust_Tool_Contact = {
+        endpoint = {0.1, 0.2, 0},
+        segment_first = {0.1, 0.2, 0},
+        segment_second = {0.4, 0.2, 0},
+        has_sweep = true,
         previous_segment_first = {0.1, 0.2, 0},
         previous_segment_second = {0.4, 0.2, 0},
-        source = .Compass_Filled_Sweep}
+        source = .Compass_Filled_Sweep,
+    }
     distinct_sweep := first_sweep
     distinct_sweep.endpoint = {0.5, 0.2, 0}
     distinct_sweep.segment_second = distinct_sweep.endpoint
-    duplicate := particlemodel.Dust_Tool_Contact{
-        endpoint = {0.7, 0.8, 0}, source = .Point}
+    duplicate: particlemodel.Dust_Tool_Contact = {
+        endpoint = {0.7, 0.8, 0},
+        source = .Point,
+    }
     testing.expect(t, queue_dust_tool_contact(ps, first_sweep))
     testing.expect(t, queue_dust_tool_contact(ps, first_sweep))
     testing.expect(t, queue_dust_tool_contact(ps, distinct_sweep))
@@ -391,8 +437,8 @@ dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) 
 dust_filled_compass_sweep_covers_ruled_sector :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    interior := [3][2]int{{110, 110}, {120, 120}, {130, 110}}
-    outside := [2]int{175, 175}
+    interior: [3][2]int = {{110, 110}, {120, 120}, {130, 110}}
+    outside: [2]int = {175, 175}
     for point in interior {
         ps^.dust_field.density[point.y * DUST_FIELD_DIM + point.x] = 1
     }
@@ -403,8 +449,11 @@ dust_filled_compass_sweep_covers_ruled_sector :: proc(t: ^testing.T) {
         endpoint = {0.4, 0.6, 0},
         previous_segment_first = {0.4, 0.4, 0},
         previous_segment_second = {0.6, 0.4, 0},
-        segment_first = {0.4, 0.4, 0}, segment_second = {0.4, 0.6, 0},
-        has_sweep = true, source = .Compass_Filled_Sweep}))
+        segment_first = {0.4, 0.4, 0},
+        segment_second = {0.4, 0.6, 0},
+        has_sweep = true,
+        source = .Compass_Filled_Sweep,
+    }))
 
     apply_dust_tool_contacts_to_field(ps)
 
@@ -426,11 +475,19 @@ dust_tool_contact_does_not_affect_airborne_particle :: proc(t: ^testing.T) {
     defer free(actual)
     expected^.use_max_dust_particles = 1
     actual^.use_max_dust_particles = 1
-    expected^.low_particles[0] = {pos_x = 0.505, pos_y = 0.5, pos_z = 0.1,
-        vel_x = 0.001, vel_y = -0.002, life = 100, alive = true}
+    expected^.low_particles[0] = {
+        pos_x = 0.505,
+        pos_y = 0.5,
+        pos_z = 0.1,
+        vel_x = 0.001,
+        vel_y = -0.002,
+        life = 100,
+        alive = true,
+    }
     actual^.low_particles[0] = expected^.low_particles[0]
     testing.expect(t, queue_dust_tool_contact(actual, {
-        endpoint = {0.5, 0.5, 0}}))
+        endpoint = {0.5, 0.5, 0},
+    }))
 
     update_particles(expected, f32(1.0 / 60.0))
     update_particles(actual, f32(1.0 / 60.0))
@@ -443,7 +500,9 @@ dust_tool_contact_does_not_affect_airborne_particle :: proc(t: ^testing.T) {
 dust_tool_contact_discard_clears_pending_force :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    testing.expect(t, queue_dust_tool_contact(ps, {endpoint = {0.2, 0.25, 0}}))
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = {0.2, 0.25, 0},
+    }))
 
     discard_dust_tool_contacts(ps)
 
@@ -456,8 +515,14 @@ dust_kick_creates_airborne_particle :: proc(t: ^testing.T) {
     ps := new(Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 1
-    ps^.low_particles[0] = {pos_x = 0.5, pos_y = 0.5, pos_z = DUST_FLOOR_Z,
-        life = 1, color = color.WHITE, alive = true}
+    ps^.low_particles[0] = {
+        pos_x = 0.5,
+        pos_y = 0.5,
+        pos_z = DUST_FLOOR_Z,
+        life = 1,
+        color = color.WHITE,
+        alive = true,
+    }
 
     kick_existing_dust_index(ps, 0)
     integrate_dust_positions(ps)
@@ -530,9 +595,14 @@ scenario_dust_emission_is_deterministic_and_rng_isolated :: proc(t: ^testing.T) 
     first^.use_max_dust_particles = 32
     second^.use_max_dust_particles = 32
     control^.use_max_dust_particles = 32
-    request := particlemodel.Scenario_Dust_Emission_Request{
-        distribution = .Disc, count = 16, x = 0.5, y = 0.5,
-        radius = 0.04, seed = 17}
+    request: particlemodel.Scenario_Dust_Emission_Request = {
+        distribution = .Disc,
+        count = 16,
+        x = 0.5,
+        y = 0.5,
+        radius = 0.04,
+        seed = 17,
+    }
 
     testing.expect_value(t, emit_scenario_dust(first, request), 16)
     testing.expect_value(t, emit_scenario_dust(second, request), 16)
@@ -555,8 +625,13 @@ scenario_dust_contact_and_kick_stream_is_deterministic :: proc(t: ^testing.T) {
     defer free(second)
     first^.use_max_dust_particles = 16
     second^.use_max_dust_particles = 16
-    request := particlemodel.Scenario_Dust_Emission_Request{
-        distribution = .Point, count = 16, x = 0.51, y = 0.51, seed = 23}
+    request: particlemodel.Scenario_Dust_Emission_Request = {
+        distribution = .Point,
+        count = 16,
+        x = 0.51,
+        y = 0.51,
+        seed = 23,
+    }
     testing.expect_value(t, emit_scenario_dust(first, request), 16)
     testing.expect_value(t, emit_scenario_dust(second, request), 16)
 
@@ -583,13 +658,25 @@ dust_update_affects_only_grounded_particles :: proc(t: ^testing.T) {
     defer free(ps)
     ps^.use_max_dust_particles = 2
     ps^.low_particles[0] = {
-        pos_x = 0.25, pos_y = 0.75, pos_z = DUST_FLOOR_Z,
-        vel_x = 0.003, vel_y = -0.002, alive = true}
+        pos_x = 0.25,
+        pos_y = 0.75,
+        pos_z = DUST_FLOOR_Z,
+        vel_x = 0.003,
+        vel_y = -0.002,
+        alive = true,
+    }
     ps^.low_particles[1] = {
-        pos_x = 0.25, pos_y = 0.75, pos_z = DUST_FLOOR_Z + 0.1,
-        vel_x = -0.004, vel_y = 0.005, alive = true}
-    airborne_velocity := Vector2{
-        ps^.low_particles.vel_x[1], ps^.low_particles.vel_y[1]}
+        pos_x = 0.25,
+        pos_y = 0.75,
+        pos_z = DUST_FLOOR_Z + 0.1,
+        vel_x = -0.004,
+        vel_y = 0.005,
+        alive = true,
+    }
+    airborne_velocity: Vector2 = {
+        ps^.low_particles.vel_x[1],
+        ps^.low_particles.vel_y[1],
+    }
 
     dust_field_update_grounded(ps, f32(1.0 / 60.0))
 
@@ -609,9 +696,15 @@ update_particles_deposits_landing_momentum :: proc(t: ^testing.T) {
     defer free(ps)
     ps^.use_max_dust_particles = 1
     ps^.low_particles[0] = {
-        pos_x = 0.5, pos_y = 0.5, pos_z = 0.001,
-        vel_x = 0.003, vel_y = -0.002, vel_z = -0.01,
-        life = 10, alive = true}
+        pos_x = 0.5,
+        pos_y = 0.5,
+        pos_z = 0.001,
+        vel_x = 0.003,
+        vel_y = -0.002,
+        vel_z = -0.01,
+        life = 10,
+        alive = true,
+    }
 
     update_particles(ps, f32(1.0 / 60.0))
 
@@ -631,8 +724,12 @@ update_particles_bypasses_legacy_grounded_authorities :: proc(t: ^testing.T) {
     ps^.use_max_dust_particles = 2
     for index in 0..<2 {
         ps^.low_particles[index] = {
-            pos_x = 0.5, pos_y = 0.5, pos_z = DUST_FLOOR_Z,
-            life = 10, alive = true}
+            pos_x = 0.5,
+            pos_y = 0.5,
+            pos_z = DUST_FLOOR_Z,
+            life = 10,
+            alive = true,
+        }
     }
 
     update_particles(ps, f32(1.0 / 60.0))
@@ -648,14 +745,29 @@ dust_transfers_are_stable_and_grounded_only :: proc(t: ^testing.T) {
     defer free(ps)
     ps^.use_max_dust_particles = 4
     ps^.low_particles[0] = {
-        pos_x = 0.2, pos_y = 0.3, pos_z = DUST_FLOOR_Z,
-        vel_x = 0.001, life = 10, alive = true}
+        pos_x = 0.2,
+        pos_y = 0.3,
+        pos_z = DUST_FLOOR_Z,
+        vel_x = 0.001,
+        life = 10,
+        alive = true,
+    }
     ps^.low_particles[1] = {
-        pos_x = 0.4, pos_y = 0.5, pos_z = DUST_FLOOR_Z + 0.1,
-        vel_x = 0.007, life = 10, alive = true}
+        pos_x = 0.4,
+        pos_y = 0.5,
+        pos_z = DUST_FLOOR_Z + 0.1,
+        vel_x = 0.007,
+        life = 10,
+        alive = true,
+    }
     ps^.low_particles[3] = {
-        pos_x = 0.7, pos_y = 0.8, pos_z = DUST_FLOOR_Z,
-        vel_y = -0.002, life = 10, alive = true}
+        pos_x = 0.7,
+        pos_y = 0.8,
+        pos_z = DUST_FLOOR_Z,
+        vel_y = -0.002,
+        life = 10,
+        alive = true,
+    }
 
     dust_field_deposit_grounded(ps)
 
@@ -692,17 +804,43 @@ update_and_deposit_low_dust_matches_sequential_reference :: proc(t: ^testing.T) 
     expected^.use_max_dust_particles = 5
     actual^.use_max_dust_particles = expected^.use_max_dust_particles
     expected^.low_particles[0] = {
-        pos_x = 0.3, pos_y = 0.4, pos_z = DUST_FLOOR_Z,
-        vel_x = 0.001, vel_y = -0.002, life = 10, alive = true}
+        pos_x = 0.3,
+        pos_y = 0.4,
+        pos_z = DUST_FLOOR_Z,
+        vel_x = 0.001,
+        vel_y = -0.002,
+        life = 10,
+        alive = true,
+    }
     expected^.low_particles[1] = {
-        pos_x = 0.5, pos_y = 0.6, pos_z = 0.001,
-        vel_x = 0.003, vel_y = 0.002, vel_z = -0.01, life = 10, alive = true}
+        pos_x = 0.5,
+        pos_y = 0.6,
+        pos_z = 0.001,
+        vel_x = 0.003,
+        vel_y = 0.002,
+        vel_z = -0.01,
+        life = 10,
+        alive = true,
+    }
     expected^.low_particles[2] = {
-        pos_x = 0.7, pos_y = 0.8, pos_z = 0.2,
-        vel_x = -0.004, vel_y = 0.005, vel_z = 0.003, life = 10, alive = true}
+        pos_x = 0.7,
+        pos_y = 0.8,
+        pos_z = 0.2,
+        vel_x = -0.004,
+        vel_y = 0.005,
+        vel_z = 0.003,
+        life = 10,
+        alive = true,
+    }
     expected^.low_particles[4] = {
-        pos_x = 1, pos_y = 0, pos_z = DUST_FLOOR_Z,
-        vel_x = 0.01, vel_y = -0.01, life = 10, alive = true}
+        pos_x = 1,
+        pos_y = 0,
+        pos_z = DUST_FLOOR_Z,
+        vel_x = 0.01,
+        vel_y = -0.01,
+        life = 10,
+        alive = true,
+    }
     for index in 0..<5 {
         actual^.low_particles[index] = expected^.low_particles[index]
     }
@@ -752,20 +890,32 @@ formation_reveals_follow_only_accepted_animation_progress :: proc(t: ^testing.T)
     formation_reset_generation(ps, 7)
     testing.expect(t, formation_advance_progress(ps, 7, 1.0))
     testing.expect(t, formation_start_reveal(ps, {
-        kind = .Region, owner_entity = 101, animation_generation = 7,
-        progress = 1.0, duration = 2.0, seed = 11,
+        kind = .Region,
+        owner_entity = 101,
+        animation_generation = 7,
+        progress = 1.0,
+        duration = 2.0,
+        seed = 11,
     }))
     testing.expect(t, formation_start_reveal(ps, {
-        kind = .Label, owner_entity = 202, animation_generation = 7,
-        progress = 1.0, duration = 0.5, seed = 12,
+        kind = .Label,
+        owner_entity = 202,
+        animation_generation = 7,
+        progress = 1.0,
+        duration = 0.5,
+        seed = 12,
     }))
     testing.expect_value(t, ps^.formation.reveal_count, 2)
 
     label_slot := formation_find_reveal(&ps^.formation, .Label, 202, 7)
     first_slot_generation := ps^.formation.reveals[label_slot].slot_generation
     testing.expect(t, formation_start_reveal(ps, {
-        kind = .Label, owner_entity = 202, animation_generation = 7,
-        progress = 1.0, duration = 1.0, seed = 13,
+        kind = .Label,
+        owner_entity = 202,
+        animation_generation = 7,
+        progress = 1.0,
+        duration = 1.0,
+        seed = 13,
     }))
     testing.expect_value(t, ps^.formation.reveal_count, 2)
     testing.expect(t,
@@ -788,8 +938,12 @@ formation_particle_slots_are_bounded_and_generation_checked :: proc(t: ^testing.
     formation_reset_generation(ps, 3)
     testing.expect(t, formation_advance_progress(ps, 3, 0))
     testing.expect(t, formation_start_reveal(ps, {
-        kind = .Label, owner_entity = 42, animation_generation = 3,
-        progress = 0, duration = 10, seed = 9,
+        kind = .Label,
+        owner_entity = 42,
+        animation_generation = 3,
+        progress = 0,
+        duration = 10,
+        seed = 9,
     }))
     reveal_slot := formation_find_reveal(&ps^.formation, .Label, 42, 3)
     reveal_generation := ps^.formation.reveals[reveal_slot].slot_generation
@@ -881,13 +1035,24 @@ seed_shape_world_particle_line :: proc(
     assert(shapemodel.shape_world_create_entity(world, &first) == .Ok)
     assert(shapemodel.shape_world_create_entity(world, &second) == .Ok)
     assert(shapemodel.shape_component_insert(&world.transforms, &world.registry,
-        first, shapemodel.Shape_Transform{position = {0, 0, 0}}) == .Ok)
+        first, shapemodel.Shape_Transform{
+            position = {0, 0, 0},
+        }) == .Ok)
     assert(shapemodel.shape_component_insert(&world.transforms, &world.registry,
-        second, shapemodel.Shape_Transform{position = {1, 0, 0}}) == .Ok)
+        second, shapemodel.Shape_Transform{
+            position = {1, 0, 0},
+        }) == .Ok)
     assert(shapemodel.shape_component_insert(&world.render_styles, &world.registry,
-        shape, shapemodel.Shape_Render_Style{visible = visible}) == .Ok)
-    geometry := shapemodel.Shape_Geometry{kind = .Line}
-    geometry.payload.line = {first = first, second = second}
+        shape, shapemodel.Shape_Render_Style{
+            visible = visible,
+        }) == .Ok)
+    geometry: shapemodel.Shape_Geometry = {
+        kind = .Line,
+    }
+    geometry.payload.line = {
+        first = first,
+        second = second,
+    }
     assert(shapemodel.shape_component_insert(&world.geometries, &world.registry,
         shape, geometry) == .Ok)
 }
@@ -934,15 +1099,17 @@ emit_shape_world_polygon_burst_uses_rendered_concave_triangles :: proc(
     ps^.use_max_dust_particles = MAX_DEPARTURE_MATERIAL_SAMPLES
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    positions := [16]Vector3{
+    positions: [16]Vector3 = {
         {0, 0, 0}, {2, 0, 0}, {4, 0, 0}, {4, 0.8, 0},
         {1, 0.8, 0}, {1.1, 1, 0}, {1, 1.5, 0}, {1, 2.5, 0},
         {1.1, 3, 0}, {1, 3.2, 0}, {4, 3.2, 0}, {4, 4, 0},
         {2, 4, 0}, {0, 4, 0}, {0, 2, 0}, {0, 1, 0},
     }
     vertices: [16]shapemodel.Shape_Entity
-    polygon, status := shapes.world_create_polygon_into(
-        world, positions[:], {color = color.WHITE, brush_size = 1}, vertices[:])
+    polygon, status := shapes.world_create_polygon_into(world, positions[:], {
+        color = color.WHITE,
+        brush_size = 1,
+    }, vertices[:])
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world.render_styles.values[0].visible = true
     shapes.build_shape_world_draw_cache(world, 1)
@@ -972,8 +1139,10 @@ sample_shape_world_polygon_material_copies_bounded_targets :: proc(
     polygon := particle_test_visible_square(world, 0.1, vertices[:])
     testing.expect(t, polygon.prepared)
     output: [4]Polygon_Material_Sample
-    request := Polygon_Material_Sampling{
-        projected_scale = 1, density = 900, seed = 42,
+    request: Polygon_Material_Sampling = {
+        projected_scale = 1,
+        density = 900,
+        seed = 42,
     }
 
     count, ready := sample_shape_world_polygon_material(
@@ -1031,18 +1200,29 @@ sample_shape_world_polygon_material_respects_density_and_scale :: proc(
     minimum: [16]Polygon_Material_Sample
     sparse: [1]Polygon_Material_Sample
     low_count, low_ready := sample_shape_world_polygon_material(
-        ps, world, polygon.entity,
-        {projected_scale = 0.5, density = 100, seed = 7}, low_scale[:])
+        ps, world, polygon.entity, {
+            projected_scale = 0.5,
+            density = 100,
+            seed = 7,
+        }, low_scale[:])
     high_count, high_ready := sample_shape_world_polygon_material(
-        ps, world, polygon.entity,
-        {projected_scale = 2, density = 100, seed = 7}, high_scale[:])
+        ps, world, polygon.entity, {
+            projected_scale = 2,
+            density = 100,
+            seed = 7,
+        }, high_scale[:])
     sparse_count, sparse_ready := sample_shape_world_polygon_material(
-        ps, world, polygon.entity,
-        {projected_scale = 1, density = 0.001, seed = 11}, sparse[:])
+        ps, world, polygon.entity, {
+            projected_scale = 1,
+            density = 0.001,
+            seed = 11,
+        }, sparse[:])
     minimum_count, minimum_ready := sample_shape_world_polygon_material(
         ps, world, polygon.entity, {
-            projected_scale = 1, density = 0.001,
-            minimum_count = 8, seed = 11,
+            projected_scale = 1,
+            density = 0.001,
+            minimum_count = 8,
+            seed = 11,
         }, minimum[:])
     testing.expect(t, low_ready && high_ready)
     testing.expect(t, sparse_ready)
@@ -1067,8 +1247,10 @@ sample_shape_world_polygon_material_is_seed_deterministic :: proc(
     testing.expect(t, polygon.prepared)
     first: [4]Polygon_Material_Sample
     second: [4]Polygon_Material_Sample
-    request := Polygon_Material_Sampling{
-        projected_scale = 1, density = 900, seed = 42,
+    request: Polygon_Material_Sampling = {
+        projected_scale = 1,
+        density = 900,
+        seed = 42,
     }
     first_count, first_ready := sample_shape_world_polygon_material(
         ps, world, polygon.entity, request, first[:])
@@ -1112,7 +1294,7 @@ formation_region_density_matches_normalized_polygon_area :: proc(t: ^testing.T) 
     defer free(ps)
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    positions := [5]Vector3{
+    positions: [5]Vector3 = {
         {0.50, 0.76, 0}, {0.31, 0.62, 0}, {0.38, 0.36, 0},
         {0.62, 0.36, 0}, {0.69, 0.62, 0},
     }
@@ -1211,12 +1393,12 @@ formation_draw_order_sorts_visible_material_back_to_front :: proc(t: ^testing.T)
 formation_bucket_sort_depths_is_stable_far_to_near :: proc(t: ^testing.T) {
     draw := new(particlemodel.Formation_Draw_Order, context.allocator)
     defer free(draw, context.allocator)
-    depths := [6]f32{0.2, 0.9, 0.2, -0.4, 0.9, 0.2}
+    depths: [6]f32 = {0.2, 0.9, 0.2, -0.4, 0.9, 0.2}
     for depth, index in depths {
         draw^.depths[index] = depth
     }
     formation_bucket_sort_depths(draw, len(depths), -0.4, 0.9)
-    expected := [6]u16{1, 4, 0, 2, 5, 3}
+    expected: [6]u16 = {1, 4, 0, 2, 5, 3}
     for slot, index in expected {
         testing.expect_value(t, draw^.order[index], slot)
     }
@@ -1347,7 +1529,7 @@ particle_test_formation_half_fill :: proc(opacity: f32) -> bool {
 particle_test_prepare_formation_region :: proc(
     ps: ^particlemodel.Particle_System,
     world: ^shapemodel.Shape_World) -> Particle_Test_Formation_Setup {
-    positions := [16]Vector3{
+    positions: [16]Vector3 = {
         {0, 0, 0.1}, {2, 0, 0.1}, {4, 0, 0.1}, {4, 0.8, 0.1},
         {1, 0.8, 0.1}, {1.1, 1, 0.1}, {1, 1.5, 0.1}, {1, 2.5, 0.1},
         {1.1, 3, 0.1}, {1, 3.2, 0.1}, {4, 3.2, 0.1}, {4, 4, 0.1},
@@ -1356,7 +1538,9 @@ particle_test_prepare_formation_region :: proc(
     vertices: [16]shapemodel.Shape_Entity
     entity, prepared := particle_test_visible_polygon(world, positions[:], vertices[:])
     if !prepared || !particle_test_start_region_reveal(ps, entity) {
-        return {entity = entity}
+        return {
+            entity = entity,
+        }
     }
     return {
         entity = entity,
@@ -1452,8 +1636,12 @@ formation_region_late_target_publication_catches_up :: proc(t: ^testing.T) {
     formation_reset_generation(ps, 9)
     testing.expect(t, formation_advance_progress(ps, 9, 0))
     testing.expect(t, formation_start_reveal(ps, {
-        kind = .Region, owner_entity = shapemodel.shape_entity_pack(entity),
-        animation_generation = 9, progress = 0, duration = 1, seed = 29,
+        kind = .Region,
+        owner_entity = shapemodel.shape_entity_pack(entity),
+        animation_generation = 9,
+        progress = 0,
+        duration = 1,
+        seed = 29,
     }))
     testing.expect_value(t, formation_prepare_region_targets(ps, world, 1), 0)
     testing.expect(t, formation_advance_progress(ps, 9, 0.5))
@@ -1469,15 +1657,17 @@ formation_region_late_target_publication_catches_up :: proc(t: ^testing.T) {
 // Create a visible polygon without preparing its draw cache yet.
 particle_test_create_late_region :: proc(
     world: ^shapemodel.Shape_World) -> (shapemodel.Shape_Entity, bool) {
-    positions := [16]Vector3{
+    positions: [16]Vector3 = {
         {0, 0, 0.1}, {2, 0, 0.1}, {4, 0, 0.1}, {4, 0.8, 0.1},
         {1, 0.8, 0.1}, {1.1, 1, 0.1}, {1, 1.5, 0.1}, {1, 2.5, 0.1},
         {1.1, 3, 0.1}, {1, 3.2, 0.1}, {4, 3.2, 0.1}, {4, 4, 0.1},
         {2, 4, 0.1}, {0, 4, 0.1}, {0, 2, 0.1}, {0, 1, 0.1},
     }
     vertices: [16]shapemodel.Shape_Entity
-    polygon, status := shapes.world_create_polygon_into(
-        world, positions[:], {color = color.WHITE, brush_size = 1}, vertices[:])
+    polygon, status := shapes.world_create_polygon_into( world, positions[:], {
+        color = color.WHITE,
+        brush_size = 1,
+    }, vertices[:])
     if status != shapemodel.Shape_World_Status.Ok {
         return {}, false
     }
@@ -1541,8 +1731,8 @@ polygon_material_sampling_is_stable_across_equivalent_triangulations :: proc(
     vertices: [4]shapemodel.Shape_Entity
     polygon := particle_test_visible_square(world, 0, vertices[:])
     testing.expect(t, polygon.prepared)
-    tint := color.Color_RGBA8{120, 180, 220, 128}
-    context_a := Shape_World_Burst_Context{first, world, tint, 1}
+    tint: color.Color_RGBA8 = {120, 180, 220, 128}
+    context_a: Shape_World_Burst_Context = {first, world, tint, 1}
     testing.expect(t, emit_shape_world_cached_polygon_burst(
         context_a, polygon.entity))
     testing.expect_value(t, first^.low_particles.color[0][3], u8(128))
@@ -1553,7 +1743,7 @@ polygon_material_sampling_is_stable_across_equivalent_triangulations :: proc(
     world.draw_cache.polygon_triangles[polygon.draw.first_triangle+1] = {
         base+1, base+2, base+3,
     }
-    context_b := Shape_World_Burst_Context{second, world, tint, 1}
+    context_b: Shape_World_Burst_Context = {second, world, tint, 1}
     testing.expect(t, emit_shape_world_cached_polygon_burst(
         context_b, polygon.entity))
 
@@ -1569,7 +1759,7 @@ emit_shape_world_polygon_burst_rejects_stale_draw_generation :: proc(
     ps^.use_max_dust_particles = MAX_DEPARTURE_MATERIAL_SAMPLES
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    positions := [4]Vector3{
+    positions: [4]Vector3 = {
         {0.2, 0.2, 0}, {0.8, 0.2, 0},
         {0.8, 0.8, 0}, {0.2, 0.8, 0},
     }
@@ -1598,12 +1788,15 @@ emit_shape_world_lune_burst_respects_material_cutout :: proc(t: ^testing.T) {
     ps^.use_max_dust_particles = MAX_DEPARTURE_MATERIAL_SAMPLES
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    input := shapes.Circle_Region_Input{
+    input: shapes.Circle_Region_Input = {
         first_center = {0.35, 0.5, 0},
         second_center = {0.5, 0.5, 0},
         first_radius = 0.2,
         second_radius = 0.2,
-        style = {color = color.WHITE, brush_size = 1},
+        style = {
+            color = color.WHITE,
+            brush_size = 1,
+        },
     }
     lune, status := shapes.world_create_lune(world, input)
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
@@ -1644,7 +1837,8 @@ polygon_fill_cached_triangles_skips_degenerate_and_invalid_indices :: proc(
     cache.polygon_triangle_count = 3
 
     triangles := polygon_fill_cached_triangles(&cache, {
-        first_triangle = 0, triangle_count = 3,
+        first_triangle = 0,
+        triangle_count = 3,
     })
 
     testing.expect_value(t, triangles.count, 1)
@@ -1652,7 +1846,10 @@ polygon_fill_cached_triangles_skips_degenerate_and_invalid_indices :: proc(
         "only nondegenerate valid triangles contribute area")
     testing.expect_value(t, polygon_fill_triangle_index_at(triangles, 0.49), 0)
 
-    skewed := Polygon_Fill_Triangles{count = 2, total_area = 1}
+    skewed: Polygon_Fill_Triangles = {
+        count = 2,
+        total_area = 1,
+    }
     skewed.areas[0] = 0.001
     skewed.areas[1] = 0.999
     tiny_triangle_samples: int
@@ -1671,11 +1868,11 @@ emit_departure_material_burst_preserves_coverage_and_plane :: proc(t: ^testing.T
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 2
-    samples := [2]Departure_Material_Sample{
+    samples: [2]Departure_Material_Sample = {
         {{0.25, 0.4, 0.3}, 128},
         {{0.75, 0.6, 0.5}, 255},
     }
-    tint := Color{20, 40, 60, 200}
+    tint: Color = {20, 40, 60, 200}
 
     testing.expect(t, emit_departure_material_burst(ps, samples[:], tint))
 
@@ -1716,8 +1913,12 @@ particle_test_start_formation_label :: proc(
         _ = formation_advance_progress(ps, 11, 0)
     }
     if !formation_start_reveal(ps, {
-        kind = .Label, owner_entity = owner, animation_generation = 11,
-        progress = ps^.formation.accepted_progress, duration = duration, seed = 43,
+        kind = .Label,
+        owner_entity = owner,
+        animation_generation = 11,
+        progress = ps^.formation.accepted_progress,
+        duration = duration,
+        seed = 43,
     }) {
         return -1
     }
@@ -1744,9 +1945,11 @@ formation_label_targets_follow_copied_ink_and_budget :: proc(t: ^testing.T) {
     testing.expect(t, slot >= 0)
     ink: [32]particlemodel.Formation_Label_Ink_Sample
     particle_test_label_ink(ink[:], 0)
-    request := particlemodel.Formation_Label_Target_Request{
-        anchor = {0.3, 0.4, 0.05}, color = {200, 100, 50, 255},
-        font_size = 16, signature = 5,
+    request: particlemodel.Formation_Label_Target_Request = {
+        anchor = {0.3, 0.4, 0.05},
+        color = {200, 100, 50, 255},
+        font_size = 16,
+        signature = 5,
     }
     expected := formation_label_sample_count(
         formation_label_ink_weight(ink[:]), 16)
@@ -1783,9 +1986,11 @@ formation_label_rebuild_and_anchor_refresh_keep_time :: proc(t: ^testing.T) {
     testing.expect(t, formation_advance_progress(ps, 11, 0.5))
     ink: [24]particlemodel.Formation_Label_Ink_Sample
     particle_test_label_ink(ink[:], 0)
-    request := particlemodel.Formation_Label_Target_Request{
-        anchor = {0.5, 0.5, 0}, color = {255, 255, 255, 255},
-        font_size = 16, signature = 5,
+    request: particlemodel.Formation_Label_Target_Request = {
+        anchor = {0.5, 0.5, 0},
+        color = {255, 255, 255, 255},
+        font_size = 16,
+        signature = 5,
     }
     first := formation_store_label_targets(ps, slot, request, ink[:])
     particle_test_label_ink(ink[:], 4)
@@ -1858,9 +2063,11 @@ formation_label_lifecycle_uses_smaller_budget_policy :: proc(t: ^testing.T) {
 trail_emission_spawns_pigment_and_white_leapers :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    stroke := color.Color_RGBA8{40, 80, 160, 255}
-    emit_trail_particles(ps,
-        SPAWN_INTERVAL * 40, {origin = {0.5, 0.5, 0}, color = stroke})
+    stroke: color.Color_RGBA8 = {40, 80, 160, 255}
+    emit_trail_particles(ps, SPAWN_INTERVAL * 40, {
+        origin = {0.5, 0.5, 0},
+        color = stroke,
+    })
 
     pigment, leapers := 0, 0
     for index in 0..<MAX_PARTICLES {

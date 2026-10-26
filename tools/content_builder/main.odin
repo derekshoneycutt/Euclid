@@ -288,7 +288,7 @@ valid_content_fingerprint :: proc(source, expected: string) -> bool {
     if len(expected) != 64 {
         return false
     }
-    hash := sha2.Context_256{}
+    hash: sha2.Context_256 = {}
     sha2.init_256(&hash)
     sha2.update(&hash, transmute([]u8)source)
     digest: [32]byte
@@ -427,17 +427,26 @@ validate_record_shape :: proc(line: string, kind: int) {
 // Derive a stable record identity for order and duplicate detection.
 record_identity :: proc(record: Content_Record) -> string {
     switch record.kind {
-    case 1: return record.key
-    case 2: return record.tag
-    case 3: return record.message_key
-    case 4: return fmt.tprintf("%s|%02d", record.message_key, record.ordinal)
-    case 5: return fmt.tprintf("%s|%s", record.locale_tag, record.message_key)
-    case 6, 7: return fmt.tprintf("%s|%s",
+    case 1:
+        return record.key
+    case 2:
+        return record.tag
+    case 3:
+        return record.message_key
+    case 4:
+        return fmt.tprintf("%s|%02d", record.message_key, record.ordinal)
+    case 5:
+        return fmt.tprintf("%s|%s", record.locale_tag, record.message_key)
+    case 6, 7:
+        return fmt.tprintf("%s|%s",
         record.source_namespace, record.animation_id)
-    case 8: return fmt.tprintf("%s|%s|%s",
+    case 8:
+        return fmt.tprintf("%s|%s|%s",
         record.source_namespace, record.animation_id, record.locale_tag)
-    case 9: return record.edition_id
-    case 10, 11: return fmt.tprintf("%s|%s|%s|%s",
+    case 9:
+        return record.edition_id
+    case 10, 11:
+        return fmt.tprintf("%s|%s|%s|%s",
         record.source_namespace, record.animation_id,
         record.locale_tag, record.edition_id)
     }
@@ -843,21 +852,30 @@ insert_ui_record :: proc(
             "corpus contains a builder-owned metadata key")
         insert_metadata(database, &database.statements.metadata,
             record.key, record.value, "source metadata insertion")
-    case 2: insert_locale(database, record)
-    case 3: insert_message(database, record, signatures)
-    case 4: insert_argument(database, record, signatures)
-    case 5: insert_translation(database, record, signatures)
+    case 2:
+        insert_locale(database, record)
+    case 3:
+        insert_message(database, record, signatures)
+    case 4:
+        insert_argument(database, record, signatures)
+    case 5:
+        insert_translation(database, record, signatures)
     }
 }
 
 // Insert content declarations and projections through their named statements.
 insert_content_record :: proc(database: ^Builder_Database, record: Content_Record) {
     switch record.kind {
-    case 6: insert_subject(database, record)
-    case 7: insert_catalog_node(database, record)
-    case 8: insert_catalog_name(database, record)
-    case 9: insert_edition(database, record)
-    case 10: insert_availability(database, record)
+    case 6:
+        insert_subject(database, record)
+    case 7:
+        insert_catalog_node(database, record)
+    case 8:
+        insert_catalog_name(database, record)
+    case 9:
+        insert_edition(database, record)
+    case 10:
+        insert_availability(database, record)
     case 11:
         insert_projection(database, record, database.counts[11] + 1)
     }
@@ -917,7 +935,7 @@ parse_content_record :: proc(line: string) -> Content_Record {
         "content record exceeds line capacity")
     record: Content_Record
     require(json.unmarshal_string(
-        line, &record, allocator=context.temp_allocator) == nil,
+        line, &record, allocator = context.temp_allocator) == nil,
         "invalid content record JSON")
     validate_record_shape(line, record.kind)
     return record

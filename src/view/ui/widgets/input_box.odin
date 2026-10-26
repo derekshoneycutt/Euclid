@@ -295,8 +295,10 @@ input_box_replace_selection :: proc(
     }
     first := min(state^.anchor_byte, state^.cursor_byte)
     last := max(state^.anchor_byte, state^.cursor_byte)
-    return input_box_replace_range(
-        state, target, {first = first, last = last}, replacement, result)
+    return input_box_replace_range(state, target, {
+        first = first,
+        last = last,
+    }, replacement, result)
 }
 
 // input_box_delete_selection removes a selection or one adjacent grapheme.
@@ -320,8 +322,10 @@ input_box_delete_selection :: proc(
             last = input_box_next_boundary(text, last)
         }
     }
-    return input_box_replace_range(
-        state, target, {first = first, last = last}, "", result)
+    return input_box_replace_range(state, target, {
+        first = first,
+        last = last,
+    }, "", result)
 }
 
 // input_box_capture_selection copies the current selected bytes into an update.
@@ -400,7 +404,7 @@ input_box_apply_commit_event :: proc(
     }
     payload := event
     replacement := input.input_event_text_payload(&payload)
-    range := Input_Box_Edit_Range{
+    range: Input_Box_Edit_Range = {
         first = min(state^.anchor_byte, state^.cursor_byte),
         last = max(state^.anchor_byte, state^.cursor_byte),
     }
@@ -631,10 +635,10 @@ input_box_apply_semantic_text :: proc(
                   command.kind == .Replace_Text {
             replacement := string(command.payload[:command.payload_length])
             if command.kind == .Replace_Text {
-                changed = input_box_replace_range(
-                    params.state, params.edit_target,
-                    {first = 0, last = len(text)},
-                    replacement, update) || changed
+                changed = input_box_replace_range(params.state, params.edit_target, {
+                    first = 0,
+                    last = len(text),
+                }, replacement, update) || changed
             } else {
                 changed = input_box_replace_selection(
                     params.state, params.edit_target, replacement, update) || changed
@@ -734,7 +738,11 @@ input_box_update_pointer :: proc(
     owns := owner^.active && owner^.kind == .Input_Box && owner^.id == press_id
     if params.pointer_routed && hovered && input_frame_left_pressed(params.frame) &&
         !owner^.active {
-        owner^ = {active = true, kind = .Input_Box, id = press_id}
+        owner^ = {
+            active = true,
+            kind = .Input_Box,
+            id = press_id,
+        }
         input_box_begin_selection(params)
         owns = true
     }
@@ -849,14 +857,24 @@ input_box_draw_result :: proc(
     descriptor := input_box_result_descriptor(params)
     text_geometry := input_box_text_geometry(params, inner, descriptor)
     caret := text_geometry.caret
-    return {hovered = hovered, focused = params.focused,
-        control_geometry = text_geometry.control, descriptor = descriptor,
-        text_geometry = text_geometry, inner = inner,
+    return {
+        hovered = hovered,
+        focused = params.focused,
+        control_geometry = text_geometry.control,
+        descriptor = descriptor,
+        text_geometry = text_geometry,
+        inner = inner,
         text_x = inner.x - params.state^.scroll_x,
-        selection = text_geometry.selection, caret = caret,
+        selection = text_geometry.selection,
+        caret = caret,
         unicode_completion = candidate,
-        unicode_hint = {caret.x + params.column_advance * 0.5, caret.y,
-            params.column_advance * 3, caret.height}}
+        unicode_hint = {
+            caret.x + params.column_advance * 0.5,
+            caret.y,
+            params.column_advance * 3,
+            caret.height,
+        },
+    }
 }
 
 // input_box_text_geometry projects one UTF-8 selection into scrolled cell geometry.
@@ -870,12 +888,23 @@ input_box_text_geometry :: proc(
     width := f32(abs(cursor - anchor)) * params.column_advance
     font_size := theme.TREE_FONT_SIZE if params.font_size <= 0 else params.font_size
     text_y := params.rect.y + (params.rect.height - font_size) * 0.5
-    return {control = {params.rect, params.clip_rect},
-        caret = {inner.x + f32(cursor) * params.column_advance - params.state^.scroll_x,
-            text_y, 1, font_size},
-        selection = {inner.x + start_x - params.state^.scroll_x,
-            text_y, width, font_size},
-        cursor_column = cursor, anchor_column = anchor}
+    return {
+        control = {params.rect, params.clip_rect},
+        caret = {
+            inner.x + f32(cursor) * params.column_advance - params.state^.scroll_x,
+            text_y,
+            1,
+            font_size,
+        },
+        selection = {
+            inner.x + start_x - params.state^.scroll_x,
+            text_y,
+            width,
+            font_size,
+        },
+        cursor_column = cursor,
+        anchor_column = anchor,
+    }
 }
 
 // Publish one semantic text-run child beneath its editable input control.
@@ -886,8 +915,10 @@ input_box_publish_text_run :: proc(
         return
     }
     _ = uisemantics.semantic_register_control(params.semantic_focus, {
-        id = descriptor.text_run_id, parent = descriptor.id,
-        role = .Text_Run, states = {.Visible, .Enabled},
+        id = descriptor.text_run_id,
+        parent = descriptor.id,
+        role = .Text_Run,
+        states = {.Visible, .Enabled},
         region = descriptor.region,
         traversal_order = descriptor.traversal_order,
         bounds = result.inner,
@@ -905,13 +936,15 @@ input_box_publish_semantics :: proc(
     if params.semantic_focus == nil || descriptor.id == {} {
         return
     }
-    states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable, .Tab_Stop}
+    states: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable, .Tab_Stop}
     if descriptor.mode == .Read_Only {
         states += {.Read_Only}
     }
     _ = uisemantics.semantic_register_control(params.semantic_focus, {
-        id = descriptor.id, parent = descriptor.parent,
-        controls = params.controls, role = .Input,
+        id = descriptor.id,
+        parent = descriptor.parent,
+        controls = params.controls,
+        role = .Input,
         states = states,
         actions = {.Focus, .Replace_Selected_Text, .Set_Text_Selection},
         region = descriptor.region,
@@ -919,7 +952,8 @@ input_box_publish_semantics :: proc(
         bounds = result^.text_geometry.control.bounds,
         clip_bounds = result^.text_geometry.control.clip_bounds,
         text_input_area = result^.caret,
-        label = descriptor.label, value = descriptor.text,
+        label = descriptor.label,
+        value = descriptor.text,
         placeholder = descriptor.placeholder,
         text_cursor_byte = descriptor.cursor_byte,
         text_anchor_byte = descriptor.anchor_byte,
@@ -971,8 +1005,11 @@ draw_encoded_input_box_preedit :: proc(
     width := f32(input_box_byte_column(preedit, len(preedit))) *
         params.column_advance
     _ = viewtext.ui_text_shaped({
-        encoder = encoder, resolver = params.resolver, key = .Regular,
-        text = preedit, position = {x, prepared.caret.y},
+        encoder = encoder,
+        resolver = params.resolver,
+        key = .Regular,
+        text = preedit,
+        position = {x, prepared.caret.y},
         color = theme.draw_color(encoder, .Text),
         font = viewtext.ui_text_font(params.font,
             encoder^.ui_text_size_percent if encoder != nil else 100),
@@ -999,9 +1036,12 @@ input_box_preedit_x :: proc(
     replacement_width := f32(input_box_byte_column(source, end) -
         input_box_byte_column(source, start)) * params.column_advance
     if replacement_width > 0 {
-        _ = native.draw_encoder_rectangle(encoder,
-            {x, prepared.caret.y, replacement_width, prepared.caret.height},
-            theme.UI_COMPONENT_BACKGROUND_COLOR)
+        _ = native.draw_encoder_rectangle(encoder, {
+            x,
+            prepared.caret.y,
+            replacement_width,
+            prepared.caret.height,
+        }, theme.UI_COMPONENT_BACKGROUND_COLOR)
     }
     return x
 }
@@ -1021,8 +1061,9 @@ input_box_draw_preedit_selection :: proc(
     selection_text := preedit[
         state^.preedit_selection_start:state^.preedit_selection_end]
     selection_x := x + f32(selection_start) * params.column_advance
-    selection_bounds := geometry.Rectangle{
-        selection_x, prepared.caret.y,
+    selection_bounds: geometry.Rectangle = {
+        selection_x,
+        prepared.caret.y,
         f32(selection_end - selection_start) * params.column_advance,
         prepared.caret.height,
     }
@@ -1030,8 +1071,11 @@ input_box_draw_preedit_selection :: proc(
         encoder, selection_bounds, theme.draw_color(encoder, .Selection_Background))
     _ = native.draw_encoder_push_scissor(encoder, selection_bounds)
     _ = viewtext.ui_text_shaped({
-        encoder = encoder, resolver = params.resolver, key = .Regular,
-        text = selection_text, position = {selection_x, prepared.caret.y},
+        encoder = encoder,
+        resolver = params.resolver,
+        key = .Regular,
+        text = selection_text,
+        position = {selection_x, prepared.caret.y},
         color = theme.draw_color(encoder, .Selection_Text),
         font = viewtext.ui_text_font(params.font,
             encoder^.ui_text_size_percent if encoder != nil else 100),
@@ -1043,9 +1087,12 @@ input_box_draw_preedit_selection :: proc(
 draw_encoded_input_box_text :: proc(
     encoder: ^native.Draw_Encoder,
     params: Input_Box_Params, prepared: Input_Box_Result) {
-    request := viewtext.Shaped_Text_Draw{
-        encoder = encoder, resolver = params.resolver, key = .Regular,
-        text = params.descriptor.text, position = {prepared.text_x, prepared.caret.y},
+    request: viewtext.Shaped_Text_Draw = {
+        encoder = encoder,
+        resolver = params.resolver,
+        key = .Regular,
+        text = params.descriptor.text,
+        position = {prepared.text_x, prepared.caret.y},
         color = theme.draw_color(encoder, .Text),
         font = viewtext.ui_text_font(params.font,
             encoder^.ui_text_size_percent if encoder != nil else 100),
@@ -1058,7 +1105,7 @@ draw_encoded_input_box_text :: proc(
     left.width = max(0, min(prepared.selection.x, left.x + left.width) - left.x)
     right.x = max(right.x, prepared.selection.x + prepared.selection.width)
     right.width = max(0, prepared.inner.x + prepared.inner.width - right.x)
-    clips := [3]geometry.Rectangle{left, right, prepared.selection}
+    clips: [3]geometry.Rectangle = {left, right, prepared.selection}
     for clip, index in clips {
         if clip.width <= 0 {
             continue
@@ -1100,8 +1147,10 @@ draw_encoded_input_box_completion :: proc(
     count += copy(bytes[count:], " \u2192")
     _ = native.draw_encoder_push_scissor(encoder, prepared.control_geometry.bounds)
     _ = viewtext.ui_text_shaped({
-        encoder = encoder, resolver = params.resolver,
-        key = .Regular, text = string(bytes[:count]),
+        encoder = encoder,
+        resolver = params.resolver,
+        key = .Regular,
+        text = string(bytes[:count]),
         position = {prepared.unicode_hint.x, prepared.unicode_hint.y},
         color = theme.draw_color(encoder, .Text),
         font = viewtext.ui_text_font(params.font,

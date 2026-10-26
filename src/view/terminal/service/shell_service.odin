@@ -35,7 +35,8 @@ shell_service_runtime_init :: proc(state: ^core.Euclid_General_State) -> bool {
     }
     if !termsession.terminal_session_init(
         &state^.shell.session, {
-            id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = 1,
+            id = viewterminalmodel.SHELL_SESSION_OWNER_ID,
+            generation = 1,
         },
         termsession.native_terminal_backend_make(&state^.shell.backend)) {
         termsession.native_terminal_backend_destroy(&state^.shell.backend)
@@ -62,9 +63,10 @@ shell_service_begin_generation :: proc(
         return false
     }
     state^.shell.close = {}
-    return termsession.terminal_session_init(&state^.shell.session,
-        {id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = generation},
-        termsession.native_terminal_backend_make(&state^.shell.backend))
+    return termsession.terminal_session_init(&state^.shell.session, {
+        id = viewterminalmodel.SHELL_SESSION_OWNER_ID,
+        generation = generation,
+    }, termsession.native_terminal_backend_make(&state^.shell.backend))
 }
 
 // Capture the bounded shell cwd and optional packaged terminfo directory.
@@ -180,11 +182,23 @@ shell_service_environment :: proc(
     }
     terminfo := viewterminalmodel.shell_terminfo_directory(&state^.shell)
     if len(terminfo) > 0 {
-        changes[1] = {kind = .Set, key = "TERMINFO", value = terminfo}
-        changes[2] = {kind = .Set, key = "COLORTERM", value = "truecolor"}
+        changes[1] = {
+            kind = .Set,
+            key = "TERMINFO",
+            value = terminfo,
+        }
+        changes[2] = {
+            kind = .Set,
+            key = "COLORTERM",
+            value = "truecolor",
+        }
         return changes, 3
     }
-    changes[1] = {kind = .Set, key = "COLORTERM", value = "truecolor"}
+    changes[1] = {
+        kind = .Set,
+        key = "COLORTERM",
+        value = "truecolor",
+    }
     return changes, 2
 }
 
@@ -276,7 +290,7 @@ shell_service_input :: proc(
     if count == 0 {
         return
     }
-    request := termsession.Terminal_Session_Input_Request{
+    request: termsession.Terminal_Session_Input_Request = {
         owner = state^.shell.session.owner,
         operation_id = state^.shell.operation_id,
         byte_count = count,

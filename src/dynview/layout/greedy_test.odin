@@ -28,12 +28,29 @@ document_greedy_breaks_at_last_fitting_glue :: proc(t: ^testing.T) {
     arena: storage.Arena_Owner
     lines := document_greedy_test_lines(t, &arena)
     defer storage.arena_owner_destroy(&arena)
-    nodes := [5]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 40},
-        {kind = .Glue, width = 5, break_allowed = true},
-        {kind = .Box, width = 70},
-        {kind = .Glue, width = 5, break_allowed = true},
-        {kind = .Box, width = 20},
+    nodes: [5]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 40,
+        },
+        {
+            kind = .Glue,
+            width = 5,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 70,
+        },
+        {
+            kind = .Glue,
+            width = 5,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 20,
+        },
     }
 
     status := document_greedy_break(nodes[:], 3, 100, &lines)
@@ -53,7 +70,10 @@ document_greedy_marks_oversized_box_overfull :: proc(t: ^testing.T) {
     arena: storage.Arena_Owner
     lines := document_greedy_test_lines(t, &arena)
     defer storage.arena_owner_destroy(&arena)
-    nodes := [1]dynviewmodel.Dynview_Document_Layout_Node{{kind = .Box, width = 140}}
+    nodes: [1]dynviewmodel.Dynview_Document_Layout_Node = {{
+        kind = .Box,
+        width = 140,
+    }}
 
     status := document_greedy_break(nodes[:], 0, 100, &lines)
 
@@ -69,10 +89,20 @@ document_greedy_preserves_nonbreaking_sequences :: proc(t: ^testing.T) {
     arena: storage.Arena_Owner
     lines := document_greedy_test_lines(t, &arena)
     defer storage.arena_owner_destroy(&arena)
-    nodes := [3]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 40},
-        {kind = .Glue, width = 10, break_allowed = false},
-        {kind = .Box, width = 40},
+    nodes: [3]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 40,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            break_allowed = false,
+        },
+        {
+            kind = .Box,
+            width = 40,
+        },
     }
 
     status := document_greedy_break(nodes[:], 0, 70, &lines)
@@ -90,10 +120,19 @@ document_greedy_honors_forced_breaks :: proc(t: ^testing.T) {
     arena: storage.Arena_Owner
     lines := document_greedy_test_lines(t, &arena)
     defer storage.arena_owner_destroy(&arena)
-    nodes := [3]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 20},
-        {kind = .Forced_Break, break_allowed = true},
-        {kind = .Box, width = 30},
+    nodes: [3]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 20,
+        },
+        {
+            kind = .Forced_Break,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 30,
+        },
     }
 
     status := document_greedy_break(nodes[:], 3, 100, &lines)

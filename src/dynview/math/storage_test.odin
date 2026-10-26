@@ -19,7 +19,9 @@ dynview_shaped_builder_enforces_exact_limits :: proc(t: ^testing.T) {
     builder: Dynview_Shaped_Builder
     testing.expect_value(t, shaped_builder_init(&builder, &arena, 7),
         storage.Bounded_Builder_Status.Ok)
-    glyphs := []fontmodel.Shaped_Glyph{{glyph_id = 1}}
+    glyphs: []fontmodel.Shaped_Glyph = {{
+        glyph_id = 1,
+    }}
     for index in 0..<dynviewmodel.DYNVIEW_MAX_SHAPED_RUNS {
         testing.expect_value(t, shaped_builder_append(
             &builder, {index, .Primary, 0, 1, glyphs, {}}),
@@ -51,7 +53,9 @@ dynview_shaped_builder_rejects_invalid_spans_and_generation :: proc(t: ^testing.
     defer storage.arena_owner_destroy(&arena)
     cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    glyph := []fontmodel.Shaped_Glyph{{glyph_id = 1}}
+    glyph: []fontmodel.Shaped_Glyph = {{
+        glyph_id = 1,
+    }}
 
     builder: Dynview_Shaped_Builder
     testing.expect_value(t, shaped_builder_init(&builder, &arena, 7),
@@ -80,7 +84,9 @@ dynview_shaped_builder_rejects_layout_and_glyph_spans :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&arena)
     cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    glyph := []fontmodel.Shaped_Glyph{{glyph_id = 1}}
+    glyph: []fontmodel.Shaped_Glyph = {{
+        glyph_id = 1,
+    }}
     builder: Dynview_Shaped_Builder
     testing.expect_value(t, shaped_builder_init(&builder, &arena, 4),
         storage.Bounded_Builder_Status.Ok)
@@ -114,7 +120,9 @@ dynview_shaped_builder_allocation_failure_preserves_fallback :: proc(t: ^testing
     testing.expect_value(t, shaped_builder_init_with_allocator(
         &builder, allocator, 3), storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, shaped_builder_append(&builder,
-        {0, .Primary, 0, 1, []fontmodel.Shaped_Glyph{{glyph_id = 1}}, {}}),
+        {0, .Primary, 0, 1, []fontmodel.Shaped_Glyph{{
+            glyph_id = 1,
+        }}, {}}),
         storage.Bounded_Builder_Status.Allocation_Failed)
     testing.expect_value(t, len(cache^.shaped_runs), 0)
     testing.expect_value(t, len(cache^.shaped_glyphs), 0)

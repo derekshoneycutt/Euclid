@@ -108,27 +108,26 @@ terminal_highlight_observe_live :: proc(term: ^model.Terminal_State, now: f64) {
     }
     terminal_highlight_schedule(term, &h.live, source, {
         animation_generation = term.animation_generation,
-        source_revision = revision, face_generation = h.face_generation,
+        source_revision = revision,
+        face_generation = h.face_generation,
         target_kind = .Live_Input,
     }, now + model.TERMINAL_HIGHLIGHT_DEBOUNCE_SECONDS)
 }
 
-// Check that a retained submission still names the same authoritative history source.
+// Check that a retained anchor belongs to this Terminal generation and has a revision.
 terminal_highlight_history_current :: proc(
     term: ^model.Terminal_State, entry: ^model.Terminal_Highlight_History) -> bool {
-    if entry.id == 0 || term.history == nil ||
-        entry.history_index < 0 || entry.history_index >= term.history.history_len {
-        return false
-    }
-    source := &term.history.history[entry.history_index]
-    return source.tag == TERMINAL_HISTORY_TAG_NORMAL && source.id == entry.id
+    return entry.id != 0 && entry.source_revision != 0 &&
+        entry.terminal_generation == term.animation_generation
 }
 
-// Resolve one retained submission by its monotonic display identity.
+// Resolve one retained submission by its stable ID and source revision.
 terminal_highlight_history_find :: proc(
-    term: ^model.Terminal_State, id: u64) -> ^model.Terminal_Highlight_History {
+    term: ^model.Terminal_State, id, revision: u64) ->
+        ^model.Terminal_Highlight_History {
     for &entry in term.highlighting.history {
-        if entry.id == id && terminal_highlight_history_current(term, &entry) {
+        if entry.id == id && entry.source_revision == revision &&
+            terminal_highlight_history_current(term, &entry) {
             return &entry
         }
     }
@@ -151,9 +150,9 @@ terminal_highlight_slot_current :: proc(
             id.source_revision == termhist.termhist_content_revision(term.history) + 1 &&
             source == termhist.termhist_current_text(term.history)
     }
-    entry := terminal_highlight_history_find(term, id.target_id)
-    return entry != nil && id.source_revision == entry.id &&
-        source == string(term.history.history[entry.history_index].text)
+    entry := terminal_highlight_history_find(
+        term, id.target_id, id.source_revision)
+    return entry != nil && slot.source_length > 0
 }
 
 // Borrow current decoration independently of pending exact classification.

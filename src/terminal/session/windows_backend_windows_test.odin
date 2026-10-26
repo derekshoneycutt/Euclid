@@ -29,7 +29,7 @@ when ODIN_OS == .Windows {
     // Build a plan for one script hosted by the in-box Windows command interpreter.
     windows_terminal_test_command_plan :: proc(
         t: ^testing.T, script: string) -> Process_Plan {
-        arguments := [4]string{"cmd.exe", "/d", "/c", script}
+        arguments: [4]string = {"cmd.exe", "/d", "/c", script}
         result := process_plan_build(arguments[:], "C:/", nil)
         testing.expect_value(t, result.kind, Process_Plan_Result_Kind.Success)
         testing.expect_value(t, result.error, Process_Plan_Error.None)
@@ -50,7 +50,7 @@ windows_terminal_test_completion_and_exit :: proc(t: ^testing.T) {
     manager: Terminal_Session_Manager
     testing.expect(t, terminal_session_init(
         &manager, TEST_SESSION_OWNER, windows_terminal_backend_make(&backend)))
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = protocol.Request_Id(2001),
         owner = TEST_SESSION_OWNER,
         plan = plan,
@@ -73,27 +73,33 @@ windows_terminal_test_completion_and_exit :: proc(t: ^testing.T) {
 @(test)
 windows_terminal_test_resize_and_cancel :: proc(t: ^testing.T) {
     when ODIN_OS == .Windows {
-    plan := windows_terminal_test_command_plan(t,
-        "ping -n 30 127.0.0.1 >nul")
+    plan := windows_terminal_test_command_plan(t, "ping -n 30 127.0.0.1 >nul")
     backend: Windows_Terminal_Backend
     testing.expect(t, windows_terminal_backend_init(&backend))
     defer windows_terminal_backend_destroy(&backend)
     manager: Terminal_Session_Manager
-    testing.expect(t, terminal_session_init(
-        &manager, TEST_SESSION_OWNER, windows_terminal_backend_make(&backend)))
-    request := Terminal_Session_Begin_Request{
-        request_id = protocol.Request_Id(2004), owner = TEST_SESSION_OWNER, plan = plan,
+    testing.expect(t, terminal_session_init(&manager, TEST_SESSION_OWNER,
+        windows_terminal_backend_make(&backend)))
+    request: Terminal_Session_Begin_Request = {
+        request_id = protocol.Request_Id(2004),
+        owner = TEST_SESSION_OWNER,
+        plan = plan,
         dimensions = TEST_SESSION_DIMENSIONS,
     }
     result := terminal_session_begin(&manager, &request)
     testing.expect(t, result.accepted)
     testing.expect_value(t, terminal_session_resize(&manager, {
-        owner = TEST_SESSION_OWNER, operation_id = result.operation_id,
+        owner = TEST_SESSION_OWNER,
+        operation_id = result.operation_id,
         geometry_generation = 1,
-        dimensions = {columns = 100, rows = 30},
+        dimensions = {
+            columns = 100,
+            rows = 30,
+        },
     }), Terminal_Session_Rejection.None)
     testing.expect_value(t, terminal_session_signal(&manager, {
-        owner = TEST_SESSION_OWNER, operation_id = result.operation_id,
+        owner = TEST_SESSION_OWNER,
+        operation_id = result.operation_id,
         signal = .Force_Terminate,
     }), Terminal_Session_Rejection.None)
 
@@ -111,7 +117,7 @@ windows_terminal_test_resize_and_cancel :: proc(t: ^testing.T) {
 @(test)
 windows_terminal_test_bare_cmd_resolves :: proc(t: ^testing.T) {
     when ODIN_OS == .Windows {
-    arguments := [4]string{"cmd.exe", "/d", "/c", "exit 0"}
+    arguments: [4]string = {"cmd.exe", "/d", "/c", "exit 0"}
     plan := process_plan_build(arguments[:], "C:/", nil)
     backend: Windows_Terminal_Backend
     testing.expect(t, windows_terminal_backend_init(&backend))
@@ -119,7 +125,7 @@ windows_terminal_test_bare_cmd_resolves :: proc(t: ^testing.T) {
     manager: Terminal_Session_Manager
     testing.expect(t, terminal_session_init(
         &manager, TEST_SESSION_OWNER, windows_terminal_backend_make(&backend)))
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = protocol.Request_Id(2002),
         owner = TEST_SESSION_OWNER,
         plan = plan.plan,
@@ -143,7 +149,7 @@ windows_terminal_test_bare_cmd_resolves :: proc(t: ^testing.T) {
 @(test)
 windows_terminal_test_bare_executable_not_found :: proc(t: ^testing.T) {
     when ODIN_OS == .Windows {
-    arguments := [1]string{"euclid-command-that-does-not-exist.exe"}
+    arguments: [1]string = {"euclid-command-that-does-not-exist.exe"}
     plan := process_plan_build(arguments[:], "C:/", nil)
     backend: Windows_Terminal_Backend
     testing.expect(t, windows_terminal_backend_init(&backend))
@@ -151,7 +157,7 @@ windows_terminal_test_bare_executable_not_found :: proc(t: ^testing.T) {
     manager: Terminal_Session_Manager
     testing.expect(t, terminal_session_init(
         &manager, TEST_SESSION_OWNER, windows_terminal_backend_make(&backend)))
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = protocol.Request_Id(2003),
         owner = TEST_SESSION_OWNER,
         plan = plan.plan,

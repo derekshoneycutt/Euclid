@@ -224,8 +224,10 @@ scenario_library_placement :: proc(
         return scenario_favorites_expand_all(runtime)
     }
     if text == "scroll_top" {
-        return scenario_library_queue_command(runtime,
-            {target = uilibrary.tree_semantic_id(), kind = .Set_Scroll_Value})
+        return scenario_library_queue_command(runtime, {
+            target = uilibrary.tree_semantic_id(),
+            kind = .Set_Scroll_Value,
+        })
     }
     if text == "focus_library" {
         return uisemantics.semantic_apply_external_action(
@@ -316,15 +318,22 @@ scenario_reorder_control :: proc(
     } else if operation == "move_down" {
         action = uilibrary.TREE_ACTION_DOWN
     }
-    id := viewmodel.Ui_Node_Id{domain = .Library_Action, local_id = action,
-        stable_id = item^.key, generation = state^.julia_interface^.content_generation}
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = action,
+        stable_id = item^.key,
+        generation = state^.julia_interface^.content_generation,
+    }
     kind := viewmodel.Ui_Focus_Command_Kind.Activate
     if operation == "actions_focus" {
         kind = .Focus
     } else if operation == "actions_open" {
         kind = .Expand
     }
-    return scenario_library_queue_command(runtime, {target = id, kind = kind})
+    return scenario_library_queue_command(runtime, {
+        target = id,
+        kind = kind,
+    })
 }
 
 // scenario_library_queue_command validates now and defers mutations to the ordinary owner phase.
@@ -373,9 +382,12 @@ scenario_reorder_sample :: proc(runtime: ^Scenario_Runtime, sample: string) -> b
     }
     fraction: f64
     switch sample {
-    case "start": fraction = 0
-    case "middle": fraction = 0.5
-    case: return false
+    case "start":
+        fraction = 0
+    case "middle":
+        fraction = 0.5
+    case:
+        return false
     }
     sampled_at := motion^.start_seconds +
         fraction * uiaccordion.INTERFACE_TRANSITION_SECONDS
@@ -392,10 +404,14 @@ scenario_reorder_sample :: proc(runtime: ^Scenario_Runtime, sample: string) -> b
 scenario_library_command :: proc(
     operation: string) -> (viewmodel.Ui_Focus_Command_Kind, bool) {
     switch operation {
-    case "focus": return .Focus, true
-    case "select": return .Select, true
-    case "expand": return .Expand, true
-    case "collapse": return .Collapse, true
+    case "focus":
+        return .Focus, true
+    case "select":
+        return .Select, true
+    case "expand":
+        return .Expand, true
+    case "collapse":
+        return .Collapse, true
     }
     return {}, false
 }
@@ -418,19 +434,24 @@ scenario_library_apply :: proc(
         return uisemantics.semantic_apply_external_action(
             focus, uilibrary.tree_semantic_id(), .Focus)
     }
-    params := uilibrary.Tree_List_Params{
+    params: uilibrary.Tree_List_Params = {
         general_state = runtime^.state,
         collections = &runtime^.state^.preferences_runtime.collections_state,
         ji = runtime^.state^.julia_interface,
         ui_runtime = &runtime^.state^.ui_runtime,
         scroll_y = &runtime^.state^.ui_runtime.library.tree.scroll_y,
         list_panel = clip,
-        visibility = {search = &runtime^.state^.ui_runtime.library.search},
+        visibility = {
+            search = &runtime^.state^.ui_runtime.library.search,
+        },
         reduce_motion =
             runtime^.state^.ui_runtime.preferences.values.interface.reduce_motion ||
                 runtime^.state^.ui_runtime.platform_reduce_motion,
     }
-    _ = uilibrary.tree_apply_semantic_command(params, item, {target = id, kind = kind})
+    _ = uilibrary.tree_apply_semantic_command(params, item, {
+        target = id,
+        kind = kind,
+    })
     return true
 }
 
@@ -445,12 +466,14 @@ scenario_favorites_expand_all :: proc(runtime: ^Scenario_Runtime) -> bool {
     if index < 0 {
         return false
     }
-    params := uilibrary.Tree_List_Params{
+    params: uilibrary.Tree_List_Params = {
         ji = state^.julia_interface,
         ui_runtime = &state^.ui_runtime,
         scroll_y = &state^.ui_runtime.library.tree.scroll_y,
         list_panel = snapshot^.nodes[index].bounds,
-        visibility = {search = &state^.ui_runtime.library.search},
+        visibility = {
+            search = &state^.ui_runtime.library.search,
+        },
         reduce_motion = state^.ui_runtime.preferences.values.interface.reduce_motion ||
             state^.ui_runtime.platform_reduce_motion,
     }

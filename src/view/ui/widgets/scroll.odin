@@ -281,13 +281,20 @@ scroll_container_visual :: proc(
     panel := uilayout.clamp_non_negative_rect(rect)
     maximum := max(f32(0), content_height - panel.height)
     scroll := clamp(retained_scroll, 0, maximum)
-    return {view_rect = panel,
+    return {
+        view_rect = panel,
         control_geometry = {geometry.Rectangle(panel), geometry.Rectangle(panel)},
-        scroll_y_out = scroll, maximum = maximum, step = step,
+        scroll_y_out = scroll,
+        maximum = maximum,
+        step = step,
         orientation = .Vertical,
-        scrollbar = build_vertical_scrollbar(
-            {panel, content_height, scroll, maximum},
-            theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)}
+        scrollbar = build_vertical_scrollbar({
+            panel,
+            content_height,
+            scroll,
+            maximum,
+        }, theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT),
+    }
 }
 
 //   Convert screen-space pointer position to local interaction space.
@@ -406,7 +413,7 @@ build_vertical_scrollbar :: proc(
             geometry.Rectangle{}, geometry.Rectangle{}, 0, false}
     }
 
-    track := geometry.Rectangle{
+    track: geometry.Rectangle = {
         panel.x + panel.width - scrollbar_width,
         panel.y,
         scrollbar_width,
@@ -416,6 +423,6 @@ build_vertical_scrollbar :: proc(
     thumb_h := scrollbar_thumb_height(panel.height, input.content_h, thumb_min_height)
     thumb_y := scrollbar_thumb_y(panel.y, panel.height, thumb_h, input.scroll_y,
         input.max_scroll)
-    thumb := geometry.Rectangle{track.x, thumb_y, scrollbar_width, thumb_h}
+    thumb: geometry.Rectangle = {track.x, thumb_y, scrollbar_width, thumb_h}
     return Vertical_Scrollbar_Geometry{track, thumb, thumb_h, true}
 }

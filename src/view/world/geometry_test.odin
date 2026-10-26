@@ -14,19 +14,22 @@ TOOL_BRUSH_TEST_EPSILON :: f32(1e-4)
 
 // Return one deterministic projection scale for visible curve run tests.
 curve_visible_test_scale :: proc() -> worldmodel.Iso_Scale {
-    return {half_scale = 1, quarter_scale = 0.5}
+    return {
+        half_scale = 1,
+        quarter_scale = 0.5,
+    }
 }
 
 // Verify one crossing creates an ordinary clipping endpoint and opens closure.
 @(test)
 curve_visible_runs_clip_one_crossing :: proc(t: ^testing.T) {
     scale := curve_visible_test_scale()
-    points := [3]geometry.Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, -1}}
-    kinds := [3]shapemodel.Curve_Point_Kind{.Cusp, .Ordinary, .Cusp}
+    points: [3]geometry.Vector3 = {{0, 0, 1}, {1, 0, 1}, {2, 0, -1}}
+    kinds: [3]shapemodel.Curve_Point_Kind = {.Cusp, .Ordinary, .Cusp}
     output_points: [4]geometry.Vector2
     output_kinds: [4]shapemodel.Curve_Point_Kind
     runs: [2]Curve_Visible_Run
-    input := Curve_Visible_Run_Input{
+    input: Curve_Visible_Run_Input = {
         scale, points[:], kinds[:], .Cusp_Closed, true, false}
     result := build_projected_curve_visible_runs(
         input, {output_points[:], output_kinds[:], runs[:]})
@@ -43,14 +46,14 @@ curve_visible_runs_clip_one_crossing :: proc(t: ^testing.T) {
 @(test)
 curve_visible_runs_split_exit_and_reentry :: proc(t: ^testing.T) {
     scale := curve_visible_test_scale()
-    points := [5]geometry.Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, -1},
+    points: [5]geometry.Vector3 = {{0, 0, 1}, {1, 0, 1}, {2, 0, -1},
         {3, 0, 1}, {4, 0, 1}}
-    kinds := [5]shapemodel.Curve_Point_Kind{
+    kinds: [5]shapemodel.Curve_Point_Kind = {
         .Ordinary, .Cusp, .Cusp, .Ordinary, .Ordinary}
     output_points: [8]geometry.Vector2
     output_kinds: [8]shapemodel.Curve_Point_Kind
     runs: [3]Curve_Visible_Run
-    input := Curve_Visible_Run_Input{scale, points[:], kinds[:], .Closed, true, false}
+    input: Curve_Visible_Run_Input = {scale, points[:], kinds[:], .Closed, true, false}
     result := build_projected_curve_visible_runs(
         input, {output_points[:], output_kinds[:], runs[:]})
 
@@ -68,12 +71,12 @@ curve_visible_runs_split_exit_and_reentry :: proc(t: ^testing.T) {
 @(test)
 curve_visible_runs_preserve_unclipped_closure :: proc(t: ^testing.T) {
     scale := curve_visible_test_scale()
-    points := [4]geometry.Vector3{{0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {0, 0, 1}}
-    kinds := [4]shapemodel.Curve_Point_Kind{.Cusp, .Ordinary, .Ordinary, .Cusp}
+    points: [4]geometry.Vector3 = {{0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {0, 0, 1}}
+    kinds: [4]shapemodel.Curve_Point_Kind = {.Cusp, .Ordinary, .Ordinary, .Cusp}
     output_points: [4]geometry.Vector2
     output_kinds: [4]shapemodel.Curve_Point_Kind
     runs: [1]Curve_Visible_Run
-    input := Curve_Visible_Run_Input{
+    input: Curve_Visible_Run_Input = {
         scale, points[:], kinds[:], .Cusp_Closed, true, false}
     result := build_projected_curve_visible_runs(
         input, {output_points[:], output_kinds[:], runs[:]})
@@ -87,12 +90,12 @@ curve_visible_runs_preserve_unclipped_closure :: proc(t: ^testing.T) {
 @(test)
 curve_visible_runs_reject_insufficient_capacity :: proc(t: ^testing.T) {
     scale := curve_visible_test_scale()
-    points := [3]geometry.Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, 1}}
-    kinds := [3]shapemodel.Curve_Point_Kind{}
+    points: [3]geometry.Vector3 = {{0, 0, 1}, {1, 0, 1}, {2, 0, 1}}
+    kinds: [3]shapemodel.Curve_Point_Kind = {}
     output_points: [2]geometry.Vector2
     output_kinds: [2]shapemodel.Curve_Point_Kind
     runs: [1]Curve_Visible_Run
-    input := Curve_Visible_Run_Input{scale, points[:], kinds[:], .Open, true, false}
+    input: Curve_Visible_Run_Input = {scale, points[:], kinds[:], .Open, true, false}
     result := build_projected_curve_visible_runs(
         input, {output_points[:], output_kinds[:], runs[:]})
 
@@ -111,11 +114,11 @@ curve_reduction_distance_uses_finite_chord :: proc(t: ^testing.T) {
 // Verify straight candidates collapse while semantic cusp anchors survive.
 @(test)
 curve_reduction_retains_cusps :: proc(t: ^testing.T) {
-    points := [5]geometry.Vector2{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}
-    kinds := [5]shapemodel.Curve_Point_Kind{
+    points: [5]geometry.Vector2 = {{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}
+    kinds: [5]shapemodel.Curve_Point_Kind = {
         .Ordinary, .Ordinary, .Cusp, .Ordinary, .Ordinary}
-    runs := [1]Curve_Visible_Run{{0, 5, .Open}}
-    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    runs: [1]Curve_Visible_Run = {{0, 5, .Open}}
+    buffers: Curve_Visible_Run_Buffers = {points[:], kinds[:], runs[:]}
     result := reduce_projected_curve_visible_runs(
         buffers, {5, 1, true}, 2, {0.1, 0.1, 4})
 
@@ -129,10 +132,10 @@ curve_reduction_retains_cusps :: proc(t: ^testing.T) {
 // Verify stroke width can reject a join that centerline error alone admits.
 @(test)
 curve_reduction_thick_stroke_rejects_join :: proc(t: ^testing.T) {
-    previous := geometry.Vector2{0, 0}
-    current := geometry.Vector2{1, 0}
-    next := geometry.Vector2{2, 0.3}
-    budget := Curve_Reduction_Budget{1, 0.05, 4}
+    previous: geometry.Vector2 = {0, 0}
+    current: geometry.Vector2 = {1, 0}
+    next: geometry.Vector2 = {2, 0.3}
+    budget: Curve_Reduction_Budget = {1, 0.05, 4}
     testing.expect(t, curve_reduction_join_passes(
         previous, current, next, 1, budget))
     testing.expect(t, !curve_reduction_join_passes(
@@ -149,19 +152,19 @@ curve_reduction_rejects_unbounded_miter :: proc(t: ^testing.T) {
 // Verify extension changes only the prior frontier after a committed anchor.
 @(test)
 curve_reduction_reveal_prefix_is_stable :: proc(t: ^testing.T) {
-    prefix_points := [5]geometry.Vector2{{0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 1}}
+    prefix_points: [5]geometry.Vector2 = {{0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 1}}
     prefix_kinds: [5]shapemodel.Curve_Point_Kind
-    prefix_runs := [1]Curve_Visible_Run{{0, 5, .Open}}
-    prefix_buffers := Curve_Visible_Run_Buffers{
+    prefix_runs: [1]Curve_Visible_Run = {{0, 5, .Open}}
+    prefix_buffers: Curve_Visible_Run_Buffers = {
         prefix_points[:], prefix_kinds[:], prefix_runs[:]}
     first := reduce_projected_curve_visible_runs(
         prefix_buffers, {5, 1, true}, 2, {0.1, 1, 4})
 
-    extended_points := [6]geometry.Vector2{
+    extended_points: [6]geometry.Vector2 = {
         {0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 1}, {5, 1}}
     extended_kinds: [6]shapemodel.Curve_Point_Kind
-    extended_runs := [1]Curve_Visible_Run{{0, 6, .Open}}
-    extended_buffers := Curve_Visible_Run_Buffers{
+    extended_runs: [1]Curve_Visible_Run = {{0, 6, .Open}}
+    extended_buffers: Curve_Visible_Run_Buffers = {
         extended_points[:], extended_kinds[:], extended_runs[:]}
     second := reduce_projected_curve_visible_runs(
         extended_buffers, {6, 1, true}, 2, {0.1, 1, 4})
@@ -174,11 +177,11 @@ curve_reduction_reveal_prefix_is_stable :: proc(t: ^testing.T) {
 // Verify closed reduction retains one deterministic coincident anchor.
 @(test)
 curve_reduction_closed_anchor_is_stable :: proc(t: ^testing.T) {
-    points := [9]geometry.Vector2{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2},
+    points: [9]geometry.Vector2 = {{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2},
         {1, 2}, {0, 2}, {0, 1}, {0, 0}}
     kinds: [9]shapemodel.Curve_Point_Kind
-    runs := [1]Curve_Visible_Run{{0, 9, .Closed}}
-    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    runs: [1]Curve_Visible_Run = {{0, 9, .Closed}}
+    buffers: Curve_Visible_Run_Buffers = {points[:], kinds[:], runs[:]}
     result := reduce_projected_curve_visible_runs(
         buffers, {9, 1, true}, 1, {0.1, 1, 4})
 
@@ -204,11 +207,11 @@ curve_reduction_budget_uses_stable_scale_tiers :: proc(t: ^testing.T) {
 // Verify mandatory points provide exact equivalence when every point is retained.
 @(test)
 curve_reduction_all_mandatory_is_identity :: proc(t: ^testing.T) {
-    points := [4]geometry.Vector2{{0, 0}, {1, 0}, {2, 0}, {3, 0}}
-    kinds := [4]shapemodel.Curve_Point_Kind{
+    points: [4]geometry.Vector2 = {{0, 0}, {1, 0}, {2, 0}, {3, 0}}
+    kinds: [4]shapemodel.Curve_Point_Kind = {
         .Ordinary, .Cusp, .Cusp, .Ordinary}
-    runs := [1]Curve_Visible_Run{{0, 4, .Open}}
-    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    runs: [1]Curve_Visible_Run = {{0, 4, .Open}}
+    buffers: Curve_Visible_Run_Buffers = {points[:], kinds[:], runs[:]}
     result := reduce_projected_curve_visible_runs(
         buffers, {4, 1, true}, 2, {1, 1, 4})
 
@@ -220,16 +223,16 @@ curve_reduction_all_mandatory_is_identity :: proc(t: ^testing.T) {
 // Verify centerline admission includes the exact configured error boundary.
 @(test)
 curve_reduction_center_error_boundary_is_inclusive :: proc(t: ^testing.T) {
-    accepted_points := [3]geometry.Vector2{{0, 0}, {1, 1}, {2, 0}}
+    accepted_points: [3]geometry.Vector2 = {{0, 0}, {1, 1}, {2, 0}}
     accepted_kinds: [3]shapemodel.Curve_Point_Kind
-    accepted_runs := [1]Curve_Visible_Run{{0, 3, .Open}}
+    accepted_runs: [1]Curve_Visible_Run = {{0, 3, .Open}}
     accepted := reduce_projected_curve_visible_runs({accepted_points[:],
         accepted_kinds[:], accepted_runs[:]}, {3, 1, true}, 1, {1, 1, 4})
     testing.expect_value(t, accepted.retained_count, 2)
 
-    rejected_points := [3]geometry.Vector2{{0, 0}, {1, 1}, {2, 0}}
+    rejected_points: [3]geometry.Vector2 = {{0, 0}, {1, 1}, {2, 0}}
     rejected_kinds: [3]shapemodel.Curve_Point_Kind
-    rejected_runs := [1]Curve_Visible_Run{{0, 3, .Open}}
+    rejected_runs: [1]Curve_Visible_Run = {{0, 3, .Open}}
     rejected := reduce_projected_curve_visible_runs({rejected_points[:],
         rejected_kinds[:], rejected_runs[:]}, {3, 1, true}, 1, {0.99, 1, 4})
     testing.expect_value(t, rejected.retained_count, 3)
@@ -238,10 +241,10 @@ curve_reduction_center_error_boundary_is_inclusive :: proc(t: ^testing.T) {
 // Verify reversed traversal retains the same semantic cusp partition.
 @(test)
 curve_reduction_reverse_domain_retains_cusp :: proc(t: ^testing.T) {
-    points := [5]geometry.Vector2{{4, 0}, {3, 0}, {2, 0}, {1, 0}, {0, 0}}
-    kinds := [5]shapemodel.Curve_Point_Kind{
+    points: [5]geometry.Vector2 = {{4, 0}, {3, 0}, {2, 0}, {1, 0}, {0, 0}}
+    kinds: [5]shapemodel.Curve_Point_Kind = {
         .Ordinary, .Ordinary, .Cusp, .Ordinary, .Ordinary}
-    runs := [1]Curve_Visible_Run{{0, 5, .Open}}
+    runs: [1]Curve_Visible_Run = {{0, 5, .Open}}
     result := reduce_projected_curve_visible_runs(
         {points[:], kinds[:], runs[:]}, {5, 1, true}, 2, {0.1, 0.1, 4})
     testing.expect_value(t, result.retained_count, 3)
@@ -253,13 +256,13 @@ curve_reduction_reverse_domain_retains_cusp :: proc(t: ^testing.T) {
 @(test)
 curve_reduction_clipped_reentry_stays_partitioned :: proc(t: ^testing.T) {
     scale := curve_visible_test_scale()
-    world := [5]geometry.Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, -1},
+    world: [5]geometry.Vector3 = {{0, 0, 1}, {1, 0, 1}, {2, 0, -1},
         {3, 0, 1}, {4, 0, 1}}
     source_kinds: [5]shapemodel.Curve_Point_Kind
     points: [8]geometry.Vector2
     kinds: [8]shapemodel.Curve_Point_Kind
     runs: [3]Curve_Visible_Run
-    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    buffers: Curve_Visible_Run_Buffers = {points[:], kinds[:], runs[:]}
     visible := build_projected_curve_visible_runs({scale, world[:],
         source_kinds[:], .Closed, true, false}, buffers)
     result := reduce_projected_curve_visible_runs(
@@ -275,10 +278,10 @@ curve_reduction_clipped_reentry_stays_partitioned :: proc(t: ^testing.T) {
 // Verify duplicate projected samples preserve the stronger cusp semantic.
 @(test)
 curve_reduction_duplicate_projected_cusp_survives :: proc(t: ^testing.T) {
-    points := [4]geometry.Vector2{{0, 0}, {1, 0}, {1, 0}, {2, 0}}
-    kinds := [4]shapemodel.Curve_Point_Kind{
+    points: [4]geometry.Vector2 = {{0, 0}, {1, 0}, {1, 0}, {2, 0}}
+    kinds: [4]shapemodel.Curve_Point_Kind = {
         .Ordinary, .Ordinary, .Cusp, .Ordinary}
-    runs := [1]Curve_Visible_Run{{0, 4, .Open}}
+    runs: [1]Curve_Visible_Run = {{0, 4, .Open}}
     result := reduce_projected_curve_visible_runs(
         {points[:], kinds[:], runs[:]}, {4, 1, true}, 2, {1, 1, 4})
     testing.expect(t, result.ok)
@@ -292,9 +295,9 @@ curve_reduction_duplicate_projected_cusp_survives :: proc(t: ^testing.T) {
 // Verify malformed bounded input rejects atomically without touching storage.
 @(test)
 curve_reduction_invalid_capacity_is_atomic :: proc(t: ^testing.T) {
-    points := [2]geometry.Vector2{{3, 4}, {5, 6}}
+    points: [2]geometry.Vector2 = {{3, 4}, {5, 6}}
     kinds: [2]shapemodel.Curve_Point_Kind
-    runs := [1]Curve_Visible_Run{{0, 3, .Open}}
+    runs: [1]Curve_Visible_Run = {{0, 3, .Open}}
     result := reduce_projected_curve_visible_runs(
         {points[:], kinds[:], runs[:]}, {3, 1, true}, 2, {1, 1, 4})
     testing.expect(t, !result.ok)
@@ -311,8 +314,10 @@ encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {
     commands: [1]native.Draw_Command
     stroke_vertices: [6]native.Stroke_Vertex
     stroke_draws: [1]native.Stroke_Draw
-    custom := native.Draw_Custom_Storage{
-        stroke_vertices = stroke_vertices[:], stroke_draws = stroke_draws[:]}
+    custom: native.Draw_Custom_Storage = {
+        stroke_vertices = stroke_vertices[:],
+        stroke_draws = stroke_draws[:],
+    }
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {draw_vertices[:], indices[:], batches[:], commands[:], &custom},
@@ -320,11 +325,16 @@ encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {
     native.draw_encoder_enable_strokes(&encoder, true)
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    iso_scale := worldmodel.Iso_Scale{main_light_dir = {0, 0, -1}}
+    iso_scale: worldmodel.Iso_Scale = {
+        main_light_dir = {0, 0, -1},
+    }
     state.iso_scale = iso_scale
     draw_encoded_tool_segment(state, &encoder, {
-        first = {10, 20}, second = {30, 20}, thickness = 4,
-        color = color.Color_RGBA8{255, 0, 0, 255}})
+        first = {10, 20},
+        second = {30, 20},
+        thickness = 4,
+        color = color.Color_RGBA8{255, 0, 0, 255},
+    })
     testing.expect_value(t, encoder.stroke_vertex_count, 6)
     testing.expect_value(t, encoder.stroke_draw_count, 1)
     testing.expect_value(t, commands[0], native.Draw_Command{.Tool, 0})
@@ -336,7 +346,7 @@ encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {
 // Verify guide ring sampling closes exactly at one full turn.
 @(test)
 trochoid_tool_ring_sampling_is_closed :: proc(t: ^testing.T) {
-    center := geometry.Vector3{1, 2, 3}
+    center: geometry.Vector3 = {1, 2, 3}
     first := trochoid_tool_ring_point(center, 0.25, 0)
     last := trochoid_tool_ring_point(center, 0.25, 2 * math.PI)
 
@@ -351,9 +361,21 @@ trochoid_tool_ring_sampling_is_closed :: proc(t: ^testing.T) {
 //   Verify nearby and distant tool segments are classified by expanded bounds.
 @(test)
 tool_brush_occluder_overlap_respects_expanded_bounds :: proc(t: ^testing.T) {
-    receiver := Tool_Brush_Occluder{p0 = {0, 0}, p1 = {10, 0}, thickness = 2}
-    nearby := Tool_Brush_Occluder{p0 = {5, 4}, p1 = {5, 8}, thickness = 2}
-    distant := Tool_Brush_Occluder{p0 = {5, 20}, p1 = {5, 24}, thickness = 2}
+    receiver: Tool_Brush_Occluder = {
+        p0 = {0, 0},
+        p1 = {10, 0},
+        thickness = 2,
+    }
+    nearby: Tool_Brush_Occluder = {
+        p0 = {5, 4},
+        p1 = {5, 8},
+        thickness = 2,
+    }
+    distant: Tool_Brush_Occluder = {
+        p0 = {5, 20},
+        p1 = {5, 24},
+        thickness = 2,
+    }
 
     testing.expect(t, tool_brush_occluder_overlaps(receiver, nearby))
     testing.expect(t, !tool_brush_occluder_overlaps(receiver, distant))
@@ -363,9 +385,21 @@ tool_brush_occluder_overlap_respects_expanded_bounds :: proc(t: ^testing.T) {
 //   Verify caster thickness expands the interaction reach conservatively.
 @(test)
 tool_brush_occluder_overlap_accounts_for_caster_thickness :: proc(t: ^testing.T) {
-    receiver := Tool_Brush_Occluder{p0 = {0, 0}, p1 = {10, 0}, thickness = 2}
-    thin := Tool_Brush_Occluder{p0 = {5, 8}, p1 = {5, 12}, thickness = 1}
-    thick := Tool_Brush_Occluder{p0 = {5, 8}, p1 = {5, 12}, thickness = 4}
+    receiver: Tool_Brush_Occluder = {
+        p0 = {0, 0},
+        p1 = {10, 0},
+        thickness = 2,
+    }
+    thin: Tool_Brush_Occluder = {
+        p0 = {5, 8},
+        p1 = {5, 12},
+        thickness = 1,
+    }
+    thick: Tool_Brush_Occluder = {
+        p0 = {5, 8},
+        p1 = {5, 12},
+        thickness = 4,
+    }
 
     testing.expect(t, !tool_brush_occluder_overlaps(receiver, thin))
     testing.expect(t, tool_brush_occluder_overlaps(receiver, thick))
@@ -375,12 +409,32 @@ tool_brush_occluder_overlap_accounts_for_caster_thickness :: proc(t: ^testing.T)
 //   Verify context insertion rejects distant casters and respects fixed capacity.
 @(test)
 append_tool_brush_occluder_filters_and_caps_context :: proc(t: ^testing.T) {
-    receiver := Tool_Brush_Occluder{p0 = {0, 0}, p1 = {10, 0}, thickness = 2}
-    nearby1 := Tool_Brush_Occluder{p0 = {2, 1}, p1 = {2, 3}, thickness = 2}
-    nearby2 := Tool_Brush_Occluder{p0 = {5, 1}, p1 = {5, 3}, thickness = 2}
-    nearby3 := Tool_Brush_Occluder{p0 = {8, 1}, p1 = {8, 3}, thickness = 2}
-    distant := Tool_Brush_Occluder{p0 = {30, 30}, p1 = {35, 35}, thickness = 2}
-    ctx := Tool_Brush_Occluder_Context{}
+    receiver: Tool_Brush_Occluder = {
+        p0 = {0, 0},
+        p1 = {10, 0},
+        thickness = 2,
+    }
+    nearby1: Tool_Brush_Occluder = {
+        p0 = {2, 1},
+        p1 = {2, 3},
+        thickness = 2,
+    }
+    nearby2: Tool_Brush_Occluder = {
+        p0 = {5, 1},
+        p1 = {5, 3},
+        thickness = 2,
+    }
+    nearby3: Tool_Brush_Occluder = {
+        p0 = {8, 1},
+        p1 = {8, 3},
+        thickness = 2,
+    }
+    distant: Tool_Brush_Occluder = {
+        p0 = {30, 30},
+        p1 = {35, 35},
+        thickness = 2,
+    }
+    ctx: Tool_Brush_Occluder_Context = {}
 
     append_tool_brush_occluder(&ctx, receiver, distant)
     testing.expect_value(t, ctx.count, 0)
@@ -443,7 +497,7 @@ tool_brush_light_to_view_preserves_basis_and_length :: proc(t: ^testing.T) {
 //   Verify canonical depth increases toward the camera and opposes the old sort key.
 @(test)
 tool_brush_view_depth_uses_larger_as_closer :: proc(t: ^testing.T) {
-    origin := geometry.Vector3{}
+    origin: geometry.Vector3 = {}
     closer := STROKE3D_VIEW_FORWARD
 
     testing.expect(t, tool_brush_view_depth(closer) > tool_brush_view_depth(origin))
@@ -478,8 +532,14 @@ compass_arc_attachment_extent_is_scaled_and_bounded :: proc(t: ^testing.T) {
 //   Verify each physical leg retains its corresponding arc endpoint slot.
 @(test)
 make_compass_arc_occluders_preserves_attachment_slots :: proc(t: ^testing.T) {
-    leg1 := Tool_Brush_Occluder{depth0 = 1, depth1 = 2}
-    leg2 := Tool_Brush_Occluder{depth0 = 3, depth1 = 4}
+    leg1: Tool_Brush_Occluder = {
+        depth0 = 1,
+        depth1 = 2,
+    }
+    leg2: Tool_Brush_Occluder = {
+        depth0 = 3,
+        depth1 = 4,
+    }
 
     ctx := make_compass_arc_occluders(leg1, leg2)
 

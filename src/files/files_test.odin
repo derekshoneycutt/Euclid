@@ -107,7 +107,7 @@ gif_output_transaction_publishes_only_complete_file :: proc(t: ^testing.T) {
     testing.expect(t, os.exists(transaction.temporary_path))
     testing.expect(t, !os.exists(transaction.final_path))
 
-    payload := []u8{'G', 'I', 'F', '8', '9', 'a'}
+    payload: []u8 = {'G', 'I', 'F', '8', '9', 'a'}
     testing.expect(t, os.write_entire_file(transaction.temporary_path, payload) == nil)
     testing.expect(t, publish_gif_output_transaction(&transaction))
     testing.expect(t, !os.exists(transaction.temporary_path))
@@ -125,9 +125,9 @@ gif_output_transaction_abort_removes_partial_file :: proc(t: ^testing.T) {
         sandbox, "capture.gif", context.allocator)
     testing.expect(t, reserved)
     temporary_path := fmt.aprintf(
-        "%s", transaction.temporary_path, allocator=context.allocator)
+        "%s", transaction.temporary_path, allocator = context.allocator)
     final_path := fmt.aprintf(
-        "%s", transaction.final_path, allocator=context.allocator)
+        "%s", transaction.final_path, allocator = context.allocator)
     defer delete(temporary_path)
     defer delete(final_path)
 
@@ -214,7 +214,7 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
 
 //   Build the full required unpack tree (scripts, icon, fonts, manifest).
 build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
-    required := []string{
+    required: []string = {
         "julia/script.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
@@ -397,7 +397,7 @@ materialize_packaged_sysimage_repairs_corrupt_cache :: proc(t: ^testing.T) {
     testing.expect(t, os.make_directory_all(unpack_dir) == nil)
     testing.expect(t, write_required_entry(unpack_dir, image_relative))
     digest := "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-    metadata := Packaged_Sysimage_Metadata{
+    metadata: Packaged_Sysimage_Metadata = {
         relative_path = image_relative,
         input_fingerprint = "input",
         artifact_sha256 = digest,

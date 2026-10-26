@@ -145,7 +145,7 @@ animation_model_test_animation_value_snapshot_is_immutable :: proc(t: ^testing.T
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 4))
     defer animation_value_store_test_destroy(&memory, &store)
-    identity := Animation_Value_Identity{4, 2, 7, 8}
+    identity: Animation_Value_Identity = {4, 2, 7, 8}
     _ = animation_value_store_set(&store, identity, []u8{1, 2})
     snapshot: Animation_Value_Snapshot
     testing.expect_value(t, animation_value_store_pack(
@@ -162,7 +162,7 @@ animation_model_test_animation_value_snapshot_is_immutable :: proc(t: ^testing.T
 @(test)
 animation_model_test_animation_value_pending_reads_newest_write :: proc(t: ^testing.T) {
     pending: Animation_Value_Pending_Writes
-    identity := Animation_Value_Identity{5, 3, 9, 10}
+    identity: Animation_Value_Identity = {5, 3, 9, 10}
     testing.expect_value(t, animation_value_pending_append(
         &pending, identity, []u8{1, 2}), Animation_Value_Status.Ok)
     testing.expect_value(t, animation_value_pending_append(
@@ -179,7 +179,7 @@ animation_model_test_animation_value_pending_reads_newest_write :: proc(t: ^test
 animation_model_test_animation_value_pending_rejection_is_terminal :: proc(
     t: ^testing.T) {
     pending: Animation_Value_Pending_Writes
-    identity := Animation_Value_Identity{6, 1, 2, 3}
+    identity: Animation_Value_Identity = {6, 1, 2, 3}
     _ = animation_value_pending_append(&pending, identity, []u8{1})
     testing.expect_value(t, animation_value_pending_append(
         &pending, {6, 1, 2, 4}, []u8{2}), Animation_Value_Status.Schema_Mismatch)
@@ -194,9 +194,14 @@ animation_model_test_animation_value_snapshot_rejects_malformed_span :: proc(
     t: ^testing.T) {
     snapshot: Animation_Value_Snapshot
     snapshot.entry_count = 1
-    snapshot.entries[0] = {key = 1, schema_low = 2, schema_high = 3,
-        payload_offset = i32(ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES), payload_size = 2}
-    destination := [2]u8{8, 9}
+    snapshot.entries[0] = {
+        key = 1,
+        schema_low = 2,
+        schema_high = 3,
+        payload_offset = i32(ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES),
+        payload_size = 2,
+    }
+    destination: [2]u8 = {8, 9}
     testing.expect_value(t, animation_value_snapshot_copy(
         &snapshot, {1, 1, 2, 3}, destination[:]), Animation_Value_Status.Illegal_State)
     testing.expect(t, mem.compare(destination[:], []u8{8, 9}) == 0)

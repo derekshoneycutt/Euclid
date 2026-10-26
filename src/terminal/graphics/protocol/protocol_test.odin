@@ -51,7 +51,7 @@ graphics_protocol_test_base64_frame :: proc(t: ^testing.T) {
     for byte in transmute([]u8)payload {
         testing.expect(t, graphics_parser_ingest_base64(&state, byte))
     }
-    producer := termmodel.Terminal_Producer{.Terminal_Session, 7, 3}
+    producer: termmodel.Terminal_Producer = {.Terminal_Session, 7, 3}
     testing.expect(t, graphics_parser_finish_frame(
         &state, .Kitty, producer, true))
 
@@ -113,11 +113,18 @@ graphics_protocol_test_response_queue_is_bounded :: proc(t: ^testing.T) {
 @(test)
 graphics_protocol_test_preflight_attachment_invariant :: proc(t: ^testing.T) {
     state: Graphics_Parser_State
-    transfer := termattachment.Transfer_Id{slot = 0, generation = 1}
-    attachment := termattachment.Attachment_Id{slot = 0, generation = 1}
+    transfer: termattachment.Transfer_Id = {
+        slot = 0,
+        generation = 1,
+    }
+    attachment: termattachment.Attachment_Id = {
+        slot = 0,
+        generation = 1,
+    }
 
     testing.expect(t, !graphics_parser_queue_decode_request(&state, {
-        kind = .Iterm2_Image, transfer_id = transfer,
+        kind = .Iterm2_Image,
+        transfer_id = transfer,
     }))
     testing.expect(t, !graphics_parser_queue_decode_request(&state, {
         kind = .Iterm2_Gif_Preflight,
@@ -125,7 +132,8 @@ graphics_protocol_test_preflight_attachment_invariant :: proc(t: ^testing.T) {
         attachment_id = attachment,
     }))
     testing.expect(t, graphics_parser_queue_decode_request(&state, {
-        kind = .Iterm2_Gif_Preflight, transfer_id = transfer,
+        kind = .Iterm2_Gif_Preflight,
+        transfer_id = transfer,
     }))
     testing.expect(t, graphics_parser_queue_decode_request(&state, {
         kind = .Iterm2_Image,
@@ -140,13 +148,19 @@ graphics_protocol_test_animation_command_queue :: proc(t: ^testing.T) {
     state: Graphics_Parser_State
     for index in 0..<KITTY_ANIMATION_COMMAND_CAPACITY {
         testing.expect(t, graphics_parser_queue_animation_command(&state, {
-            attachment_id = {slot = index, generation = u64(index + 1)},
+            attachment_id = {
+                slot = index,
+                generation = u64(index + 1),
+            },
             kind = .Control,
             current_frame = index + 1,
         }))
     }
     testing.expect(t, !graphics_parser_queue_animation_command(&state, {
-        attachment_id = {slot = 1, generation = 1},
+        attachment_id = {
+            slot = 1,
+            generation = 1,
+        },
     }))
     for index in 0..<KITTY_ANIMATION_COMMAND_CAPACITY {
         command, present := graphics_parser_take_animation_command(&state)
@@ -162,8 +176,14 @@ graphics_protocol_test_animation_command_queue :: proc(t: ^testing.T) {
 @(test)
 graphics_protocol_test_mutation_readiness_preserves_order :: proc(t: ^testing.T) {
     state: Graphics_Parser_State
-    target := termattachment.Attachment_Id{slot = 1, generation = 2}
-    temporary := termattachment.Attachment_Id{slot = 0, generation = 3}
+    target: termattachment.Attachment_Id = {
+        slot = 1,
+        generation = 2,
+    }
+    temporary: termattachment.Attachment_Id = {
+        slot = 0,
+        generation = 3,
+    }
     first_sequence, queued := graphics_parser_queue_mutation_request(&state, {
         attachment_id = target,
         temporary_attachment_id = temporary,
@@ -179,7 +199,10 @@ graphics_protocol_test_mutation_readiness_preserves_order :: proc(t: ^testing.T)
     _, present := graphics_parser_take_mutation_request(&state)
     testing.expect(t, !present)
     testing.expect(t, !graphics_parser_mark_mutation_ready(
-        &state, first_sequence, {slot = 0, generation = 4}))
+        &state, first_sequence, {
+            slot = 0,
+            generation = 4,
+        }))
     testing.expect(t, graphics_parser_mark_mutation_ready(
         &state, first_sequence, temporary))
     first, second: Kitty_Mutation_Request

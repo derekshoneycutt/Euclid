@@ -663,7 +663,7 @@ graphics_parser_ingest_raw :: proc(
     if state == nil || state.invalid || state.transfer_id.generation == 0 {
         return false
     }
-    source := [1]u8{byte}
+    source: [1]u8 = {byte}
     if termattachment.transfer_append(
         state.store, state.transfer_id, source[:]) != .Admitted {
         state.invalid = true

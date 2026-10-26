@@ -234,19 +234,21 @@ iso_to_cartesian_components_batch_simd :: proc(
         count = len(out)
     }
 
-    half_scale := simd.f32x4{
+    half_scale: simd.f32x4 = {
         scale.half_scale, scale.half_scale, scale.half_scale, scale.half_scale}
-    quarter_scale := simd.f32x4{
+    quarter_scale: simd.f32x4 = {
         scale.quarter_scale, scale.quarter_scale,
         scale.quarter_scale, scale.quarter_scale}
-    x_offset := simd.f32x4{scale.x_offset, scale.x_offset, scale.x_offset, scale.x_offset}
-    y_offset := simd.f32x4{scale.y_offset, scale.y_offset, scale.y_offset, scale.y_offset}
+    x_offset: simd.f32x4 = {
+        scale.x_offset, scale.x_offset, scale.x_offset, scale.x_offset}
+    y_offset: simd.f32x4 = {
+        scale.y_offset, scale.y_offset, scale.y_offset, scale.y_offset}
 
     i := 0
     for i + 3 < count {
-        xv := simd.f32x4{xs[i], xs[i + 1], xs[i + 2], xs[i + 3]}
-        yv := simd.f32x4{ys[i], ys[i + 1], ys[i + 2], ys[i + 3]}
-        zv := simd.f32x4{zs[i], zs[i + 1], zs[i + 2], zs[i + 3]}
+        xv: simd.f32x4 = {xs[i], xs[i + 1], xs[i + 2], xs[i + 3]}
+        yv: simd.f32x4 = {ys[i], ys[i + 1], ys[i + 2], ys[i + 3]}
+        zv: simd.f32x4 = {zs[i], zs[i + 1], zs[i + 2], zs[i + 3]}
 
         screen_x := (xv - yv) * half_scale + x_offset
         screen_y := -((xv + yv) * quarter_scale) + y_offset - (zv * half_scale)
@@ -298,7 +300,7 @@ iso_to_cartesian_inline :: #force_inline proc(
 // Returns:
 //   - screen: 2D screen coordinate.
 iso_to_cartesian :: proc(
-    coord : geometry.Vector3,
-    scale : worldmodel.Iso_Scale) -> geometry.Vector2 {
+    coord: geometry.Vector3,
+    scale: worldmodel.Iso_Scale) -> geometry.Vector2 {
     return iso_to_cartesian_inline(coord, scale)
 }

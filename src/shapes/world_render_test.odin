@@ -58,8 +58,12 @@ world_render_builds_direct_line_and_arc_items :: proc(t: ^testing.T) {
     line, line_status := world_create_line(
         world, {0, 0, 0}, {2, 0, 0}, Shape_Style{})
     arc, arc_status := world_create_arc(world, {
-        center = {4, 0, 0}, radius = 2, start_theta = 0,
-        sweep_theta = 1, style = Shape_Style{}})
+        center = {4, 0, 0},
+        radius = 2,
+        start_theta = 0,
+        sweep_theta = 1,
+        style = Shape_Style{},
+    })
     testing.expect_value(t, line_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, arc_status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(world, line.shape)
@@ -88,10 +92,17 @@ world_render_builds_direct_line_and_arc_items :: proc(t: ^testing.T) {
 world_render_builds_trochoid_curve_packet :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    trochoid, status := world_create_trochoid(world, {center = {1, 2, 0},
-        mode = .External, fixed_radius = 0.2, rolling_radius = 0.2,
-        tracer_distance = 0.2, parameter_start = 0, parameter_finish = 6.28,
-        draw_parameter = 3.14, style = Shape_Style{}})
+    trochoid, status := world_create_trochoid(world, {
+        center = {1, 2, 0},
+        mode = .External,
+        fixed_radius = 0.2,
+        rolling_radius = 0.2,
+        tracer_distance = 0.2,
+        parameter_start = 0,
+        parameter_finish = 6.28,
+        draw_parameter = 3.14,
+        style = Shape_Style{},
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(world, trochoid.shape)
 
@@ -133,9 +144,13 @@ world_render_curve_storage_rollback_preserves_alignment :: proc(t: ^testing.T) {
 world_render_builds_trochoid_tool_packet :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    tool, status := world_create_trochoid_tool(world, {center = {1, 2, 0},
-        mode = .External, fixed_radius = 2, rolling_radius = 1,
-        style = Shape_Style{}})
+    tool, status := world_create_trochoid_tool(world, {
+        center = {1, 2, 0},
+        mode = .External,
+        fixed_radius = 2,
+        rolling_radius = 1,
+        style = Shape_Style{},
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(world, tool.shape)
 
@@ -159,14 +174,25 @@ world_render_builds_filled_arc_pen_and_compass_items :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
     filled, filled_status := world_create_filled_arc(world, {
-        center = {0, 0, 0}, radius = 1, start_theta = 0,
-        sweep_theta = 1, style = Shape_Style{}})
+        center = {0, 0, 0},
+        radius = 1,
+        start_theta = 0,
+        sweep_theta = 1,
+        style = Shape_Style{},
+    })
     pen, pen_status := world_create_pen(world, {
-        joint1 = {2, 0, 0}, joint2 = {3, 0, 0}, length = 1,
-        style = Shape_Style{}})
+        joint1 = {2, 0, 0},
+        joint2 = {3, 0, 0},
+        length = 1,
+        style = Shape_Style{},
+    })
     compass, compass_status := world_create_compass(world, {
-        joint1 = {4, 0, 0}, pivot = {5, 0, 0}, joint2 = {6, 0, 0},
-        limb_length = 1, style = Shape_Style{}})
+        joint1 = {4, 0, 0},
+        pivot = {5, 0, 0},
+        joint2 = {6, 0, 0},
+        limb_length = 1,
+        style = Shape_Style{},
+    })
     testing.expect_value(t, filled_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, pen_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, compass_status, shapemodel.Shape_World_Status.Ok)
@@ -197,7 +223,7 @@ world_render_builds_filled_arc_pen_and_compass_items :: proc(t: ^testing.T) {
 world_render_triangulates_ordered_polygon_references :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    positions := [4]Vector3{{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}}
+    positions: [4]Vector3 = {{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}}
     square, status := world_create_square(world, positions, Shape_Style{})
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(world, square.shape)
@@ -217,8 +243,12 @@ world_render_triangulates_ordered_polygon_references :: proc(t: ^testing.T) {
 world_render_triangulates_circle_regions :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    input := Circle_Region_Input{first_center = {0, 0, 0},
-        second_center = {1, 0, 0}, first_radius = 1, second_radius = 1}
+    input: Circle_Region_Input = {
+        first_center = {0, 0, 0},
+        second_center = {1, 0, 0},
+        first_radius = 1,
+        second_radius = 1,
+    }
     lens, lens_status := world_create_lens(world, input)
     lune, lune_status := world_create_lune(world, input)
     testing.expect_value(t, lens_status, shapemodel.Shape_World_Status.Ok)
@@ -251,8 +281,11 @@ world_render_resolves_unicode_label_source_metadata :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
     label, status := world_create_label(world, {
-        source = "∠A′", mime = .Text_Plain, position = {1, 2, 0},
-        style = Shape_Style{}})
+        source = "∠A′",
+        mime = .Text_Plain,
+        position = {1, 2, 0},
+        style = Shape_Style{},
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(world, label.entity)
 
@@ -300,7 +333,10 @@ world_render_packet_does_not_survive_animation_rewind :: proc(t: ^testing.T) {
     testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
         world), shapemodel.Shape_World_Status.Ok)
     label, status := world_create_label(world, {
-        source = "α", mime = .Text_Plain, style = Shape_Style{}})
+        source = "α",
+        mime = .Text_Plain,
+        style = Shape_Style{},
+    })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(world, label.entity)
     build_shape_world_draw_cache(world, 1)

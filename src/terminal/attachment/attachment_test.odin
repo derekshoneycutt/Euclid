@@ -33,7 +33,10 @@ attachment_test_metadata :: proc(origin: Protocol_Origin = .Kitty) ->
     return {
         kind = .Raster,
         origin = origin,
-        metrics = {width = 2, height = 2},
+        metrics = {
+            width = 2,
+            height = 2,
+        },
     }
 }
 
@@ -41,7 +44,7 @@ attachment_test_metadata :: proc(origin: Protocol_Origin = .Kitty) ->
 attachment_test_admit :: proc(
     store: ^Store, retained: bool = true,
     origin: Protocol_Origin = .Kitty) -> (Attachment_Id, Admission_Outcome) {
-    payload := [4]u8{1, 2, 3, 4}
+    payload: [4]u8 = {1, 2, 3, 4}
     return attachment_admit(store, {
         metadata = attachment_test_metadata(origin),
         payload = payload[:],
@@ -61,7 +64,10 @@ attachment_test_placement :: proc(id: Attachment_Id) -> Placement_Metadata {
             column = 3,
             column_span = 2,
             row_span = 1,
-            source = {width = 2, height = 2},
+            source = {
+                width = 2,
+                height = 2,
+            },
             sizing = .Fit,
             cursor = .Advance,
         },
@@ -190,7 +196,10 @@ attachment_test_prepared_id_at :: proc(t: ^testing.T) {
         metadata = {
             kind = .Raster,
             origin = .Sixel,
-            metrics = {width = 1, height = 1},
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
         payload_byte_count = 4,
         payload_format = .Rgba8,
@@ -225,7 +234,10 @@ attachment_test_preparation_reserve_publish :: proc(t: ^testing.T) {
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 2, height = 1},
+            metrics = {
+                width = 2,
+                height = 1,
+            },
         },
         payload_byte_count = 8,
         payload_format = .Rgba8,
@@ -259,7 +271,10 @@ attachment_test_preparation_removal_rejects_publish :: proc(t: ^testing.T) {
         metadata = {
             kind = .Raster,
             origin = .Sixel,
-            metrics = {width = 1, height = 1},
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
         payload_byte_count = 4,
         payload_format = .Rgba8,
@@ -439,7 +454,7 @@ attachment_test_payload_validation :: proc(t: ^testing.T) {
     store: Store
     testing.expect(t, store_init(&store, attachment_test_limits(), context.allocator))
     defer store_destroy(&store)
-    payload := [4]u8{1, 2, 3, 4}
+    payload: [4]u8 = {1, 2, 3, 4}
     oversized := attachment_test_metadata()
     oversized.metrics.width = 5
 
@@ -573,15 +588,31 @@ attachment_test_residency_defers_removal :: proc(t: ^testing.T) {
 @(test)
 attachment_test_renderer_capability :: proc(t: ^testing.T) {
     observed: Raster_Draw_Request
-    renderer := Raster_Renderer{
+    renderer: Raster_Renderer = {
         user_data = &observed,
         draw = attachment_test_draw,
     }
-    request := Raster_Draw_Request{
-        attachment_id = {slot = 3, generation = 7},
-        source = {x = 1, y = 2, width = 4, height = 5},
-        destination = {x = 10, y = 20, width = 30, height = 40},
-        clip = {width = 80, height = 60},
+    request: Raster_Draw_Request = {
+        attachment_id = {
+            slot = 3,
+            generation = 7,
+        },
+        source = {
+            x = 1,
+            y = 2,
+            width = 4,
+            height = 5,
+        },
+        destination = {
+            x = 10,
+            y = 20,
+            width = 30,
+            height = 40,
+        },
+        clip = {
+            width = 80,
+            height = 60,
+        },
         z_index = -2,
     }
 

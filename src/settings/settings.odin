@@ -184,7 +184,9 @@ default_preferences :: proc() -> Preferences {
             sound_enabled = false,
         },
         interface = {
-            display_fps = false, reduce_motion = false, increased_contrast = false,
+            display_fps = false,
+            reduce_motion = false,
+            increased_contrast = false,
             text_size_percent = 100,
         },
     }
@@ -344,22 +346,34 @@ apply_setting_value :: proc(
 
 // Build a typed scalar value for a boolean preference.
 boolean_value :: proc(value: bool) -> Setting_Value {
-    return {kind = .Boolean, boolean = value}
+    return {
+        kind = .Boolean,
+        boolean = value,
+    }
 }
 
 // Build a typed scalar value for an integer preference.
 integer_value :: proc(value: int) -> Setting_Value {
-    return {kind = .Integer, integer = value}
+    return {
+        kind = .Integer,
+        integer = value,
+    }
 }
 
 // Build a typed scalar value for the window mode preference.
 window_mode_value :: proc(value: Window_Mode) -> Setting_Value {
-    return {kind = .Window_Mode, window_mode = value}
+    return {
+        kind = .Window_Mode,
+        window_mode = value,
+    }
 }
 
 // Build a typed scalar value for the layout preference.
 layout_preference_value :: proc(value: Layout_Preference) -> Setting_Value {
-    return {kind = .Layout_Preference, layout = value}
+    return {
+        kind = .Layout_Preference,
+        layout = value,
+    }
 }
 
 // Read one typed scalar from the fixed preference record.
@@ -447,7 +461,11 @@ change_set_set :: proc(
         index = changes^.count
         changes^.count += 1
     }
-    changes^.changes[index] = {id = id, kind = .Set, value = value}
+    changes^.changes[index] = {
+        id = id,
+        kind = .Set,
+        value = value,
+    }
     return true
 }
 
@@ -464,7 +482,10 @@ change_set_reset :: proc(changes: ^Change_Set, id: Setting_Id) -> bool {
         index = changes^.count
         changes^.count += 1
     }
-    changes^.changes[index] = {id = id, kind = .Reset}
+    changes^.changes[index] = {
+        id = id,
+        kind = .Reset,
+    }
     return true
 }
 

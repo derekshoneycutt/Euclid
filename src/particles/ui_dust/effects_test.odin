@@ -6,7 +6,10 @@ import testing "core:testing"
 // Create one heap-backed test system so fixed SoA storage stays off the test stack.
 ui_dust_test_system :: proc(viewport: geometry.Rectangle) -> ^Ui_Dust_System {
     system := new(Ui_Dust_System, context.allocator)
-    ui_dust_validate_context(system, {visible = true, viewport = viewport})
+    ui_dust_validate_context(system, {
+        visible = true,
+        viewport = viewport,
+    })
     return system
 }
 
@@ -25,7 +28,7 @@ ui_dust_test_emit_line :: proc(system: ^Ui_Dust_System, count: int) -> int {
 // Verify emission is deterministic, bounded by fixed capacity, and moves downward.
 @(test)
 ui_dust_departure_is_deterministic_and_bounded :: proc(t: ^testing.T) {
-    viewport := geometry.Rectangle{0, 0, 5000, 100}
+    viewport: geometry.Rectangle = {0, 0, 5000, 100}
     first := ui_dust_test_system(viewport)
     second := ui_dust_test_system(viewport)
     defer free(first, context.allocator)
@@ -55,7 +58,7 @@ ui_dust_departure_is_deterministic_and_bounded :: proc(t: ^testing.T) {
 // Verify fragments come to rest on the viewport floor and fade after landing.
 @(test)
 ui_dust_departure_rests_at_floor_before_fading :: proc(t: ^testing.T) {
-    viewport := geometry.Rectangle{0, 0, 100, 120}
+    viewport: geometry.Rectangle = {0, 0, 100, 120}
     system := ui_dust_test_system(viewport)
     defer free(system, context.allocator)
     ui_dust_begin_departure(system, 71)
@@ -92,21 +95,30 @@ ui_dust_arrival_fades_and_settles :: proc(t: ^testing.T) {
 ui_dust_context_invalidation_retires_effects :: proc(t: ^testing.T) {
     system := new(Ui_Dust_System, context.allocator)
     defer free(system, context.allocator)
-    viewport := geometry.Rectangle{10, 20, 200, 120}
+    viewport: geometry.Rectangle = {10, 20, 200, 120}
     ui_dust_validate_context(system, {
-        visible = true, viewport = viewport, scroll_y = 5, visual_signature = 1,
+        visible = true,
+        viewport = viewport,
+        scroll_y = 5,
+        visual_signature = 1,
     })
     ui_dust_begin_arrival(system, 9, .Fade)
     ui_dust_advance(system, 0.01)
     ui_dust_validate_context(system, {
-        visible = true, viewport = viewport, scroll_y = 6, visual_signature = 1,
+        visible = true,
+        viewport = viewport,
+        scroll_y = 6,
+        visual_signature = 1,
     })
     testing.expect(t, !system^.incoming_active)
     ui_dust_begin_departure(system, 10)
     testing.expect(t, ui_dust_emit(system, {20, 30}, {1, 2, 3, 255}, 255, 1))
     ui_dust_validate_context(system, {
-        visible = true, reduced_motion = true, viewport = viewport,
-        scroll_y = 6, visual_signature = 1,
+        visible = true,
+        reduced_motion = true,
+        viewport = viewport,
+        scroll_y = 6,
+        visual_signature = 1,
     })
     testing.expect_value(t, system^.particle_count, 0)
     testing.expect(t, !system^.viewport_initialized)

@@ -16,8 +16,10 @@ library_collection_name_prefill :: proc(
     }
     collection := set^.collections[index]
     return {
-        target_kind = .Collection, valid = true,
-        accepted_name = collection.name, accepted_name_length = collection.name_length,
+        target_kind = .Collection,
+        valid = true,
+        accepted_name = collection.name,
+        accepted_name_length = collection.name_length,
     }
 }
 

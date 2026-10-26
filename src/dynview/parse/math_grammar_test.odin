@@ -205,7 +205,7 @@ tex_parse_math_matches_annotation_fixtures :: proc(t: ^testing.T) {
         "\\overset{!}{=}+\\underset{n}{x}+\\overbrace{a+b}^{n}+" +
         "\\underbrace{x+y}_{m}", .Display, output), Tex_Parse_Status.Ok)
     testing.expect(t, !output.recoverable)
-    expected_limits := [4]i32{1, 2, 1, 2}
+    expected_limits: [4]i32 = {1, 2, 1, 2}
     found := 0
     index := output.programs[output.root_program].first_op
     for index >= 0 {
@@ -252,7 +252,9 @@ tex_math_test_middle_delimiters :: proc(
     for index >= 0 {
         op := &output.ops[index]
         if op.kind == .Stretch_Delimiter && op.operator_growth == 0 &&
-            op.child_program >= 0 {outer_child = op.child_program}
+            op.child_program >= 0 {
+            outer_child = op.child_program
+        }
         index = op.next_op
     }
     testing.expect(t, outer_child >= 0)
@@ -313,10 +315,10 @@ tex_parse_math_matches_unicode_roles :: proc(t: ^testing.T) {
     defer free(output)
     testing.expect_value(t, tex_parse_math(
         "Γα×≤⌈⌉", .Display, output), Tex_Parse_Status.Ok)
-    expected_roles := [6]Tex_Math_Style_Role{
+    expected_roles: [6]Tex_Math_Style_Role = {
         .Math_Upright, .Math_Italic, .Math_Upright, .Math_Upright,
         .Math_Upright, .Math_Upright}
-    expected_classes := [6]Tex_Math_Atom_Class{
+    expected_classes: [6]Tex_Math_Atom_Class = {
         .Ord, .Ord, .Bin, .Rel, .Open, .Close}
     index := output.programs[output.root_program].first_op
     for expected_index in 0..<6 {

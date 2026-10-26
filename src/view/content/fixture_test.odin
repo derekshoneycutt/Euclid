@@ -99,9 +99,12 @@ search_test_populate_content :: proc(database: ^sqlite3.Database) -> bool {
 search_test_populate_argument :: proc(
     database: ^sqlite3.Database, key: string,
     signature: contentdata.Content_Message_Signature) -> bool {
-    kinds := [contentdata.Content_Argument_Kind]string{
-        .Text = "text", .Uint32 = "uint32", .Int64 = "int64",
-        .Float32_One_Decimal = "float32_1dp"}
+    kinds: [contentdata.Content_Argument_Kind]string = {
+        .Text = "text",
+        .Uint32 = "uint32",
+        .Int64 = "int64",
+        .Float32_One_Decimal = "float32_1dp",
+    }
     sql := fmt.tprintf("INSERT INTO ui_argument VALUES ('%s',0,'%s','%s');",
         key, signature.name, kinds[signature.kind])
     return search_test_execute_sql(

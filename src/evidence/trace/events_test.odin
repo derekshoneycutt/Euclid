@@ -22,7 +22,7 @@ trace_test_event_schema :: proc(t: ^testing.T) {
 // Verify correlation keeps an existing identity domain, value, and generation.
 @(test)
 trace_test_identity_is_primitive :: proc(t: ^testing.T) {
-    identity := Identity{
+    identity: Identity = {
         kind = .Animation_Tick,
         id = 17,
         generation = 4,
@@ -32,12 +32,15 @@ trace_test_identity_is_primitive :: proc(t: ^testing.T) {
     testing.expect_value(t, identity.id, u64(17))
     testing.expect_value(t, identity.generation, u64(4))
 
-    event := Event{
+    event: Event = {
         correlation = identity.id,
         generation = identity.generation,
         correlation_kind = identity.kind,
     }
     testing.expect(t, event_correlates(event, identity))
-    testing.expect(t, !event_correlates(event,
-        Identity{kind = .Animation_Tick, id = 17, generation = 5}))
+    testing.expect(t, !event_correlates(event, Identity{
+        kind = .Animation_Tick,
+        id = 17,
+        generation = 5,
+    }))
 }

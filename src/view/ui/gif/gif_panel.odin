@@ -80,7 +80,7 @@ Gif_Timing_Button_Descriptor :: struct {
 gif_path_input_rect_for_panel :: proc(
     panel: geometry.Rectangle,
     text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT) -> geometry.Rectangle {
-    stack := geometry.Rectangle{panel.x + theme.SETTINGS_PANEL_INSET,
+    stack: geometry.Rectangle = {panel.x + theme.SETTINGS_PANEL_INSET,
         panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
         panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
@@ -229,25 +229,32 @@ gif_path_input_params :: proc(
     if !measured {
         advance = theme.TEXT_WRAP_ADVANCE
     }
-    return {rect = rect, clip_rect = runtime^.layout.ui_regions.accordion_rect,
+    return {
+        rect = rect,
+        clip_rect = runtime^.layout.ui_regions.accordion_rect,
         controls = uilibrary.tree_semantic_id(),
         descriptor = {
             id = uisemantics.semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID),
-            region = .Accordion_Content, traversal_order = 5,
+            region = .Accordion_Content,
+            traversal_order = 5,
             label = viewmessages.shell_message(state, .Gif_Saved_Path_Accessible),
-            text = text, mode = .Read_Only,
+            text = text,
+            mode = .Read_Only,
             cursor_byte = runtime^.gif_path_input.cursor_byte,
             anchor_byte = runtime^.gif_path_input.anchor_byte,
             content_revision = state^.gif_capture_status.last_gif_path_revision,
         },
         semantic_focus = runtime^.semantic_focus,
-        state = &runtime^.gif_path_input, frame = frame,
+        state = &runtime^.gif_path_input,
+        frame = frame,
         focused = focus.kind == .Input_Box && focus.id == GIF_PATH_INPUT_BOX_ID,
         pointer_routed = target.focus.kind == .Input_Box &&
             target.id == GIF_PATH_INPUT_BOX_ID,
-        column_advance = advance, font_size = font_size,
+        column_advance = advance,
+        font_size = font_size,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
-        resolver = view_font.cache_terminal_resolver(&state^.font_cache)}
+        resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+    }
 }
 
 // draw_encoded_gif_value right-aligns one prepared slider value in the panel.
@@ -270,10 +277,14 @@ draw_encoded_gif_value :: proc(
 gif_output_scale_label :: proc(
     state: ^core.Euclid_General_State, factor: int) -> string {
     switch clamp(factor, 1, 4) {
-    case 1: return viewmessages.shell_message(state, .Gif_Output_Scale_Hundred)
-    case 2: return viewmessages.shell_message(state, .Gif_Output_Scale_Fifty)
-    case 3: return viewmessages.shell_message(state, .Gif_Output_Scale_Thirty_Three)
-    case 4: return viewmessages.shell_message(state, .Gif_Output_Scale_Twenty_Five)
+    case 1:
+        return viewmessages.shell_message(state, .Gif_Output_Scale_Hundred)
+    case 2:
+        return viewmessages.shell_message(state, .Gif_Output_Scale_Fifty)
+    case 3:
+        return viewmessages.shell_message(state, .Gif_Output_Scale_Thirty_Three)
+    case 4:
+        return viewmessages.shell_message(state, .Gif_Output_Scale_Twenty_Five)
     }
     return viewmessages.shell_message(state, .Gif_Output_Scale_Hundred)
 }
@@ -299,9 +310,9 @@ gif_timing_button_rects :: proc(
     width := max(f32(0), available * 0.5)
     y := row_y + gif_timing_button_top_offset(text_size_percent)
     height := gif_timing_button_height(text_size_percent)
-    animation := geometry.Rectangle{panel.x + theme.SETTINGS_PANEL_INSET, y,
+    animation: geometry.Rectangle = {panel.x + theme.SETTINGS_PANEL_INSET, y,
         width, height}
-    recorded := geometry.Rectangle{animation.x + width +
+    recorded: geometry.Rectangle = {animation.x + width +
         theme.SETTINGS_GIF_TIMING_BUTTON_GAP, y, width, height}
     if gif_timing_buttons_stack(panel.width, text_size_percent) {
         stacked_width := max(f32(0), panel.width - theme.SETTINGS_PANEL_INSET * 2)
@@ -341,12 +352,17 @@ gif_slider_params :: proc(
     label: string,
     value: int) -> uiwidgets.Integer_Slider_Params {
     return {
-        panel = geometry.Rectangle(ctx.panel), row_y = row_y,
+        panel = geometry.Rectangle(ctx.panel),
+        row_y = row_y,
         mouse_input = ctx.mouse_input,
         press_owner = &ctx.ui_runtime^.input.press_owner,
         semantic_focus = ctx.ui_runtime^.semantic_focus,
-        press_id = press_id, label = label,
-        value = value, min_value = 1, max_value = 4, font = ctx.font,
+        press_id = press_id,
+        label = label,
+        value = value,
+        min_value = 1,
+        max_value = 4,
+        font = ctx.font,
         text_size_percent =
             ctx.ui_runtime^.preferences.values.interface.text_size_percent,
         font_resolver = ctx.resolver,
@@ -362,15 +378,20 @@ gif_save_button_params :: proc(
     phase := ctx.gif_capture_status.gif_capture_phase
     return {
         id = 3001,
-        rect = {ctx.panel.x + theme.SETTINGS_PANEL_INSET, row_y,
+        rect = {
+            ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+            row_y,
             ctx.panel.width - theme.SETTINGS_PANEL_INSET * 2,
             gif_save_button_height(
-                ctx.ui_runtime^.preferences.values.interface.text_size_percent)},
+                ctx.ui_runtime^.preferences.values.interface.text_size_percent),
+        },
         label = gif_capture_button_label(ctx.state, phase),
-        enabled = gif_capture_button_enabled(phase), mouse = ctx.mouse_input,
+        enabled = gif_capture_button_enabled(phase),
+        mouse = ctx.mouse_input,
         interaction_space_rect = geometry.Rectangle(ctx.panel),
         interaction_enabled = true,
-        font = ctx.font, font_resolver = ctx.resolver,
+        font = ctx.font,
+        font_resolver = ctx.resolver,
         semantics = {
             publish = true,
             focus = ctx.ui_runtime.semantic_focus,
@@ -400,10 +421,15 @@ gif_timing_button_params :: proc(
         states += {.Selected}
     }
     return {
-        id = descriptor.id, rect = descriptor.rectangle, label = descriptor.label,
+        id = descriptor.id,
+        rect = descriptor.rectangle,
+        label = descriptor.label,
         enabled = enabled,
-        mouse = ctx.mouse_input, interaction_space_rect = ctx.panel,
-        interaction_enabled = true, font = ctx.font, font_resolver = ctx.resolver,
+        mouse = ctx.mouse_input,
+        interaction_space_rect = ctx.panel,
+        interaction_enabled = true,
+        font = ctx.font,
+        font_resolver = ctx.resolver,
         semantics = {
             publish = true,
             focus = ctx.ui_runtime.semantic_focus,
@@ -488,17 +514,19 @@ gif_accessibility_status_label :: proc(
 register_gif_status :: proc(
     ctx: Gif_Panel_Context, result: ^Gif_View_Preparation) {
     text_percent := ctx.ui_runtime.preferences.values.interface.text_size_percent
-    bounds := geometry.Rectangle{ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+    bounds: geometry.Rectangle = {ctx.panel.x + theme.SETTINGS_PANEL_INSET,
         result^.rows.status_y, max(f32(0),
             ctx.panel.width - theme.SETTINGS_PANEL_INSET * 2),
         gif_status_line_height(text_percent)}
-    states := viewmodel.Ui_Node_State{.Visible}
+    states: viewmodel.Ui_Node_State = {.Visible}
     if result^.phase == .Recording || result^.phase == .Finalizing {
         states += {.Busy}
     }
     _ = uisemantics.semantic_register_control(ctx.ui_runtime.semantic_focus, {
         id = uisemantics.semantic_control_id(.Gif_Control, GIF_STATUS_NODE_ID),
-        role = .Status, states = states, bounds = bounds,
+        role = .Status,
+        states = states,
+        bounds = bounds,
         clip_bounds = geometry.Rectangle(ctx.panel),
         label = gif_accessibility_status_label(ctx.state, result^.phase),
     })
@@ -511,8 +539,11 @@ register_gif_status :: proc(
     note := string(result^.status_note[:result^.status_note_len])
     _ = uisemantics.semantic_register_control(ctx.ui_runtime.semantic_focus, {
         id = uisemantics.semantic_control_id(.Gif_Control, GIF_STATUS_NOTE_NODE_ID),
-        role = .Status, states = {.Visible}, bounds = note_bounds,
-        clip_bounds = geometry.Rectangle(ctx.panel), label = note,
+        role = .Status,
+        states = {.Visible},
+        bounds = note_bounds,
+        clip_bounds = geometry.Rectangle(ctx.panel),
+        label = note,
     })
 }
 
@@ -745,17 +776,18 @@ prepare_gif_view :: proc(
     if state == nil {
         return {}
     }
-    ctx := Gif_Panel_Context{state, panel, mouse_input, &state.ui_runtime,
+    ctx: Gif_Panel_Context = {state, panel, mouse_input, &state.ui_runtime,
         &state.gif_capture_status,
         view_font.cache_borrow(&state.font_cache, .Regular),
         view_font.cache_terminal_resolver(&state.font_cache)}
-    stack_rect := geometry.Rectangle{panel.x + theme.SETTINGS_PANEL_INSET,
+    stack_rect: geometry.Rectangle = {panel.x + theme.SETTINGS_PANEL_INSET,
         panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
         panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
     text_percent := ctx.ui_runtime^.preferences.values.interface.text_size_percent
-    result := Gif_View_Preparation{
-        rows = gif_view_layout_rows(stack_rect, text_percent)}
+    result: Gif_View_Preparation = {
+        rows = gif_view_layout_rows(stack_rect, text_percent),
+    }
     prepare_gif_sliders(ctx, &result, interactive)
     prepare_gif_timing_controls(ctx, panel, result.rows.timing_y, &result, interactive)
     prepare_gif_capture_button(ctx, &result, interactive)

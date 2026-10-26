@@ -18,21 +18,21 @@ windows_terminal_test_command_line :: proc(
 // Verify quoting for empty, whitespace, quote, slash, and metacharacter cases.
 @(test)
 windows_terminal_test_command_line_quoting :: proc(t: ^testing.T) {
-    empty := [2]string{"program", ""}
+    empty: [2]string = {"program", ""}
     windows_terminal_test_command_line(t, empty[:], "program \"\"")
 
-    whitespace := [3]string{"program", "two words", "tab\tvalue"}
+    whitespace: [3]string = {"program", "two words", "tab\tvalue"}
     windows_terminal_test_command_line(
         t, whitespace[:], "program \"two words\" \"tab\tvalue\"")
 
-    quotes := [2]string{"program", "a\"b"}
+    quotes: [2]string = {"program", "a\"b"}
     windows_terminal_test_command_line(t, quotes[:], "program \"a\\\"b\"")
 
-    trailing := [2]string{"program", "C:\\path with space\\"}
+    trailing: [2]string = {"program", "C:\\path with space\\"}
     windows_terminal_test_command_line(
         t, trailing[:], "program \"C:\\path with space\\\\\"")
 
-    metacharacters := [3]string{"program", "$|", "line\nbreak"}
+    metacharacters: [3]string = {"program", "$|", "line\nbreak"}
     windows_terminal_test_command_line(
         t, metacharacters[:], "program $| line\nbreak")
 }
@@ -40,7 +40,7 @@ windows_terminal_test_command_line_quoting :: proc(t: ^testing.T) {
 // Verify command-line encoding rejects an undersized destination.
 @(test)
 windows_terminal_test_command_line_capacity :: proc(t: ^testing.T) {
-    arguments := [2]string{"program", "two words"}
+    arguments: [2]string = {"program", "two words"}
     result := process_plan_build(arguments[:], "/tmp", nil)
     destination: [8]u8
     _, valid := windows_terminal_encode_command_line(

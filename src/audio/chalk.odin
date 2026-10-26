@@ -29,7 +29,10 @@ advance_chalk_gain :: proc(current, target, dt: f32) -> f32 {
 // Select the next contiguous source span, wrapping only at the authored boundary.
 chalk_loop_segment :: proc(cursor, total, requested: u32) -> Chalk_Loop_Segment {
     if total == 0 || requested == 0 {
-        return {offset = cursor, next = cursor}
+        return {
+            offset = cursor,
+            next = cursor,
+        }
     }
     offset := min(cursor, total - 1)
     count := min(requested, total - offset)

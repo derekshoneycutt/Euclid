@@ -40,16 +40,17 @@ draw_encoder_test_ink_sink_captures_clipped_triangle :: proc(t: ^testing.T) {
     batches: [1]Draw_Batch
     commands: [1]Draw_Command
     encoder: Draw_Encoder
-    state := Draw_Ink_Sample_Test_State{}
+    state: Draw_Ink_Sample_Test_State = {}
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {200, 200}))
     testing.expect(t, draw_encoder_push_scissor(&encoder, {10, 10, 20, 20}))
     draw_encoder_set_ink_sink(&encoder, {
-        user_data = &state, record = draw_encoder_test_record_ink,
+        user_data = &state,
+        record = draw_encoder_test_record_ink,
     })
 
-    tint := color.Color_RGBA8{120, 80, 40, 255}
+    tint: color.Color_RGBA8 = {120, 80, 40, 255}
     testing.expect(t, draw_encoder_triangle(
         &encoder, {10, 10}, {30, 10}, {10, 30}, tint))
     draw_encoder_record_ink_sample(&encoder, {5, 5}, tint, 255)
@@ -71,12 +72,13 @@ draw_encoder_test_ink_sink_spans_thin_line :: proc(t: ^testing.T) {
     batches: [1]Draw_Batch
     commands: [1]Draw_Command
     encoder: Draw_Encoder
-    state := Draw_Ink_Sample_Test_State{}
+    state: Draw_Ink_Sample_Test_State = {}
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
     draw_encoder_set_ink_sink(&encoder, {
-        user_data = &state, record = draw_encoder_test_record_ink,
+        user_data = &state,
+        record = draw_encoder_test_record_ink,
     })
 
     testing.expect(t, draw_encoder_line(
@@ -99,7 +101,7 @@ draw_encoder_test_rectangles_merge_adjacent_batch :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    draw_color := color.Color_RGBA8{10, 20, 30, 40}
+    draw_color: color.Color_RGBA8 = {10, 20, 30, 40}
     testing.expect(t, draw_encoder_rectangle(&encoder, {1, 2, 3, 4}, draw_color))
     testing.expect(t, draw_encoder_rectangle(&encoder, {10, 20, 30, 40}, draw_color))
     testing.expect_value(t, encoder.vertex_count, 8)
@@ -163,7 +165,7 @@ draw_encoder_test_rejects_invalid_frame_and_scissor_misuse :: proc(t: ^testing.T
     batches: [1]Draw_Batch
     commands: [1]Draw_Command
     encoder: Draw_Encoder
-    storage := Draw_Storage{vertices[:], indices[:], batches[:], commands[:], nil}
+    storage: Draw_Storage = {vertices[:], indices[:], batches[:], commands[:], nil}
     testing.expect(t, !draw_encoder_begin(
         &encoder, storage, {0, 100}, {100, 100}))
     testing.expect(t, draw_encoder_begin(
@@ -208,10 +210,15 @@ draw_encoder_test_polyline_round_caps :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    points := [2]geometry.Vector2{{10, 10}, {20, 10}}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Open,
-        start_cap = .Round, finish_cap = .Round}
+    points: [2]geometry.Vector2 = {{10, 10}, {20, 10}}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
 
     testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
     testing.expect_value(t, encoder.vertex_count, 32)
@@ -231,10 +238,15 @@ draw_encoder_test_polyline_diagonal_round_caps :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    points := [2]geometry.Vector2{{10, 10}, {20, 20}}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Open,
-        start_cap = .Round, finish_cap = .Round}
+    points: [2]geometry.Vector2 = {{10, 10}, {20, 20}}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
 
     testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
     testing.expect_value(t, encoder.vertex_count, 32)
@@ -255,9 +267,13 @@ draw_encoder_test_polyline_miter_shares_boundary :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    points := [3]geometry.Vector2{{10, 10}, {20, 10}, {20, 20}}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Open}
+    points: [3]geometry.Vector2 = {{10, 10}, {20, 10}, {20, 20}}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+    }
 
     testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
     testing.expect_value(t, encoder.vertex_count, 6)
@@ -271,13 +287,13 @@ draw_encoder_test_polyline_miter_shares_boundary :: proc(t: ^testing.T) {
 // draw_encoder_test_polyline_miter_limit verifies exact bounded classification.
 @(test)
 draw_encoder_test_polyline_miter_limit :: proc(t: ^testing.T) {
-    origin := geometry.Vector2{0, 0}
-    current := geometry.Vector2{1, 0}
+    origin: geometry.Vector2 = {0, 0}
+    current: geometry.Vector2 = {1, 0}
     below_angle := f64(119) * math.PI / 180
     above_angle := f64(121) * math.PI / 180
-    below := geometry.Vector2{1 + f32(math.cos(below_angle)),
+    below: geometry.Vector2 = {1 + f32(math.cos(below_angle)),
         f32(math.sin(below_angle))}
-    above := geometry.Vector2{1 + f32(math.cos(above_angle)),
+    above: geometry.Vector2 = {1 + f32(math.cos(above_angle)),
         f32(math.sin(above_angle))}
     testing.expect_value(t, draw_polyline_join(
         origin, current, below, .Ordinary, 2), Draw_Polyline_Join.Miter)
@@ -298,9 +314,13 @@ draw_encoder_test_polyline_bevel_is_finite :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    points := [3]geometry.Vector2{{0, 0}, {10, 0}, {0.1, 0.1}}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Open}
+    points: [3]geometry.Vector2 = {{0, 0}, {10, 0}, {0.1, 0.1}}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+    }
 
     testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
     testing.expect_value(t, encoder.vertex_count, 8)
@@ -321,10 +341,14 @@ draw_encoder_test_polyline_cusp_emits_one_fan :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    points := [3]geometry.Vector2{{10, 10}, {20, 10}, {10, 10.001}}
-    kinds := [3]Draw_Polyline_Point_Kind{.Ordinary, .Cusp, .Ordinary}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Open}
+    points: [3]geometry.Vector2 = {{10, 10}, {20, 10}, {10, 10.001}}
+    kinds: [3]Draw_Polyline_Point_Kind = {.Ordinary, .Cusp, .Ordinary}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+    }
 
     testing.expect(t, draw_encoder_polyline(&encoder, points[:], kinds[:], style))
     testing.expect_value(t, encoder.vertex_count, 22)
@@ -341,9 +365,13 @@ draw_encoder_test_polyline_closure :: proc(t: ^testing.T) {
     batches: [1]Draw_Batch
     commands: [1]Draw_Command
     encoder: Draw_Encoder
-    triangle := [4]geometry.Vector2{{10, 10}, {30, 10}, {20, 30}, {10, 10}}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Closed}
+    triangle: [4]geometry.Vector2 = {{10, 10}, {30, 10}, {20, 30}, {10, 10}}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Closed,
+    }
     testing.expect(t, draw_encoder_begin(&encoder,
         {smooth_vertices[:], smooth_indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
@@ -351,7 +379,7 @@ draw_encoder_test_polyline_closure :: proc(t: ^testing.T) {
     testing.expect_value(t, encoder.vertex_count, 6)
     testing.expect_value(t, encoder.index_count, 18)
 
-    kinds := [4]Draw_Polyline_Point_Kind{.Ordinary, .Ordinary, .Ordinary, .Cusp}
+    kinds: [4]Draw_Polyline_Point_Kind = {.Ordinary, .Ordinary, .Ordinary, .Cusp}
     testing.expect(t, draw_encoder_begin(&encoder,
         {cusp_vertices[:], cusp_indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
@@ -363,17 +391,21 @@ draw_encoder_test_polyline_closure :: proc(t: ^testing.T) {
 // draw_encoder_test_polyline_compaction preserves a cusp on duplicate samples.
 @(test)
 draw_encoder_test_polyline_compaction :: proc(t: ^testing.T) {
-    points := [4]geometry.Vector2{{0, 0}, {10, 0}, {10, 0}, {0, 0.001}}
-    kinds := [4]Draw_Polyline_Point_Kind{.Ordinary, .Ordinary, .Cusp, .Ordinary}
-    style := Draw_Polyline_Style{width = 2, miter_limit = 4,
-        color = color.WHITE, topology = .Open}
+    points: [4]geometry.Vector2 = {{0, 0}, {10, 0}, {10, 0}, {0, 0.001}}
+    kinds: [4]Draw_Polyline_Point_Kind = {.Ordinary, .Ordinary, .Cusp, .Ordinary}
+    style: Draw_Polyline_Style = {
+        width = 2,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+    }
     summary, valid := draw_polyline_preflight(points[:], kinds[:], style)
     testing.expect(t, valid)
     testing.expect_value(t, summary.group_count, 3)
     testing.expect_value(t, summary.vertices, 22)
     testing.expect_value(t, summary.indices, 48)
 
-    degenerate := [3]geometry.Vector2{{1, 1}, {1, 1}, {1, 1}}
+    degenerate: [3]geometry.Vector2 = {{1, 1}, {1, 1}, {1, 1}}
     _, valid = draw_polyline_preflight(degenerate[:], nil, style)
     testing.expect(t, !valid)
 }
@@ -389,9 +421,13 @@ draw_encoder_test_polyline_overflow_is_atomic :: proc(t: ^testing.T) {
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    points := [3]geometry.Vector2{{10, 10}, {20, 10}, {20, 20}}
-    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
-        color = color.WHITE, topology = .Open}
+    points: [3]geometry.Vector2 = {{10, 10}, {20, 10}, {20, 20}}
+    style: Draw_Polyline_Style = {
+        width = 4,
+        miter_limit = 4,
+        color = color.WHITE,
+        topology = .Open,
+    }
 
     testing.expect(t, !draw_encoder_polyline(&encoder, points[:], nil, style))
     testing.expect_value(t, encoder.vertex_count, 0)
@@ -569,20 +605,30 @@ draw_encoder_test_append_stroke_is_atomic_and_ordered :: proc(t: ^testing.T) {
     commands: [2]Draw_Command
     stroke_vertices: [3]Stroke_Vertex
     stroke_draws: [1]Stroke_Draw
-    custom := Draw_Custom_Storage{
-        stroke_vertices = stroke_vertices[:], stroke_draws = stroke_draws[:]}
+    custom: Draw_Custom_Storage = {
+        stroke_vertices = stroke_vertices[:],
+        stroke_draws = stroke_draws[:],
+    }
     encoder: Draw_Encoder
     testing.expect(t, draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], &custom},
         {100, 100}, {200, 200}))
-    source := [3]Stroke_Vertex{
-        {position = {1, 2, 0}},
-        {position = {3, 4, 0}},
-        {position = {5, 6, 0}},
+    source: [3]Stroke_Vertex = {
+        {
+            position = {1, 2, 0},
+        },
+        {
+            position = {3, 4, 0},
+        },
+        {
+            position = {5, 6, 0},
+        },
     }
     vertex_uniforms: Stroke_Vertex_Uniforms
     vertex_uniforms.clip_from_model[0] = 1
-    fragment_uniforms := Stroke_Fragment_Uniforms{ambient = 0.4}
+    fragment_uniforms: Stroke_Fragment_Uniforms = {
+        ambient = 0.4,
+    }
 
     testing.expect(t, draw_encoder_append_stroke(
         &encoder, source[:], vertex_uniforms, fragment_uniforms))
@@ -605,10 +651,16 @@ draw_encoder_test_dust_capacity_is_one_instanced_draw :: proc(t: ^testing.T) {
     instances := make([]Dust_Instance, DUST_INSTANCE_CAPACITY, context.allocator)
     defer delete(instances, context.allocator)
     draws: [1]Dust_Draw
-    custom := Draw_Custom_Storage{dust_instances = instances, dust_draws = draws[:]}
+    custom: Draw_Custom_Storage = {
+        dust_instances = instances,
+        dust_draws = draws[:],
+    }
     encoder: Draw_Encoder
     testing.expect(t, draw_encoder_begin(&encoder,
-        {commands = commands[:], custom = &custom}, {100, 100}, {200, 200}))
+        {
+            commands = commands[:],
+            custom = &custom,
+        }, {100, 100}, {200, 200}))
     draw_encoder_enable_dust_instancing(&encoder, true)
 
     testing.expect(t, draw_encoder_commit_dust(
@@ -626,15 +678,27 @@ draw_encoder_test_dust_expanded_fallback_is_capacity_safe :: proc(t: ^testing.T)
     instances: [2]Dust_Instance
     vertices: [12]Draw_Vertex
     draws: [1]Dust_Draw
-    custom := Draw_Custom_Storage{dust_instances = instances[:],
-        dust_expanded_vertices = vertices[:], dust_expanded_draws = draws[:]}
+    custom: Draw_Custom_Storage = {
+        dust_instances = instances[:],
+        dust_expanded_vertices = vertices[:],
+        dust_expanded_draws = draws[:],
+    }
     encoder: Draw_Encoder
     testing.expect(t, draw_encoder_begin(&encoder,
-        {commands = commands[:], custom = &custom}, {100, 100}, {100, 100}))
-    instances[0] = {center_diameter = {10, 20, 4},
-        color = {1, 0.5, 0, 1}, sprite_index = 4}
-    instances[1] = {center_diameter = {30, 40, 2},
-        color = {0, 1, 1, 0.5}, sprite_index = 8}
+        {
+            commands = commands[:],
+            custom = &custom,
+        }, {100, 100}, {100, 100}))
+    instances[0] = {
+        center_diameter = {10, 20, 4},
+        color = {1, 0.5, 0, 1},
+        sprite_index = 4,
+    }
+    instances[1] = {
+        center_diameter = {30, 40, 2},
+        color = {0, 1, 1, 0.5},
+        sprite_index = 8,
+    }
 
     testing.expect(t, draw_encoder_commit_dust(
         &encoder, len(instances), rawptr(uintptr(1))))
@@ -643,6 +707,27 @@ draw_encoder_test_dust_expanded_fallback_is_capacity_safe :: proc(t: ^testing.T)
     testing.expect_value(t, vertices[0].position, geometry.Vector2{8, 18})
     testing.expect_value(t, vertices[0].texcoord,
         geometry.Vector2{f32(1.0 / 3.0), f32(1.0 / 3.0)})
+}
+
+// Fill two ordered dust batches and verify a third commit cannot exceed capacity.
+draw_encoder_test_append_dust_batches :: proc(t: ^testing.T, encoder: ^Draw_Encoder) {
+    staging := draw_encoder_dust_staging(encoder)
+    staging[0] = {
+        center_diameter = {10, 20, 4},
+        color = {1, 1, 1, 1},
+    }
+    staging[1] = {
+        center_diameter = {30, 40, 4},
+        color = {1, 1, 1, 1},
+    }
+    testing.expect(t, draw_encoder_commit_dust(encoder, 2, rawptr(uintptr(1))))
+    staging = draw_encoder_dust_staging(encoder)
+    staging[0] = {
+        center_diameter = {50, 60, 2},
+        color = {1, 1, 1, 1},
+    }
+    testing.expect(t, draw_encoder_commit_dust(encoder, 1, rawptr(uintptr(1))))
+    testing.expect(t, !draw_encoder_commit_dust(encoder, 1, rawptr(uintptr(1))))
 }
 
 // Verify world and pane dust batches append into disjoint instance or vertex ranges.
@@ -654,21 +739,20 @@ draw_encoder_test_dust_batches_append_in_both_modes :: proc(t: ^testing.T) {
         instances: [3]Dust_Instance
         vertices: [18]Draw_Vertex
         draws: [2]Dust_Draw
-        custom := Draw_Custom_Storage{dust_instances = instances[:],
-            dust_draws = draws[:], dust_expanded_vertices = vertices[:],
-            dust_expanded_draws = draws[:]}
+        custom: Draw_Custom_Storage = {
+            dust_instances = instances[:],
+            dust_draws = draws[:],
+            dust_expanded_vertices = vertices[:],
+            dust_expanded_draws = draws[:],
+        }
         encoder: Draw_Encoder
         testing.expect(t, draw_encoder_begin(&encoder,
-            {commands = commands[:], custom = &custom}, {100, 100}, {100, 100}))
+            {
+                commands = commands[:],
+                custom = &custom,
+            }, {100, 100}, {100, 100}))
         draw_encoder_enable_dust_instancing(&encoder, instanced)
-        staging := draw_encoder_dust_staging(&encoder)
-        staging[0] = {center_diameter = {10, 20, 4}, color = {1, 1, 1, 1}}
-        staging[1] = {center_diameter = {30, 40, 4}, color = {1, 1, 1, 1}}
-        testing.expect(t, draw_encoder_commit_dust(&encoder, 2, rawptr(uintptr(1))))
-        staging = draw_encoder_dust_staging(&encoder)
-        staging[0] = {center_diameter = {50, 60, 2}, color = {1, 1, 1, 1}}
-        testing.expect(t, draw_encoder_commit_dust(&encoder, 1, rawptr(uintptr(1))))
-        testing.expect(t, !draw_encoder_commit_dust(&encoder, 1, rawptr(uintptr(1))))
+        draw_encoder_test_append_dust_batches(t, &encoder)
         if instanced {
             testing.expect_value(t, len(draw_encoder_dust_staging(&encoder)), 0)
             testing.expect_value(t, instances[0].center_diameter.x, f32(10))

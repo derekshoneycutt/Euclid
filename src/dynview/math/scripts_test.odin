@@ -6,7 +6,7 @@ import "core:testing"
 
 //   Build deterministic script constants whose 26.6 values map directly at 32 px.
 math_script_test_constants :: proc() -> fontmodel.Font_Math_Constants {
-    constants := fontmodel.Font_Math_Constants{
+    constants: fontmodel.Font_Math_Constants = {
         valid = true,
         generation = 11,
         base_pixel_size = 32,
@@ -30,26 +30,42 @@ math_script_test_kern_table :: proc(
     corner: u8,
     maximum, low, high: i32) -> fontmodel.Font_Math_Kern_Table {
 
-    table := fontmodel.Font_Math_Kern_Table{
-        valid = true, generation = 11, glyph_id = 9, corner = corner, count = 2}
+    table: fontmodel.Font_Math_Kern_Table = {
+        valid = true,
+        generation = 11,
+        glyph_id = 9,
+        corner = corner,
+        count = 2,
+    }
     table.entries[0] = {maximum, low}
-    table.entries[1] = {maximum+1, high}
+    table.entries[1] = {maximum + 1, high}
     return table
 }
 
 //   Verify both physical heights and independent base/script scales compose exactly.
 @(test)
 math_script_kerns_choose_minimum_scaled_height_sum :: proc(t: ^testing.T) {
-    input := Math_Script_Geometry_Input{
-        constants = math_script_test_constants(), generation = 11,
-        font_size = 32, script_font_size = 16,
-        base = {ascent = 18, descent = 6},
-        superscript = {descent = 2}, subscript = {ascent = 12},
+    input: Math_Script_Geometry_Input = {
+        constants = math_script_test_constants(),
+        generation = 11,
+        font_size = 32,
+        script_font_size = 16,
+        base = {
+            ascent = 18,
+            descent = 6,
+        },
+        superscript = {
+            descent = 2,
+        },
+        subscript = {
+            ascent = 12,
+        },
         base_top_right = math_script_test_kern_table(0, 600, 64, 128),
         superscript_bottom_left = math_script_test_kern_table(3, 0, 192, 256),
         base_bottom_right = math_script_test_kern_table(2, 0, -64, 64),
         subscript_top_left = math_script_test_kern_table(1, 500, 128, 256),
-        has_superscript = true, has_subscript = true,
+        has_superscript = true,
+        has_subscript = true,
     }
     superscript, subscript := math_script_kern_adjustments(input, 11, 8)
     testing.expect_value(t, superscript, f32(2.5))
@@ -60,10 +76,21 @@ math_script_kerns_choose_minimum_scaled_height_sum :: proc(t: ^testing.T) {
 @(test)
 math_script_geometry_resolves_superscript_bounds :: proc(t: ^testing.T) {
     geometry := math_script_geometry({
-        constants = math_script_test_constants(), generation = 11, font_size = 32,
-        base = {width = 12, ascent = 18, descent = 4},
-        superscript = {width = 7, ascent = 6, descent = 2},
-        italic_correction = 3, has_superscript = true,
+        constants = math_script_test_constants(),
+        generation = 11,
+        font_size = 32,
+        base = {
+            width = 12,
+            ascent = 18,
+            descent = 4,
+        },
+        superscript = {
+            width = 7,
+            ascent = 6,
+            descent = 2,
+        },
+        italic_correction = 3,
+        has_superscript = true,
     })
 
     testing.expect(t, geometry.valid)
@@ -77,10 +104,22 @@ math_script_geometry_resolves_superscript_bounds :: proc(t: ^testing.T) {
 @(test)
 math_script_geometry_attaches_at_base_advance :: proc(t: ^testing.T) {
     geometry := math_script_geometry({
-        constants = math_script_test_constants(), generation = 11, font_size = 32,
-        base = {width = 16, advance = 12, ascent = 18, descent = 4},
-        superscript = {width = 7, ascent = 6, descent = 2},
-        italic_correction = 3, has_superscript = true,
+        constants = math_script_test_constants(),
+        generation = 11,
+        font_size = 32,
+        base = {
+            width = 16,
+            advance = 12,
+            ascent = 18,
+            descent = 4,
+        },
+        superscript = {
+            width = 7,
+            ascent = 6,
+            descent = 2,
+        },
+        italic_correction = 3,
+        has_superscript = true,
     })
 
     testing.expect_value(t, geometry.superscript_x, f32(15))
@@ -92,15 +131,37 @@ math_script_geometry_attaches_at_base_advance :: proc(t: ^testing.T) {
 math_script_geometry_resolves_cramped_and_subscript_bounds :: proc(t: ^testing.T) {
     constants := math_script_test_constants()
     cramped := math_script_geometry({
-        constants = constants, generation = 11, font_size = 32,
-        style = {.Script, true}, base = {width = 10, ascent = 8, descent = 3},
-        superscript = {width = 4, ascent = 5, descent = 1},
+        constants = constants,
+        generation = 11,
+        font_size = 32,
+        style = {.Script, true},
+        base = {
+            width = 10,
+            ascent = 8,
+            descent = 3,
+        },
+        superscript = {
+            width = 4,
+            ascent = 5,
+            descent = 1,
+        },
         has_superscript = true,
     })
     subscript := math_script_geometry({
-        constants = constants, generation = 11, font_size = 32,
-        base = {width = 10, ascent = 8, descent = 6},
-        subscript = {width = 4, ascent = 12, descent = 2}, has_subscript = true,
+        constants = constants,
+        generation = 11,
+        font_size = 32,
+        base = {
+            width = 10,
+            ascent = 8,
+            descent = 6,
+        },
+        subscript = {
+            width = 4,
+            ascent = 12,
+            descent = 2,
+        },
+        has_subscript = true,
     })
 
     testing.expect_value(t, cramped.superscript_baseline, f32(-10))
@@ -112,11 +173,27 @@ math_script_geometry_resolves_cramped_and_subscript_bounds :: proc(t: ^testing.T
 @(test)
 math_script_geometry_enforces_combined_clearance :: proc(t: ^testing.T) {
     geometry := math_script_geometry({
-        constants = math_script_test_constants(), generation = 11, font_size = 32,
-        base = {width = 10, ascent = 8, descent = 3},
-        superscript = {width = 5, ascent = 6, descent = 4},
-        subscript = {width = 6, ascent = 8, descent = 2},
-        italic_correction = 2, has_superscript = true, has_subscript = true,
+        constants = math_script_test_constants(),
+        generation = 11,
+        font_size = 32,
+        base = {
+            width = 10,
+            ascent = 8,
+            descent = 3,
+        },
+        superscript = {
+            width = 5,
+            ascent = 6,
+            descent = 4,
+        },
+        subscript = {
+            width = 6,
+            ascent = 8,
+            descent = 2,
+        },
+        italic_correction = 2,
+        has_superscript = true,
+        has_subscript = true,
     })
 
     sup_raise := -geometry.superscript_baseline
@@ -132,9 +209,19 @@ math_script_geometry_enforces_combined_clearance :: proc(t: ^testing.T) {
 @(test)
 math_script_geometry_rejects_stale_constants :: proc(t: ^testing.T) {
     geometry := math_script_geometry({
-        constants = math_script_test_constants(), generation = 12, font_size = 32,
-        base = {width = 10, ascent = 8, descent = 3},
-        superscript = {width = 5, ascent = 6, descent = 2},
+        constants = math_script_test_constants(),
+        generation = 12,
+        font_size = 32,
+        base = {
+            width = 10,
+            ascent = 8,
+            descent = 3,
+        },
+        superscript = {
+            width = 5,
+            ascent = 6,
+            descent = 2,
+        },
         has_superscript = true,
     })
     testing.expect(t, !geometry.valid)

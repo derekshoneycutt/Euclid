@@ -19,10 +19,16 @@ input_box_draw_shape :: proc(
     state := cast(^Input_Box_Draw_Fixture)data
     state^.shape_calls += 1
     state^.complete_source = state^.complete_source && text == "aβc"
-    if len(output) < 3 {return 0, false}
-    clusters := [3]u32{0, 1, 3}
+    if len(output) < 3 {
+        return 0, false
+    }
+    clusters: [3]u32 = {0, 1, 3}
     for cluster, index in clusters {
-        output[index] = {glyph_id = u32(index + 1), cluster = cluster, x_advance = 1024}
+        output[index] = {
+            glyph_id = u32(index + 1),
+            cluster = cluster,
+            x_advance = 1024,
+        }
     }
     return 3, true
 }
@@ -33,11 +39,22 @@ input_box_draw_glyph :: proc(
     _: view_font.Font_Raster_Request) -> (view_font.Resolved_Glyph, bool) {
     return {
         glyph_id = id,
-        texture = {handle = rawptr(uintptr(1)), width = 32, height = 32},
-        source = {width = 8, height = 10},
-        raster_pixel_height = 32, raster_ascent = 24,
-        canonical_pixel_height = 32, canonical_raster_ascent = 24,
-        canonical_advance_x = 16, raster_slot_index = 1, raster_slot_incarnation = 2,
+        texture = {
+            handle = rawptr(uintptr(1)),
+            width = 32,
+            height = 32,
+        },
+        source = {
+            width = 8,
+            height = 10,
+        },
+        raster_pixel_height = 32,
+        raster_ascent = 24,
+        canonical_pixel_height = 32,
+        canonical_raster_ascent = 24,
+        canonical_advance_x = 16,
+        raster_slot_index = 1,
+        raster_slot_incarnation = 2,
     }, true
 }
 
@@ -52,16 +69,33 @@ input_box_draw_selection_preserves_shaped_positions :: proc(t: ^testing.T) {
     encoder: native.Draw_Encoder
     selections := [?][3]int{{1, 3, 0}, {3, 1, 8}, {0, 4, 0}, {4, 0, 16}, {1, 1, 0}}
     for selection in selections {
-        fixture := Input_Box_Draw_Fixture{complete_source = true}
-        state := viewmodel.Ui_Input_Box_State{
-            anchor_byte = selection[0], cursor_byte = selection[1],
-            scroll_x = f32(selection[2])}
-        params := Input_Box_Params{
-            rect = {10, 20, 64, 24}, clip_rect = {10, 20, 64, 24},
-            descriptor = {text = "aβc"}, state = &state, column_advance = 8,
-            font = {base_size = 32, space_advance = 16},
-            resolver = {user_data = &fixture, shape = input_box_draw_shape,
-                resolve_glyph = input_box_draw_glyph, workspace = workspace[:]}}
+        fixture: Input_Box_Draw_Fixture = {
+            complete_source = true,
+        }
+        state: viewmodel.Ui_Input_Box_State = {
+            anchor_byte = selection[0],
+            cursor_byte = selection[1],
+            scroll_x = f32(selection[2]),
+        }
+        params: Input_Box_Params = {
+            rect = {10, 20, 64, 24},
+            clip_rect = {10, 20, 64, 24},
+            descriptor = {
+                text = "aβc",
+            },
+            state = &state,
+            column_advance = 8,
+            font = {
+                base_size = 32,
+                space_advance = 16,
+            },
+            resolver = {
+                user_data = &fixture,
+                shape = input_box_draw_shape,
+                resolve_glyph = input_box_draw_glyph,
+                workspace = workspace[:],
+            },
+        }
         prepared := input_box_draw_result(params, false)
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},

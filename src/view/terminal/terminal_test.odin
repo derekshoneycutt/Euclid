@@ -67,12 +67,29 @@ terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
 
     terminal_draw_shaped_glyph(
         &encoder,
-        {texture = {handle = texture, width = 32, height = 32},
-            source = {x = 1, y = 2, width = 8, height = 10},
-            offset_x = 6, offset_y = 20, raster_pixel_height = 24,
-            raster_ascent = 18, canonical_pixel_height = 32,
-            canonical_raster_ascent = 24},
-        {x_offset = 64, y_offset = 64}, {10, 20}, Color{255, 255, 255, 255})
+        {
+            texture = {
+                handle = texture,
+                width = 32,
+                height = 32,
+            },
+            source = {
+                x = 1,
+                y = 2,
+                width = 8,
+                height = 10,
+            },
+            offset_x = 6,
+            offset_y = 20,
+            raster_pixel_height = 24,
+            raster_ascent = 18,
+            canonical_pixel_height = 32,
+            canonical_raster_ascent = 24,
+        },
+        {
+            x_offset = 64,
+            y_offset = 64,
+        }, {10, 20}, Color{255, 255, 255, 255})
 
     testing.expect_value(t, encoder.batch_count, 1)
     testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
@@ -92,7 +109,10 @@ terminal_test_shape_high_glyph :: proc(
     if len(output) == 0 {
         return 0, false
     }
-    output[0] = {glyph_id = 4000, x_advance = 10}
+    output[0] = {
+        glyph_id = 4000,
+        x_advance = 10,
+    }
     return 1, true
 }
 
@@ -107,7 +127,9 @@ terminal_test_resolve_high_glyph :: proc(
     if !state.resident || glyph_id != 4000 {
         return {}, false
     }
-    return {raster_pixel_height = 32}, true
+    return {
+        raster_pixel_height = 32,
+    }, true
 }
 
 // Record pending-glyph fallback without retaining test request data.
@@ -125,7 +147,7 @@ terminal_test_record_shape_fallback :: proc(
 terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
     palette: termpalette.Terminal_Palette_State
     termpalette.terminal_palette_init(&palette)
-    themed_default := Color{12, 34, 56, 255}
+    themed_default: Color = {12, 34, 56, 255}
 
     testing.expect_value(t,
         terminal_resolve_foreground(&palette, {}, themed_default),
@@ -140,11 +162,17 @@ terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
         terminal_resolve_foreground(&palette, direct, themed_default),
         Color{0xAA, 0xBB, 0xCC, 0xFF})
     testing.expect(t, termpalette.terminal_palette_apply_operation(&palette,
-        {target = .Foreground, rgba = palette.default_foreground}))
+        {
+            target = .Foreground,
+            rgba = palette.default_foreground,
+        }))
     testing.expect_value(t, terminal_resolve_foreground(&palette, {}, themed_default),
         terminal_packed_color(palette.default_foreground))
     testing.expect(t, termpalette.terminal_palette_apply_operation(&palette,
-        {target = .Foreground, reset = true}))
+        {
+            target = .Foreground,
+            reset = true,
+        }))
     testing.expect_value(t, terminal_resolve_foreground(&palette, {}, themed_default),
         themed_default)
 }
@@ -154,14 +182,22 @@ terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
 terminal_test_theme_preserves_prompt_provenance :: proc(t: ^testing.T) {
     palette: termpalette.Terminal_Palette_State
     termpalette.terminal_palette_init(&palette)
-    draw := Terminal_Shaped_Output_Context{
+    draw: Terminal_Shaped_Output_Context = {
         palette = &palette,
-        theme = {default_foreground = {208, 185, 189, 255},
-            prompt_colors = {.None = {}, .Julia = {126, 192, 112, 255},
-                .Help = {}, .Package = {}, .Shell = {242, 162, 155, 255}}},
+        theme = {
+            default_foreground = {208, 185, 189, 255},
+            prompt_colors = {
+                .None = {},
+                .Julia = {126, 192, 112, 255},
+                .Help = {},
+                .Package = {},
+                .Shell = {242, 162, 155, 255},
+            },
+        },
     }
-    style := termgrid.Cell_Style{
-        foreground = termpalette.terminal_color_direct(0x389826FF)}
+    style: termgrid.Cell_Style = {
+        foreground = termpalette.terminal_color_direct(0x389826FF),
+    }
     testing.expect_value(t,
         terminal_cell_foreground(draw, style), TERMINAL_PROMPT_COLOR)
     style.application_prompt = .Julia
@@ -207,14 +243,20 @@ terminal_test_destroy_is_idempotent :: proc(t: ^testing.T) {
 // Verify fit sizing centers content and explicit-cell sizing applies offsets.
 @(test)
 terminal_test_raster_fit_and_explicit_geometry :: proc(t: ^testing.T) {
-    placement := termattachment.Placement_Metadata{
+    placement: termattachment.Placement_Metadata = {
         geometry = {
-            column_span = 4, row_span = 2, sizing = .Fit,
-            content_offset_x = 3, content_offset_y = 5,
+            column_span = 4,
+            row_span = 2,
+            sizing = .Fit,
+            content_offset_x = 3,
+            content_offset_y = 5,
         },
     }
     fit := terminal_raster_geometry(
-        placement, {width = 100, height = 50}, geometry.Vector2{10, 20}, 20, 20)
+        placement, {
+            width = 100,
+            height = 50,
+        }, geometry.Vector2{10, 20}, 20, 20)
     testing.expect(t, fit.valid)
     testing.expect_value(t, fit.destination.x, f32(13))
     testing.expect_value(t, fit.destination.y, f32(25))
@@ -223,7 +265,10 @@ terminal_test_raster_fit_and_explicit_geometry :: proc(t: ^testing.T) {
 
     placement.geometry.sizing = .Explicit_Cells
     explicit := terminal_raster_geometry(
-        placement, {width = 100, height = 50}, geometry.Vector2{10, 20}, 20, 20)
+        placement, {
+            width = 100,
+            height = 50,
+        }, geometry.Vector2{10, 20}, 20, 20)
     testing.expect_value(t, explicit.destination.width, f32(80))
     testing.expect_value(t, explicit.destination.height, f32(40))
 }
@@ -231,20 +276,32 @@ terminal_test_raster_fit_and_explicit_geometry :: proc(t: ^testing.T) {
 // Verify fill sizing crops centrally and rejects source rectangles outside the raster.
 @(test)
 terminal_test_raster_fill_and_source_validation :: proc(t: ^testing.T) {
-    placement := termattachment.Placement_Metadata{
+    placement: termattachment.Placement_Metadata = {
         geometry = {
-            pixel_width = 50, pixel_height = 50, sizing = .Fill,
+            pixel_width = 50,
+            pixel_height = 50,
+            sizing = .Fill,
         },
     }
     fill := terminal_raster_geometry(
-        placement, {width = 100, height = 50}, {}, 10, 20)
+        placement, {
+            width = 100,
+            height = 50,
+        }, {}, 10, 20)
     testing.expect(t, fill.valid)
     testing.expect_value(t, fill.source.x, 25)
     testing.expect_value(t, fill.source.width, 50)
     testing.expect_value(t, fill.destination.width, f32(50))
-    placement.geometry.source = {x = 90, width = 20, height = 10}
+    placement.geometry.source = {
+        x = 90,
+        width = 20,
+        height = 10,
+    }
     testing.expect(t, !terminal_raster_geometry(
-        placement, {width = 100, height = 50}, {}, 10, 20).valid)
+        placement, {
+            width = 100,
+            height = 50,
+        }, {}, 10, 20).valid)
 }
 
 // Verify negative placements sit behind text while zero and positive z sit above it.
@@ -289,17 +346,27 @@ terminal_test_shell_integration_navigation :: proc(t: ^testing.T) {
     testing.expect_value(t, terminal_observed_cwd_uri(&term),
         "file:///tmp/project")
     term.scroll_offset_y = 0
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .A},
-        {kind = .Press, key = .Page_Down,
-            modifiers = {.Control, .Shift}},
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .A,
+        },
+        {
+            kind = .Press,
+            key = .Page_Down,
+            modifiers = {.Control, .Shift},
+        },
     }
     event_index, handled := terminal_update_shell_navigation(
-        &term, {events = events[:]})
+        &term, {
+            events = events[:],
+        })
     testing.expect(t, handled)
     testing.expect_value(t, event_index, 1)
     testing.expect_value(t, term.scroll_offset_y, f32(40))
-    filtered := input.input_frame_remove_event({events = events[:]}, event_index)
+    filtered := input.input_frame_remove_event({
+        events = events[:],
+    }, event_index)
     testing.expect_value(t, len(filtered.events), 1)
     testing.expect_value(t, filtered.events[0].key, input.Input_Key.A)
 }
@@ -308,10 +375,14 @@ terminal_test_shell_integration_navigation :: proc(t: ^testing.T) {
 terminal_test_apply_shell_shortcut :: proc(
     term: ^viewterminalmodel.Terminal_State,
     key: input.Input_Key) -> bool {
-    events := [1]input.Input_Event{{
-        kind = .Press, key = key, modifiers = {.Control, .Alt},
+    events: [1]input.Input_Event = {{
+        kind = .Press,
+        key = key,
+        modifiers = {.Control, .Alt},
     }}
-    _, handled := terminal_update_shell_navigation(term, {events = events[:]})
+    _, handled := terminal_update_shell_navigation(term, {
+        events = events[:],
+    })
     return handled
 }
 
@@ -353,7 +424,10 @@ terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 20, rows = 4}, term.output_grid.allocator))
+        &term, {
+            columns = 20,
+            rows = 4,
+        }, term.output_grid.allocator))
     terminal_append_ansi_output(&term,
         "\e]133;A\a\e]133;B\aabcdefghijklmnopqrstuv\e]133;C\a" +
         "\e]133;D;0\a\r\n\e]133;A\a\e]133;B\aéx\e]133;C\a\e]133;D;0\a")
@@ -390,10 +464,20 @@ terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
     terminal_append_ansi_output(&term,
         "\e]133;A\a\e]133;B\aecho β\e]133;C\a\e]133;D;0\a")
     testing.expect(t, terminal_command_search_begin(&term))
-    events := [3]input.Input_Event{
-        {kind = .Text, codepoint = 'β'},
-        {kind = .Press, key = .Enter},
-        {kind = .Press, key = .Enter, modifiers = {.Shift}},
+    events: [3]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'β',
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+        },
+        {
+            kind = .Press,
+            key = .Enter,
+            modifiers = {.Shift},
+        },
     }
     for event in events {
         testing.expect(t, terminal_update_command_search(&term, event))
@@ -405,10 +489,16 @@ terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
     testing.expect_value(t, term.view_selection_anchor.byte_offset, 5)
     testing.expect_value(t, term.view_selection_head.byte_offset, 7)
     testing.expect(t, terminal_update_command_search(
-        &term, {kind = .Press, key = .Backspace}))
+        &term, {
+            kind = .Press,
+            key = .Backspace,
+        }))
     testing.expect_value(t, shell.search_query_byte_count, 0)
     testing.expect(t, terminal_update_command_search(
-        &term, {kind = .Press, key = .Escape}))
+        &term, {
+            kind = .Press,
+            key = .Escape,
+        }))
     testing.expect(t, !shell.search_editing)
     testing.expect_value(t, terminal_command_status_color(0),
         Color{0x38, 0x98, 0x26, 0xFF})
@@ -420,7 +510,10 @@ terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
 terminal_test_cell :: proc(
     text: string, style := termgrid.Cell_Style{}) -> termgrid.Cell {
 
-    result := termgrid.Cell{width = 1, style = style}
+    result: termgrid.Cell = {
+        width = 1,
+        style = style,
+    }
     result.grapheme_len = u8(copy(result.grapheme[:], text))
     return result
 }
@@ -445,7 +538,10 @@ terminal_test_dimensions_from_viewport :: proc(t: ^testing.T) {
     exact := terminal_dimensions_from_viewport(1280, 612, 10, 18, limits)
     testing.expect(t, exact.valid)
     testing.expect_value(t, exact.dimensions,
-        protocol.Terminal_Dimensions{columns = 128, rows = 34})
+        protocol.Terminal_Dimensions{
+            columns = 128,
+            rows = 34,
+        })
     fractional := terminal_dimensions_from_viewport(1289.9, 629.9, 10, 18, limits)
     testing.expect_value(t, fractional.dimensions, exact.dimensions)
     clamped := terminal_dimensions_from_viewport(9999, 9999, 10, 18, limits)
@@ -460,48 +556,93 @@ terminal_test_dimensions_from_viewport :: proc(t: ^testing.T) {
 @(test)
 terminal_test_accept_geometry_generation :: proc(t: ^testing.T) {
     retained: termemulator.Terminal_Title_State
-    term := viewterminalmodel.Terminal_State{
-        geometry = {dimensions = {columns = 128, rows = 34}, generation = 1},
-        output_interpreter = {title_state = &retained},
+    term: viewterminalmodel.Terminal_State = {
+        geometry = {
+            dimensions = {
+                columns = 128,
+                rows = 34,
+            },
+            generation = 1,
+        },
+        output_interpreter = {
+            title_state = &retained,
+        },
     }
     unchanged := terminal_accept_geometry(&term,
-        {dimensions = term.geometry.dimensions, valid = true}, 10, 18)
+        {
+            dimensions = term.geometry.dimensions,
+            valid = true,
+        }, 10, 18)
     testing.expect(t, !unchanged.changed)
     testing.expect_value(t, term.geometry.generation, u64(1))
     testing.expect_value(t, term.geometry.column_width, f32(10))
     testing.expect_value(t, term.geometry.line_height, f32(18))
     terminal_test_expect_query_geometry(
-        t, retained.query_geometry, {columns = 128, rows = 34}, 10, 18)
+        t, retained.query_geometry, {
+            columns = 128,
+            rows = 34,
+        }, 10, 18)
     changed := terminal_accept_geometry(&term,
-        {dimensions = {columns = 100, rows = 30}, valid = true}, 10, 18)
+        {
+            dimensions = {
+                columns = 100,
+                rows = 30,
+            },
+            valid = true,
+        }, 10, 18)
     testing.expect(t, changed.changed)
     testing.expect_value(t, changed.previous,
-        protocol.Terminal_Dimensions{columns = 128, rows = 34})
+        protocol.Terminal_Dimensions{
+            columns = 128,
+            rows = 34,
+        })
     testing.expect_value(t, changed.generation, u64(2))
     terminal_accept_geometry(&term, {}, 10, 18)
     testing.expect_value(t, term.geometry.generation, u64(2))
     testing.expect_value(t, term.geometry.dimensions,
-        protocol.Terminal_Dimensions{columns = 100, rows = 30})
+        protocol.Terminal_Dimensions{
+            columns = 100,
+            rows = 30,
+        })
     testing.expect_value(t, term.rejected_geometry_count, u64(1))
     latest := terminal_accept_geometry(&term,
-        {dimensions = {columns = 90, rows = 20}, valid = true}, 12, 21)
+        {
+            dimensions = {
+                columns = 90,
+                rows = 20,
+            },
+            valid = true,
+        }, 12, 21)
     testing.expect_value(t, latest.generation, u64(3))
     testing.expect_value(t, term.geometry.column_width, f32(12))
     testing.expect_value(t, term.geometry.line_height, f32(21))
     terminal_test_expect_query_geometry(
-        t, retained.query_geometry, {columns = 90, rows = 20}, 12, 21)
+        t, retained.query_geometry, {
+            columns = 90,
+            rows = 20,
+        }, 12, 21)
 }
 
 // Verify semantic drawing and hit-test bounds use accepted cell dimensions.
 @(test)
 terminal_test_accepted_bounds_follow_dynamic_geometry :: proc(t: ^testing.T) {
-    term := viewterminalmodel.Terminal_State{geometry = {
-        dimensions = {columns = 20, rows = 4},
-        column_width = 8,
-        line_height = 18,
-    }}
+    term: viewterminalmodel.Terminal_State = {
+        geometry = {
+            dimensions = {
+                columns = 20,
+                rows = 4,
+            },
+            column_width = 8,
+            line_height = 18,
+        },
+    }
     bounds := terminal_accepted_padded_bounds(
-        &term, {x = 5, y = 7, width = 1000, height = 800})
+        &term, {
+            x = 5,
+            y = 7,
+            width = 1000,
+            height = 800,
+        })
     testing.expect_value(t, bounds.width, f32(160))
     testing.expect_value(t, bounds.height, f32(72))
 }
@@ -509,12 +650,14 @@ terminal_test_accepted_bounds_follow_dynamic_geometry :: proc(t: ^testing.T) {
 // Verify wide continuations resolve to leaders while later columns retain byte offsets.
 @(test)
 terminal_test_output_row_byte_offsets_follow_cell_geometry :: proc(t: ^testing.T) {
-    cells := [5]termgrid.Cell{
+    cells: [5]termgrid.Cell = {
         terminal_test_cell("界"), {}, terminal_test_cell("e\u0301"), {},
         terminal_test_cell("x"),
     }
     cells[0].width = 2
-    cells[1] = {continuation = true}
+    cells[1] = {
+        continuation = true,
+    }
 
     testing.expect_value(t, terminal_output_row_byte_offset(cells[:], 0), 0)
     testing.expect_value(t, terminal_output_row_byte_offset(cells[:], 1), 0)
@@ -529,33 +672,60 @@ terminal_test_output_row_byte_offsets_follow_cell_geometry :: proc(t: ^testing.T
 // Verify live-grid mouse coordinates are one-based, bounded, and Shift-arbitrated.
 @(test)
 terminal_test_resolve_mouse_frame_uses_live_grid :: proc(t: ^testing.T) {
-    term := viewterminalmodel.Terminal_State{geometry = {
-        dimensions = {columns = 20, rows = 4},
-        column_width = 8,
-        line_height = 18,
-    }}
-    bounds := geometry.Rectangle{x = 5, y = 7, width = 1000, height = 800}
+    term: viewterminalmodel.Terminal_State = {
+        geometry = {
+            dimensions = {
+                columns = 20,
+                rows = 4,
+            },
+            column_width = 8,
+            line_height = 18,
+        },
+    }
+    bounds: geometry.Rectangle = {
+        x = 5,
+        y = 7,
+        width = 1000,
+        height = 800,
+    }
     inside := terminal_resolve_mouse_frame(&term, {
-        mouse_position = {x = 5 + TERMINAL_PADDING + 17,
-            y = 7 + TERMINAL_PADDING + 37},
+        mouse_position = {
+            x = 5 + TERMINAL_PADDING + 17,
+            y = 7 + TERMINAL_PADDING + 37,
+        },
     }, bounds)
     testing.expect(t, inside.terminal_mouse_inside)
     testing.expect(t, inside.terminal_mouse_owned)
     testing.expect_value(t, inside.terminal_mouse_position,
-        input.Input_Terminal_Position{column = 3, row = 3})
+        input.Input_Terminal_Position{
+            column = 3,
+            row = 3,
+        })
     testing.expect_value(t, inside.terminal_mouse_pixel_position,
-        input.Input_Terminal_Position{column = 18, row = 38})
+        input.Input_Terminal_Position{
+            column = 18,
+            row = 38,
+        })
 
     outside := terminal_resolve_mouse_frame(&term, {
-        mouse_position = {x = 9999, y = 9999},
+        mouse_position = {
+            x = 9999,
+            y = 9999,
+        },
         mouse_modifiers = {.Shift},
     }, bounds)
     testing.expect(t, !outside.terminal_mouse_inside)
     testing.expect(t, !outside.terminal_mouse_owned)
     testing.expect_value(t, outside.terminal_mouse_position,
-        input.Input_Terminal_Position{column = 20, row = 4})
+        input.Input_Terminal_Position{
+            column = 20,
+            row = 4,
+        })
     testing.expect_value(t, outside.terminal_mouse_pixel_position,
-        input.Input_Terminal_Position{column = 160, row = 72})
+        input.Input_Terminal_Position{
+            column = 160,
+            row = 72,
+        })
 }
 
 // Verify resize preserves a valid fixed-shape checkpoint without changing scrollback.
@@ -572,7 +742,10 @@ terminal_test_primary_grid_resize_rebuilds_checkpoint :: proc(t: ^testing.T) {
         &term.output_interpreter, "\rLIVE"))
     committed_rows := term.output_scrollback.committed_rows
 
-    dimensions := protocol.Terminal_Dimensions{columns = 100, rows = 30}
+    dimensions: protocol.Terminal_Dimensions = {
+        columns = 100,
+        rows = 30,
+    }
     testing.expect(t, terminal_resize_display_grids(
         &term, dimensions, term.output_grid.allocator))
     testing.expect_value(t, term.output_grid.columns, 100)
@@ -604,7 +777,10 @@ terminal_test_primary_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) 
     failing_allocator := mem.arena_allocator(&failure_arena)
 
     testing.expect(t, !terminal_resize_display_grids(
-        &term, {columns = 100, rows = 30}, failing_allocator))
+        &term, {
+            columns = 100,
+            rows = 30,
+        }, failing_allocator))
     testing.expect_value(t, term.output_grid.columns, columns)
     testing.expect_value(t, term.output_grid.row_count, rows)
     testing.expect_value(t, term.geometry.dimensions, dimensions)
@@ -625,7 +801,10 @@ terminal_test_second_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
     mem.arena_init(&failure_arena, failure_storage[:])
 
     testing.expect(t, !terminal_resize_display_grids(
-        &term, {columns = 100, rows = 30},
+        &term, {
+            columns = 100,
+            rows = 30,
+        },
         mem.arena_allocator(&failure_arena)))
     testing.expect_value(t, raw_data(term.output_grid.cells), active_cells)
     testing.expect_value(t,
@@ -642,7 +821,10 @@ terminal_test_resized_grid_commits_new_width_scrollback :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "first\r\nsecond\r\nthird"))
 
@@ -659,9 +841,15 @@ terminal_test_expect_narrow_reflow :: proc(
     testing.expect_value(t, term.output_scrollback.count, 1)
     testing.expect(t, term.view_selection_active)
     testing.expect_value(t, term.view_selection_anchor,
-        viewterminalmodel.Terminal_View_Position{line = 2, byte_offset = 2})
+        viewterminalmodel.Terminal_View_Position{
+            line = 2,
+            byte_offset = 2,
+        })
     testing.expect_value(t, term.view_selection_head,
-        viewterminalmodel.Terminal_View_Position{line = 0, byte_offset = 1})
+        viewterminalmodel.Terminal_View_Position{
+            line = 0,
+            byte_offset = 1,
+        })
     history, history_found := termgrid.scrollback_row(&term.output_scrollback, 0)
     testing.expect(t, history_found)
     testing.expect_value(t, history.logical_line_id, line_id)
@@ -674,43 +862,73 @@ terminal_test_primary_reflow_round_trip_preserves_selection :: proc(t: ^testing.
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     term.output_started = true
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "abcdefghi"))
     line_id := term.output_grid.rows[0].logical_line_id
     term.view_selection_active = true
-    term.view_selection_anchor = {line = 1, byte_offset = 2}
-    term.view_selection_head = {line = 0, byte_offset = 1}
+    term.view_selection_anchor = {
+        line = 1,
+        byte_offset = 2,
+    }
+    term.view_selection_head = {
+        line = 0,
+        byte_offset = 1,
+    }
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 3, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 3,
+            rows = 2,
+        }, term.output_grid.allocator))
     terminal_test_expect_narrow_reflow(t, &term, line_id)
-    term.view_selection_anchor = {line = 0, byte_offset = 1}
-    term.view_selection_head = {line = 2, byte_offset = 2}
+    term.view_selection_anchor = {
+        line = 0,
+        byte_offset = 1,
+    }
+    term.view_selection_head = {
+        line = 2,
+        byte_offset = 2,
+    }
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 9, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 9,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect_value(t, term.output_scrollback.count, 0)
     testing.expect_value(t,
         terminal_output_row_text(term.output_grid.rows[0].cells), "abcdefghi")
     testing.expect_value(t, term.output_grid.rows[0].logical_line_id, line_id)
     testing.expect_value(t, term.view_selection_anchor,
-        viewterminalmodel.Terminal_View_Position{line = 0, byte_offset = 1})
+        viewterminalmodel.Terminal_View_Position{
+            line = 0,
+            byte_offset = 1,
+        })
     testing.expect_value(t, term.view_selection_head,
-        viewterminalmodel.Terminal_View_Position{line = 0, byte_offset = 8})
+        viewterminalmodel.Terminal_View_Position{
+            line = 0,
+            byte_offset = 8,
+        })
 }
 
 // Admit one tiny raster attachment for terminal placement resize fixtures.
 terminal_test_admit_reflow_attachment :: proc(
     store: ^termattachment.Store) ->
     (termattachment.Attachment_Id, termattachment.Admission_Outcome) {
-    payload := [4]u8{1, 2, 3, 4}
+    payload: [4]u8 = {1, 2, 3, 4}
     return termattachment.attachment_admit(store, {
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 2, height = 2},
+            metrics = {
+                width = 2,
+                height = 2,
+            },
         },
         payload = payload[:],
         payload_format = .Indexed8,
@@ -731,7 +949,10 @@ terminal_test_admit_reflow_placement :: proc(
             column = column,
             column_span = 1,
             row_span = 1,
-            source = {width = 2, height = 2},
+            source = {
+                width = 2,
+                height = 2,
+            },
             sizing = .Fit,
         },
     })
@@ -744,7 +965,10 @@ terminal_test_raster_resolves_blank_grid_row :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     term.output_started = true
     termgrid.grid_set_cursor(&term.output_grid, 1, 0)
 
@@ -761,7 +985,10 @@ terminal_test_raster_extends_content_height :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     term.output_started = true
     termgrid.grid_set_cursor(&term.output_grid, 1, 0)
     attachment, attachment_outcome := terminal_test_admit_reflow_attachment(
@@ -785,14 +1012,20 @@ terminal_test_primary_reflow_relocates_viewport_anchor :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 3, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 3,
+            rows = 2,
+        }, term.output_grid.allocator))
     term.output_started = true
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "abcdefghi"))
     term.scroll_offset_y = TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect_value(t, term.scroll_offset_y, f32(0))
     testing.expect_value(t,
         terminal_output_row_text(term.output_grid.rows[0].cells), "abcdef")
@@ -805,7 +1038,10 @@ terminal_test_primary_reflow_relocates_placements :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "abcdefghi"))
     store := term.synchronized_output.attachments
@@ -824,7 +1060,10 @@ terminal_test_primary_reflow_relocates_placements :: proc(t: ^testing.T) {
         termattachment.Admission_Outcome.Admitted)
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 3, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 3,
+            rows = 2,
+        }, term.output_grid.allocator))
     primary_metadata, primary_found := termattachment.placement_metadata(
         store, primary)
     alternate_metadata, alternate_found := termattachment.placement_metadata(
@@ -844,19 +1083,36 @@ terminal_test_primary_reflow_preserves_delayed_wrap :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "abcdef"))
     testing.expect(t, term.output_grid.cursor.wrap_pending)
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 3, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 3,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect_value(t, term.output_grid.cursor,
-        termgrid.Cursor{row = 1, column = 2, wrap_pending = true})
+        termgrid.Cursor{
+            row = 1,
+            column = 2,
+            wrap_pending = true,
+        })
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 6, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 6,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect_value(t, term.output_grid.cursor,
-        termgrid.Cursor{row = 0, column = 5, wrap_pending = true})
+        termgrid.Cursor{
+            row = 0,
+            column = 5,
+            wrap_pending = true,
+        })
 }
 
 // Verify rollback checkpoint content reflows independently from later live output.
@@ -866,7 +1122,10 @@ terminal_test_primary_reflow_rebuilds_semantic_checkpoint :: proc(t: ^testing.T)
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 9, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 9,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect(t, termemulator.interpreter_write(
         &term.output_interpreter, "abcdefghi"))
     testing.expect(t, termgrid.display_checkpoint_capture(
@@ -875,7 +1134,10 @@ terminal_test_primary_reflow_rebuilds_semantic_checkpoint :: proc(t: ^testing.T)
         &term.output_interpreter, "\rLIVE"))
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 3, rows = 2}, term.output_grid.allocator))
+        &term, {
+            columns = 3,
+            rows = 2,
+        }, term.output_grid.allocator))
     testing.expect(t, termgrid.display_checkpoint_restore(
         term.output_checkpoint, &term.output_grid, &term.output_scrollback))
     history, history_found := termgrid.scrollback_row(
@@ -896,11 +1158,20 @@ terminal_test_resize_reconciles_view_selection :: proc(t: ^testing.T) {
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     term.view_selection_active = true
-    term.view_selection_anchor = {line = 0, byte_offset = 2}
-    term.view_selection_head = {line = 1, byte_offset = 30}
+    term.view_selection_anchor = {
+        line = 0,
+        byte_offset = 2,
+    }
+    term.view_selection_head = {
+        line = 1,
+        byte_offset = 30,
+    }
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 20, rows = 4}, term.output_grid.allocator))
+        &term, {
+            columns = 20,
+            rows = 4,
+        }, term.output_grid.allocator))
     testing.expect(t, !term.view_selection_active)
     testing.expect(t, !term.view_selection_dragging)
 }
@@ -913,11 +1184,20 @@ terminal_test_resize_preserves_valid_view_selection :: proc(t: ^testing.T) {
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     term.view_selection_active = true
-    term.view_selection_anchor = {line = 0, byte_offset = 2}
-    term.view_selection_head = {line = 1, byte_offset = 10}
+    term.view_selection_anchor = {
+        line = 0,
+        byte_offset = 2,
+    }
+    term.view_selection_head = {
+        line = 1,
+        byte_offset = 10,
+    }
 
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 20, rows = 4}, term.output_grid.allocator))
+        &term, {
+            columns = 20,
+            rows = 4,
+        }, term.output_grid.allocator))
     testing.expect(t, term.view_selection_active)
 }
 
@@ -933,7 +1213,10 @@ terminal_test_alternate_screen_resize_restores_resized_primary :: proc(
         interpreter, "\e[34;1HPRIMARY\e[s\e[?1049h\e[34;1HALT\e[s"))
     committed_rows := term.output_scrollback.committed_rows
 
-    dimensions := protocol.Terminal_Dimensions{columns = 10, rows = 4}
+    dimensions: protocol.Terminal_Dimensions = {
+        columns = 10,
+        rows = 4,
+    }
     testing.expect(t, terminal_resize_display_grids(
         &term, dimensions, term.output_grid.allocator))
     testing.expect(t, interpreter.alternate_screen_active)
@@ -942,14 +1225,23 @@ terminal_test_alternate_screen_resize_restores_resized_primary :: proc(
     testing.expect_value(t,
         termgrid.cell_text(&term.output_grid.rows[3].cells[0]), "A")
     testing.expect_value(t,
-        interpreter.saved_cursor, termgrid.Cursor{row = 3, column = 3})
+        interpreter.saved_cursor, termgrid.Cursor{
+            row = 3,
+            column = 3,
+        })
 
     testing.expect(t, termemulator.interpreter_write(interpreter, "\e[?1049l"))
     testing.expect_value(t,
         termgrid.cell_text(&term.output_grid.rows[3].cells[0]), "P")
-    testing.expect_value(t, term.output_grid.cursor, termgrid.Cursor{row = 3, column = 7})
+    testing.expect_value(t, term.output_grid.cursor, termgrid.Cursor{
+        row = 3,
+        column = 7,
+    })
     testing.expect_value(t,
-        interpreter.saved_cursor, termgrid.Cursor{row = 3, column = 7})
+        interpreter.saved_cursor, termgrid.Cursor{
+            row = 3,
+            column = 7,
+        })
     testing.expect_value(t,
         term.output_scrollback.committed_rows, committed_rows)
 }
@@ -957,9 +1249,15 @@ terminal_test_alternate_screen_resize_restores_resized_primary :: proc(
 // Exercise display replacement, attachment reuse, and retained history growth.
 terminal_test_churn_recyclable_storage :: proc(
     t: ^testing.T, term: ^viewterminalmodel.Terminal_State) {
-    dimensions := [2]protocol.Terminal_Dimensions{
-        {columns = 140, rows = 40},
-        {columns = TERMINAL_GRID_COLUMNS, rows = TERMINAL_GRID_ROWS},
+    dimensions: [2]protocol.Terminal_Dimensions = {
+        {
+            columns = 140,
+            rows = 40,
+        },
+        {
+            columns = TERMINAL_GRID_COLUMNS,
+            rows = TERMINAL_GRID_ROWS,
+        },
     }
 
     for iteration in 0..<32 {
@@ -968,14 +1266,17 @@ terminal_test_churn_recyclable_storage :: proc(
             term, target, term.output_grid.allocator))
     }
 
-    payload := [1024]u8{}
+    payload: [1024]u8 = {}
     attachments := term.synchronized_output.attachments
     for _ in 0..<64 {
         id, outcome := termattachment.attachment_admit(attachments, {
             metadata = {
                 kind = .Raster,
                 origin = .Kitty,
-                metrics = {width = 32, height = 32},
+                metrics = {
+                    width = 32,
+                    height = 32,
+                },
             },
             payload = payload[:],
             payload_format = .Indexed8,
@@ -1039,7 +1340,10 @@ terminal_test_ambiguous_width_policy_is_terminal_lifetime_state :: proc(
     testing.expect_value(t, term.output_alternate_grid.editing.ambiguous_width,
         termgrid.Ambiguous_Width_Mode.Wide)
     testing.expect(t, terminal_resize_display_grids(
-        &term, {columns = 100, rows = 20}, term.output_grid.allocator))
+        &term, {
+            columns = 100,
+            rows = 20,
+        }, term.output_grid.allocator))
     testing.expect_value(t,
         term.output_grid.editing.ambiguous_width,
         termgrid.Ambiguous_Width_Mode.Wide)
@@ -1050,11 +1354,12 @@ terminal_test_ambiguous_width_policy_is_terminal_lifetime_state :: proc(
 // Verify shaped runs stop at style, blank, and non-single-width boundaries.
 @(test)
 terminal_test_shape_run_boundaries :: proc(t: ^testing.T) {
-    regular := termgrid.Cell_Style{
-        foreground = termpalette.terminal_color_direct(0xffffffff)}
+    regular: termgrid.Cell_Style = {
+        foreground = termpalette.terminal_color_direct(0xffffffff),
+    }
     bold := regular
     bold.bold = true
-    cells := [5]termgrid.Cell{
+    cells: [5]termgrid.Cell = {
         terminal_test_cell("-", regular),
         terminal_test_cell(">", regular),
         terminal_test_cell("=", bold),
@@ -1069,7 +1374,7 @@ terminal_test_shape_run_boundaries :: proc(t: ^testing.T) {
 // Verify UTF-8 flattening preserves source bytes and maps clusters to source cells.
 @(test)
 terminal_test_shape_run_utf8_mapping :: proc(t: ^testing.T) {
-    cells := [2]termgrid.Cell{
+    cells: [2]termgrid.Cell = {
         terminal_test_cell("λ"), terminal_test_cell("→")}
     storage: [16]u8
     offsets: [3]int
@@ -1091,8 +1396,10 @@ terminal_test_unicode_cluster_shaping_boundaries :: proc(t: ^testing.T) {
     combining := terminal_test_cell("e\u0301")
     emoji := terminal_test_cell("🇺🇸")
     emoji.width = 2
-    continuation := termgrid.Cell{continuation = true}
-    cells := [3]termgrid.Cell{combining, emoji, continuation}
+    continuation: termgrid.Cell = {
+        continuation = true,
+    }
+    cells: [3]termgrid.Cell = {combining, emoji, continuation}
 
     testing.expect(t, terminal_cell_shape_eligible(&cells[0]))
     testing.expect(t, terminal_cell_shape_eligible(&cells[1]))
@@ -1167,9 +1474,16 @@ terminal_test_shape_workspace_accepts_maximum_width :: proc(t: ^testing.T) {
 // Verify shaped output accepts ligatures and combining marks but remains horizontal.
 @(test)
 terminal_test_shaped_run_advance_validation :: proc(t: ^testing.T) {
-    glyphs := [2]font.Shaped_Glyph{
-        {glyph_id = 2000, x_advance = 20},
-        {glyph_id = 3000, cluster = 1, x_advance = 0},
+    glyphs: [2]font.Shaped_Glyph = {
+        {
+            glyph_id = 2000,
+            x_advance = 20,
+        },
+        {
+            glyph_id = 3000,
+            cluster = 1,
+            x_advance = 0,
+        },
     }
     testing.expect(t, terminal_shaped_run_is_valid(glyphs[:], 2, 2))
     glyphs[0].x_advance = 0
@@ -1183,14 +1497,14 @@ terminal_test_shaped_run_advance_validation :: proc(t: ^testing.T) {
 @(test)
 terminal_test_shaped_run_waits_for_paged_glyph :: proc(t: ^testing.T) {
     state: Terminal_Test_Shaped_Font
-    resolver := font.Font_Resolver{
+    resolver: font.Font_Resolver = {
         user_data = &state,
         resolve_glyph = terminal_test_resolve_high_glyph,
         shape = terminal_test_shape_high_glyph,
         record_shape_fallback = terminal_test_record_shape_fallback,
     }
     cell := terminal_test_cell("λ")
-    request := Terminal_Shaped_Run_Draw{
+    request: Terminal_Shaped_Run_Draw = {
         resolver = resolver,
         cells = []termgrid.Cell{cell},
         column_width = 10,
@@ -1210,12 +1524,23 @@ terminal_test_shaped_run_waits_for_paged_glyph :: proc(t: ^testing.T) {
 @(test)
 terminal_test_shaped_whitespace_has_no_ink :: proc(t: ^testing.T) {
     testing.expect(t, !terminal_shaped_source_has_ink({}))
-    testing.expect(t, !terminal_shaped_source_has_ink({width = 8}))
-    testing.expect(t, terminal_shaped_source_has_ink({width = 8, height = 12}))
+    testing.expect(t, !terminal_shaped_source_has_ink({
+        width = 8,
+    }))
+    testing.expect(t, terminal_shaped_source_has_ink({
+        width = 8,
+        height = 12,
+    }))
     testing.expect(t, !terminal_text_has_visible_bytes(TERMINAL_CONTINUATION_PROMPT))
     testing.expect(t, terminal_text_has_visible_bytes("julia> "))
-    space := termgrid.Cell{grapheme_len = 1, width = 1}
-    visible := termgrid.Cell{grapheme_len = 1, width = 1}
+    space: termgrid.Cell = {
+        grapheme_len = 1,
+        width = 1,
+    }
+    visible: termgrid.Cell = {
+        grapheme_len = 1,
+        width = 1,
+    }
     space.grapheme[0] = ' '
     visible.grapheme[0] = '#'
     testing.expect(t, terminal_cell_is_ascii_space(&space))
@@ -1244,14 +1569,16 @@ terminal_test_prompt_hit_testing_uses_unicode_columns :: proc(t: ^testing.T) {
 // Verify copy requires Shift so plain Ctrl+C remains a foreground interrupt.
 @(test)
 terminal_test_clipboard_copy_shortcut :: proc(t: ^testing.T) {
-    ctrl_c := input.Input_Frame{events = []input.Input_Event{{
-        kind = .Press,
-        key = .C,
-        modifiers = {.Control},
-    }}}
+    ctrl_c: input.Input_Frame = {
+        events = []input.Input_Event{{
+            kind = .Press,
+            key = .C,
+            modifiers = {.Control},
+        }},
+    }
     testing.expect(t, !terminal_clipboard_copy_requested(ctrl_c))
 
-    copy := input.Input_Frame{
+    copy: input.Input_Frame = {
         events = []input.Input_Event{{
             kind = .Press,
             key = .C,
@@ -1264,14 +1591,16 @@ terminal_test_clipboard_copy_shortcut :: proc(t: ^testing.T) {
 // Verify paste requires both modifiers and inserts clipboard text at the cursor.
 @(test)
 terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
-    ctrl_v := input.Input_Frame{events = []input.Input_Event{{
-        kind = .Press,
-        key = .V,
-        modifiers = {.Control},
-    }}}
+    ctrl_v: input.Input_Frame = {
+        events = []input.Input_Event{{
+            kind = .Press,
+            key = .V,
+            modifiers = {.Control},
+        }},
+    }
     testing.expect(t, !terminal_clipboard_paste_requested(ctrl_v))
 
-    paste := input.Input_Frame{
+    paste: input.Input_Frame = {
         events = []input.Input_Event{{
             kind = .Press,
             key = .V,
@@ -1298,10 +1627,12 @@ terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
-    frame := input.Input_Frame{events = []input.Input_Event{{
-        kind = .Text,
-        codepoint = 'x',
-    }}}
+    frame: input.Input_Frame = {
+        events = []input.Input_Event{{
+            kind = .Text,
+            codepoint = 'x',
+        }},
+    }
 
     testing.expect(t, termhist.termhist_update_preedit(
         term.history, "仮", 0, 1))
@@ -1322,11 +1653,22 @@ terminal_test_keyboard_inserts_ordered_committed_text :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
-    frame := input.Input_Frame{events = []input.Input_Event{
-        {kind = .Text, codepoint = 'A'},
-        {kind = .Text, codepoint = '界'},
-        {kind = .Text, codepoint = 'β'},
-    }}
+    frame: input.Input_Frame = {
+        events = []input.Input_Event{
+        {
+            kind = .Text,
+            codepoint = 'A',
+        },
+        {
+            kind = .Text,
+            codepoint = '界',
+        },
+        {
+            kind = .Text,
+            codepoint = 'β',
+        },
+    },
+    }
 
     update := terminal_update_keyboard(&term, frame)
     testing.expect(t, update.cursor_moved)
@@ -1342,17 +1684,27 @@ terminal_test_ime_commit_precedes_enter_submission :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
-    preedit := input.Input_Event{
-        kind = .Text_Preedit, text_length = 3,
-        preedit_start = 0, preedit_length = 1,
+    preedit: input.Input_Event = {
+        kind = .Text_Preedit,
+        text_length = 3,
+        preedit_start = 0,
+        preedit_length = 1,
     }
     copy(preedit.text[:3], "仮")
-    commit := input.Input_Event{kind = .Text_Commit, text_length = 6}
-    copy(commit.text[:6], "確定")
-    events := [3]input.Input_Event{
-        preedit, commit, {kind = .Press, key = .Enter},
+    commit: input.Input_Event = {
+        kind = .Text_Commit,
+        text_length = 6,
     }
-    update := terminal_update_keyboard(&term, {events = events[:]})
+    copy(commit.text[:6], "確定")
+    events: [3]input.Input_Event = {
+        preedit, commit, {
+            kind = .Press,
+            key = .Enter,
+        },
+    }
+    update := terminal_update_keyboard(&term, {
+        events = events[:],
+    })
     testing.expect(t, update.submission.submitted)
     testing.expect_value(t, update.submission.text, "確定")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "")
@@ -1370,21 +1722,46 @@ terminal_test_ime_keys_do_not_edit_or_submit :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_update_preedit(term.history, "仮", 0, 1))
     testing.expect(t, !terminal_request_completion(&term).requested)
     testing.expect(t, !terminal_set_completion_preview(&term, {
-        request_id = request.request_id, found = true,
-        replacement_end = len("draft"), insertion = "replacement",
+        request_id = request.request_id,
+        found = true,
+        replacement_end = len("draft"),
+        insertion = "replacement",
     }))
-    events := []input.Input_Event{
-        {kind = .Press, key = .Enter}, {kind = .Press, key = .Tab},
-        {kind = .Press, key = .Backspace}, {kind = .Press, key = .Left},
-        {kind = .Press, key = .Escape}, {kind = .Press, key = .C, modifiers = {.Control}},
+    events: []input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Enter,
+        }, {
+            kind = .Press,
+            key = .Tab,
+        },
+        {
+            kind = .Press,
+            key = .Backspace,
+        }, {
+            kind = .Press,
+            key = .Left,
+        },
+        {
+            kind = .Press,
+            key = .Escape,
+        }, {
+            kind = .Press,
+            key = .C,
+            modifiers = {.Control},
+        },
     }
-    update := terminal_update_keyboard(&term, {events = events})
+    update := terminal_update_keyboard(&term, {
+        events = events,
+    })
     testing.expect(t, !update.submission.submitted && !update.completion.requested)
     testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("draft"))
     testing.expect(t, term.history.preedit_active)
     _ = terminal_update_keyboard(&term, {
-        events = []input.Input_Event{{kind = .Text_Cancel}},
+        events = []input.Input_Event{{
+            kind = .Text_Cancel,
+        }},
     })
     testing.expect(t, !term.history.preedit_active)
     testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
@@ -1398,11 +1775,19 @@ terminal_test_keyboard_preserves_text_navigation_order :: proc(t: ^testing.T) {
     defer terminal_destroy(&left_first, context.allocator)
     left_first.banner_ready = true
     testing.expect(t, termhist.termhist_insert_text(left_first.history, "ab"))
-    events := [2]input.Input_Event{
-        {kind = .Press, key = .Left},
-        {kind = .Text, codepoint = 'x'},
+    events: [2]input.Input_Event = {
+        {
+            kind = .Press,
+            key = .Left,
+        },
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
     }
-    _ = terminal_update_keyboard(&left_first, {events = events[:]})
+    _ = terminal_update_keyboard(&left_first, {
+        events = events[:],
+    })
     testing.expect_value(t, termhist.termhist_current_text(left_first.history), "axb")
     testing.expect_value(t, termhist.termhist_cursor(left_first.history), 2)
 
@@ -1411,9 +1796,17 @@ terminal_test_keyboard_preserves_text_navigation_order :: proc(t: ^testing.T) {
     defer terminal_destroy(&text_first, context.allocator)
     text_first.banner_ready = true
     testing.expect(t, termhist.termhist_insert_text(text_first.history, "ab"))
-    events[0] = {kind = .Text, codepoint = 'x'}
-    events[1] = {kind = .Press, key = .Left}
-    _ = terminal_update_keyboard(&text_first, {events = events[:]})
+    events[0] = {
+        kind = .Text,
+        codepoint = 'x',
+    }
+    events[1] = {
+        kind = .Press,
+        key = .Left,
+    }
+    _ = terminal_update_keyboard(&text_first, {
+        events = events[:],
+    })
     testing.expect_value(t, termhist.termhist_current_text(text_first.history), "abx")
     testing.expect_value(t, termhist.termhist_cursor(text_first.history), 2)
 }
@@ -1428,20 +1821,27 @@ terminal_test_editing_keymap_selection_newline_and_submit :: proc(t: ^testing.T)
     testing.expect(t, termhist.termhist_insert_text(term.history, "α beta"))
     _ = termhist.termhist_move_buffer_home(term.history)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Right, modifiers = {.Control, .Shift},
+        kind = .Press,
+        key = .Right,
+        modifiers = {.Control, .Shift},
     }, "")
     testing.expect_value(t, termhist.termhist_anchor(term.history), 0)
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("α "))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Text, codepoint = 'X',
+        kind = .Text,
+        codepoint = 'X',
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "Xbeta")
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Enter, modifiers = {.Alt},
+        kind = .Press,
+        key = .Enter,
+        modifiers = {.Alt},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "X\nbeta")
     update := terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .J, modifiers = {.Control},
+        kind = .Press,
+        key = .J,
+        modifiers = {.Control},
     }, "")
     testing.expect(t, update.submission.submitted)
     testing.expect_value(t, update.submission.text, "X\nbeta")
@@ -1457,19 +1857,27 @@ terminal_test_navigation_and_word_keymap :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_insert_text(term.history, "one two"))
     _ = termhist.termhist_move_buffer_home(term.history)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .F, modifiers = {.Control},
+        kind = .Press,
+        key = .F,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), 1)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .B, modifiers = {.Control},
+        kind = .Press,
+        key = .B,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), 0)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Right, modifiers = {.Control},
+        kind = .Press,
+        key = .Right,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("one "))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .W, modifiers = {.Control},
+        kind = .Press,
+        key = .W,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "two")
 }
@@ -1483,28 +1891,40 @@ terminal_test_line_and_buffer_navigation_keymap :: proc(t: ^testing.T) {
     term.banner_ready = true
     testing.expect(t, termhist.termhist_insert_text(term.history, "abc\ndef"))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .A, modifiers = {.Control},
+        kind = .Press,
+        key = .A,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("abc\n"))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .E, modifiers = {.Control},
+        kind = .Press,
+        key = .E,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("abc\ndef"))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Home, modifiers = {.Control},
+        kind = .Press,
+        key = .Home,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), 0)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .End, modifiers = {.Control},
+        kind = .Press,
+        key = .End,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("abc\ndef"))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .U, modifiers = {.Control},
+        kind = .Press,
+        key = .U,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "abc\n")
     _ = termhist.termhist_move_buffer_home(term.history)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .K, modifiers = {.Control},
+        kind = .Press,
+        key = .K,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "\n")
 }
@@ -1518,29 +1938,38 @@ terminal_test_word_deletion_and_shortcut_reservations :: proc(t: ^testing.T) {
     term.banner_ready = true
     testing.expect(t, termhist.termhist_insert_text(term.history, "abc def"))
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Backspace, modifiers = {.Super},
+        kind = .Press,
+        key = .Backspace,
+        modifiers = {.Super},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "abc ")
     _ = termhist.termhist_move_buffer_home(term.history)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Delete, modifiers = {.Super},
+        kind = .Press,
+        key = .Delete,
+        modifiers = {.Super},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "")
     update := terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Tab, modifiers = {.Control},
+        kind = .Press,
+        key = .Tab,
+        modifiers = {.Control},
     }, "")
     testing.expect(t, !update.completion.requested)
     update = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .B, modifiers = {.Alt},
+        kind = .Press,
+        key = .B,
+        modifiers = {.Alt},
     }, "")
     testing.expect(t, !update.cursor_moved)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Text, codepoint = 'ø',
+        kind = .Text,
+        codepoint = 'ø',
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "ø")
 }
 
-// Verify vertical history traversal restores the draft's cursor, selection, and mode.
+// Verify boundary keys preserve ordered intent and the complete unsent draft.
 @(test)
 terminal_test_vertical_history_preserves_draft_editor_state :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
@@ -1548,8 +1977,6 @@ terminal_test_vertical_history_preserves_draft_editor_state :: proc(t: ^testing.
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     term.geometry.dimensions.columns = 80
-    testing.expect(t, termhist.termhist_history_push(
-        term.history, "prior", TERMINAL_HISTORY_TAG_PKG))
     testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
     _ = termhist.termhist_move_left(term.history)
     _ = termhist.termhist_move_left(term.history, true)
@@ -1557,17 +1984,23 @@ terminal_test_vertical_history_preserves_draft_editor_state :: proc(t: ^testing.
     anchor := termhist.termhist_anchor(term.history)
     term.input_mode = .Help
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Up,
+        kind = .Press,
+        key = .Up,
     }, "")
-    testing.expect_value(t, termhist.termhist_current_text(term.history), "prior")
-    testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Pkg)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
+    testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Help)
+    testing.expect_value(t, term.history_navigation_intent_count, 1)
+    testing.expect_value(t, term.history.backup_cursor, cursor)
+    testing.expect_value(t, term.history.backup_anchor, anchor)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .Down,
+        kind = .Press,
+        key = .Down,
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
     testing.expect_value(t, termhist.termhist_cursor(term.history), cursor)
     testing.expect_value(t, termhist.termhist_anchor(term.history), anchor)
     testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Help)
+    testing.expect_value(t, term.history_navigation_intent_count, 2)
 }
 
 // Verify Ctrl+D deletes content, Ctrl+C cancels only the draft, and Ctrl+L clears output.
@@ -1580,13 +2013,17 @@ terminal_test_editing_keymap_delete_cancel_and_clear :: proc(t: ^testing.T) {
     testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
     _ = termhist.termhist_move_buffer_home(term.history)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .D, modifiers = {.Control},
+        kind = .Press,
+        key = .D,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "raft")
     terminal_append_output_line(&term, "visible")
     testing.expect(t, term.output_grid.rows[0].cells[0].grapheme_len > 0)
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .L, modifiers = {.Control},
+        kind = .Press,
+        key = .L,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "raft")
     testing.expect_value(t, term.output_grid.rows[0].cells[0].grapheme_len, u8(0))
@@ -1595,7 +2032,9 @@ terminal_test_editing_keymap_delete_cancel_and_clear :: proc(t: ^testing.T) {
     term.input_mode = .Help
     term.collecting_continuation = true
     _ = terminal_update_keyboard_event(&term, {
-        kind = .Press, key = .C, modifiers = {.Control},
+        kind = .Press,
+        key = .C,
+        modifiers = {.Control},
     }, "")
     testing.expect_value(t, termhist.termhist_current_text(term.history), "")
     testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Normal)
@@ -1612,20 +2051,22 @@ terminal_test_mouse_selects_editable_prompt :: proc(t: ^testing.T) {
     term.geometry.column_width = 10
     term.geometry.line_height = 20
     testing.expect(t, termhist.termhist_insert_text(term.history, "abc"))
-    bounds := geometry.Rectangle{0, 0, 240, 800}
+    bounds: geometry.Rectangle = {0, 0, 240, 800}
     padded := terminal_padded_bounds(bounds)
     first_x := padded.x + f32(len(TERMINAL_PROMPT) + 1) * 10 + 5
     second_x := first_x + 10
     prompt_y := terminal_padded_bounds(bounds).y +
         f32(terminal_line_count(&term)) * term.geometry.line_height
     terminal_update_mouse_selection(&term, {
-        mouse_position = {first_x, prompt_y + 10}, mouse_pressed = {.Left},
+        mouse_position = {first_x, prompt_y + 10},
+        mouse_pressed = {.Left},
     }, {}, bounds)
     terminal_update_mouse_selection(&term, {
         mouse_position = {second_x, prompt_y + 10},
     }, {}, bounds)
     terminal_update_mouse_selection(&term, {
-        mouse_position = {second_x, prompt_y + 10}, mouse_released = {.Left},
+        mouse_position = {second_x, prompt_y + 10},
+        mouse_released = {.Left},
     }, {}, bounds)
     testing.expect_value(t, termhist.termhist_anchor(term.history), 1)
     testing.expect_value(t, termhist.termhist_cursor(term.history), 2)
@@ -1657,10 +2098,23 @@ terminal_test_keyboard_applies_paste_at_event_position :: proc(t: ^testing.T) {
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
     events := [?]input.Input_Event{
-        {kind = .Text, codepoint = 'A'},
-        {kind = .Press, key = .V, modifiers = {.Control, .Shift}},
-        {kind = .Press, key = .Left},
-        {kind = .Text, codepoint = 'x'},
+        {
+            kind = .Text,
+            codepoint = 'A',
+        },
+        {
+            kind = .Press,
+            key = .V,
+            modifiers = {.Control, .Shift},
+        },
+        {
+            kind = .Press,
+            key = .Left,
+        },
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
     }
     testing.expect_value(t,
         terminal_update_keyboard_event(&term, events[0], "").cursor_moved, true)
@@ -1681,11 +2135,19 @@ terminal_test_keyboard_completion_uses_ordered_draft :: proc(t: ^testing.T) {
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
     term.banner_ready = true
-    events := [2]input.Input_Event{
-        {kind = .Text, codepoint = 'x'},
-        {kind = .Press, key = .Tab},
+    events: [2]input.Input_Event = {
+        {
+            kind = .Text,
+            codepoint = 'x',
+        },
+        {
+            kind = .Press,
+            key = .Tab,
+        },
     }
-    update := terminal_update_keyboard(&term, {events = events[:]})
+    update := terminal_update_keyboard(&term, {
+        events = events[:],
+    })
     testing.expect(t, update.completion.requested)
     testing.expect_value(t, update.completion.code, "x")
     testing.expect_value(t, update.completion.request_id,
@@ -1822,10 +2284,7 @@ terminal_test_repeated_continuation_does_not_duplicate_prompt_rows :: proc(
     testing.expect(t, terminal_begin_eval(&term, third))
     terminal_complete_eval(&term)
 
-    testing.expect_value(t, term.history.history_len, 1)
-    testing.expect(t, terminal_history_prev_test_helper(&term))
-    testing.expect_value(t, termhist.termhist_current_text(term.history),
-        "for i in 1:2\nprintln(i)\nend")
+    testing.expect(t, !term.collecting_continuation)
 }
 
 // Verify `?` at the start of the line enters help mode and keeps trailing text.
@@ -1950,45 +2409,11 @@ terminal_test_cancel_pkg_mode :: proc(t: ^testing.T) {
     testing.expect(t, !terminal_cancel_pkg_mode(&term))
 }
 
-// Verify history browsing restores each entry's own recorded prompt mode.
-@(test)
-terminal_test_history_browse_restores_recorded_mode :: proc(t: ^testing.T) {
-    term: viewterminalmodel.Terminal_State
-    testing.expect(t, terminal_init(&term))
-    defer terminal_destroy(&term, context.allocator)
-
-    testing.expect(t, terminal_enter_pkg_mode_on_bracket(&term, ']'))
-    termhist.termhist_insert_text(term.history, "status")
-    terminal_submit(&term)
-
-    testing.expect(t, terminal_try_exit_mode_on_empty_backspace(&term))
-    termhist.termhist_insert_text(term.history, "1 + 1")
-    terminal_submit(&term)
-
-    testing.expect(t, terminal_history_prev_test_helper(&term))
-    testing.expect(t, !terminal_is_pkg_mode(&term))
-    testing.expect(t, !terminal_is_help_mode(&term))
-
-    testing.expect(t, terminal_history_prev_test_helper(&term))
-    testing.expect(t, terminal_is_pkg_mode(&term))
-
-    terminal_history_browse_next(&term)
-    testing.expect(t, !terminal_is_pkg_mode(&term))
-}
-
-//   Step to the previous history entry via the same path terminal keys use.
-terminal_history_prev_test_helper :: proc(
-    term: ^viewterminalmodel.Terminal_State) -> bool {
-    before := term.history.history_index
-    terminal_history_browse_prev(term)
-    return term.history.history_index != before
-}
-
 // Verify selection and negotiated mouse tracking suppress hyperlink clicks.
 terminal_test_expect_hyperlink_precedence :: proc(
     t: ^testing.T, term: ^viewterminalmodel.Terminal_State,
     point: input.Input_Position, bounds: geometry.Rectangle) {
-    shifted := input.Input_Frame{
+    shifted: input.Input_Frame = {
         mouse_position = point,
         mouse_pressed = {.Left},
         mouse_modifiers = {.Shift},
@@ -2056,8 +2481,8 @@ terminal_test_hyperlink_click_activation :: proc(t: ^testing.T) {
         &term, "\e]8;;https://example.com/path\a界\e]8;;\a")
     term.geometry.column_width = 10
     term.geometry.line_height = 20
-    bounds := geometry.Rectangle{0, 0, 100, 60}
-    point := input.Input_Position{25, 15}
+    bounds: geometry.Rectangle = {0, 0, 100, 60}
+    point: input.Input_Position = {25, 15}
 
     terminal_update_hyperlink_click(&term, {
         mouse_position = point,
@@ -2144,19 +2569,22 @@ terminal_test_detected_link_click_activation :: proc(t: ^testing.T) {
     terminal_append_output_line(&term, "https://example.com/path")
     term.geometry.column_width = 10
     term.geometry.line_height = 20
-    bounds := geometry.Rectangle{0, 0, 400, 60}
-    point := input.Input_Position{25, 15}
+    bounds: geometry.Rectangle = {0, 0, 400, 60}
+    point: input.Input_Position = {25, 15}
 
     terminal_update_hyperlink_click(&term, {
-        mouse_position = point, mouse_pressed = {.Left},
+        mouse_position = point,
+        mouse_pressed = {.Left},
     }, bounds)
     request := terminal_update_hyperlink_click(&term, {
-        mouse_position = point, mouse_released = {.Left},
+        mouse_position = point,
+        mouse_released = {.Left},
     }, bounds)
     testing.expect_value(t, request.kind, Terminal_Link_Kind.Detected)
     fake: Terminal_Test_Hyperlink_Activation
     testing.expect(t, terminal_activate_hyperlink(&term, request, {
-        user_data = &fake, activate = terminal_test_activate_hyperlink,
+        user_data = &fake,
+        activate = terminal_test_activate_hyperlink,
     }))
     testing.expect_value(t, fake.uri, "https://example.com/path")
     testing.expect_value(t, term.hyperlink_registry.count, 0)
@@ -2194,7 +2622,7 @@ terminal_test_publishes_osc_clipboard_writes :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
-    producer := termmodel.Terminal_Producer{.Julia_Evaluation, 19, 0}
+    producer: termmodel.Terminal_Producer = {.Julia_Evaluation, 19, 0}
     terminal_append_ansi_output(
         &term, "\e]52;c;b25l\a\e]52;;zrI=\e\\", producer)
 
@@ -2222,8 +2650,8 @@ terminal_test_discards_stale_osc_clipboard_writes :: proc(t: ^testing.T) {
     term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term, context.allocator)
-    first := termmodel.Terminal_Producer{.Terminal_Session, 3, 1}
-    second := termmodel.Terminal_Producer{.Terminal_Session, 3, 2}
+    first: termmodel.Terminal_Producer = {.Terminal_Session, 3, 1}
+    second: termmodel.Terminal_Producer = {.Terminal_Session, 3, 2}
     terminal_append_ansi_output(&term, "\e]52;c;b2xk\a", first)
     terminal_append_ansi_output(&term, "\e]52;c;bmV3\a", second)
 
@@ -2413,12 +2841,24 @@ terminal_test_completion_failure_respects_snapshot :: proc(t: ^testing.T) {
 // Verify font selection maps terminal styling to semantic variant identity.
 @(test)
 terminal_test_font_weight_selection :: proc(t: ^testing.T) {
-    styles := []termhist.Termhist_Text_Style{
-        {font_weight = .Light},
-        {font_weight = .Medium, is_italic = true},
-        {font_weight = .Semi_Bold},
-        {font_weight = .Extra_Bold, is_italic = true},
-        {font_weight = .Black},
+    styles: []termhist.Termhist_Text_Style = {
+        {
+            font_weight = .Light,
+        },
+        {
+            font_weight = .Medium,
+            is_italic = true,
+        },
+        {
+            font_weight = .Semi_Bold,
+        },
+        {
+            font_weight = .Extra_Bold,
+            is_italic = true,
+        },
+        {
+            font_weight = .Black,
+        },
     }
 
     testing.expect_value(

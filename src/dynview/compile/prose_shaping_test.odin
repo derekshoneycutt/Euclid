@@ -24,7 +24,10 @@ prose_shaping_test_shape :: proc(
     }
     for byte, index in transmute([]u8)request.text {
         request.output[index] = {
-            glyph_id = u32(byte), cluster = u32(index), x_advance = 64}
+            glyph_id = u32(byte),
+            cluster = u32(index),
+            x_advance = 64,
+        }
     }
     return len(request.text), true
 }
@@ -37,14 +40,18 @@ prose_shaping_test_extents :: proc(
     if generation == 0 || glyph_id == 0 {
         return {}, false
     }
-    return {y_bearing = 64, width = 64, height = -64}, true
+    return {
+        y_bearing = 64,
+        width = 64,
+        height = -64,
+    }, true
 }
 
 // Build a complete service with Bold resolved to its own generation.
 prose_shaping_test_service :: proc(
     workspace: []fontmodel.Shaped_Glyph) -> Document_Prose_Shaping_Service {
 
-    result := Document_Prose_Shaping_Service{
+    result: Document_Prose_Shaping_Service = {
         base_pixel_size = 32,
         shape = prose_shaping_test_shape,
         glyph_extents = prose_shaping_test_extents,
@@ -63,12 +70,24 @@ prose_shaping_rebuild_fixture_init :: proc(
     fixture: ^Prose_Shaping_Rebuild_Fixture) -> Document_Prose_Shaping_Service {
 
     fixture^.inlines = {
-        {kind = .Text, text_offset = 0, text_count = 1,
-            font_flags = i32(fontmodel.Font_Variant_Flags.Regular)},
-        {kind = .Space, text_offset = 1, text_count = 1,
-            font_flags = i32(fontmodel.Font_Variant_Flags.Regular)},
-        {kind = .Text, text_offset = 2, text_count = 1,
-            font_flags = i32(fontmodel.Font_Variant_Flags.Bold)},
+        {
+            kind = .Text,
+            text_offset = 0,
+            text_count = 1,
+            font_flags = i32(fontmodel.Font_Variant_Flags.Regular),
+        },
+        {
+            kind = .Space,
+            text_offset = 1,
+            text_count = 1,
+            font_flags = i32(fontmodel.Font_Variant_Flags.Regular),
+        },
+        {
+            kind = .Text,
+            text_offset = 2,
+            text_count = 1,
+            font_flags = i32(fontmodel.Font_Variant_Flags.Bold),
+        },
     }
     text: string = "A B"
     runtime^.content.document_text = transmute([]u8)text
@@ -115,7 +134,10 @@ document_prose_shaping_seals_complete_records :: proc(t: ^testing.T) {
     builder := prose_shaping_test_builder(t, &arena)
     defer storage.arena_owner_destroy(&arena)
     allocator := storage.arena_owner_allocator(&arena)
-    glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = 3, x_advance = 1024}}
+    glyphs: [1]fontmodel.Shaped_Glyph = {{
+        glyph_id = 3,
+        x_advance = 1024,
+    }}
     testing.expect_value(t, document_shaped_builder_append(
         &builder, prose_shaping_test_append(0, glyphs[:])),
         storage.Bounded_Builder_Status.Ok)
@@ -139,7 +161,9 @@ document_prose_shaping_rejects_stale_generation :: proc(t: ^testing.T) {
     builder := prose_shaping_test_builder(t, &arena)
     defer storage.arena_owner_destroy(&arena)
     allocator := storage.arena_owner_allocator(&arena)
-    glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = 3}}
+    glyphs: [1]fontmodel.Shaped_Glyph = {{
+        glyph_id = 3,
+    }}
     _ = document_shaped_builder_append(
         &builder, prose_shaping_test_append(0, glyphs[:]))
     cache := new(dynviewmodel.Dynview_Compile_Cache, allocator)
@@ -160,7 +184,9 @@ document_prose_shaping_rejects_glyph_overflow :: proc(t: ^testing.T) {
     builder := prose_shaping_test_builder(t, &arena)
     defer storage.arena_owner_destroy(&arena)
     builder.glyphs.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_SHAPED_GLYPHS
-    glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = 3}}
+    glyphs: [1]fontmodel.Shaped_Glyph = {{
+        glyph_id = 3,
+    }}
 
     status := document_shaped_builder_append(
         &builder, prose_shaping_test_append(0, glyphs[:]))
@@ -176,7 +202,9 @@ document_prose_shaping_rejects_run_overflow :: proc(t: ^testing.T) {
     builder := prose_shaping_test_builder(t, &arena)
     defer storage.arena_owner_destroy(&arena)
     builder.runs.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_SHAPED_RUNS
-    glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = 3}}
+    glyphs: [1]fontmodel.Shaped_Glyph = {{
+        glyph_id = 3,
+    }}
 
     status := document_shaped_builder_append(
         &builder, prose_shaping_test_append(0, glyphs[:]))
@@ -201,8 +229,8 @@ document_prose_shaping_measures_semantic_inlines_deterministically :: proc(
     service := prose_shaping_rebuild_fixture_init(runtime, &fixture)
 
     first_status := rebuild_document_shaped_cache(runtime, &cache_arena, service)
-    first_runs := [3]dynviewmodel.Dynview_Document_Shaped_Run{}
-    first_glyphs := [3]fontmodel.Shaped_Glyph{}
+    first_runs: [3]dynviewmodel.Dynview_Document_Shaped_Run = {}
+    first_glyphs: [3]fontmodel.Shaped_Glyph = {}
     copy(first_runs[:], runtime^.compile_cache.document_shaped_runs)
     copy(first_glyphs[:], runtime^.compile_cache.document_shaped_glyphs)
     storage.arena_owner_reset(&cache_arena)
@@ -226,6 +254,9 @@ document_prose_shaping_measures_semantic_inlines_deterministically :: proc(
 // Verify clusters outside an inline's source byte span are rejected.
 @(test)
 document_prose_shaping_rejects_invalid_cluster :: proc(t: ^testing.T) {
-    glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = 2, cluster = 1}}
+    glyphs: [1]fontmodel.Shaped_Glyph = {{
+        glyph_id = 2,
+        cluster = 1,
+    }}
     testing.expect(t, !document_shaped_clusters_are_valid(glyphs[:], 1))
 }

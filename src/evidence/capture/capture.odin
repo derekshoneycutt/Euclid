@@ -29,14 +29,14 @@ Failure_Reason :: enum u8 {
 // only when the display owner reaches the first eligible completed frame.
 Checkpoint :: struct {
     // Request lifecycle and semantic trigger identity.
-    status : Checkpoint_Status,
+    status: Checkpoint_Status,
     failure_reason: Failure_Reason,
-    scenario_step : u32,
+    scenario_step: u32,
     trigger: trace.Identity,
 
     // Display and simulation state visible when fulfillment was attempted.
-    presented_frame : u64,
-    fixed_step : u64,
+    presented_frame: u64,
+    fixed_step: u64,
 }
 
 // Display-owned callback that materializes evidence for one checkpoint value.
@@ -48,10 +48,10 @@ Capture_Proc :: proc(user_data: rawptr, checkpoint: Checkpoint) -> bool
 // Optional capture destination invoked at the post-presentation boundary.
 Sink :: struct {
     // Opaque state interpreted exclusively by the callback implementation.
-    user_data : rawptr,
+    user_data: rawptr,
 
     // Capture operation; nil causes a pending checkpoint to fail explicitly.
-    capture : Capture_Proc,
+    capture: Capture_Proc,
 }
 
 // Display-owned coordinator retaining at most one checkpoint request.
@@ -60,11 +60,11 @@ Sink :: struct {
 // caller's source lifetime. The initialized prefix is followed by a zero byte.
 Coordinator :: struct {
     // Current request identity, lifecycle, and eventual presentation facts.
-    checkpoint : Checkpoint,
+    checkpoint: Checkpoint,
 
     // Inline screenshot path and its initialized byte count.
-    path : [CAPTURE_PATH_CAPACITY]u8,
-    path_count : int,
+    path: [CAPTURE_PATH_CAPACITY]u8,
+    path_count: int,
 }
 
 //   Request evidence for the first complete frame presented after a semantic trigger.

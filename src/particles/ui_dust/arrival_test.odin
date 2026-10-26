@@ -16,7 +16,7 @@ ui_dust_test_formation :: proc(
 ui_dust_arrival_converges_onto_targets :: proc(t: ^testing.T) {
     system := ui_dust_test_system({0, 0, 200, 200})
     defer free(system, context.allocator)
-    target := geometry.Vector2{50, 80}
+    target: geometry.Vector2 = {50, 80}
     testing.expect(t, ui_dust_test_formation(system, 5, target))
     delay := system^.particles.delay[0]
     duration := system^.particles.duration[0]
@@ -94,7 +94,7 @@ ui_dust_arrival_without_targets_falls_back_to_fade :: proc(t: ^testing.T) {
 // Verify departure, viewport invalidation, and reduced motion cancel formation.
 @(test)
 ui_dust_arrival_cancellation_retires_particles :: proc(t: ^testing.T) {
-    viewport := geometry.Rectangle{0, 0, 200, 200}
+    viewport: geometry.Rectangle = {0, 0, 200, 200}
     system := ui_dust_test_system(viewport)
     defer free(system, context.allocator)
     testing.expect(t, ui_dust_test_formation(system, 1, {10, 10}))
@@ -102,11 +102,16 @@ ui_dust_arrival_cancellation_retires_particles :: proc(t: ^testing.T) {
     testing.expect_value(t, system^.arrival_count, 0)
     testing.expect(t, !system^.incoming_active)
     testing.expect(t, ui_dust_test_formation(system, 3, {10, 10}))
-    ui_dust_validate_context(system, {visible = true, viewport = {0, 0, 210, 200}})
+    ui_dust_validate_context(system, {
+        visible = true,
+        viewport = {0, 0, 210, 200},
+    })
     testing.expect_value(t, system^.arrival_count, 0)
     testing.expect(t, ui_dust_test_formation(system, 4, {10, 10}))
     ui_dust_validate_context(system, {
-        visible = true, reduced_motion = true, viewport = viewport,
+        visible = true,
+        reduced_motion = true,
+        viewport = viewport,
     })
     testing.expect_value(t, system^.arrival_count, 0)
     testing.expect_value(t, ui_dust_incoming_alpha(system), f32(1))

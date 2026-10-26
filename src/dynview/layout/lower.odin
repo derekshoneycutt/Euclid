@@ -134,10 +134,15 @@ document_math_node :: proc(
         return {}, false
     }
     return {
-        kind = .Box, box_kind = .Math, inline_index = inline_index,
-        shaped_run_index = -1, width = max(program^.draw_width, program^.advance),
-        source_offset = item.source_offset, source_count = item.source_count,
-        ascent = program^.ascent, descent = program^.descent,
+        kind = .Box,
+        box_kind = .Math,
+        inline_index = inline_index,
+        shaped_run_index = -1,
+        width = max(program^.draw_width, program^.advance),
+        source_offset = item.source_offset,
+        source_count = item.source_count,
+        ascent = program^.ascent,
+        descent = program^.descent,
     }, true
 }
 
@@ -145,7 +150,7 @@ document_math_node :: proc(
 document_shape_command :: proc(
     shape: dynviewmodel.Dynview_Document_Shape) -> (dynviewmodel.Dynview_Command, bool) {
 
-    command := dynviewmodel.Dynview_Command{
+    command: dynviewmodel.Dynview_Command = {
         inline_atom_dimension = shape.width,
         inline_box_height = shape.height,
         inline_atom_stroke = shape.thickness,
@@ -158,16 +163,22 @@ document_shape_command :: proc(
     case .Point:
         command.kind = .Inline_Filled_Circle
         command.inline_outline_stroke = 0
-    case .Line: command.kind = .Inline_Line
+    case .Line:
+        command.kind = .Inline_Line
     case .Circle:
         command.kind = .Inline_Filled_Circle if shape.filled else .Inline_Circle
     case .Box:
         command.kind = .Inline_Filled_Box if shape.filled else .Inline_Box
-    case .Angle, .Semicircle: command.kind = .Inline_Pie_Section
-    case .Perpendicular: command.kind = .Inline_Perpendicular
-    case .Triangle: command.kind = .Inline_Triangle
-    case .Pentagon: command.kind = .Inline_Pentagon
-    case .None: return {}, false
+    case .Angle, .Semicircle:
+        command.kind = .Inline_Pie_Section
+    case .Perpendicular:
+        command.kind = .Inline_Perpendicular
+    case .Triangle:
+        command.kind = .Inline_Triangle
+    case .Pentagon:
+        command.kind = .Inline_Pentagon
+    case .None:
+        return {}, false
     }
     return command, true
 }
@@ -198,10 +209,15 @@ document_shape_node :: proc(
         return {}, false
     }
     return {
-        kind = .Box, box_kind = .Shape, inline_index = inline_index,
-        shaped_run_index = -1, width = geometry.draw_width,
-        source_offset = item.source_offset, source_count = item.source_count,
-        ascent = geometry.draw_height*0.5, descent = geometry.draw_height*0.5,
+        kind = .Box,
+        box_kind = .Shape,
+        inline_index = inline_index,
+        shaped_run_index = -1,
+        width = geometry.draw_width,
+        source_offset = item.source_offset,
+        source_count = item.source_count,
+        ascent = geometry.draw_height * 0.5,
+        descent = geometry.draw_height * 0.5,
     }, true
 }
 
@@ -219,12 +235,20 @@ document_lower_inline :: proc(
     case .Shape:
         return document_shape_node(cache, item, inline_index)
     case .Penalty:
-        return {kind = .Penalty, inline_index = inline_index,
-            shaped_run_index = -1, penalty = item.penalty,
-            break_allowed = item.penalty < 10000}, true
+        return {
+            kind = .Penalty,
+            inline_index = inline_index,
+            shaped_run_index = -1,
+            penalty = item.penalty,
+            break_allowed = item.penalty < 10000,
+        }, true
     case .Forced_Break:
-        return {kind = .Forced_Break, inline_index = inline_index,
-            shaped_run_index = -1, break_allowed = true}, true
+        return {
+            kind = .Forced_Break,
+            inline_index = inline_index,
+            shaped_run_index = -1,
+            break_allowed = true,
+        }, true
     }
     return {}, false
 }
@@ -250,10 +274,16 @@ document_display_program_node :: proc(
         item := content^.document_inlines[inline_index]
         if item.kind == .Math && item.math_program_id == program_id {
             node, ok := document_math_node(cache, item, inline_index)
-            return {node, inline_index+1, ok}
+            return {
+                node = node,
+                next = inline_index+1,
+                ok = ok,
+            }
         }
     }
-    return {next = search_start}
+    return {
+        next = search_start,
+    }
 }
 
 // Lower one display row's primary math and optional aligned secondary math.
@@ -264,29 +294,42 @@ document_lower_display_row :: proc(
         input.cache, input.content, input.block,
         input.row.primary_program_id, input.search_start)
     if !primary.ok {
-        return {ok = false}
+        return {
+            ok = false,
+        }
     }
     status := document_append_layout_node(input.builders, primary.node)
     if status != .Ok {
-        return {ok = false}
+        return {
+            ok = false,
+        }
     }
     if input.row.secondary_program_id < 0 {
         return primary
     }
     status = document_append_layout_node(input.builders, {
-        kind = .Glue, inline_index = -1, shaped_run_index = -1})
+        kind = .Glue,
+        inline_index = -1,
+        shaped_run_index = -1,
+    })
     if status != .Ok {
-        return {ok = false}
+        return {
+            ok = false,
+        }
     }
     secondary := document_display_program_node(
         input.cache, input.content, input.block,
         input.row.secondary_program_id, primary.next)
     if !secondary.ok {
-        return {ok = false}
+        return {
+            ok = false,
+        }
     }
     status = document_append_layout_node(input.builders, secondary.node)
     if status != .Ok {
-        return {ok = false}
+        return {
+            ok = false,
+        }
     }
     return secondary
 }
@@ -359,7 +402,7 @@ document_lower_all_blocks :: proc(
         if status != .Ok {
             return status
         }
-        record := dynviewmodel.Dynview_Document_Layout_Block{
+        record: dynviewmodel.Dynview_Document_Layout_Block = {
             source_block_index = block_index,
             node_start = node_start,
             node_count = builders^.nodes.count-node_start,

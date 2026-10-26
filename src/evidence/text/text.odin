@@ -89,7 +89,10 @@ store_put :: proc(store: ^Store, value: string, required: bool) -> (Handle, bool
     }
     entry.count = u16(copy(entry.bytes[:], transmute([]u8)value))
     store.next_slot = (slot + 1) % TEXT_STORE_CAPACITY
-    return {slot = u16(slot), generation = generation}, !entry.truncated
+    return {
+        slot = u16(slot),
+        generation = generation,
+    }, !entry.truncated
 }
 
 //   Resolve one current handle to borrowed immutable text.

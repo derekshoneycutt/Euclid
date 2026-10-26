@@ -15,8 +15,8 @@ CHECKPOINT_POINT_CAPACITY :: 256
 // Reusing a slot changes its generation, which makes every older handle for
 // that slot stale. The zero handle does not identify an initialized entry.
 Handle :: struct {
-    slot : u16,
-    generation : u16,
+    slot: u16,
+    generation: u16,
 }
 
 // Pointer-free point state copied from the authoritative shape world.
@@ -26,20 +26,20 @@ Handle :: struct {
 // only when has_position is true.
 Point :: struct {
     // Resolved world-space position, guarded by has_position.
-    x : f32,
-    y : f32,
-    z : f32,
+    x: f32,
+    y: f32,
+    z: f32,
 
     // Drawing state needed to inspect the captured point.
-    brush_size : f32,
+    brush_size: f32,
 
     // Stable source slot and its active child relationship.
-    index : i32,
-    active_child : i32,
+    index: i32,
+    active_child: i32,
 
     // Captured visibility and optional-position state.
-    visible : bool,
-    has_position : bool,
+    visible: bool,
+    has_position: bool,
 }
 
 // Self-contained Euclid state captured after the simulation task fence joins.
@@ -51,21 +51,21 @@ Point :: struct {
 // constraint records are not copied into the checkpoint.
 Snapshot :: struct {
     // Simulation boundary represented by this checkpoint.
-    fixed_step : u64,
-    simulation_time : f32,
+    fixed_step: u64,
+    simulation_time: f32,
 
     // Runtime and animation identity current at that boundary.
-    runtime_generation : u64,
-    animation_generation : u64,
-    animation_tick_sequence : u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    animation_tick_sequence: u64,
 
     // Copied point prefix and full-system constraint summary.
-    point_count : int,
-    constraint_count : int,
-    active_constraint_count : int,
+    point_count: int,
+    constraint_count: int,
+    active_constraint_count: int,
 
     // Inline storage; only points[:point_count] is initialized evidence.
-    points : [CHECKPOINT_POINT_CAPACITY]Point,
+    points: [CHECKPOINT_POINT_CAPACITY]Point,
 }
 
 // Store-owned slot containing one snapshot and its overwrite policy.
@@ -73,10 +73,10 @@ Snapshot :: struct {
 // required marks evidence whose later eviction must make completeness loss
 // sticky, even when the replacement itself is optional.
 Entry :: struct {
-    snapshot : Snapshot,
-    generation : u16,
-    occupied : bool,
-    required : bool,
+    snapshot: Snapshot,
+    generation: u16,
+    occupied: bool,
+    required: bool,
 }
 
 // Fixed circular checkpoint store with sticky required-evidence loss.
@@ -85,9 +85,9 @@ Entry :: struct {
 // the next slot to replace; required_evidence_lost remains true after any
 // required entry is replaced and is cleared only when the store is reset.
 Store :: struct {
-    entries : [CHECKPOINT_STORE_CAPACITY]Entry,
-    next_slot : int,
-    required_evidence_lost : bool,
+    entries: [CHECKPOINT_STORE_CAPACITY]Entry,
+    next_slot: int,
+    required_evidence_lost: bool,
 }
 
 //   Copy a snapshot into the next circular slot.
@@ -124,7 +124,10 @@ store_put :: proc(store: ^Store, snapshot: Snapshot, required: bool) -> Handle {
         required = required,
     }
     store.next_slot = (slot + 1) % CHECKPOINT_STORE_CAPACITY
-    return {slot = u16(slot), generation = generation}
+    return {
+        slot = u16(slot),
+        generation = generation,
+    }
 }
 
 //   Resolve a current handle to checkpoint storage owned by the store.

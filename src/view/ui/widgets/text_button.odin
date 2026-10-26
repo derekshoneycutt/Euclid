@@ -8,28 +8,28 @@ import input "../../input"
 import uilayout "../layout"
 
 Text_Button_Params :: struct {
-    id : int,
-    rect : geometry.Rectangle,
-    label : string,
-    enabled : bool,
-    mouse : input.Input_Frame,
-    scroll_offset : geometry.Vector2,
-    interaction_space_rect : geometry.Rectangle,
-    interaction_enabled : bool,
-    font : view_font.Font_Face,
-    has_font_color_override : bool,
-    font_color_override : color.Color_RGBA8,
-    font_resolver : view_font.Font_Resolver,
+    id: int,
+    rect: geometry.Rectangle,
+    label: string,
+    enabled: bool,
+    mouse: input.Input_Frame,
+    scroll_offset: geometry.Vector2,
+    interaction_space_rect: geometry.Rectangle,
+    interaction_enabled: bool,
+    font: view_font.Font_Face,
+    has_font_color_override: bool,
+    font_color_override: color.Color_RGBA8,
+    font_resolver: view_font.Font_Resolver,
     semantics: Button_Semantics,
 }
 
 Text_Button_Result :: struct {
-    button_drawn_rect : geometry.Rectangle,
+    button_drawn_rect: geometry.Rectangle,
     control_geometry: viewmodel.Ui_Control_Geometry,
     action: Button_Action_Result,
-    clicked : bool,
-    hovered : bool,
-    pressed : bool,
+    clicked: bool,
+    hovered: bool,
+    pressed: bool,
 }
 
 // prepare_text_button omits actions and semantic publication for visual-only panels.
@@ -40,9 +40,13 @@ prepare_text_button :: proc(
         return update_text_button(params, owner)
     }
     rectangle := uilayout.clamp_non_negative_rect(params.rect)
-    return {button_drawn_rect = rectangle,
-        control_geometry = {geometry.Rectangle(rectangle),
-            geometry.Rectangle(params.interaction_space_rect)}}
+    return {
+        button_drawn_rect = rectangle,
+        control_geometry = {
+            geometry.Rectangle(rectangle),
+            geometry.Rectangle(params.interaction_space_rect),
+        },
+    }
 }
 
 //   Resolve whether this text button currently owns the shared press state.

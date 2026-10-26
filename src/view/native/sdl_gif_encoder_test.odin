@@ -30,7 +30,7 @@ gif_encoder_test_decode :: proc(path: cstring) -> bool {
        return false
     }
     defer image.CloseAnimationDecoder(decoder)
-    expected_delays := [2]u64{40, 80}
+    expected_delays: [2]u64 = {40, 80}
     for expected_delay in expected_delays {
         frame: ^sdl.Surface
         delay: u64
@@ -69,16 +69,28 @@ sdl_gif_encoder_streams_two_frames_and_tears_down_safely :: proc(t: ^testing.T) 
         &encoder, c_path, 0, 1, context.allocator))
     testing.expect(t, sdl_gif_encoder_begin(
         &encoder, c_path, 2, 1, context.allocator))
-    pixels := [12]u8{255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 0, 0}
+    pixels: [12]u8 = {255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 0, 0}
     testing.expect(t, !sdl_gif_encoder_stage_frame(&encoder, {
-        pixels = pixels[:], width = 2, height = 1, pitch_bytes = 7}))
+        pixels = pixels[:],
+        width = 2,
+        height = 1,
+        pitch_bytes = 7,
+    }))
     testing.expect(t, sdl_gif_encoder_stage_frame(&encoder, {
-        pixels = pixels[:], width = 2, height = 1, pitch_bytes = 12}))
+        pixels = pixels[:],
+        width = 2,
+        height = 1,
+        pitch_bytes = 12,
+    }))
     testing.expect(t, !sdl_gif_encoder_close(&encoder, context.allocator))
     testing.expect(t, sdl_gif_encoder_commit_frame(&encoder, 40))
     pixels = {0, 0, 255, 64, 255, 255, 255, 0, 0, 0, 0, 0}
     testing.expect(t, sdl_gif_encoder_stage_frame(&encoder, {
-        pixels = pixels[:], width = 2, height = 1, pitch_bytes = 12}))
+        pixels = pixels[:],
+        width = 2,
+        height = 1,
+        pitch_bytes = 12,
+    }))
     pixels = {}
     testing.expect(t, sdl_gif_encoder_commit_frame(&encoder, 80))
     testing.expect(t, sdl_gif_encoder_close(&encoder, context.allocator))

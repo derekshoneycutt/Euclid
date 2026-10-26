@@ -290,7 +290,9 @@ tree_actions_toggle_drawer :: proc(
     entry_id := item^.key
     motion := &params.ui_runtime^.library.actions.drawer
     if motion^.entry_id != entry_id {
-        motion^ = {entry_id = entry_id}
+        motion^ = {
+            entry_id = entry_id,
+        }
     }
     opening := !motion^.open
     if !opening {
@@ -354,7 +356,7 @@ tree_actions_layout_buttons :: proc(
     layout: ^viewmodel.Ui_Tree_Actions_Layout) {
     available := max(layout^.drawer_rect.width - layout^.label_clip.x -
         TREE_ACTION_DRAWER_PADDING, 0)
-    inner := geometry.Rectangle{
+    inner: geometry.Rectangle = {
         layout^.label_clip.x + TREE_ACTION_DRAWER_PADDING,
         layout^.drawer_rect.y + TREE_ACTION_DRAWER_PADDING,
         max(available - TREE_ACTION_DRAWER_PADDING * 2, 0),
@@ -456,12 +458,18 @@ tree_actions_prepare_controls :: proc(
     toggle_clip := geometry.Rectangle(row_geometry.clip_bounds)
     toggle := tree_actions_screen_rect(row^.actions.toggle_rect, ctx.panel, ctx.scroll_y)
     prepared^.actions_toggle = uiwidgets.update_icon_button({
-        id = row^.actions.toggle_id, rect = toggle, icon_id = .None,
-        toggle = row^.actions.open, mouse = params.mouse_input,
+        id = row^.actions.toggle_id,
+        rect = toggle,
+        icon_id = .None,
+        toggle = row^.actions.open,
+        mouse = params.mouse_input,
         interaction_space_rect = toggle_clip,
         interaction_enabled = ctx.allow_clicks &&
             !params.ui_runtime^.library.tree.scroll_dragging,
-        inset_scale = 1, semantics = {clip_bounds = toggle_clip},
+        inset_scale = 1,
+        semantics = {
+            clip_bounds = toggle_clip,
+        },
     }, &params.ui_runtime^.input.press_owner)
     if prepared^.actions_toggle.clicked {
         hit^.actions_toggle_id = row^.item^.key
@@ -517,13 +525,18 @@ tree_actions_button_params :: proc(
     bounds: viewmodel.Ui_Control_Geometry, enabled: bool,
     allow_clicks: bool) -> uiwidgets.Text_Button_Params {
     return {
-        id = id, rect = bounds.bounds, enabled = enabled,
-        mouse = params.mouse_input, interaction_space_rect = bounds.clip_bounds,
+        id = id,
+        rect = bounds.bounds,
+        enabled = enabled,
+        mouse = params.mouse_input,
+        interaction_space_rect = bounds.clip_bounds,
         interaction_enabled = allow_clicks &&
-        !params.ui_runtime^.library.tree.scroll_dragging &&
-            enabled,
-        font = params.font, font_resolver = params.font_resolver,
-        semantics = {clip_bounds = bounds.clip_bounds},
+            !params.ui_runtime^.library.tree.scroll_dragging && enabled,
+        font = params.font,
+        font_resolver = params.font_resolver,
+        semantics = {
+            clip_bounds = bounds.clip_bounds,
+        },
     }
 }
 
@@ -748,7 +761,7 @@ draw_tree_actions_toggle :: proc(
             style.selected else theme.UI_HOVER_COLOR
         _ = native.draw_encoder_rectangle(encoder, rect, highlight)
     }
-    center := geometry.Vector2{rect.x + rect.width * 0.5,
+    center: geometry.Vector2 = {rect.x + rect.width * 0.5,
         rect.y + rect.height * 0.5}
     if style.create {
         _ = native.draw_encoder_rectangle(encoder,

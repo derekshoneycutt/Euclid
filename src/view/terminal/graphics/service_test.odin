@@ -93,15 +93,15 @@ service_test_limits :: proc() -> termattachment.Limits {
 // Verify graphics service telemetry projects into pointer-free display evidence.
 @(test)
 service_test_observe_copies_lifecycle_counters :: proc(t: ^testing.T) {
-    parser := gfxprotocol.Graphics_Parser_State{
+    parser: gfxprotocol.Graphics_Parser_State = {
         gif_preflight_acceptance_count = 3,
     }
-    store := termattachment.Store{
+    store: termattachment.Store = {
         cpu_byte_count = 1024,
         gpu_byte_count = 2048,
     }
     store.diagnostics.transfer_admission_count = 5
-    service := Service{
+    service: Service = {
         parser = &parser,
         store = &store,
         decode_count = 7,
@@ -161,15 +161,30 @@ service_test_prepare_sixel_operation :: proc(
         store, transfer, transmute([]u8)sixel),
         termattachment.Admission_Outcome.Admitted)
     attachment, attachment_outcome := termattachment.attachment_reserve(store, {
-        metadata = {kind = .Raster, origin = .Sixel, metrics = {width = 1, height = 1}},
-        payload_byte_count = 4, payload_format = .Rgba8, payload_stride = 4,
+        metadata = {
+            kind = .Raster,
+            origin = .Sixel,
+            metrics = {
+                width = 1,
+                height = 1,
+            },
+        },
+        payload_byte_count = 4,
+        payload_format = .Rgba8,
+        payload_stride = 4,
     })
     testing.expect_value(t,
         attachment_outcome, termattachment.Admission_Outcome.Admitted)
-    operation := Operation{state = .Retry, decode = {
-        kind = .Sixel, transfer_id = transfer, attachment_id = attachment,
-        width = 1, height = 1,
-    }}
+    operation: Operation = {
+        state = .Retry,
+        decode = {
+            kind = .Sixel,
+            transfer_id = transfer,
+            attachment_id = attachment,
+            width = 1,
+            height = 1,
+        },
+    }
     testing.expect(t, operation_prepare(service, &operation))
     return operation
 }
@@ -188,7 +203,10 @@ service_test_prepare_animated_operation :: proc(
         metadata = {
             kind = .Raster,
             origin = .Iterm2,
-            metrics = {width = 2, height = 1},
+            metrics = {
+                width = 2,
+                height = 1,
+            },
         },
         frame_count = 2,
         payload_byte_count = 16,
@@ -197,13 +215,16 @@ service_test_prepare_animated_operation :: proc(
     })
     testing.expect_value(t,
         attachment_outcome, termattachment.Admission_Outcome.Admitted)
-    operation := Operation{state = .Retry, decode = {
-        kind = .Iterm2_Animated_Gif,
-        transfer_id = transfer,
-        attachment_id = attachment,
-        width = 2,
-        height = 1,
-    }}
+    operation: Operation = {
+        state = .Retry,
+        decode = {
+            kind = .Iterm2_Animated_Gif,
+            transfer_id = transfer,
+            attachment_id = attachment,
+            width = 2,
+            height = 1,
+        },
+    }
     operation.preflight.inspection =
         termgraphicsprepare.inspect_gif_animation(
             bytes[:], termgraphicsprepare.gif_animation_limits(store.limits))
@@ -324,8 +345,10 @@ service_test_cancel_gif_preflight_before_reservation :: proc(t: ^testing.T) {
     pool: taskpool.Task_Pool
     service_test_init(t, &store, &parser, &service, &pool)
     defer service_test_destroy(&store, &parser, &pool)
-    producer := termmodel.Terminal_Producer{
-        kind = .Terminal_Session, id = 7, generation = 3,
+    producer: termmodel.Terminal_Producer = {
+        kind = .Terminal_Session,
+        id = 7,
+        generation = 3,
     }
     bytes := GRAPHICS_SERVICE_TEST_ANIMATED_GIF
     service_test_queue_gif_preflight(
@@ -350,7 +373,10 @@ service_test_records_raster_publication :: proc(t: ^testing.T) {
         metadata = {
             kind = .Raster,
             origin = .Sixel,
-            metrics = {width = 2, height = 1},
+            metrics = {
+                width = 2,
+                height = 1,
+            },
         },
         payload_byte_count = 8,
         payload_format = .Rgba8,
@@ -362,7 +388,10 @@ service_test_records_raster_publication :: proc(t: ^testing.T) {
         termattachment.Handle_Outcome.Found)
     ring: trace.Ring
     trace.ring_init(&ring, .Display)
-    service := Service{store = &store, trace_ring = &ring}
+    service: Service = {
+        store = &store,
+        trace_ring = &ring,
+    }
 
     service_record_publication(&service, attachment)
 
@@ -386,21 +415,31 @@ service_test_sixel_replacement_commits_after_upload :: proc(t: ^testing.T) {
     defer termattachment.store_destroy(&store)
     old_id := service_test_publish_resident(t, &store)
     new_id := service_test_publish_resident(t, &store)
-    geometry := termattachment.Placement_Geometry{
-        screen = .Primary, logical_row = 1, column = 2,
+    geometry: termattachment.Placement_Geometry = {
+        screen = .Primary,
+        logical_row = 1,
+        column = 2,
     }
     _, old_outcome := termattachment.placement_admit(&store, {
-        attachment_id = old_id, geometry = geometry,
+        attachment_id = old_id,
+        geometry = geometry,
     })
     _, new_outcome := termattachment.placement_admit(&store, {
-        attachment_id = new_id, geometry = geometry,
+        attachment_id = new_id,
+        geometry = geometry,
     })
     testing.expect_value(t, old_outcome, termattachment.Admission_Outcome.Admitted)
     testing.expect_value(t, new_outcome, termattachment.Admission_Outcome.Admitted)
-    service := Service{store = &store}
+    service: Service = {
+        store = &store,
+    }
     entry := &service.textures[new_id.slot]
     entry.candidate_id = new_id
-    entry.candidate = {handle = rawptr(uintptr(1)), width = 1, height = 1}
+    entry.candidate = {
+        handle = rawptr(uintptr(1)),
+        width = 1,
+        height = 1,
+    }
     entry.candidate_sixel_geometry = geometry
     entry.candidate_replaces_sixel = true
     entry.publishing = true
@@ -471,10 +510,16 @@ service_test_publish_resident :: proc(
     t: ^testing.T, store: ^termattachment.Store) -> termattachment.Attachment_Id {
     resident, outcome := termattachment.attachment_reserve(store, {
         metadata = {
-            kind = .Raster, origin = .Sixel,
-            metrics = {width = 1, height = 1},
+            kind = .Raster,
+            origin = .Sixel,
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
-        payload_byte_count = 4, payload_format = .Rgba8, payload_stride = 4,
+        payload_byte_count = 4,
+        payload_format = .Rgba8,
+        payload_stride = 4,
     })
     testing.expect_value(t, outcome, termattachment.Admission_Outcome.Admitted)
     testing.expect_value(t,
@@ -497,7 +542,7 @@ service_test_cancel_producer_preserves_resident :: proc(t: ^testing.T) {
     defer service_test_destroy(&store, &parser, &pool)
     resident := service_test_publish_resident(t, &store)
 
-    producer := termmodel.Terminal_Producer{.Terminal_Session, 7, 3}
+    producer: termmodel.Terminal_Producer = {.Terminal_Session, 7, 3}
     operation := &service.operations[0]
     operation^ = service_test_prepare_sixel_operation(
         t, &service, &store, "@")
@@ -530,8 +575,8 @@ service_test_cancel_producer_filters_parser_queue :: proc(t: ^testing.T) {
     pool: taskpool.Task_Pool
     service_test_init(t, &store, &parser, &service, &pool)
     defer service_test_destroy(&store, &parser, &pool)
-    cancelled := termmodel.Terminal_Producer{.Terminal_Session, 7, 3}
-    retained := termmodel.Terminal_Producer{.Terminal_Session, 8, 1}
+    cancelled: termmodel.Terminal_Producer = {.Terminal_Session, 7, 3}
+    retained: termmodel.Terminal_Producer = {.Terminal_Session, 8, 1}
     first := service_test_prepare_animated_operation(t, &service, &store)
     second := service_test_prepare_sixel_operation(t, &service, &store, "A")
     first.decode.producer = cancelled
@@ -550,7 +595,9 @@ service_test_cancel_producer_filters_parser_queue :: proc(t: ^testing.T) {
     testing.expect(t, !extra)
     testing.expect_value(t, store.attachment_count, 1)
     testing.expect_value(t, store.transfer_count, 1)
-    operation := Operation{decode = request}
+    operation: Operation = {
+        decode = request,
+    }
     operation_discard(&service, &operation)
 }
 
@@ -563,8 +610,8 @@ service_test_cancel_producer_filters_retry_operations :: proc(t: ^testing.T) {
     pool: taskpool.Task_Pool
     service_test_init(t, &store, &parser, &service, &pool)
     defer service_test_destroy(&store, &parser, &pool)
-    cancelled := termmodel.Terminal_Producer{.Terminal_Session, 7, 3}
-    retained := termmodel.Terminal_Producer{.Terminal_Session, 8, 1}
+    cancelled: termmodel.Terminal_Producer = {.Terminal_Session, 7, 3}
+    retained: termmodel.Terminal_Producer = {.Terminal_Session, 8, 1}
     service.operations[0] = service_test_prepare_sixel_operation(
         t, &service, &store, "@")
     service.operations[1] = service_test_prepare_sixel_operation(
@@ -628,7 +675,10 @@ service_test_build_kitty_parity_animation :: proc(
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 2, height = 1},
+            metrics = {
+                width = 2,
+                height = 1,
+            },
         },
         payload = encoded.pixels[:8],
         payload_format = .Rgba8,
@@ -648,8 +698,10 @@ service_test_build_kitty_parity_animation :: proc(
         }), termattachment.Animation_Mutation_Outcome.Found)
     testing.expect_value(t, termattachment.kitty_animation_control(
         store, kitty_id, {
-            frame_number = 1, gap_ms = 20,
-            gap_specified = true, loop_count = 3,
+            frame_number = 1,
+            gap_ms = 20,
+            gap_specified = true,
+            loop_count = 3,
         }),
         termattachment.Animation_Mutation_Outcome.Found)
     return kitty_id
@@ -802,12 +854,15 @@ service_test_shutdown_rejects_rebind :: proc(t: ^testing.T) {
 service_test_kitty_root :: proc(
     t: ^testing.T, store: ^termattachment.Store,
     parser: ^gfxprotocol.Graphics_Parser_State) -> termattachment.Attachment_Id {
-    root := [4]u8{255, 0, 0, 255}
+    root: [4]u8 = {255, 0, 0, 255}
     id, outcome := termattachment.attachment_admit(store, {
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 1, height = 1},
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
         payload = root[:],
         payload_format = .Rgba8,
@@ -831,7 +886,10 @@ service_test_kitty_png_input :: proc(
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 1, height = 1},
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
         payload_byte_count = 4,
         payload_format = .Rgba8,
@@ -859,13 +917,22 @@ service_test_queue_kitty_mutations :: proc(
         parser, {
             attachment_id = id,
             temporary_attachment_id = temporary,
-            controls = {image_id = 9, format = 32, width = 1, height = 1},
+            controls = {
+                image_id = 9,
+                format = 32,
+                width = 1,
+                height = 1,
+            },
             kind = .Frame,
         })
     testing.expect(t, queued)
     _, queued = gfxprotocol.graphics_parser_queue_mutation_request(parser, {
         attachment_id = id,
-        controls = {image_id = 9, animation_state = 3, current_frame = 2},
+        controls = {
+            image_id = 9,
+            animation_state = 3,
+            current_frame = 2,
+        },
         kind = .Control,
         ready = true,
     })
@@ -922,19 +989,27 @@ service_test_replace_kitty_root :: proc(
     t: ^testing.T, store: ^termattachment.Store,
     parser: ^gfxprotocol.Graphics_Parser_State,
     old_id: termattachment.Attachment_Id) -> termattachment.Attachment_Id {
-    replacement := [4]u8{1, 2, 3, 255}
+    replacement: [4]u8 = {1, 2, 3, 255}
     new_id, outcome := termattachment.attachment_admit(store, {
         metadata = {
-            kind = .Raster, origin = .Kitty,
-            metrics = {width = 1, height = 1},
+            kind = .Raster,
+            origin = .Kitty,
+            metrics = {
+                width = 1,
+                height = 1,
+            },
         },
-        payload = replacement[:], payload_format = .Rgba8,
-        payload_stride = 4, protocol_retained = true,
+        payload = replacement[:],
+        payload_format = .Rgba8,
+        payload_stride = 4,
+        protocol_retained = true,
     })
     testing.expect_value(t, outcome, termattachment.Admission_Outcome.Admitted)
     gfxprotocol.graphics_discard_attachment(parser, old_id)
     parser.kitty_images[0] = {
-        image_id = 9, attachment_id = new_id, active = true,
+        image_id = 9,
+        attachment_id = new_id,
+        active = true,
     }
     return new_id
 }

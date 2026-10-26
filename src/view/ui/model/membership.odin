@@ -45,7 +45,9 @@ ui_membership_reserve :: proc(
         return true
     }
     if !menu.allocator.initialized {
-        heap := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+        heap: runtime.Allocator = {
+            procedure = runtime.heap_allocator_proc,
+        }
         if storage.tlsf_owner_init(&menu.allocator, heap) != .Ok {
             return false
         }

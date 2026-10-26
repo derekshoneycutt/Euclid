@@ -250,7 +250,7 @@ parse_packaged_sysimage_manifest :: proc(
     if len(source) == 0 || len(source) > ASSET_MANIFEST_MAX_BYTES {
         return {}, false
     }
-    state := Manifest_Parse_State{}
+    state: Manifest_Parse_State = {}
     remaining := source
     for len(remaining) > 0 {
         newline := strings.index_byte(remaining, '\n')
@@ -389,7 +389,7 @@ file_matches_sha256 :: proc(path, expected: string) -> bool {
         return false
     }
     defer os.close(file)
-    hash := sha2.Context_256{}
+    hash: sha2.Context_256 = {}
     sha2.init_256(&hash)
     buffer: [64 * 1024]byte
     for {
@@ -545,7 +545,7 @@ packaged_sysimage_input_fingerprint_with_config :: proc(
 //   - config: Config containing the override root when provided.
 make_asset_root_config :: proc(
     root_dir: string, allocator: mem.Allocator) -> Asset_Root_Config {
-    config := Asset_Root_Config{}
+    config: Asset_Root_Config = {}
     if len(root_dir) > 0 {
         config.asset_root_override = strings.clone(root_dir, allocator)
     }
@@ -613,7 +613,7 @@ resolve_writable_pictures_dir :: proc(
     cache_dir, _ := os.user_cache_dir(allocator)
     temp_dir, _ := os.temp_directory(allocator)
 
-    candidate_dirs := []string{pictures_dir, data_dir, cache_dir, temp_dir}
+    candidate_dirs: []string = {pictures_dir, data_dir, cache_dir, temp_dir}
     for base_dir in candidate_dirs {
         output_dir, ok := resolve_writable_gif_output_dir(base_dir, allocator)
         if ok {
@@ -653,7 +653,7 @@ reserve_gif_output_transaction_in_directory :: proc(
     }
     temporary_path := fmt.aprintf(
         "%s.partial.gif", final_path[:len(final_path) - len(".gif")],
-        allocator=allocator)
+        allocator = allocator)
     temporary_file, open_error := os.open(
         temporary_path, {.Write, .Create, .Excl})
     if open_error != nil {
@@ -662,7 +662,10 @@ reserve_gif_output_transaction_in_directory :: proc(
         return {}, false
     }
     os.close(temporary_file)
-    return {final_path = final_path, temporary_path = temporary_path}, true
+    return {
+        final_path = final_path,
+        temporary_path = temporary_path,
+    }, true
 }
 
 //   Reserve one generated GIF destination and its sibling temporary file.
@@ -836,7 +839,10 @@ packaged_content_asset_with_config :: proc(
         return {}, false
     }
     fingerprint := strings.clone(metadata.content_fingerprint, allocator)
-    return {database_path = path, corpus_fingerprint = fingerprint}, true
+    return {
+        database_path = path,
+        corpus_fingerprint = fingerprint,
+    }, true
 }
 
 //   Resolve an absolute path for a packaged asset relative path under an optional root config.
@@ -926,7 +932,7 @@ resolve_asset_unpack_dir :: proc(
     base_dir := ""
     cache_dir, _ := os.user_cache_dir(allocator)
     temp_dir, _ := os.temp_directory(allocator)
-    candidate_dirs := []string{cache_dir, temp_dir}
+    candidate_dirs: []string = {cache_dir, temp_dir}
 
     for candidate in candidate_dirs {
         if len(candidate) > 0 {
@@ -964,7 +970,7 @@ resolve_current_asset_unpack_dir :: proc(
 
 //   Return whether all fixed baseline files exist in one extracted tree.
 baseline_asset_entries_exist :: proc(unpack_dir: string) -> bool {
-    required_entries := []string{
+    required_entries: []string = {
         "julia/script.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
@@ -1087,7 +1093,7 @@ prepare_unpack_directory :: proc(unpack_dir: string) -> bool {
 
 //   Decode archive gzip payload and extract tar entries into unpack directory.
 decode_and_extract_archive_payload :: proc(archive_path, unpack_dir: string) -> bool {
-    decompressed := bytes.Buffer{}
+    decompressed: bytes.Buffer = {}
     defer bytes.buffer_destroy(&decompressed)
 
     gzip_err := gzip.load_from_file(archive_path, &decompressed)

@@ -76,10 +76,16 @@ allocation_test_snapshot_records_pressure :: proc(t: ^testing.T) {
 @(test)
 allocation_test_arena_baseline_matches_warm_rebuild :: proc(t: ^testing.T) {
     baselines: Arena_Baselines
-    warm := Arena_Snapshot{
-        current_used = 10, current_reserved = 20, current_committed = 15,
-        peak_used = 10, peak_reserved = 20, peak_committed = 15,
-        reset_count = 2, initialized_count = 1}
+    warm: Arena_Snapshot = {
+        current_used = 10,
+        current_reserved = 20,
+        current_committed = 15,
+        peak_used = 10,
+        peak_reserved = 20,
+        peak_committed = 15,
+        reset_count = 2,
+        initialized_count = 1,
+    }
     testing.expect(t, arena_checkpoint(&baselines, .Display_Cache, warm))
     rebuilt := warm
     rebuilt.reset_count += 1

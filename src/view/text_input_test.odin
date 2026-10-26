@@ -18,8 +18,9 @@ sdl_text_input_collection_name_qualified_focus :: proc(t: ^testing.T) {
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     state^.ui_runtime.semantic_focus = semantic
-    editor := viewmodel.Ui_Node_Id{
-        domain = .Library_Action, local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
+    editor: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = uilibrary.TREE_ENTRY_NAME_INPUT,
         generation = 7,
     }
     editor.stable_id[0] = 42
@@ -28,8 +29,11 @@ sdl_text_input_collection_name_qualified_focus :: proc(t: ^testing.T) {
         id := editor
         id.stable_id[0] += u8(index)
         testing.expect_value(t, uisemantics.semantic_register_control(semantic, {
-            id = id, role = .Input, states = {.Visible, .Enabled, .Focusable},
-            bounds = {0, 0, 200, 30}, clip_bounds = {0, 0, 200, 30},
+            id = id,
+            role = .Input,
+            states = {.Visible, .Enabled, .Focusable},
+            bounds = {0, 0, 200, 30},
+            clip_bounds = {0, 0, 200, 30},
             text_input_area = {f32(index + 10), 2, 1, 20},
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
@@ -37,7 +41,9 @@ sdl_text_input_collection_name_qualified_focus :: proc(t: ^testing.T) {
         viewmodel.Ui_Semantic_Status.Ok)
     semantic^.logical_focus = editor
     state^.ui_runtime.input.interaction_frame.effective_focus = {
-        kind = .Input_Box, id = uilibrary.TREE_ENTRY_NAME_INPUT_ID}
+        kind = .Input_Box,
+        id = uilibrary.TREE_ENTRY_NAME_INPUT_ID,
+    }
     sdl_text_input_test_name_target(t, state)
 }
 

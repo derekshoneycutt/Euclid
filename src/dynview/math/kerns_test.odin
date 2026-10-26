@@ -6,8 +6,13 @@ import "core:testing"
 
 //   Build one fake corner table with exact low, middle, and high ranges.
 math_kern_test_table :: proc(corner: u8) -> fontmodel.Font_Math_Kern_Table {
-    table := fontmodel.Font_Math_Kern_Table{
-        valid = true, generation = 17, glyph_id = 9, corner = corner, count = 3}
+    table: fontmodel.Font_Math_Kern_Table = {
+        valid = true,
+        generation = 17,
+        glyph_id = 9,
+        corner = corner,
+        count = 3,
+    }
     table.entries[0] = {-64, -12}
     table.entries[1] = {64, 7}
     table.entries[2] = {192, 21}
@@ -17,8 +22,8 @@ math_kern_test_table :: proc(corner: u8) -> fontmodel.Font_Math_Kern_Table {
 //   Verify every corner and both sides of every correction-height boundary.
 @(test)
 math_kern_tables_resolve_all_corners_and_boundaries :: proc(t: ^testing.T) {
-    heights := [7]i32{-65, -64, -63, 64, 65, 192, 193}
-    expected := [7]i32{-12, -12, 7, 7, 21, 21, 21}
+    heights: [7]i32 = {-65, -64, -63, 64, 65, 192, 193}
+    expected: [7]i32 = {-12, -12, 7, 7, 21, 21, 21}
     for corner in u8(0)..=u8(3) {
         table := math_kern_test_table(corner)
         for height, index in heights {

@@ -33,7 +33,9 @@ run_sdl_capture_session :: proc(
     chalk_audio: native.Sdl_Chalk_Audio_Runtime
     defer native.sdl_chalk_audio_destroy(&chalk_audio)
     bound_display := bind_sdl_chalk_audio(display, &chalk_audio)
-    framebuffer_owner := capturebackend.Sdl_Framebuffer_Context{platform = platform}
+    framebuffer_owner: capturebackend.Sdl_Framebuffer_Context = {
+        platform = platform,
+    }
     if !capturebackend.bind_sdl_framebuffer_capture(&framebuffer_owner) {
         log.error("display_framebuffer_start_failed")
         _ = shutdown_window_runtime(session)

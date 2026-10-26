@@ -353,7 +353,10 @@ terminal_session_begin :: proc(
         state = .Running,
         request_id = request.request_id,
         owner = request.owner,
-        id = {slot = 1, generation = manager.next_generation},
+        id = {
+            slot = 1,
+            generation = manager.next_generation,
+        },
         applied_geometry_generation = request.geometry_generation,
         applied_dimensions = request.dimensions,
     }

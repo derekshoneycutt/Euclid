@@ -6,7 +6,10 @@ import math "core:math"
 // ui_dust_reveal_reset empties every occupancy bin and forgets prior rows.
 ui_dust_reveal_reset :: proc(system: ^Ui_Dust_System) {
     for &bin in system^.reveal_bins {
-        bin = {left = math.F32_MAX, right = -math.F32_MAX}
+        bin = {
+            left = math.F32_MAX,
+            right = -math.F32_MAX,
+        }
     }
     system^.reveal_row_count = 0
 }
@@ -75,8 +78,10 @@ ui_dust_reveal_collect_rows :: proc(system: ^Ui_Dust_System) {
             row^.right = max(row^.right, bin.right)
         } else {
             system^.reveal_rows[count] = {
-                top = top, bottom = top + bin_height,
-                left = bin.left, right = bin.right,
+                top = top,
+                bottom = top + bin_height,
+                left = bin.left,
+                right = bin.right,
             }
             count += 1
         }

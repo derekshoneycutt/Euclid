@@ -17,7 +17,7 @@ search_query_compiles_friendly_grammar :: proc(t: ^testing.T) {
 // Verify punctuation and operator words remain inert quoted token content.
 @(test)
 search_query_neutralizes_fts_and_sql_syntax :: proc(t: ^testing.T) {
-    fixtures := []string{
+    fixtures: []string = {
         "name:circle", "circle OR line", "circle NEAR(line)",
         "circle*", "Robert'); DROP TABLE search_documents;--",
     }
@@ -37,7 +37,7 @@ search_query_neutralizes_fts_and_sql_syntax :: proc(t: ^testing.T) {
 // Verify malformed encoding, controls, incomplete syntax, and capacity fail explicitly.
 @(test)
 search_query_rejects_invalid_and_saturated_input :: proc(t: ^testing.T) {
-    malformed_bytes := []u8{0xc3, 0x28}
+    malformed_bytes: []u8 = {0xc3, 0x28}
     malformed := transmute(string)malformed_bytes
     testing.expect_value(t, search_query_compile(malformed).status,
         Search_Query_Parse_Status.Invalid_Utf8)

@@ -19,7 +19,10 @@ math_shaping_test_shape :: proc(
     _ = request.italic
     _ = request.flattened_accent
     if request.standalone_accent {
-        request.glyph_output[0] = {glyph_id = 94, x_advance = 640}
+        request.glyph_output[0] = {
+            glyph_id = 94,
+            x_advance = 640,
+        }
         return {1, true}
     }
     _ = request.projection_workspace
@@ -32,7 +35,9 @@ math_shaping_test_shape :: proc(
             return {}
         }
         request.glyph_output[glyph_count] = {
-            glyph_id = u32(codepoint), x_advance = 640}
+            glyph_id = u32(codepoint),
+            x_advance = 640,
+        }
         glyph_count += 1
     }
     return {glyph_count, true}
@@ -46,7 +51,12 @@ math_shaping_test_metrics :: proc(
     _ = user_data
     _ = request.generation
     return {
-        extents = {x_bearing = 0, y_bearing = 640, width = 512, height = -768},
+        extents = {
+            x_bearing = 0,
+            y_bearing = 640,
+            width = 512,
+            height = -768,
+        },
         italic_correction = 128,
         top_accent_attachment = 320,
         ok = request.glyph_id != 0,
@@ -63,11 +73,17 @@ math_shaping_test_variants :: proc(
         return {}
     }
     request.output[0] = {
-        glyph_id = request.glyph_id, advance = 1024,
-        extents = {0, 896, 768, -1024}, italic_correction = 64}
+        glyph_id = request.glyph_id,
+        advance = 1024,
+        extents = {0, 896, 768, -1024},
+        italic_correction = 64,
+    }
     request.output[1] = {
-        glyph_id = request.glyph_id + 1, advance = 1536,
-        extents = {0, 1280, 1024, -1536}, italic_correction = 96}
+        glyph_id = request.glyph_id + 1,
+        advance = 1536,
+        extents = {0, 1280, 1024, -1536},
+        italic_correction = 96,
+    }
     return {2, true, true}
 }
 
@@ -81,15 +97,25 @@ math_shaping_test_assembly :: proc(
         return {}
     }
     request.output[0] = {
-        glyph_id = request.glyph_id, end_connector_length = 128,
-        full_advance = 640, extents = {0, 640, 512, -640}}
+        glyph_id = request.glyph_id,
+        end_connector_length = 128,
+        full_advance = 640,
+        extents = {0, 640, 512, -640},
+    }
     request.output[1] = {
-        glyph_id = request.glyph_id + 1, start_connector_length = 128,
-        end_connector_length = 128, full_advance = 512, extender = true,
-        extents = {0, 512, 512, -512}}
+        glyph_id = request.glyph_id + 1,
+        start_connector_length = 128,
+        end_connector_length = 128,
+        full_advance = 512,
+        extender = true,
+        extents = {0, 512, 512, -512},
+    }
     request.output[2] = {
-        glyph_id = request.glyph_id + 2, start_connector_length = 128,
-        full_advance = 640, extents = {0, 640, 512, -640}}
+        glyph_id = request.glyph_id + 2,
+        start_connector_length = 128,
+        full_advance = 640,
+        extents = {0, 640, 512, -640},
+    }
     return {3, 64, 0, true}
 }
 
@@ -103,14 +129,20 @@ math_shaping_test_kern_table :: proc(
         request.corner > 3 || len(request.output) < 1 {
         return {}
     }
-    request.output[0] = {max_correction_height = 0, kern_value = 16}
+    request.output[0] = {
+        max_correction_height = 0,
+        kern_value = 16,
+    }
     return {1, true}
 }
 
 //   Build deterministic OpenType MATH constants for shaping tests.
 math_shaping_test_constants :: proc() -> fontmodel.Font_Math_Constants {
-    constants := fontmodel.Font_Math_Constants{
-        valid = true, generation = 7, base_pixel_size = 32}
+    constants: fontmodel.Font_Math_Constants = {
+        valid = true,
+        generation = 7,
+        base_pixel_size = 32,
+    }
     constants.values[int(Math_Constant.Script_Percent_Scale_Down)] = 80
     constants.values[int(Math_Constant.Script_Script_Percent_Scale_Down)] = 60
     constants.values[int(Math_Constant.Axis_Height)] = 4 * 64
@@ -161,32 +193,59 @@ math_shaping_test_populate_recursive_fixture :: proc(
     cache^.last_cell_width = 8
     cache^.math_command_count = 7
     cache^.math_commands[0] = {
-        kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 0, text_len = 1}
+        kind = .Math_Glyph_Run,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 0,
+        text_len = 1,
+    }
     cache^.math_commands[1] = {
-        kind = .Script_Attach, math_program_id = 0,
-        script_sup_text_offset = 1, script_sup_text_len = 1,
-        script_style_id = dyncore.DYNVIEW_STYLE_ITALIC, script_scale = 0.7,
-        script_gap = 0.1}
+        kind = .Script_Attach,
+        math_program_id = 0,
+        script_sup_text_offset = 1,
+        script_sup_text_len = 1,
+        script_style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        script_scale = 0.7,
+        script_gap = 0.1,
+    }
     cache^.math_commands[2] = {
-        kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 2, text_len = 1}
+        kind = .Math_Glyph_Run,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 2,
+        text_len = 1,
+    }
     cache^.math_commands[3] = {
-        kind = .Frac, math_program_id = 1, secondary_math_program_id = 2,
-        accent_thickness = 0.05}
+        kind = .Frac,
+        math_program_id = 1,
+        secondary_math_program_id = 2,
+        accent_thickness = 0.05,
+    }
     cache^.math_commands[4] = {
-        kind = .Radical_Bar, math_program_id = 3, secondary_math_program_id = 2,
-        radical_index_text_offset = 3, radical_index_text_len = 1,
-        script_style_id = dyncore.DYNVIEW_STYLE_ITALIC, script_scale = 0.6,
-        accent_thickness = 0.05}
+        kind = .Radical_Bar,
+        math_program_id = 3,
+        secondary_math_program_id = 2,
+        radical_index_text_offset = 3,
+        radical_index_text_len = 1,
+        script_style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        script_scale = 0.6,
+        accent_thickness = 0.05,
+    }
     cache^.math_commands[5] = {
-        kind = .Accent_Bar, math_program_id = 0, accent_mode = 1}
+        kind = .Accent_Bar,
+        math_program_id = 0,
+        accent_mode = 1,
+    }
     cache^.math_commands[6] = {
-        kind = .Accent_Bar, math_program_id = 0, accent_mode = 3}
+        kind = .Accent_Bar,
+        math_program_id = 0,
+        accent_mode = 3,
+    }
     cache^.math_program_count = 7
     for index in 0..<cache^.math_program_count {
         cache^.math_programs[index] = {
-            valid = true, command_start = index, command_count = 1}
+            valid = true,
+            command_start = index,
+            command_count = 1,
+        }
     }
 }
 
@@ -199,8 +258,11 @@ math_shaping_expect_cached_run :: proc(
     run, run_ok := shaped_run_for_command(cache, command, .Primary)
     cached_glyphs, glyphs_ok := shaped_glyphs_for_run(cache, run)
     item, item_ok := math_program_item({
-        cache = cache, buffer = &runtime^.command_buffer,
-        cmd = command, font_size = 32, command_index = 0,
+        cache = cache,
+        buffer = &runtime^.command_buffer,
+        cmd = command,
+        font_size = 32,
+        command_index = 0,
     })
     testing.expect(t, run_ok && glyphs_ok && item_ok)
     testing.expect_value(t, item.math_command_index, i32(0))
@@ -230,15 +292,23 @@ math_shaping_populate_intrinsic_fixture :: proc(runtime: ^dynviewmodel.Dynview_S
     cache^.last_cell_width = 8
     cache^.math_command_count = 2
     cache^.math_commands[0] = {
-        kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 0, text_len = 1}
+        kind = .Math_Glyph_Run,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 0,
+        text_len = 1,
+    }
     cache^.math_commands[1] = {
-        kind = .Large_Op, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 1, text_len = 1,
+        kind = .Large_Op,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 1,
+        text_len = 1,
         operator_growth = OPERATOR_GROWTH_DISPLAY,
     }
     cache^.math_program_count = 1
-    cache^.math_programs[0] = {valid = true, command_count = 1}
+    cache^.math_programs[0] = {
+        valid = true,
+        command_count = 1,
+    }
 }
 
 //   Verify cached NewCM metrics replace synthetic math-glyph measurements.
@@ -287,8 +357,11 @@ math_shaping_expect_recursive_accents :: proc(
 
     cache := &runtime^.compile_cache
     bar_item, bar_ok := math_program_item({
-        cache = cache, buffer = &runtime^.command_buffer,
-        cmd = cache^.math_commands[5], font_size = 32, command_index = 5,
+        cache = cache,
+        buffer = &runtime^.command_buffer,
+        cmd = cache^.math_commands[5],
+        font_size = 32,
+        command_index = 5,
         math_style = {.Text, false},
     })
     testing.expect(t, bar_ok && bar_item.accent_geometry_valid)
@@ -296,8 +369,11 @@ math_shaping_expect_recursive_accents :: proc(
     testing.expect_value(t, bar_item.accent_rule_thickness, f32(1))
     testing.expect_value(t, bar_item.ascent, f32(16))
     glyph_accent, glyph_accent_ok := math_program_item({
-        cache = cache, buffer = &runtime^.command_buffer,
-        cmd = cache^.math_commands[6], font_size = 32, command_index = 6,
+        cache = cache,
+        buffer = &runtime^.command_buffer,
+        cmd = cache^.math_commands[6],
+        font_size = 32,
+        command_index = 6,
         math_style = {.Text, false},
     })
     testing.expect(t, glyph_accent_ok && glyph_accent.accent_geometry_valid)
@@ -386,20 +462,38 @@ dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
     cache^.last_cell_width = 8
     cache^.math_command_count = 3
     cache^.math_commands[0] = {
-        kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 0, text_len = 1}
+        kind = .Math_Glyph_Run,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 0,
+        text_len = 1,
+    }
     cache^.math_commands[1] = {
-        kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 1, text_len = 1}
+        kind = .Math_Glyph_Run,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 1,
+        text_len = 1,
+    }
     cache^.math_commands[2] = {
-        kind = .Matrix, math_program_id = 0, table_descriptor_index = 0}
+        kind = .Matrix,
+        math_program_id = 0,
+        table_descriptor_index = 0,
+    }
     cache^.math_table_descriptor_count = 1
     cache^.math_table_descriptors[0] = {
-        rows = 1, columns = 2, cell_style = .Text,
+        rows = 1,
+        columns = 2,
+        cell_style = .Text,
     }
     cache^.math_program_count = 2
-    cache^.math_programs[0] = {valid = true, command_count = 2}
-    cache^.math_programs[1] = {valid = true, command_start = 2, command_count = 1}
+    cache^.math_programs[0] = {
+        valid = true,
+        command_count = 2,
+    }
+    cache^.math_programs[1] = {
+        valid = true,
+        command_start = 2,
+        command_count = 1,
+    }
     projection: [16]u8
     glyphs: [8]fontmodel.Shaped_Glyph
 
@@ -428,10 +522,16 @@ dynview_math_shaping_missing_glyph_uses_whole_run_fallback :: proc(t: ^testing.T
     cache^.last_cell_width = 8
     cache^.math_command_count = 1
     cache^.math_commands[0] = {
-        kind = .Math_Glyph_Run, style_id = dyncore.DYNVIEW_STYLE_ITALIC,
-        text_offset = 0, text_len = 2}
+        kind = .Math_Glyph_Run,
+        style_id = dyncore.DYNVIEW_STYLE_ITALIC,
+        text_offset = 0,
+        text_len = 2,
+    }
     cache^.math_program_count = 1
-    cache^.math_programs[0] = {valid = true, command_count = 1}
+    cache^.math_programs[0] = {
+        valid = true,
+        command_count = 1,
+    }
     projection: [16]u8
     glyphs: [8]fontmodel.Shaped_Glyph
 

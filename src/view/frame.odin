@@ -343,8 +343,10 @@ prepare_sdl_frame :: proc(
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     prepare_sdl_frame_owners(state, ctx, Sdl_Frame_Update{
-        frame_dt = frame_dt, input_frame = input_frame,
-        routed_frame = routed_frame, ui_geometry = ui_geometry,
+        frame_dt = frame_dt,
+        input_frame = input_frame,
+        routed_frame = routed_frame,
+        ui_geometry = ui_geometry,
     }, prepared)
     sync_sdl_text_input_target(
         state, ctx.platform, ctx.input_runtime, input_frame,
@@ -372,7 +374,7 @@ prepare_sdl_frame_owners :: proc(
         &prepared^.controls)
     uilibrary.library_entry_name_service(state, update.frame_dt)
     if state^.simulation_executor != nil {
-        viewpreferences.settings_save_service(state, &state^.simulation_executor^.pool)
+        service_frame_user_data(state)
     }
     libraryservice.service_library_search(state, ctx.content_service, update.frame_dt)
     terminal_frame := terminalservice.terminal_service_update(
@@ -393,6 +395,18 @@ prepare_sdl_frame_owners :: proc(
     prepared^.splitters = update.ui_geometry.splitters
 }
 
+// Give both SQLite borrowers a fair admission turn before Terminal input is handled.
+service_frame_user_data :: proc(state: ^core.Euclid_General_State) {
+    pool := &state^.simulation_executor^.pool
+    history_ready := terminalview.history_runtime_has_work(
+        &state^.terminal_history_runtime)
+    settings_ready := viewpreferences.settings_save_ready(state)
+    terminalview.history_runtime_service(
+        &state^.terminal_history_runtime, &state^.user_data_admission,
+        pool, settings_ready)
+    viewpreferences.settings_save_service(state, pool, history_ready)
+}
+
 // sync_sdl_text_input_target publishes the focused editable owner and native caret area.
 sync_sdl_text_input_target :: proc(
     state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform,
@@ -410,7 +424,8 @@ sync_sdl_text_input_target :: proc(
     native.sdl_platform_sync_text_input(platform, target.kind != .None)
     if target.kind != .None {
         native.sdl_platform_set_text_input_area(platform, {
-            x = i32(target.area.x), y = i32(target.area.y),
+            x = i32(target.area.x),
+            y = i32(target.area.y),
             w = max(i32(1), i32(target.area.width)),
             h = max(i32(1), i32(target.area.height)),
         }, 0)
@@ -446,14 +461,19 @@ sdl_frame_resolve_text_input_target :: proc(
     if target.kind == .Terminal && terminal_frame.available &&
         state^.terminal.history != nil {
         return {
-            kind = .Terminal, id = target.id,
+            kind = .Terminal,
+            id = target.id,
             area = terminal_frame.editable_geometry.caret,
         }
     }
     if target.kind == .Input_Box {
         area, eligible := sdl_frame_input_box_caret_area(state, target.id)
         if eligible {
-            return {kind = .Input_Box, id = target.id, area = area}
+            return {
+                kind = .Input_Box,
+                id = target.id,
+                area = area,
+            }
         }
     }
     return {}

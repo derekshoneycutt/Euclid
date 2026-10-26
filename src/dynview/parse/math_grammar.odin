@@ -75,7 +75,9 @@ tex_parse_math :: proc(
     if !tex_semantic_output_init(output) {
         return .Work_Limit
     }
-    parser := Tex_Math_Parser{output = output}
+    parser: Tex_Math_Parser = {
+        output = output,
+    }
     status := tex_cursor_init(&parser.cursor, source, limits)
     if status != .Ok {
         return tex_math_finish(&parser, status)
@@ -101,7 +103,9 @@ tex_parse_math_fragment :: proc(
     if root < 0 {
         return -1, .Work_Limit
     }
-    parser := Tex_Math_Parser{output = output}
+    parser: Tex_Math_Parser = {
+        output = output,
+    }
     status := tex_cursor_init(&parser.cursor, source, limits)
     if status == .Ok {
         status = tex_math_parse_sequence(&parser, root, false)
@@ -201,10 +205,14 @@ tex_math_parse_sequence :: proc(
 tex_math_explicit_style :: proc(
     command: string) -> (Tex_Math_Style_Level, bool) {
     switch command {
-    case "\\displaystyle": return .Display, true
-    case "\\textstyle": return .Text, true
-    case "\\scriptstyle": return .Script, true
-    case "\\scriptscriptstyle": return .Script_Script, true
+    case "\\displaystyle":
+        return .Display, true
+    case "\\textstyle":
+        return .Text, true
+    case "\\scriptstyle":
+        return .Script, true
+    case "\\scriptscriptstyle":
+        return .Script_Script, true
     }
     return .Display, false
 }
@@ -302,22 +310,41 @@ tex_math_append_text_atom :: proc(
     width := tex_utf8_sequence_width(parser.cursor.source, offset)
     if width == 0 {
         tex_cursor_fail(&parser.cursor, .Invalid_Utf8, offset)
-        return {-1, offset, false}
+        return {
+            index = -1,
+            next = offset,
+            ok = false,
+        }
     }
     if width == 1 && tex_math_ascii_space(parser.cursor.source[offset]) {
-        return {-1, offset+width, true}
+        return {
+            index = -1,
+            next = offset + width,
+            ok = true,
+        }
     }
     if width == 1 && parser.cursor.source[offset] == '~' {
         index, _ := tex_math_append_glue(parser, program_id, .Space, "\u00a0")
-        return {index, offset+width, true}
+        return {
+            index = index,
+            next = offset + width,
+            ok = true,
+        }
     }
     role, atom_class := tex_math_scalar_class(
         parser.cursor.source, offset, width)
     end := tex_math_scalar_run_end(
         parser.cursor.source, offset+width, token_end, role, atom_class)
     index := tex_math_append_glyph(parser, program_id,
-        parser.cursor.source[offset:end], {role = role, atom_class = atom_class})
-    return {index, end, true}
+        parser.cursor.source[offset:end], {
+            role = role,
+            atom_class = atom_class,
+        })
+    return {
+        index = index,
+        next = end,
+        ok = true,
+    }
 }
 
 // Find the end of one contiguous scalar run with matching math semantics.
@@ -362,11 +389,16 @@ tex_math_scalar_class :: proc(
         role = .Math_Italic
     }
     switch value {
-    case '+', '-', '*', '/': return role, .Bin
-    case '=', '<', '>': return role, .Rel
-    case '(', '[': return role, .Open
-    case ')', ']': return role, .Close
-    case ',', ';': return role, .Punct
+    case '+', '-', '*', '/':
+        return role, .Bin
+    case '=', '<', '>':
+        return role, .Rel
+    case '(', '[':
+        return role, .Open
+    case ')', ']':
+        return role, .Close
+    case ',', ';':
+        return role, .Punct
     }
     return role, .Ord
 }
@@ -440,14 +472,16 @@ tex_math_parse_command :: proc(
         return structured.index, structured.status
     }
     switch command {
-    case "\\left": return tex_math_parse_stretch_delimiter(parser, program_id)
+    case "\\left":
+        return tex_math_parse_stretch_delimiter(parser, program_id)
     case "\\mathbb", "\\mathbf", "\\mathit", "\\mathcal":
         return tex_math_parse_alphabet(parser, program_id, command)
     case "\\mathrm", "\\text":
         return tex_math_parse_upright_group(parser, program_id, command)
     case "\\operatorname":
         return tex_math_parse_operator_name(parser, program_id)
-    case "\\begin": return tex_math_parse_table(parser, program_id)
+    case "\\begin":
+        return tex_math_parse_table(parser, program_id)
     }
     return tex_math_parse_symbol_command(parser, program_id, command)
 }
@@ -464,14 +498,22 @@ tex_math_parse_structured_command :: proc(
     index := -1
     status := Tex_Parse_Status.Ok
     switch command {
-    case "\\sqrt": index, status = tex_math_parse_radical(parser, program_id)
-    case "\\overset": index, status = tex_math_parse_annotation(
+    case "\\sqrt":
+        index, status = tex_math_parse_radical(parser, program_id)
+    case "\\overset":
+        index, status = tex_math_parse_annotation(
         parser, program_id, true)
-    case "\\underset": index, status = tex_math_parse_annotation(
+    case "\\underset":
+        index, status = tex_math_parse_annotation(
         parser, program_id, false)
-    case: return {}
+    case:
+        return {}
     }
-    return {index = index, status = status, handled = true}
+    return {
+        index = index,
+        status = status,
+        handled = true,
+    }
 }
 
 // Dispatch fraction and binomial commands that share two recursive operands.
@@ -483,20 +525,31 @@ tex_math_parse_fraction_command :: proc(
     index := -1
     status := Tex_Parse_Status.Ok
     switch command {
-    case "\\frac": index, status = tex_math_parse_fraction(parser, program_id)
-    case "\\dfrac": index, status = tex_math_parse_fraction_variant(
+    case "\\frac":
+        index, status = tex_math_parse_fraction(parser, program_id)
+    case "\\dfrac":
+        index, status = tex_math_parse_fraction_variant(
         parser, program_id, .Display)
-    case "\\tfrac": index, status = tex_math_parse_fraction_variant(
+    case "\\tfrac":
+        index, status = tex_math_parse_fraction_variant(
         parser, program_id, .Text)
-    case "\\binom": index, status = tex_math_parse_binomial(
+    case "\\binom":
+        index, status = tex_math_parse_binomial(
         parser, program_id, false, .Display)
-    case "\\dbinom": index, status = tex_math_parse_binomial(
+    case "\\dbinom":
+        index, status = tex_math_parse_binomial(
         parser, program_id, true, .Display)
-    case "\\tbinom": index, status = tex_math_parse_binomial(
+    case "\\tbinom":
+        index, status = tex_math_parse_binomial(
         parser, program_id, true, .Text)
-    case: return {}
+    case:
+        return {}
     }
-    return {index = index, status = status, handled = true}
+    return {
+        index = index,
+        status = status,
+        handled = true,
+    }
 }
 
 //   Parse one standalone fixed-size delimiter with explicit atom semantics.
@@ -512,7 +565,10 @@ tex_math_parse_fixed_delimiter :: proc(
     }
     growth, atom_class := tex_math_fixed_delimiter_policy(command)
     return tex_math_append_standalone_delimiter(parser, program_id, {
-        text = delimiter, growth = growth, atom_class = atom_class})
+        text = delimiter,
+        growth = growth,
+        atom_class = atom_class,
+    })
 }
 
 //   Resolve one fixed delimiter command's size and atom class.
@@ -553,11 +609,19 @@ tex_math_append_standalone_delimiter :: proc(
         left, right = right, .None
     }
     return tex_math_append_structured(parser, program_id, {
-        kind = .Stretch_Delimiter, text = text, radical_index_text = text,
-        left_delimiter = left, right_delimiter = right, style_role = .Math,
-        atom_class = delimiter.atom_class, operator_growth = delimiter.growth,
-        operator_limits = delimiter.shared_extent, child_program = -1,
-        secondary_program = -1, tertiary_program = -1, table_descriptor = -1,
+        kind = .Stretch_Delimiter,
+        text = text,
+        radical_index_text = text,
+        left_delimiter = left,
+        right_delimiter = right,
+        style_role = .Math,
+        atom_class = delimiter.atom_class,
+        operator_growth = delimiter.growth,
+        operator_limits = delimiter.shared_extent,
+        child_program = -1,
+        secondary_program = -1,
+        tertiary_program = -1,
+        table_descriptor = -1,
     })
 }
 
@@ -587,12 +651,18 @@ tex_math_parse_symbol_command :: proc(
 tex_math_resolve_glue :: proc(
     command: string) -> (Tex_Math_Glue_Result, bool) {
     switch command {
-    case "\\;": return {.Thick, " "}, true
-    case "\\:", "\\>", "\\ ", "\\enspace": return {.Space, " "}, true
-    case "\\!": return {.Negative_Thin, ""}, true
-    case "\\quad": return {.Quad, " "}, true
-    case "\\qquad": return {.Quad, "  "}, true
-    case "\\,": return {.Thin, " "}, true
+    case "\\;":
+        return {.Thick, " "}, true
+    case "\\:", "\\>", "\\ ", "\\enspace":
+        return {.Space, " "}, true
+    case "\\!":
+        return {.Negative_Thin, ""}, true
+    case "\\quad":
+        return {.Quad, " "}, true
+    case "\\qquad":
+        return {.Quad, "  "}, true
+    case "\\,":
+        return {.Thin, " "}, true
     }
     return {}, false
 }
@@ -635,9 +705,14 @@ tex_math_append_text_run :: proc(
         return -1, .Work_Limit 
     }
     index := tex_semantic_append_op(parser.output, program_id, {
-        kind = .Text_Run, text = span, style_role = .Text,
-        atom_class = atom_class, child_program = -1,
-        secondary_program = -1, tertiary_program = -1, table_descriptor = -1,
+        kind = .Text_Run,
+        text = span,
+        style_role = .Text,
+        atom_class = atom_class,
+        child_program = -1,
+        secondary_program = -1,
+        tertiary_program = -1,
+        table_descriptor = -1,
     })
     return index, .Ok if index >= 0 else .Work_Limit
 }
@@ -687,10 +762,17 @@ tex_math_parse_operator_name :: proc(
             tex_semantic_text(parser.output, span), .Operator_Name, .Op)
     }
     index := tex_semantic_append_op(parser.output, program_id, {
-        kind = .Large_Operator, text = span, style_role = .Operator_Name_Star,
-        atom_class = .Op, large_op_kind = 4, operator_growth = 0,
-        operator_limits = 2, child_program = -1, secondary_program = -1,
-        tertiary_program = -1, table_descriptor = -1,
+        kind = .Large_Operator,
+        text = span,
+        style_role = .Operator_Name_Star,
+        atom_class = .Op,
+        large_op_kind = 4,
+        operator_growth = 0,
+        operator_limits = 2,
+        child_program = -1,
+        secondary_program = -1,
+        tertiary_program = -1,
+        table_descriptor = -1,
     })
     return index, .Ok if index >= 0 else .Work_Limit
 }
@@ -769,8 +851,10 @@ tex_math_parse_stretch_delimiter :: proc(
     text := tex_math_stretch_text(parser.output, left, child, right)
     if !has_right {
         return tex_math_append_glyph(
-            parser, program_id, tex_semantic_text(parser.output, text),
-            {role = .Math, atom_class = .Ord}), .Ok
+            parser, program_id, tex_semantic_text(parser.output, text), {
+                role = .Math,
+                atom_class = .Ord,
+            }), .Ok
     }
     return tex_math_append_stretch_delimiter(parser, program_id, {
         text = text,
@@ -825,7 +909,10 @@ tex_math_parse_until_right :: proc(
                 return false
             }
             _, status = tex_math_append_standalone_delimiter(parser, program_id, {
-                text = delimiter, shared_extent = 1, atom_class = .Rel})
+                text = delimiter,
+                shared_extent = 1,
+                atom_class = .Rel,
+            })
             if status != .Ok {
                 return false
             }
@@ -894,7 +981,10 @@ tex_math_stretch_text :: proc(
     for part in parts {
         _, _ = tex_semantic_append_text(output, part)
     }
-    return {offset = start, length = output.text_count-start}
+    return {
+        offset = start,
+        length = output.text_count-start,
+    }
 }
 
 //   Append one explicit semantic glue operation.
@@ -1045,7 +1135,11 @@ tex_math_build_binomial_content :: proc(
     delimited_text := tex_math_stretch_text(
         parser.output, "(", stack_program, ")")
     _, status = tex_math_append_stretch_delimiter(parser, content_program, {
-        text = delimited_text, left = "(", right = ")", child = stack_program})
+        text = delimited_text,
+        left = "(",
+        right = ")",
+        child = stack_program,
+    })
     return status
 }
 
@@ -1061,7 +1155,10 @@ tex_math_stack_text :: proc(
     for part in parts {
         _, _ = tex_semantic_append_text(output, part)
     }
-    return {offset = start, length = output.text_count-start}
+    return {
+        offset = start,
+        length = output.text_count-start,
+    }
 }
 
 //   Parse an optional radical degree followed by one radicand group.
@@ -1130,9 +1227,14 @@ tex_math_parse_annotation :: proc(
     bottom := base if over else annotation
     text := tex_math_stack_text(parser.output, top, bottom)
     return tex_math_append_structured(parser, program_id, {
-        kind = .Stack, text = text, style_role = .Math, atom_class = .Inner,
-        operator_limits = 1 if over else 2, child_program = top,
-        secondary_program = bottom, tertiary_program = -1,
+        kind = .Stack,
+        text = text,
+        style_role = .Math,
+        atom_class = .Inner,
+        operator_limits = 1 if over else 2,
+        child_program = top,
+        secondary_program = bottom,
+        tertiary_program = -1,
         table_descriptor = -1,
     })
 }
@@ -1291,8 +1393,10 @@ tex_math_attach_scripts :: proc(
     }
     if op.kind == .Accent &&
         tex_math_attach_brace_annotation(parser, op, {
-            superscript = superscript, subscript = subscript,
-            superscript_text = sup_text, subscript_text = sub_text,
+            superscript = superscript,
+            subscript = subscript,
+            superscript_text = sup_text,
+            subscript_text = sub_text,
         }) {
         return
     }
@@ -1381,7 +1485,10 @@ tex_math_program_plain_span :: proc(
         }
         index = output.ops[index].next_op
     }
-    return {offset = start, length = output.text_count-start}
+    return {
+        offset = start,
+        length = output.text_count-start,
+    }
 }
 
 //   Append one operation's recursive canonical plain representation.
@@ -1527,5 +1634,8 @@ tex_math_fraction_text :: proc(
     for text in parts {
         _, _ = tex_semantic_append_text(output, text)
     }
-    return {offset = start, length = output.text_count-start}
+    return {
+        offset = start,
+        length = output.text_count-start,
+    }
 }

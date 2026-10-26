@@ -749,7 +749,7 @@ formation_lifecycle :: proc(
     angle := formation_particle_unit(seed, index, 1) * math.TAU
     reach := policy.motion_scale * math.lerp(profile.reach_min, profile.reach_max,
         math.sqrt(formation_particle_unit(seed, index, 2)))
-    lifecycle := Formation_Region_Lifecycle{
+    lifecycle: Formation_Region_Lifecycle = {
         role = role,
         hops = 1,
         birth = math.lerp(profile.birth_min, profile.birth_max,
@@ -977,7 +977,8 @@ formation_remove_reveal_particles :: proc(
         if particle^.alive && int(particle^.reveal_slot) == reveal_index &&
             particle^.reveal_generation == reveal_generation {
             _ = formation_remove_particle(ps, {
-                slot = i32(index), generation = particle^.slot_generation,
+                slot = i32(index),
+                generation = particle^.slot_generation,
             })
         }
     }
@@ -1288,7 +1289,7 @@ emit_shape_world_arc_burst :: proc(
     if !center_ok || !arc_ok {
         return
     }
-    emission := Circle_Dust_Emission{
+    emission: Circle_Dust_Emission = {
         center, arc.radius, arc.start_theta, arc.sweep_theta, ctx.color}
     if filled {
         emit_filled_circle_dust(ctx.particles, emission)
@@ -1456,8 +1457,7 @@ emit_shape_world_hide_burst :: proc(
     ps: ^Particle_System,
     world: ^shapemodel.Shape_World,
     entity: shapemodel.Shape_Entity,
-    options := Hide_Burst_Options{kick_dust = true, projected_scale = 1,
-        opacity = 1}) -> bool {
+    options: Hide_Burst_Options = {true, 1, 1}) -> bool {
     if ps == nil || world == nil || ps.use_max_dust_particles < 1 ||
         !(options.opacity > 0) ||
         !shapemodel.shape_registry_resolves(&world.registry, entity) {
@@ -1526,7 +1526,7 @@ emit_shape_world_clear_geometry_burst :: proc(
            !shapemodel.shape_registry_resolves(&world.registry, entity) {
             continue
         }
-        ctx := Shape_World_Burst_Context{
+        ctx: Shape_World_Burst_Context = {
             particles = ps,
             world = world,
             color = style.color,
@@ -2170,7 +2170,7 @@ spawn_dust_particle_index_with_generator :: proc(
 scenario_dust_origin :: proc(
     request: particlemodel.Scenario_Dust_Emission_Request,
     index: int, generator: rand.Generator) -> Vector3 {
-    result := Vector3{request.x, request.y, 0}
+    result: Vector3 = {request.x, request.y, 0}
     switch request.distribution {
     case .Point:
     case .Disc:
@@ -2399,13 +2399,17 @@ queue_dust_label_reveal_contact :: proc(
         return false
     }
     center_offset := font_size / projection_scale
-    start := Vector3{position.x - center_offset,
+    start: Vector3 = {position.x - center_offset,
         position.y - center_offset, position.z}
     width := font_size * 0.6 * f32(glyph_count) / projection_scale
-    finish := Vector3{start.x + width, start.y - width, start.z}
+    finish: Vector3 = {start.x + width, start.y - width, start.z}
     return queue_dust_tool_contact(ps, {
-        endpoint = start, segment_first = start, segment_second = finish,
-        has_sweep = true, source = .Label})
+        endpoint = start,
+        segment_first = start,
+        segment_second = finish,
+        has_sweep = true,
+        source = .Label,
+    })
 }
 
 // Copy one revealed polygon outline so the worker pushes its ground dust aside.
@@ -2563,7 +2567,7 @@ apply_dust_tool_contact_to_field :: proc(
     inv_intervals := f32(1.0) / f32(interval_count)
     for sample_index in 0..=interval_count {
         interpolation := f32(sample_index) * inv_intervals
-        position := Vector2{
+        position: Vector2 = {
             math.lerp(intent^.segment_first.x, intent^.segment_second.x, interpolation),
             math.lerp(intent^.segment_first.y, intent^.segment_second.y, interpolation)}
         ps^.dust_tool_contact_field_node_visit_count +=

@@ -129,7 +129,10 @@ terminal_init_retained_storage :: proc(
 //   - Sets generation-one dimensions, configured limits, and zeroed scroll metrics.
 terminal_init_geometry :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.geometry = {
-        dimensions = {columns = TERMINAL_GRID_COLUMNS, rows = TERMINAL_GRID_ROWS},
+        dimensions = {
+            columns = TERMINAL_GRID_COLUMNS,
+            rows = TERMINAL_GRID_ROWS,
+        },
         generation = 1,
     }
     term.dimension_limits = TERMINAL_DIMENSION_LIMITS
@@ -150,8 +153,7 @@ terminal_construct_candidate :: proc(
     ambiguous_width: termgrid.Ambiguous_Width_Mode) -> bool {
     history := &term.history_storage
     if !termhist.termhist_init_with_allocator(
-        history, TERMINAL_INITIAL_TEXT_CAPACITY,
-        TERMINAL_INITIAL_HISTORY_CAPACITY, allocator) {
+        history, TERMINAL_INITIAL_TEXT_CAPACITY, allocator) {
         terminal_rollback_init(term, history)
         return false
     }
@@ -183,7 +185,9 @@ terminal_init_with_allocator :: proc(
     if term.initialized || term.history != nil {
         return false
     }
-    term^ = {animation_generation = generation}
+    term^ = {
+        animation_generation = generation,
+    }
     if !terminal_construct_candidate(term, allocator, ambiguous_width) {
         term^ = {}
         return false
@@ -593,6 +597,7 @@ terminal_complete_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil {
         return
     }
+    terminal_history_navigation_invalidate(term)
     termemulator.interpreter_restore_primary_screen(&term.output_interpreter)
     termemulator.interpreter_finish_input(&term.output_interpreter)
     term.awaiting_eval = false
@@ -600,6 +605,9 @@ terminal_complete_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.output_checkpoint.valid = false
     term.pending_eval_request_id = 0
     term.pending_draft_valid = false
+    term.history_navigation_active = false
+    term.history_navigation_intent_count = 0
+    term.history_navigation_pending_id = 0
     termhist.termhist_reset_undo(term.history)
     terminal_clear_completion(term)
     if len(term.pending_eval_source) > 0 {
@@ -614,6 +622,8 @@ terminal_restore_output_checkpoint :: proc(term: ^viewterminalmodel.Terminal_Sta
         &term.output_interpreter, true)
     if termgrid.display_checkpoint_restore(
         term.output_checkpoint, &term.output_grid, &term.output_scrollback) {
+        terminal_highlight_remove_submission(
+            term, term.provisional_submission_id)
         term.output_started = term.output_checkpoint_started
     }
 }
@@ -651,7 +661,6 @@ terminal_continue_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
         return
     }
 
-    terminal_highlight_remove_latest(term)
     terminal_restore_output_checkpoint(term)
     term.pending_eval_request_id = 0
     terminal_restore_continuation_draft(term)
@@ -670,8 +679,10 @@ terminal_restore_continuation_draft :: proc(
     snapshot := term.pending_draft
     if !term.pending_draft_valid {
         snapshot = {
-            length = len(source), cursor = len(source),
-            anchor = len(source), preferred_column = -1,
+            length = len(source),
+            cursor = len(source),
+            anchor = len(source),
+            preferred_column = -1,
         }
     }
     if termhist.termhist_resume_draft(term.history, source, snapshot) {
@@ -929,10 +940,13 @@ terminal_update :: proc(
 //     the live line via termhist. Does not append any output line; the
 //     caller appends the real evaluated result once it arrives.
 terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
+    terminal_history_navigation_invalidate(term)
     text := termhist.termhist_current_text(term.history)
     term.pending_draft = {
-        length = len(text), cursor = term.history.cursor,
-        anchor = term.history.anchor, preferred_column = term.history.preferred_column,
+        length = len(text),
+        cursor = term.history.cursor,
+        anchor = term.history.anchor,
+        preferred_column = term.history.preferred_column,
     }
     term.pending_draft_valid = true
     term.history.undo.sequence = false
@@ -944,19 +958,15 @@ terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
             term.output_checkpoint, &term.output_grid, &term.output_scrollback)
     }
 
-    prompt_style := termhist.Termhist_Text_Style{
+    prompt_style: termhist.Termhist_Text_Style = {
         color_rgba = terminal_palette_rgba(
             terminal_prompt_palette_color(term.input_mode)),
         is_bold = true,
     }
-    history_tag := terminal_history_tag_for_mode(term.input_mode)
-
     terminal_highlight_begin_submission(term, text)
     terminal_append_submitted_input(term, text, prompt_style)
-    if termhist.termhist_accept_current(
-        term.history, history_tag, term.collecting_continuation, true) {
-        terminal_highlight_end_submission(term)
-    } else if term.highlighting != nil {
+    if !termhist.termhist_accept_current(term.history, true) &&
+        term.highlighting != nil {
         term.highlighting.recording = false
     }
     return text
@@ -989,12 +999,12 @@ terminal_append_submitted_input :: proc(
     term: ^viewterminalmodel.Terminal_State, text: string,
     prompt_style: termhist.Termhist_Text_Style) {
     saved_style := term.output_grid.style
-    prompt_cell_style := termgrid.Cell_Style{
+    prompt_cell_style: termgrid.Cell_Style = {
         foreground = termpalette.terminal_color_direct(prompt_style.color_rgba),
         bold = prompt_style.is_bold,
         application_prompt = terminal_application_prompt(term.input_mode),
     }
-    input_cell_style := termgrid.Cell_Style{}
+    input_cell_style: termgrid.Cell_Style = {}
     remaining := text
     first_line := true
     for {

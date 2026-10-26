@@ -67,7 +67,10 @@ hyperlink_registry_init :: proc(
     if allocation_error != nil {
         return false
     }
-    registry^ = {allocator = allocator, entries = entries}
+    registry^ = {
+        allocator = allocator,
+        entries = entries,
+    }
     return true
 }
 
@@ -88,10 +91,10 @@ hyperlink_uri_byte_rejected :: proc(byte: u8) -> bool {
 // Decode one exact supported URI scheme prefix.
 hyperlink_uri_scheme :: proc(uri: string) -> (Hyperlink_Uri_Parse, bool) {
     bytes := transmute([]u8)uri
-    schemes := [4]struct {
+    schemes: [4]struct {
         text: string,
         scheme: Hyperlink_Scheme,
-    }{
+    } = {
         {"http:", .Http}, {"https:", .Https},
         {"mailto:", .Mailto}, {"file:", .File},
     }

@@ -11,8 +11,12 @@ shell_integration_test_command_lifecycle :: proc(t: ^testing.T) {
     testing.expect(t, shell_integration_init(&state, 2, context.allocator))
     defer shell_integration_destroy(&state)
 
-    prompt := termmodel.Terminal_Semantic_Position{logical_line_id = 1}
-    finished := termmodel.Terminal_Semantic_Position{logical_line_id = 2}
+    prompt: termmodel.Terminal_Semantic_Position = {
+        logical_line_id = 1,
+    }
+    finished: termmodel.Terminal_Semantic_Position = {
+        logical_line_id = 2,
+    }
     shell_command_admit_marker(&state, {
         kind = .Prompt,
         valid = true,

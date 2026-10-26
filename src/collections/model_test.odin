@@ -204,7 +204,7 @@ collections_uuid_indexes_grow_rebuild_and_reinitialize :: proc(t: ^testing.T) {
 
 // Grow and verify the collection UUID index beyond its initial table.
 collections_test_append_index_collections :: proc(t: ^testing.T, set: ^Set) {
-    collection_name := [4]u8{'W', 'o', 'r', 'k'}
+    collection_name: [4]u8 = {'W', 'o', 'r', 'k'}
     for index in 1..=600 {
         result := append_collection(set, {
             id = collections_test_index_id(u32(index + 2000)),
@@ -311,13 +311,13 @@ collections_replay_mutations_require_qualified_identity :: proc(t: ^testing.T) {
     unqualified_name.placement = {}
     testing.expect_value(t, apply_mutation(set, unqualified_name),
         Mutation_Error.Invalid_Entry)
-    unqualified_remove := Mutation{
+    unqualified_remove: Mutation = {
         kind = .Remove_Favorite,
         entry_id = entry_id,
     }
     testing.expect_value(t, apply_mutation(set, unqualified_remove),
         Mutation_Error.Invalid_Entry)
-    unqualified_add := Mutation{
+    unqualified_add: Mutation = {
         kind = .Add_Favorite,
         entry_id = collections_test_id(78),
         animation_id = collections_test_id(79),
@@ -344,7 +344,7 @@ collections_stale_operations_cannot_target_readded_placement :: proc(t: ^testing
     testing.expect_value(t, name_error, Mutation_Error.None)
     stale_move, move_error := make_placement_move(set, identity, .Down)
     testing.expect_value(t, move_error, Policy_Error.None)
-    remove := Mutation{
+    remove: Mutation = {
         kind = .Remove_Favorite,
         placement = identity,
         entry_id = entry_id,
@@ -397,8 +397,8 @@ collections_entry_names_enforce_byte_capacity :: proc(t: ^testing.T) {
 @(test)
 collections_entry_names_reject_invalid_utf8_and_nul :: proc(t: ^testing.T) {
     entry_id := collections_test_id(40)
-    invalid_utf8 := [2]u8{0xc0, 0xaf}
-    identity := Placement_Identity{
+    invalid_utf8: [2]u8 = {0xc0, 0xaf}
+    identity: Placement_Identity = {
         collection_id = FAVORITES_COLLECTION_ID,
         entry_id = entry_id,
     }
@@ -416,7 +416,7 @@ collections_entry_names_reject_malformed_mutations_atomically :: proc(t: ^testin
     entry_id := collections_test_id(40)
     index := find_entry(set, entry_id)
     before := set^.entries[index]
-    malformed := Mutation{
+    malformed: Mutation = {
         kind = .Set_Entry_Name,
         placement = collections_test_identity(set, entry_id),
         entry_id = entry_id,
@@ -564,7 +564,7 @@ collections_sibling_moves_reject_read_only_and_cross_parent :: proc(t: ^testing.
         set, collections_test_id(22), .Down)
     testing.expect_value(t, failure, Policy_Error.None)
     testing.expect_value(t, neighbor, collections_test_id(25))
-    cross_scope := Mutation{
+    cross_scope: Mutation = {
         kind = .Reorder_Siblings,
         placement = collections_test_identity(set, collections_test_id(21)),
         entry_id = collections_test_id(21),
@@ -581,7 +581,7 @@ collections_sibling_moves_reject_read_only_and_cross_parent :: proc(t: ^testing.
 collections_sibling_moves_reject_malformed_operations :: proc(t: ^testing.T) {
     set := collections_test_shuffled_set()
     defer collections_test_destroy(set)
-    malformed := Mutation{
+    malformed: Mutation = {
         kind = .Reorder_Siblings,
         placement = collections_test_identity(set, collections_test_id(40)),
         entry_id = collections_test_id(40),
@@ -648,7 +648,7 @@ collections_test_nested_set :: proc() -> ^Set {
 // Add a read-only named collection fixture record.
 collections_test_add_nested_collection :: proc(
     set: ^Set, collection_id: uuid.Identifier) {
-    name := [4]u8{'W', 'o', 'r', 'k'}
+    name: [4]u8 = {'W', 'o', 'r', 'k'}
     assert(append_collection(set, {
         id = collection_id,
         role = .User,

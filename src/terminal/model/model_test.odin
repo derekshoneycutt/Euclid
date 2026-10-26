@@ -6,7 +6,7 @@ import "core:testing"
 // Verify producer identities retain their source and lifetime correlation.
 @(test)
 terminal_model_test_producer_identity :: proc(t: ^testing.T) {
-    producer := Terminal_Producer{
+    producer: Terminal_Producer = {
         kind = .Julia_Evaluation,
         id = 41,
         generation = 7,

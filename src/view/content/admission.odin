@@ -284,8 +284,10 @@ content_admission_metadata_rule_accepts :: proc(
     database: ^Content_Database, entry: Content_Metadata_Key,
     value, fingerprint: string) -> bool {
     switch entry.rule {
-    case .Fixed: return value == entry.fixed_value
-    case .Fingerprint: return value == fingerprint
+    case .Fixed:
+        return value == entry.fixed_value
+    case .Fingerprint:
+        return value == fingerprint
     case .Table_Counts:
         return content_admission_parse_table_counts(
             value, &database.expected_table_counts)

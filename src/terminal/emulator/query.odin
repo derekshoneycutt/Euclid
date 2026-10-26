@@ -47,7 +47,7 @@ interpreter_append_preflighted_response :: proc(
 query_prepare_decrqss_response :: proc(
     query_context: Query_Context,
     selector: []u8) -> termmodel.Terminal_Response {
-    response := termmodel.Terminal_Response{
+    response: termmodel.Terminal_Response = {
         kind = .Decrqss_Unsupported,
         producer = query_context.producer,
     }
@@ -124,7 +124,7 @@ terminal_capability_prepare_response :: proc(
         }
         decoded[index] = u8(high << 4 | low)
     }
-    response := termmodel.Terminal_Response{
+    response: termmodel.Terminal_Response = {
         kind = .Xtgetcap,
         first = u32(terminal_capability_classify(decoded[:decoded_count])),
         producer = producer,
@@ -162,7 +162,7 @@ interpreter_query_context :: proc(interpreter: ^Interpreter) -> Query_Context {
     if interpreter == nil || interpreter.grid == nil {
         return {} 
     }
-    result := Query_Context{
+    result: Query_Context = {
         style = interpreter.grid.style,
         scroll_top = interpreter.grid.editing.scroll_top,
         scroll_bottom = interpreter.grid.editing.scroll_bottom,

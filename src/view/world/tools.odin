@@ -67,9 +67,14 @@ encoded_ring_fallback :: proc(
         projected[index] = geometry.Vector2(
             projection.iso_to_cartesian(world, state^.iso_scale))
     }
-    style := native.Draw_Polyline_Style{width = draw.thickness,
-        miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw.color,
-        topology = .Closed, start_cap = .Butt, finish_cap = .Butt}
+    style: native.Draw_Polyline_Style = {
+        width = draw.thickness,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = draw.color,
+        topology = .Closed,
+        start_cap = .Butt,
+        finish_cap = .Butt,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
@@ -167,9 +172,14 @@ encoded_compass_arc_fallback :: proc(
             center + direction * basis.radius, draw.state^.iso_scale)
         projected[index] = geometry.Vector2(current)
     }
-    style := native.Draw_Polyline_Style{width = draw.brush_size,
-        miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
-        topology = .Open, start_cap = .Butt, finish_cap = .Butt}
+    style: native.Draw_Polyline_Style = {
+        width = draw.brush_size,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = draw_color,
+        topology = .Open,
+        start_cap = .Butt,
+        finish_cap = .Butt,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
@@ -201,7 +211,7 @@ draw_encoded_compass_arc :: proc(
     if !ok {
         return
     }
-    draw := Compass_Arc_Draw{state, compass^.brush_size}
+    draw: Compass_Arc_Draw = {state, compass^.brush_size}
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
     radius := compass^.brush_size * 0.5
@@ -214,8 +224,12 @@ draw_encoded_compass_arc :: proc(
         return
     }
     encoded_compass_arc_submit(state, encoder, {
-        compass = compass, basis = basis, samples = &samples,
-        coverage_radius = coverage_radius, occluders = occluders})
+        compass = compass,
+        basis = basis,
+        samples = &samples,
+        coverage_radius = coverage_radius,
+        occluders = occluders,
+    })
 }
 
 // encoded_compass_arc_submit records one complete arc or its atomic fallback.
@@ -242,7 +256,7 @@ encoded_compass_arc_submit :: proc(
         &uniforms, encoder, submission.occluders)
     if !native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), uniforms) {
-        draw := Compass_Arc_Draw{state, compass^.brush_size}
+        draw: Compass_Arc_Draw = {state, compass^.brush_size}
         encoded_compass_arc_fallback(
             encoder, compass^.pivot, submission.basis, draw, compass^.color)
     }
@@ -294,7 +308,9 @@ encoded_compass_leg :: proc(
 encoded_compass_context :: proc(
     state: ^core.Euclid_General_State, compass: ^shapemodel.Shapes_Compass_Draw,
     pen_caster: ^shapemodel.Shapes_Pen_Draw) -> Compass_Leg_Draw_Context {
-    result := Compass_Leg_Draw_Context{state = state, comp = compass,
+    result: Compass_Leg_Draw_Context = {
+        state = state,
+        comp = compass,
         c0 = projection.iso_to_cartesian(compass^.joint1, state^.iso_scale),
         c1 = projection.iso_to_cartesian(compass^.pivot, state^.iso_scale),
         c2 = projection.iso_to_cartesian(compass^.joint2, state^.iso_scale),
@@ -302,7 +318,8 @@ encoded_compass_context :: proc(
             compass^.pivot, compass^.brush_size),
         leg2 = make_tool_brush_occluder(state, compass^.pivot,
             compass^.joint2, compass^.brush_size),
-        has_pen_occluder = pen_caster != nil}
+        has_pen_occluder = pen_caster != nil,
+    }
     if pen_caster != nil {
         result.pen_occluder = make_tool_brush_occluder(state,
             pen_caster^.joint1, pen_caster^.joint2, pen_caster^.brush_size)
@@ -340,16 +357,22 @@ draw_encoded_pen_crossing :: proc(
         first := projection.iso_to_cartesian(crossing^.back0, state^.iso_scale)
         second := projection.iso_to_cartesian(crossing^.back1, state^.iso_scale)
         draw_encoded_pen_fragment(state, encoder, {
-            pen = pen, first = first, second = second,
-            compass = compass_caster})
+            pen = pen,
+            first = first,
+            second = second,
+            compass = compass_caster,
+        })
     }
     draw_encoded_cached_polygon(state, encoder, &crossing^.polygon)
     if crossing^.has_front {
         first := projection.iso_to_cartesian(crossing^.front0, state^.iso_scale)
         second := projection.iso_to_cartesian(crossing^.front1, state^.iso_scale)
         draw_encoded_pen_fragment(state, encoder, {
-            pen = pen, first = first, second = second,
-            compass = compass_caster})
+            pen = pen,
+            first = first,
+            second = second,
+            compass = compass_caster,
+        })
     }
 }
 
@@ -445,7 +468,7 @@ draw_encoded_high_merged_item :: proc(
 // draw_encoded_shapes_high_merged_cached preserves legacy elevated painter order.
 draw_encoded_shapes_high_merged_cached :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
-    ctx := High_Merged_Draw_Context{}
+    ctx: High_Merged_Draw_Context = {}
     ctx.crossing.pen_index = -1
     ctx.crossing.polygon_index = -1
     ctx.has_crossing = find_pen_polygon_crossing(state, &ctx.crossing)
@@ -480,12 +503,16 @@ draw_encoded_tool_shadow_line :: proc(
     draw: Tool_Shadow_Line_Draw) {
     screen_first := shadow_to_screen(draw.first, state)
     screen_second := shadow_to_screen(draw.second, state)
-    points := [2]geometry.Vector2{
+    points: [2]geometry.Vector2 = {
         geometry.Vector2(screen_first), geometry.Vector2(screen_second)}
-    style := native.Draw_Polyline_Style{width = draw.thickness,
+    style: native.Draw_Polyline_Style = {
+        width = draw.thickness,
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = encoded_shadow_color(draw.average_height), topology = .Open,
-        start_cap = .Round, finish_cap = .Round}
+        color = encoded_shadow_color(draw.average_height),
+        topology = .Open,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
     _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
 }
 
@@ -499,10 +526,14 @@ draw_encoded_ring_shadow :: proc(
         world := trochoid_tool_ring_point(center, radius, angle)
         projected[index] = geometry.Vector2(shadow_to_screen(world, state))
     }
-    style := native.Draw_Polyline_Style{width = thickness,
+    style: native.Draw_Polyline_Style = {
+        width = thickness,
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = encoded_shadow_color(center.z), topology = .Closed,
-        start_cap = .Butt, finish_cap = .Butt}
+        color = encoded_shadow_color(center.z),
+        topology = .Closed,
+        start_cap = .Butt,
+        finish_cap = .Butt,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
@@ -533,10 +564,14 @@ draw_encoded_compass_shadow_arc :: proc(
         world := compass^.pivot + direction * basis.radius
         projected[index] = geometry.Vector2(shadow_to_screen(world, state))
     }
-    style := native.Draw_Polyline_Style{width = thickness,
+    style: native.Draw_Polyline_Style = {
+        width = thickness,
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = encoded_shadow_color(height), topology = .Open,
-        start_cap = .Butt, finish_cap = .Butt}
+        color = encoded_shadow_color(height),
+        topology = .Open,
+        start_cap = .Butt,
+        finish_cap = .Butt,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 

@@ -30,16 +30,42 @@ document_optimal_penalty_selects_competing_path :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&optimal_arena)
     greedy_lines := document_optimal_test_lines(t, &greedy_arena)
     defer storage.arena_owner_destroy(&greedy_arena)
-    nodes := [7]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 30},
-        {kind = .Penalty, penalty = -9999, break_allowed = true},
-        {kind = .Box, width = 30},
-        {kind = .Glue, width = 10, stretch = 20, shrink = 3,
-            break_allowed = true},
-        {kind = .Box, width = 30},
-        {kind = .Glue, width = 10, stretch = 20, shrink = 3,
-            break_allowed = true},
-        {kind = .Box, width = 30},
+    nodes: [7]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 30,
+        },
+        {
+            kind = .Penalty,
+            penalty = -9999,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 30,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            stretch = 20,
+            shrink = 3,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 30,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            stretch = 20,
+            shrink = 3,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 30,
+        },
     }
 
     result := document_optimal_break(nodes[:], 2, 80, &lines)
@@ -89,19 +115,59 @@ document_optimal_publishes_adjusted_line_widths :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&stretch_arena)
     shrink_lines := document_optimal_test_lines(t, &shrink_arena)
     defer storage.arena_owner_destroy(&shrink_arena)
-    stretch_nodes := [5]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 30},
-        {kind = .Glue, width = 10, stretch = 20, shrink = 3},
-        {kind = .Box, width = 30},
-        {kind = .Glue, width = 10, stretch = 20, shrink = 3,
-            break_allowed = true}, {kind = .Box, width = 30},
+    stretch_nodes: [5]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 30,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            stretch = 20,
+            shrink = 3,
+        },
+        {
+            kind = .Box,
+            width = 30,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            stretch = 20,
+            shrink = 3,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 30,
+        },
     }
-    shrink_nodes := [5]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 40},
-        {kind = .Glue, width = 20, stretch = 10, shrink = 10},
-        {kind = .Box, width = 40},
-        {kind = .Glue, width = 10, stretch = 5, shrink = 3,
-            break_allowed = true}, {kind = .Box, width = 40},
+    shrink_nodes: [5]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 40,
+        },
+        {
+            kind = .Glue,
+            width = 20,
+            stretch = 10,
+            shrink = 10,
+        },
+        {
+            kind = .Box,
+            width = 40,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            stretch = 5,
+            shrink = 3,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 40,
+        },
     }
     stretch_result := document_optimal_break(stretch_nodes[:], 0, 80, &stretch_lines)
     shrink_result := document_optimal_break(shrink_nodes[:], 0, 95, &shrink_lines)
@@ -129,10 +195,19 @@ document_optimal_honors_forced_and_atomic_overfull_lines :: proc(t: ^testing.T) 
     arena: storage.Arena_Owner
     lines := document_optimal_test_lines(t, &arena)
     defer storage.arena_owner_destroy(&arena)
-    nodes := [3]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 20},
-        {kind = .Forced_Break, break_allowed = true},
-        {kind = .Box, width = 140},
+    nodes: [3]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 20,
+        },
+        {
+            kind = .Forced_Break,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 140,
+        },
     }
 
     result := document_optimal_break(nodes[:], 4, 100, &lines)
@@ -152,19 +227,43 @@ document_optimal_exhaustion_is_exact_greedy_fallback :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&optimal_arena)
     greedy_lines := document_optimal_test_lines(t, &greedy_arena)
     defer storage.arena_owner_destroy(&greedy_arena)
-    nodes := [5]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 40},
-        {kind = .Glue, width = 5, stretch = 3, shrink = 2,
-            break_allowed = true},
-        {kind = .Box, width = 70},
-        {kind = .Glue, width = 5, stretch = 3, shrink = 2,
-            break_allowed = true},
-        {kind = .Box, width = 20},
+    nodes: [5]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 40,
+        },
+        {
+            kind = .Glue,
+            width = 5,
+            stretch = 3,
+            shrink = 2,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 70,
+        },
+        {
+            kind = .Glue,
+            width = 5,
+            stretch = 3,
+            shrink = 2,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 20,
+        },
     }
 
     result := document_optimal_break_with_limits(
-        nodes[:], 3, {available = 100}, &optimal_lines,
-        {candidates = 8, states = 32, work = 1})
+        nodes[:], 3, {
+            available = 100,
+        }, &optimal_lines, {
+            candidates = 8,
+            states = 32,
+            work = 1,
+        })
     greedy_status := document_greedy_break(nodes[:], 3, 100, &greedy_lines)
 
     testing.expect_value(t, result.status, greedy_status)
@@ -183,18 +282,38 @@ document_optimal_storage_limits_fallback :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&candidate_arena)
     state_lines := document_optimal_test_lines(t, &state_arena)
     defer storage.arena_owner_destroy(&state_arena)
-    nodes := [3]dynviewmodel.Dynview_Document_Layout_Node{
-        {kind = .Box, width = 40},
-        {kind = .Glue, width = 10, break_allowed = true},
-        {kind = .Box, width = 40},
+    nodes: [3]dynviewmodel.Dynview_Document_Layout_Node = {
+        {
+            kind = .Box,
+            width = 40,
+        },
+        {
+            kind = .Glue,
+            width = 10,
+            break_allowed = true,
+        },
+        {
+            kind = .Box,
+            width = 40,
+        },
     }
 
     candidate_result := document_optimal_break_with_limits(
-        nodes[:], 0, {available = 70}, &candidate_lines,
-        {candidates = 1, states = 16, work = 100})
+        nodes[:], 0, {
+            available = 70,
+        }, &candidate_lines,{
+            candidates = 1,
+            states = 16,
+            work = 100,
+        })
     state_result := document_optimal_break_with_limits(
-        nodes[:], 0, {available = 70}, &state_lines,
-        {candidates = 4, states = 1, work = 100})
+        nodes[:], 0, {
+            available = 70,
+        }, &state_lines, {
+            candidates = 4,
+            states = 1,
+            work = 100,
+        })
 
     testing.expect_value(t, candidate_result.fallback,
         Document_Break_Fallback.Candidate_Limit)

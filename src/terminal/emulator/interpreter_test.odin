@@ -120,12 +120,15 @@ emulator_test_attachment_place :: proc(
     store: ^termattachment.Store, logical_row: i64,
     screen: termattachment.Screen_Identity = .Primary) ->
     (termattachment.Attachment_Id, termattachment.Admission_Outcome) {
-    payload := [4]u8{1, 2, 3, 4}
+    payload: [4]u8 = {1, 2, 3, 4}
     attachment, attachment_outcome := termattachment.attachment_admit(store, {
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 2, height = 2},
+            metrics = {
+                width = 2,
+                height = 2,
+            },
         },
         payload = payload[:],
         payload_format = .Indexed8,
@@ -141,7 +144,10 @@ emulator_test_attachment_place :: proc(
             logical_row = logical_row,
             column_span = 1,
             row_span = 1,
-            source = {width = 2, height = 2},
+            source = {
+                width = 2,
+                height = 2,
+            },
             sizing = .Fit,
         },
     })
@@ -153,14 +159,17 @@ termgrid_test_leave_alternate_with_placement :: proc(
     t: ^testing.T, interpreter: ^Interpreter,
     store: ^termattachment.Store,
     primary_attachment, alternate_attachment: termattachment.Attachment_Id) {
-    alternate_metadata := termattachment.Placement_Metadata{
+    alternate_metadata: termattachment.Placement_Metadata = {
         attachment_id = alternate_attachment,
         geometry = {
             screen = .Alternate,
             logical_row = interpreter.grid.rows[0].logical_id,
             column_span = 1,
             row_span = 1,
-            source = {width = 2, height = 2},
+            source = {
+                width = 2,
+                height = 2,
+            },
             sizing = .Fit,
         },
     }
@@ -212,7 +221,7 @@ termgrid_test_write_fragmented :: proc(
     producer: Terminal_Producer) {
     for fixture in fixtures {
         for byte in transmute([]u8)fixture {
-            part := [1]u8{byte}
+            part: [1]u8 = {byte}
             testing.expect(t, interpreter_write(
                 interpreter, transmute(string)part[:], producer))
         }
@@ -245,7 +254,9 @@ termgrid_test_init_query_interpreter :: proc(
         return false
     }
     if !testing.expect(t,
-        interpreter_init(interpreter, grid, {title_state = retained})) {
+        interpreter_init(interpreter, grid, {
+            title_state = retained,
+        })) {
         termgrid.grid_destroy(grid)
         return false
     }
@@ -262,24 +273,35 @@ termgrid_test_interpreter_decrqss_queries :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 8, 2}
+    producer: Terminal_Producer = {.Terminal_Session, 8, 2}
     testing.expect(t, interpreter_write(&interpreter,
         "\e[1;3;4;38;5;17;48;2;1;2;3m", producer))
     style := interpreter.grid.style
     fixtures := [?]Terminal_Query_Fixture{
-        {"\eP$qm\e\\", {
-            kind = .Decrqss_Sgr,
-            first = TERMINAL_SGR_BOLD | TERMINAL_SGR_ITALIC |
-                TERMINAL_SGR_UNDERLINE,
-            second = u32(style.foreground), third = u32(style.background),
-            producer = producer,
-        }},
-        {"\eP$q q\e\\", {
-            kind = .Decrqss_Cursor_Style, producer = producer,
-        }},
-        {"\eP$qs\e\\", {
-            kind = .Decrqss_Unsupported, producer = producer,
-        }},
+        {
+            "\eP$qm\e\\",
+            {
+                kind = .Decrqss_Sgr,
+                first = TERMINAL_SGR_BOLD | TERMINAL_SGR_ITALIC | TERMINAL_SGR_UNDERLINE,
+                second = u32(style.foreground),
+                third = u32(style.background),
+                producer = producer,
+            },
+        },
+        {
+            "\eP$q q\e\\",
+            {
+                kind = .Decrqss_Cursor_Style,
+                producer = producer,
+            },
+        },
+        {
+            "\eP$qs\e\\",
+            {
+                kind = .Decrqss_Unsupported,
+                producer = producer,
+            },
+        },
     }
     for fixture in fixtures {
         termgrid_test_expect_query_fixture(
@@ -296,13 +318,19 @@ termgrid_test_interpreter_decrqss_margin_query :: proc(t: ^testing.T) {
     testing.expect(t, termgrid.grid_init(&grid, 8, 8, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
     interpreter: Interpreter
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained}))
-    producer := Terminal_Producer{.Terminal_Session, 3, 4}
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &retained,
+    }))
+    producer: Terminal_Producer = {.Terminal_Session, 3, 4}
     testing.expect(t, interpreter_write(&interpreter, "\e[2;7r", producer))
     termgrid_test_expect_query_fixture(t, &interpreter, {
         "\eP$qr\e\\",
-        {kind = .Decrqss_Margins, first = 2, second = 7, producer = producer},
+        {
+            kind = .Decrqss_Margins,
+            first = 2,
+            second = 7,
+            producer = producer,
+        },
     }, producer)
 }
 
@@ -316,7 +344,7 @@ termgrid_test_interpreter_xtgetcap_queries :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Julia_Evaluation, 19, 0}
+    producer: Terminal_Producer = {.Julia_Evaluation, 19, 0}
     request := "\eP+q544e;436f;524742;5463;5a5a\e\\"
     termgrid_test_write_fragmented(
         t, &interpreter, []string{request}, producer)
@@ -358,7 +386,7 @@ termgrid_test_interpreter_rejects_dcs_queries_transactionally :: proc(
 
     overflow_payload: [TERMINAL_QUERY_BYTE_CAPACITY + 1]u8
     for &byte in overflow_payload {
-        byte = '4' 
+        byte = '4'
     }
     testing.expect(t, interpreter_write(&interpreter, "\eP+q"))
     testing.expect(t, interpreter_write(
@@ -378,12 +406,26 @@ termgrid_test_interpreter_ansi_mode_queries :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 4, 6}
+    producer: Terminal_Producer = {.Terminal_Session, 4, 6}
     fixtures := [?]Terminal_Query_Fixture{
-        {"\e[4$p", {kind = .Mode_Status, first = 4, second = 2,
-            producer = producer}},
-        {"\e[9999$p", {kind = .Mode_Status, first = 9999, second = 0,
-            producer = producer}},
+        {
+            "\e[4$p",
+            {
+                kind = .Mode_Status,
+                first = 4,
+                second = 2,
+                producer = producer,
+            },
+        },
+        {
+            "\e[9999$p",
+            {
+                kind = .Mode_Status,
+                first = 9999,
+                second = 0,
+                producer = producer,
+            },
+        },
     }
     termgrid_test_expect_query_fixture(t, &interpreter, fixtures[0], producer)
     testing.expect(t, interpreter_write(&interpreter, "\e[4h", producer))
@@ -395,7 +437,7 @@ termgrid_test_interpreter_ansi_mode_queries :: proc(t: ^testing.T) {
 // Set every row's dirty flag for a dynamic-color redraw assertion.
 termgrid_test_set_rows_dirty :: proc(grid: ^termgrid.Grid, dirty: bool) {
     for &row in grid.rows {
-        row.dirty = dirty 
+        row.dirty = dirty
     }
 }
 
@@ -406,10 +448,10 @@ termgrid_test_expect_dynamic_palette_commit :: proc(
     testing.expect_value(t, retained.palette.colors[1], u32(0x112233ff))
     testing.expect_value(t, retained.palette.generation, u64(1))
     for row in grid.rows {
-        testing.expect(t, row.dirty) 
+        testing.expect(t, row.dirty)
     }
     for row in alternate.rows {
-        testing.expect(t, row.dirty) 
+        testing.expect(t, row.dirty)
     }
 }
 
@@ -418,7 +460,7 @@ termgrid_test_expect_dynamic_palette_query :: proc(
     t: ^testing.T, retained: ^Terminal_Title_State, grid: ^termgrid.Grid) {
     testing.expect_value(t, retained.palette.generation, u64(1))
     for row in grid.rows {
-        testing.expect(t, !row.dirty) 
+        testing.expect(t, !row.dirty)
     }
 }
 
@@ -434,22 +476,24 @@ termgrid_test_interpreter_dynamic_osc_colors :: proc(t: ^testing.T) {
     defer termgrid.grid_destroy(&alternate)
     interpreter: Interpreter
     testing.expect(t, interpreter_init(&interpreter, &grid, {
-        alternate_grid = &alternate, title_state = &retained,
+        alternate_grid = &alternate,
+        title_state = &retained,
     }))
     termgrid_test_set_rows_dirty(&grid, false)
     termgrid_test_set_rows_dirty(&alternate, false)
-    producer := Terminal_Producer{.Terminal_Session, 7, 3}
+    producer: Terminal_Producer = {.Terminal_Session, 7, 3}
 
-    termgrid_test_write_fragmented(t, &interpreter,
-        []string{"\e]4;1;rgb:1/2/3\a"}, producer)
-    termgrid_test_expect_dynamic_palette_commit(
-        t, &retained, &grid, &alternate)
+    termgrid_test_write_fragmented(
+        t, &interpreter, []string{"\e]4;1;rgb:1/2/3\a"}, producer)
+    termgrid_test_expect_dynamic_palette_commit(t, &retained, &grid, &alternate)
 
     termgrid_test_set_rows_dirty(&grid, false)
-    termgrid_test_write_fragmented(t, &interpreter,
-        []string{"\e]4;1;?\e\\"}, producer)
+    termgrid_test_write_fragmented(t, &interpreter, []string{"\e]4;1;?\e\\"}, producer)
     termgrid_test_expect_responses(t, &interpreter, []Terminal_Response{{
-        kind = .Osc_Color, first = 4, second = 1, third = 0x112233ff,
+        kind = .Osc_Color,
+        first = 4,
+        second = 1,
+        third = 0x112233ff,
         producer = producer,
     }})
     termgrid_test_expect_dynamic_palette_query(t, &retained, &grid)
@@ -457,8 +501,7 @@ termgrid_test_interpreter_dynamic_osc_colors :: proc(t: ^testing.T) {
     testing.expect(t, interpreter_write(&interpreter, "\e]10;#abc\a"))
     testing.expect_value(t, retained.palette.foreground, u32(0xaabbccff))
     testing.expect(t, interpreter_write(&interpreter, "\e]110\a"))
-    testing.expect_value(t, retained.palette.foreground,
-        TERMINAL_DEFAULT_FOREGROUND_RGBA)
+    testing.expect_value(t, retained.palette.foreground, TERMINAL_DEFAULT_FOREGROUND_RGBA)
     testing.expect(t, interpreter_write(&interpreter, "\e]104;1\a"))
     testing.expect_value(t, retained.palette.colors[1], retained.palette.defaults[1])
     testing.expect_value(t, retained.palette.color_acceptance_count, u64(5))
@@ -474,8 +517,9 @@ termgrid_test_interpreter_rejects_osc_color_transactions :: proc(t: ^testing.T) 
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
     interpreter: Interpreter
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &retained,
+    }))
     original_one := retained.palette.colors[1]
     original_two := retained.palette.colors[2]
 
@@ -567,7 +611,7 @@ termgrid_test_expect_command_block :: proc(
 termgrid_test_expect_unsafe_hyperlinks_rejected :: proc(
     t: ^testing.T, interpreter: ^Interpreter, grid: ^termgrid.Grid,
     registry: ^Hyperlink_Registry) {
-    rejected := [9]string{
+    rejected: [9]string = {
         "javascript:alert(1)", "https://user@example.com/path",
         "file://remote/tmp/file", "file:///tmp/../secret",
         "file:///tmp/%2e%2e/secret", "file:///tmp%2fsecret",
@@ -599,7 +643,7 @@ termgrid_test_expect_unsafe_hyperlinks_rejected :: proc(
 termgrid_test_expect_synchronized_transaction :: proc(
     t: ^testing.T, interpreter: ^Interpreter,
     synchronized: ^Synchronized_Output_State, grid: ^termgrid.Grid) {
-    producer := Terminal_Producer{.Terminal_Session, 4, 7}
+    producer: Terminal_Producer = {.Terminal_Session, 4, 7}
     testing.expect(t, interpreter_write(
         interpreter, "old\e[?2026hnew\e[?2026h", producer))
     testing.expect(t, synchronized.active)
@@ -617,8 +661,8 @@ termgrid_test_expect_synchronized_transaction :: proc(
 termgrid_test_expect_synchronized_boundaries :: proc(
     t: ^testing.T, interpreter: ^Interpreter,
     synchronized: ^Synchronized_Output_State) {
-    first := Terminal_Producer{.Terminal_Session, 1, 1}
-    second := Terminal_Producer{.Terminal_Session, 2, 1}
+    first: Terminal_Producer = {.Terminal_Session, 1, 1}
+    second: Terminal_Producer = {.Terminal_Session, 2, 1}
     testing.expect(t, interpreter_write(interpreter, "\e[?2026h\e[5n", first))
     response, present := interpreter_peek_response(interpreter)
     testing.expect(t, present)
@@ -664,7 +708,7 @@ termgrid_test_interpreter_sgr_is_chunk_independent :: proc(t: ^testing.T) {
     fixture := "\e[1;38;5;196mERROR\e[0m \e[3;4;38:2::10:20:30mlink\e[0m"
     testing.expect(t, interpreter_write(&contiguous, fixture))
     for byte in transmute([]u8)fixture {
-        part := [1]u8{byte}
+        part: [1]u8 = {byte}
         testing.expect(t,
             interpreter_write(&chunked, transmute(string)part[:]))
     }
@@ -720,7 +764,7 @@ termgrid_test_interpreter_sgr_backgrounds_survive_boundaries :: proc(t: ^testing
     defer termgrid.grid_destroy(&grid)
     fixture := "\e[44mA界\e[104mB\e[49mC"
     for byte in transmute([]u8)fixture {
-        part := [1]u8{byte}
+        part: [1]u8 = {byte}
         testing.expect(t,
             interpreter_write(&interpreter, transmute(string)part[:]))
     }
@@ -758,12 +802,13 @@ termgrid_test_interpreter_consumes_osc_title_sequences :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &title_state}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &title_state,
+    }))
 
     fixture := "\e]0;derek@BlackBoxen Euclid\a$ \e]2;working\e\\ready"
     for byte in transmute([]u8)fixture {
-        part := [1]u8{byte}
+        part: [1]u8 = {byte}
         testing.expect(t,
             interpreter_write(&interpreter, transmute(string)part[:]))
     }
@@ -824,7 +869,7 @@ termgrid_test_interpreter_queues_osc_clipboard_writes :: proc(t: ^testing.T) {
     interpreter: Interpreter
     retained: Terminal_Title_State
     queue: Clipboard_Action_Queue
-    producer := Terminal_Producer{.Terminal_Session, 17, 3}
+    producer: Terminal_Producer = {.Terminal_Session, 17, 3}
     testing.expect(t, CLIPBOARD_ACTION_QUEUE_INIT(&queue, context.allocator))
     defer CLIPBOARD_ACTION_QUEUE_DESTROY(&queue)
     testing.expect(t, termgrid.grid_init(&grid, 8, 2, allocator = context.allocator))
@@ -863,12 +908,13 @@ termgrid_test_interpreter_commits_shell_integration :: proc(t: ^testing.T) {
     defer SHELL_INTEGRATION_DESTROY(&shell)
     testing.expect(t, termgrid.scrollback_init(&scrollback, 8, 4, context.allocator))
     defer termgrid.scrollback_destroy(&scrollback)
-    sink := termgrid.Scrollback_Sink{
+    sink: termgrid.Scrollback_Sink = {
         user_data = &scrollback,
         commit = termgrid.scrollback_sink_commit,
     }
-    testing.expect(t, termgrid.grid_init(
-        &grid, 8, 2, context.allocator, {scrollback = sink}))
+    testing.expect(t, termgrid.grid_init(&grid, 8, 2, context.allocator, {
+        scrollback = sink,
+    }))
     defer termgrid.grid_destroy(&grid)
     testing.expect(t, termgrid.display_checkpoint_init(
         &checkpoint, &grid, &scrollback, context.allocator))
@@ -899,8 +945,9 @@ termgrid_test_shell_command_index_lifecycle_and_wrap :: proc(t: ^testing.T) {
     defer SHELL_INTEGRATION_DESTROY(&shell)
     testing.expect(t, termgrid.grid_init(&grid, 16, 4, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {shell_integration = &shell}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        shell_integration = &shell,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter,
         "\e]133;A\a\e]133;B\aone\r\n" +
@@ -935,8 +982,9 @@ termgrid_test_shell_command_index_tracks_wrapped_endpoints :: proc(t: ^testing.T
     defer SHELL_INTEGRATION_DESTROY(&shell)
     testing.expect(t, termgrid.grid_init(&grid, 4, 3, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {shell_integration = &shell}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        shell_integration = &shell,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter,
         "\e]133;A\a\e]133;B\aabcdef\e]133;C\a\e]133;D\a"))
@@ -961,8 +1009,9 @@ termgrid_test_shell_command_index_handles_malformed_order :: proc(t: ^testing.T)
     defer SHELL_INTEGRATION_DESTROY(&shell)
     testing.expect(t, termgrid.grid_init(&grid, 16, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {shell_integration = &shell}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        shell_integration = &shell,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter,
         "\e]133;A\a\e]133;B\aone\e]133;B\atwo"))
@@ -1011,8 +1060,9 @@ termgrid_test_interpreter_rejects_invalid_shell_integration :: proc(t: ^testing.
     shell: Shell_Integration_State
     testing.expect(t, termgrid.grid_init(&grid, 8, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {shell_integration = &shell}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        shell_integration = &shell,
+    }))
     testing.expect(t, interpreter_write(
         &interpreter, "\e]7;file:///tmp/good\a"))
     testing.expect(t, interpreter_write(
@@ -1047,7 +1097,7 @@ termgrid_test_interpreter_rejects_unsafe_osc_clipboard_writes :: proc(
             clipboard_actions = &queue,
         }))
 
-    rejected := [9]string{
+    rejected: [9]string = {
         "\e]52;c;?\a",
         "\e]52;p;QQ==\a",
         "\e]52;cp;QQ==\a",
@@ -1185,14 +1235,15 @@ termgrid_test_interpreter_rejects_invalid_osc_titles :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &title_state}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &title_state,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter, "\e]2;stable\a"))
     testing.expect(t, interpreter_write(&interpreter, "\e]1;icon-only\a"))
     testing.expect_value(t, interpreter_title(&interpreter), "stable")
 
-    invalid := [2]u8{0xc3, 0x28}
+    invalid: [2]u8 = {0xc3, 0x28}
     testing.expect(t, interpreter_write(&interpreter, "\e]2;"))
     testing.expect(t, interpreter_write(&interpreter, string(invalid[:])))
     testing.expect(t, interpreter_write(&interpreter, "\e\\"))
@@ -1218,8 +1269,9 @@ termgrid_test_interpreter_bounds_osc_titles :: proc(t: ^testing.T) {
     testing.expect(t, termgrid.grid_init(
         &grid, 8, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &title_state}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &title_state,
+    }))
 
     exact: [TERMINAL_TITLE_BYTE_CAPACITY]u8
     for &byte in exact {
@@ -1283,10 +1335,10 @@ termgrid_test_interpreter_replays_terminal_menu_redraw :: proc(t: ^testing.T) {
     testing.expect(t, interpreter_write(&interpreter, initial))
     testing.expect(t, !interpreter.cursor_visible)
     testing.expect(t, interpreter_write(&interpreter, redraw))
-    fixtures := [2]string{initial, redraw}
+    fixtures: [2]string = {initial, redraw}
     for fixture in fixtures {
         for byte in transmute([]u8)fixture {
-            part := [1]u8{byte}
+            part: [1]u8 = {byte}
             testing.expect(t,
                 interpreter_write(&chunked, transmute(string)part[:]))
         }
@@ -1297,7 +1349,10 @@ termgrid_test_interpreter_replays_terminal_menu_redraw :: proc(t: ^testing.T) {
     testing.expect_value(t, interpreter.unsupported_sequence_count, u64(0))
     testing.expect_value(t, interpreter.malformed_sequence_count, u64(0))
     testing.expect_value(t, interpreter.overflow_sequence_count, u64(0))
-    testing.expect_value(t, grid.cursor, termgrid.Cursor{row = 2, column = 6})
+    testing.expect_value(t, grid.cursor, termgrid.Cursor{
+        row = 2,
+        column = 6,
+    })
     testing.expect_value(t, cell_text(&grid.rows[0].cells[1]), " ")
     testing.expect_value(t, cell_text(&grid.rows[0].cells[3]), "o")
     testing.expect_value(t, cell_text(&grid.rows[1].cells[1]), ">")
@@ -1317,7 +1372,10 @@ termgrid_test_interpreter_cursor_and_erasure :: proc(t: ^testing.T) {
     testing.expect(t, interpreter_write(&interpreter,
         "abcdef\r\n123456\e[1;3H\e[s\e[2KX\e[uY"))
 
-    testing.expect_value(t, grid.cursor, termgrid.Cursor{row = 0, column = 3})
+    testing.expect_value(t, grid.cursor, termgrid.Cursor{
+        row = 0,
+        column = 3,
+    })
     testing.expect_value(t, cell_text(&grid.rows[0].cells[0]), "")
     testing.expect_value(t, cell_text(&grid.rows[0].cells[2]), "Y")
     testing.expect_value(t, cell_text(&grid.rows[1].cells[0]), "1")
@@ -1325,7 +1383,10 @@ termgrid_test_interpreter_cursor_and_erasure :: proc(t: ^testing.T) {
 
     testing.expect(t,
         interpreter_write(&interpreter, "\e[2;6f\e[1A\e[2B\e[2C\e[3D"))
-    testing.expect_value(t, grid.cursor, termgrid.Cursor{row = 2, column = 2})
+    testing.expect_value(t, grid.cursor, termgrid.Cursor{
+        row = 2,
+        column = 2,
+    })
     testing.expect(t, interpreter_write(&interpreter, "\e[2J"))
     for &cell in grid.cells {
         testing.expect_value(t, cell_text(&cell), "")
@@ -1414,19 +1475,21 @@ termgrid_test_interpreter_selective_erase_and_dec_restore :: proc(t: ^testing.T)
 termgrid_test_interpreter_alternate_screen_restores_primary :: proc(t: ^testing.T) {
     history: Emulator_Scrollback_Test_State
     primary, alternate: termgrid.Grid
-    sink := termgrid.Scrollback_Sink{
+    sink: termgrid.Scrollback_Sink = {
         user_data = &history,
         commit = emulator_test_scrollback_commit,
     }
-    testing.expect(t, termgrid.grid_init(
-        &primary, 6, 2, context.allocator, {scrollback = sink}))
+    testing.expect(t, termgrid.grid_init(&primary, 6, 2, context.allocator, {
+        scrollback = sink,
+    }))
     defer termgrid.grid_destroy(&primary)
     testing.expect(t, termgrid.grid_init(
         &alternate, 6, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&alternate)
     interpreter: Interpreter
-    testing.expect(t, interpreter_init(
-        &interpreter, &primary, {alternate_grid = &alternate}))
+    testing.expect(t, interpreter_init(&interpreter, &primary, {
+        alternate_grid = &alternate,
+    }))
 
     testing.expect(t, interpreter_write(
         &interpreter, "first\r\nsecond\e[1;3H\e[s\e[?25l"))
@@ -1479,8 +1542,9 @@ termgrid_test_interpreter_alternate_screen_isolates_placements :: proc(t: ^testi
     alternate_entry, _ := termattachment.attachment_entry(
         &store, alternate_attachment)
     interpreter: Interpreter
-    testing.expect(t, interpreter_init(
-        &interpreter, &primary, {alternate_grid = &alternate}))
+    testing.expect(t, interpreter_init(&interpreter, &primary, {
+        alternate_grid = &alternate,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter, "\e[?1049h"))
 
@@ -1503,8 +1567,9 @@ termgrid_test_interpreter_alternate_transitions_are_bounded :: proc(t: ^testing.
         &alternate, 4, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&alternate)
     interpreter: Interpreter
-    testing.expect(t, interpreter_init(
-        &interpreter, &primary, {alternate_grid = &alternate}))
+    testing.expect(t, interpreter_init(&interpreter, &primary, {
+        alternate_grid = &alternate,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter, "\e[?2004;1049;25h"))
     testing.expect(t, interpreter.alternate_screen_active)
@@ -1514,7 +1579,7 @@ termgrid_test_interpreter_alternate_transitions_are_bounded :: proc(t: ^testing.
 
     enter_sequence: string = "\e[?1049h"
     for byte in transmute([]u8)enter_sequence {
-        part := [1]u8{byte}
+        part: [1]u8 = {byte}
         testing.expect(t,
             interpreter_write(&interpreter, transmute(string)part[:]))
     }
@@ -1551,7 +1616,7 @@ termgrid_test_interpreter_tracks_input_modes :: proc(t: ^testing.T) {
 
     fixture := "\e[?1;1000;1002;1004;1006;1016;2004h\e="
     for byte in transmute([]u8)fixture {
-        part := [1]u8{byte}
+        part: [1]u8 = {byte}
         testing.expect(t,
             interpreter_write(&interpreter, transmute(string)part[:]))
     }
@@ -1584,12 +1649,14 @@ termgrid_test_interpreter_tracks_modify_other_keys :: proc(t: ^testing.T) {
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 7, 9}
+    producer: Terminal_Producer = {.Terminal_Session, 7, 9}
 
     testing.expect(t, interpreter_write(&interpreter, "\e[>4;1m"))
     testing.expect_value(t, interpreter_modify_other_keys_level(&interpreter), u8(1))
@@ -1599,7 +1666,9 @@ termgrid_test_interpreter_tracks_modify_other_keys :: proc(t: ^testing.T) {
     response, present := interpreter_peek_response(&interpreter)
     testing.expect(t, present)
     testing.expect_value(t, response, Terminal_Response{
-        kind = .Modify_Other_Keys, first = 2, producer = producer,
+        kind = .Modify_Other_Keys,
+        first = 2,
+        producer = producer,
     })
     testing.expect(t, interpreter_pop_response(&interpreter))
 
@@ -1625,16 +1694,22 @@ termgrid_test_interpreter_rejects_cross_producer_sequences :: proc(t: ^testing.T
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
     defer termgrid.grid_destroy(&grid)
-    first := Terminal_Producer{
-        kind = .Terminal_Session, id = 1, generation = 3,
+    first: Terminal_Producer = {
+        kind = .Terminal_Session,
+        id = 1,
+        generation = 3,
     }
-    second := Terminal_Producer{
-        kind = .Terminal_Session, id = 1, generation = 4,
+    second: Terminal_Producer = {
+        kind = .Terminal_Session,
+        id = 1,
+        generation = 4,
     }
 
     testing.expect(t, interpreter_write(&interpreter, "\e[?", first))
@@ -1651,7 +1726,9 @@ termgrid_test_interpreter_rejects_modify_other_keys_extensions :: proc(t: ^testi
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
@@ -1676,12 +1753,14 @@ termgrid_test_interpreter_negotiates_kitty_keyboard :: proc(t: ^testing.T) {
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 3, 5}
+    producer: Terminal_Producer = {.Terminal_Session, 3, 5}
 
     testing.expect(t, interpreter_write(&interpreter, "\e[=31u"))
     testing.expect_value(t, interpreter_kitty_keyboard_flags(&interpreter), u8(31))
@@ -1693,7 +1772,9 @@ termgrid_test_interpreter_negotiates_kitty_keyboard :: proc(t: ^testing.T) {
     response, present := interpreter_peek_response(&interpreter)
     testing.expect(t, present)
     testing.expect_value(t, response, Terminal_Response{
-        kind = .Kitty_Keyboard, first = 30, producer = producer,
+        kind = .Kitty_Keyboard,
+        first = 30,
+        producer = producer,
     })
 }
 
@@ -1705,8 +1786,9 @@ termgrid_test_interpreter_stacks_complete_kitty_flags :: proc(t: ^testing.T) {
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     defer termgrid.grid_destroy(&grid)
-    testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained}))
+    testing.expect(t, interpreter_init(&interpreter, &grid, {
+        title_state = &retained,
+    }))
 
     testing.expect(t, interpreter_write(&interpreter, "\e[>17u"))
     testing.expect_value(t, interpreter_kitty_keyboard_flags(&interpreter), u8(17))
@@ -1722,25 +1804,29 @@ termgrid_test_interpreter_queues_kitty_detection_responses :: proc(t: ^testing.T
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 8, 13}
+    producer: Terminal_Producer = {.Terminal_Session, 8, 13}
 
     testing.expect(t, interpreter_write(&interpreter, "\e[?u\e[c", producer))
     first, present := interpreter_peek_response(&interpreter)
     testing.expect(t, present)
     testing.expect_value(t, first, Terminal_Response{
-        kind = .Kitty_Keyboard, producer = producer,
+        kind = .Kitty_Keyboard,
+        producer = producer,
     })
     testing.expect(t, interpreter_pop_response(&interpreter))
     second: Terminal_Response
     second, present = interpreter_peek_response(&interpreter)
     testing.expect(t, present)
     testing.expect_value(t, second, Terminal_Response{
-        kind = .Primary_Device_Attributes, producer = producer,
+        kind = .Primary_Device_Attributes,
+        producer = producer,
     })
 }
 
@@ -1752,7 +1838,9 @@ termgrid_test_interpreter_rejects_kitty_keyboard_extensions :: proc(t: ^testing.
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 4, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
@@ -1898,10 +1986,10 @@ termgrid_test_interpreter_tracks_csi_private_prefixes :: proc(t: ^testing.T) {
     }
     defer termgrid.grid_destroy(&grid)
 
-    fixtures := [4]string{"\e[<1m", "\e[=1m", "\e[>1m", "\e[?1003h"}
+    fixtures: [4]string = {"\e[<1m", "\e[=1m", "\e[>1m", "\e[?1003h"}
     for fixture in fixtures {
         for byte in transmute([]u8)fixture {
-            part := [1]u8{byte}
+            part: [1]u8 = {byte}
             testing.expect(t,
                 interpreter_write(&interpreter, transmute(string)part[:]))
         }
@@ -1926,20 +2014,20 @@ termgrid_test_interpreter_rejects_misplaced_csi_private_prefixes :: proc(
     }
     defer termgrid.grid_destroy(&grid)
 
-    fixtures := [5]string{
+    fixtures: [5]string = {
         "\e[??1h", "\e[?>1h", "\e[1?m", "\e[;>m", "\e[1 <m",
     }
     for fixture in fixtures {
         testing.expect(t, interpreter_write(&interpreter, fixture))
     }
-    prefixes := [4]u8{'<', '=', '>', '?'}
-    cancellations := [4]u8{0x18, 0x1a, 0x18, 0x1a}
+    prefixes: [4]u8 = {'<', '=', '>', '?'}
+    cancellations: [4]u8 = {0x18, 0x1a, 0x18, 0x1a}
     for prefix, index in prefixes {
-        sequence := [3]u8{0x1b, '[', prefix}
+        sequence: [3]u8 = {0x1b, '[', prefix}
         testing.expect(t,
             interpreter_write(&interpreter, transmute(string)sequence[:]))
         testing.expect(t, interpreter.csi_private_marker != .None)
-        cancelled := [1]u8{cancellations[index]}
+        cancelled: [1]u8 = {cancellations[index]}
         testing.expect(t,
             interpreter_write(&interpreter, transmute(string)cancelled[:]))
         testing.expect_value(t, interpreter.csi_private_marker,
@@ -1967,10 +2055,10 @@ termgrid_test_interpreter_consumes_unadvertised_queries_and_modes :: proc(
     }
     defer termgrid.grid_destroy(&grid)
 
-    fixtures := [4]string{"\e[1c", "\e[5n", "\e[6n", "\e[?2h"}
+    fixtures: [4]string = {"\e[1c", "\e[5n", "\e[6n", "\e[?2h"}
     for fixture in fixtures {
         for byte in transmute([]u8)fixture {
-            part := [1]u8{byte}
+            part: [1]u8 = {byte}
             testing.expect(t,
                 interpreter_write(&interpreter, transmute(string)part[:]))
         }
@@ -1995,24 +2083,65 @@ termgrid_test_interpreter_captures_query_responses :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 11, 17}
+    producer: Terminal_Producer = {.Terminal_Session, 11, 17}
     fixtures := [?]Terminal_Query_Fixture{
-        {"\e[c", {kind = .Primary_Device_Attributes, producer = producer}},
-        {"\e[>c", {kind = .Secondary_Device_Attributes, producer = producer}},
-        {"\e[5n", {kind = .Device_Status, producer = producer}},
-        {"\e[2;3H\e[6n", {
-            kind = .Cursor_Position, first = 2, second = 3, producer = producer,
-        }},
-        {"\e[14t", {
-            kind = .Window_Pixels, first = 480, second = 640,
-            producer = producer,
-        }},
-        {"\e[16t", {
-            kind = .Cell_Pixels, first = 16, second = 8, producer = producer,
-        }},
-        {"\e[18t", {
-            kind = .Text_Area_Size, first = 2, second = 8, producer = producer,
-        }},
+        {
+            "\e[c",
+            {
+                kind = .Primary_Device_Attributes,
+                producer = producer,
+            },
+        },
+        {
+            "\e[>c",
+            {
+                kind = .Secondary_Device_Attributes,
+                producer = producer,
+            },
+        },
+        {
+            "\e[5n",
+            {
+                kind = .Device_Status,
+                producer = producer,
+            },
+        },
+        {
+            "\e[2;3H\e[6n",
+            {
+                kind = .Cursor_Position,
+                first = 2,
+                second = 3,
+                producer = producer,
+            },
+        },
+        {
+            "\e[14t",
+            {
+                kind = .Window_Pixels,
+                first = 480,
+                second = 640,
+                producer = producer,
+            },
+        },
+        {
+            "\e[16t",
+            {
+                kind = .Cell_Pixels,
+                first = 16,
+                second = 8,
+                producer = producer,
+            },
+        },
+        {
+            "\e[18t",
+            {
+                kind = .Text_Area_Size,
+                first = 2,
+                second = 8,
+                producer = producer,
+            },
+        },
     }
     for fixture in fixtures {
         termgrid_test_expect_query_fixture(
@@ -2033,27 +2162,87 @@ termgrid_test_interpreter_captures_mode_query_responses :: proc(t: ^testing.T) {
         return
     }
     defer termgrid.grid_destroy(&grid)
-    producer := Terminal_Producer{.Terminal_Session, 11, 17}
+    producer: Terminal_Producer = {.Terminal_Session, 11, 17}
     testing.expect(t, interpreter_write(&interpreter, "\e[>4;2m\e[=3u"))
     fixtures := [?]Terminal_Query_Fixture{
-        {"\e[?25l\e[?25$p", {kind = .Private_Mode_Status,
-            first = 25, second = 2, producer = producer}},
-        {"\e[?6h\e[?6$p", {kind = .Private_Mode_Status,
-            first = 6, second = 1, producer = producer}},
-        {"\e[?7l\e[?7$p", {kind = .Private_Mode_Status,
-            first = 7, second = 2, producer = producer}},
-        {"\e[?1048h\e[?1048$p", {kind = .Private_Mode_Status,
-            first = 1048, second = 1, producer = producer}},
-        {"\e[?2004h\e[?2004$p", {kind = .Private_Mode_Status,
-            first = 2004, second = 1, producer = producer}},
-        {"\e[?1016h\e[?1016$p", {kind = .Private_Mode_Status,
-            first = 1016, second = 1, producer = producer}},
-        {"\e[?999$p", {kind = .Private_Mode_Status,
-            first = 999, producer = producer}},
-        {"\e[?4m", {kind = .Modify_Other_Keys,
-            first = 2, producer = producer}},
-        {"\e[?u", {kind = .Kitty_Keyboard,
-            first = 3, producer = producer}},
+        {
+            "\e[?25l\e[?25$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 25,
+                second = 2,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?6h\e[?6$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 6,
+                second = 1,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?7l\e[?7$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 7,
+                second = 2,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?1048h\e[?1048$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 1048,
+                second = 1,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?2004h\e[?2004$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 2004,
+                second = 1,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?1016h\e[?1016$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 1016,
+                second = 1,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?999$p",
+            {
+                kind = .Private_Mode_Status,
+                first = 999,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?4m",
+            {
+                kind = .Modify_Other_Keys,
+                first = 2,
+                producer = producer,
+            },
+        },
+        {
+            "\e[?u",
+            {
+                kind = .Kitty_Keyboard,
+                first = 3,
+                producer = producer,
+            },
+        },
     }
     for fixture in fixtures {
         termgrid_test_expect_query_fixture(
@@ -2070,7 +2259,9 @@ termgrid_test_interpreter_rejects_query_intermediate_extensions :: proc(t: ^test
     retained: Terminal_Title_State
     testing.expect(t, termgrid.grid_init(&grid, 8, 2, allocator = context.allocator))
     if !testing.expect(t, interpreter_init(
-        &interpreter, &grid, {title_state = &retained})) {
+        &interpreter, &grid, {
+            title_state = &retained,
+        })) {
         termgrid.grid_destroy(&grid)
         return
     }
@@ -2096,12 +2287,14 @@ termgrid_test_interpreter_synchronized_output_transaction :: proc(t: ^testing.T)
         &scrollback, 8, 4, context.allocator))
     defer termgrid.scrollback_destroy(&scrollback)
     testing.expect(t, termgrid.grid_init(
-        &grid, 8, 2, context.allocator, {scrollback = {
-            user_data = &scrollback,
-            commit = termgrid.scrollback_sink_commit,
-        }}))
+        &grid, 8, 2, context.allocator, {
+            scrollback = {
+                user_data = &scrollback,
+                commit = termgrid.scrollback_sink_commit,
+            },
+        }))
     defer termgrid.grid_destroy(&grid)
-    synchronized := Synchronized_Output_State{
+    synchronized: Synchronized_Output_State = {
         scrollback = &scrollback,
         output_started = &output_started,
     }

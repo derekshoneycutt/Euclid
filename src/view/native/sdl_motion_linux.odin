@@ -73,7 +73,9 @@ sdl_query_gsettings_motion :: proc(schema: cstring) -> (bool, Sdl_Motion_Status)
         }
     }
     gio, loaded := sdl_motion_gio_symbols(handle)
-    if !loaded { return false, .Failed }
+    if !loaded {
+        return false, .Failed
+    }
     source := gio.g_settings_schema_source_get_default()
     if source == nil {
         return false, .Unavailable

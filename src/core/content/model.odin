@@ -256,7 +256,10 @@ content_generation_append_text :: proc(
     if status != .Ok {
         return .Allocation_Failed
     }
-    reference^ = Content_Text_Ref{offset = u32(offset), length = u32(len(text))}
+    reference^ = Content_Text_Ref{
+        offset = u32(offset),
+        length = u32(len(text)),
+    }
     return .Ok
 }
 

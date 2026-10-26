@@ -22,14 +22,18 @@ animation_speed_cycles_without_resuming_and_capture_restores_choice :: proc(
     defer free(store, context.allocator)
     defer destroy_shell_test_state(state)
     state.ui_runtime.playback.simulation_paused = true
-    expected_rates := [3]animationmodel.Playback_Rate{.Double, .Quadruple, .Normal}
+    expected_rates: [3]animationmodel.Playback_Rate = {.Double, .Quadruple, .Normal}
     for expected in expected_rates {
-        uianimation.apply_animation_control_hit(state, {cycle_speed_requested = true})
+        uianimation.apply_animation_control_hit(state, {
+            cycle_speed_requested = true,
+        })
         testing.expect_value(t, state.ui_runtime.playback.rate, expected)
         testing.expect(t, state.ui_runtime.playback.simulation_paused)
     }
     state.ui_runtime.playback.rate = .Quadruple
-    uianimation.apply_animation_control_hit(state, {refresh_requested = true})
+    uianimation.apply_animation_control_hit(state, {
+        refresh_requested = true,
+    })
     testing.expect_value(t,
         state.ui_runtime.playback.rate, animationmodel.Playback_Rate.Quadruple)
     for phase in capturemodel.Gif_Capture_Phase {
@@ -40,8 +44,9 @@ animation_speed_cycles_without_resuming_and_capture_restores_choice :: proc(
         testing.expect_value(t, effective,
             animationmodel.Playback_Rate.Normal if locked else .Quadruple)
         if locked {
-            uianimation.apply_animation_control_hit(
-                state, {cycle_speed_requested = true})
+            uianimation.apply_animation_control_hit(state, {
+                cycle_speed_requested = true,
+            })
             testing.expect_value(t, state.ui_runtime.playback.rate,
                 animationmodel.Playback_Rate.Quadruple)
         }
@@ -98,8 +103,10 @@ animation_speed_capture_disables_semantic_activation :: proc(t: ^testing.T) {
         uisemantics.semantic_publish(focus), viewmodel.Ui_Semantic_Status.Ok)
     id := uisemantics.semantic_control_id(
         .Animation_Control, uianimation.ANIMATION_SPEED_BUTTON_ID)
-    testing.expect(t,
-        uisemantics.semantic_append_command(focus, {target = id, kind = .Activate}))
+    testing.expect(t, uisemantics.semantic_append_command(focus, {
+        target = id,
+        kind = .Activate,
+    }))
     state.gif_capture_status.save_gif_requested = true
     testing.expect(t, uisemantics.semantic_begin(focus))
     prepared := uianimation.prepare_animation_controls(state, {})
@@ -132,8 +139,10 @@ animation_speed_keyboard_activation_dismisses_tooltip :: proc(t: ^testing.T) {
         viewmodel.Ui_Semantic_Status.Ok)
     id := uisemantics.semantic_control_id(
         .Animation_Control, uianimation.ANIMATION_SPEED_BUTTON_ID)
-    testing.expect(t, uisemantics.semantic_append_command(focus,
-        {target = id, kind = .Activate}))
+    testing.expect(t, uisemantics.semantic_append_command(focus,{
+        target = id,
+        kind = .Activate,
+    }))
     testing.expect(t, uisemantics.semantic_begin(focus))
     _ = uianimation.prepare_animation_controls(state, {})
     testing.expect_value(t, state.ui_runtime.playback.rate,

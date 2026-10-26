@@ -95,7 +95,10 @@ tlsf_owner_allocator :: proc(owner: ^Tlsf_Owner) -> runtime.Allocator {
     if owner == nil || !owner.initialized {
         return {}
     }
-    return {procedure = tlsf_owner_allocator_proc, data = owner}
+    return {
+        procedure = tlsf_owner_allocator_proc,
+        data = owner,
+    }
 }
 
 // Release every pool and its tracking node while retaining terminal diagnostics.
@@ -153,7 +156,7 @@ tlsf_owner_allocator_proc :: proc(
     if owner == nil || !owner.initialized {
         return nil, .Invalid_Argument
     }
-    request := Tlsf_Owner_Request{mode, size, alignment, old_memory, old_size, location}
+    request: Tlsf_Owner_Request = {mode, size, alignment, old_memory, old_size, location}
     return tlsf_owner_dispatch(owner, request)
 }
 

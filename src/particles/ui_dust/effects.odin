@@ -73,7 +73,7 @@ ui_dust_emit :: proc(
     generator := rand.xoshiro256_random_generator(&system^.rng_state)
     coverage_unit := f32(coverage) / 255
     alpha := f32(ink[3]) / 255 * coverage_unit * clamp(visible_alpha, 0, 1)
-    particle := Ui_Dust_Particle{
+    particle: Ui_Dust_Particle = {
         phase = .Airborne_Departure,
         pos_x = position.x,
         pos_y = position.y,

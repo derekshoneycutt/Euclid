@@ -24,92 +24,92 @@ Animation_Value_Status :: enum {
 
 // Identify one schema-bound key in one authoritative animation generation.
 Animation_Value_Identity :: struct {
-    generation : u64,
-    key : u64,
-    schema_low : u64,
-    schema_high : u64,
+    generation: u64,
+    key: u64,
+    schema_low: u64,
+    schema_high: u64,
 }
 
 // Locate one opaque value inside slot-owned packed byte storage.
 Animation_Value_Packed_Entry :: struct {
-    key : u64,
-    schema_low : u64,
-    schema_high : u64,
-    payload_offset : i32,
-    payload_size : i32,
+    key: u64,
+    schema_low: u64,
+    schema_high: u64,
+    payload_offset: i32,
+    payload_size: i32,
 }
 
 // Own one immutable pointer-free canonical value snapshot for a worker tick.
 Animation_Value_Snapshot :: struct {
-    entry_count : int,
-    payload_size : int,
-    entries : [ANIMATION_VALUE_ENTRY_CAPACITY]Animation_Value_Packed_Entry,
-    payload : [ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES]u8,
+    entry_count: int,
+    payload_size: int,
+    entries: [ANIMATION_VALUE_ENTRY_CAPACITY]Animation_Value_Packed_Entry,
+    payload: [ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES]u8,
 }
 
 // Own ordered pointer-free writes staged by one worker tick.
 Animation_Value_Pending_Writes :: struct {
-    write_count : int,
-    payload_size : int,
-    invalid : bool,
-    entries : [ANIMATION_VALUE_PENDING_WRITE_CAPACITY]Animation_Value_Packed_Entry,
-    payload : [ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES]u8,
+    write_count: int,
+    payload_size: int,
+    invalid: bool,
+    entries: [ANIMATION_VALUE_PENDING_WRITE_CAPACITY]Animation_Value_Packed_Entry,
+    payload: [ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES]u8,
 }
 
 // Bind one nonzero key to an opaque schema and arena-owned payload.
 Animation_Value_Entry :: struct {
     // Stable identity for one animation generation.
-    key : u64,
-    schema_low : u64,
-    schema_high : u64,
+    key: u64,
+    schema_low: u64,
+    schema_high: u64,
 
     // Arena-owned payload storage, allocated exactly once per key.
-    payload : []u8,
-    occupied : bool,
+    payload: []u8,
+    occupied: bool,
 }
 
 // Report logical quotas and backing arena pressure for one store lifetime.
 Animation_Value_Store_Diagnostics :: struct {
     // Availability and current animation generation identity.
-    initialized : bool,
-    generation : u64,
+    initialized: bool,
+    generation: u64,
 
     // Current and lifetime-high FFI-controlled logical usage.
-    entry_count : int,
-    payload_bytes : int,
-    peak_entry_count : int,
-    peak_payload_bytes : int,
+    entry_count: int,
+    payload_bytes: int,
+    peak_entry_count: int,
+    peak_payload_bytes: int,
 
     // Rejections and bulk lifecycle transitions.
-    quota_rejections : u64,
-    schema_rejections : u64,
-    allocation_failures : u64,
-    generation_resets : u64,
+    quota_rejections: u64,
+    schema_rejections: u64,
+    allocation_failures: u64,
+    generation_resets: u64,
 
     // Current and lifetime backing-arena usage.
-    arena : storage.Arena_Owner_Diagnostics,
+    arena: storage.Arena_Owner_Diagnostics,
 }
 
 // Index canonical opaque values allocated from shared animation memory.
 Animation_Value_Store :: struct {
     // Borrowed storage and fixed deterministic key index.
-    memory : ^Animation_Memory,
-    allocator : runtime.Allocator,
-    entries : [ANIMATION_VALUE_ENTRY_CAPACITY]Animation_Value_Entry,
+    memory: ^Animation_Memory,
+    allocator: runtime.Allocator,
+    entries: [ANIMATION_VALUE_ENTRY_CAPACITY]Animation_Value_Entry,
 
     // Current generation identity and logical FFI quota usage.
-    generation : u64,
-    entry_count : int,
-    payload_bytes : int,
+    generation: u64,
+    entry_count: int,
+    payload_bytes: int,
 
     // Lifetime diagnostics retained across generation resets.
-    peak_entry_count : int,
-    peak_payload_bytes : int,
-    quota_rejections : u64,
-    schema_rejections : u64,
-    allocation_failures : u64,
-    generation_resets : u64,
-    initialized : bool,
+    peak_entry_count: int,
+    peak_payload_bytes: int,
+    quota_rejections: u64,
+    schema_rejections: u64,
+    allocation_failures: u64,
+    generation_resets: u64,
+    initialized: bool,
 }
 
 //   Initialize one canonical animation store over shared animation memory.

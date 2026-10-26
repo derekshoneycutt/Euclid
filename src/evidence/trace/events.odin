@@ -204,13 +204,13 @@ Flags :: bit_set[Flag; u16]
 // One existing runtime identity; zero ID means no correlation is available.
 Identity :: struct {
     // Namespace that defines the meaning and uniqueness scope of id.
-    kind : Correlation_Kind,
+    kind: Correlation_Kind,
 
     // Existing subsystem-issued identity; zero represents no concrete identity.
-    id : u64,
+    id: u64,
 
     // Reuse generation, or zero for identity domains that are not generational.
-    generation : u64,
+    generation: u64,
 }
 
 // Bounded point mutation payload stored directly in an event.
@@ -258,31 +258,31 @@ Event_Payload :: struct #raw_union {
 // kind-relevant metadata and payload values; zero consistently means unavailable.
 Event :: struct {
     // Producer-local ordering and optional monotonic timing metadata.
-    sequence : u64,
-    timestamp_ns : u64,
+    sequence: u64,
+    timestamp_ns: u64,
 
     // Existing runtime identity and optional reuse generation.
-    correlation : u64,
-    generation : u64,
+    correlation: u64,
+    generation: u64,
 
     // Optional authoritative simulation position observed by the producer.
-    tick : u64,
-    revision : u64,
+    tick: u64,
+    revision: u64,
 
     // Event ownership, evidence class, and correlation namespace.
-    producer : Producer,
-    lane : Lane,
-    correlation_kind : Correlation_Kind,
+    producer: Producer,
+    lane: Lane,
+    correlation_kind: Correlation_Kind,
 
     // Reserved schema byte; producers write zero and readers ignore it.
-    reserved : u8,
+    reserved: u8,
 
     // Semantic occurrence and independent evidence properties.
-    kind : Kind,
-    flags : Flags,
+    kind: Kind,
+    flags: Flags,
 
     // Kind-specific fixed payload selected by the event kind.
-    payload : Event_Payload,
+    payload: Event_Payload,
 }
 
 #assert(size_of(Event) == TRACE_EVENT_SIZE_BYTES)

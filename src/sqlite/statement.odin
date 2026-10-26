@@ -24,6 +24,37 @@ statement_prepare :: proc(
     return {}
 }
 
+// Prepare one static or caller-owned SQL string without requiring a NUL-terminated copy.
+statement_prepare_text :: proc(
+    connection: ^Connection, statement: ^Statement, sql: string) -> Error {
+    if connection == nil || connection.handle == nil || statement == nil ||
+       statement.handle != nil {
+        return sqlite_make_validation_error(.Prepare, .Invalid_State)
+    }
+    if len(sql) == 0 {
+        return sqlite_make_validation_error(.Prepare, .Invalid_Argument)
+    }
+    if len(sql) > int(max(c.int)) {
+        return sqlite_make_validation_error(.Prepare, .Range)
+    }
+    for byte in transmute([]u8)sql {
+        if byte == 0 {
+            return sqlite_make_validation_error(.Prepare, .Invalid_Argument)
+        }
+    }
+    result := raw.sqlite3_prepare_v3(connection.handle, cstring(raw_data(sql)),
+        c.int(len(sql)), c.uint(raw.Prepare_Flag.Persistent), &statement.handle, nil)
+    if result != .Ok {
+        if statement.handle != nil {
+            _ = raw.sqlite3_finalize(statement.handle)
+        }
+        statement^ = {}
+        return sqlite_make_error(.Prepare, connection.handle, result)
+    }
+    statement.database = connection.handle
+    return {}
+}
+
 // Advance one statement and distinguish a row, completion, and SQLite failure.
 statement_step :: proc(statement: ^Statement) -> (Step_Status, Error) {
     if statement == nil || statement.handle == nil || statement.database == nil {

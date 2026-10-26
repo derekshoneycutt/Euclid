@@ -20,14 +20,14 @@ SCENARIO_LINE_MAX_BYTES :: 1024
 
 // Stable public scenario spelling paired with its typed evidence identity.
 Event_Kind_Entry :: struct {
-    name : string,
-    kind : trace.Kind,
+    name: string,
+    kind: trace.Kind,
 }
 
 // Stable payload-free action spelling paired with its command identity.
 Action_Kind_Entry :: struct {
-    name : string,
-    kind : Command_Kind,
+    name: string,
+    kind: Command_Kind,
 }
 
 // Event names accepted by `wait_event`; spellings are part of the scenario format.
@@ -171,8 +171,8 @@ Run_Status :: enum u8 {
 // The initialized prefix is not NUL-terminated; count selects the valid bytes.
 Text :: struct {
     // Inline bytes and initialized prefix length.
-    bytes : [SCENARIO_TEXT_CAPACITY]u8,
-    count : int,
+    bytes: [SCENARIO_TEXT_CAPACITY]u8,
+    count: int,
 }
 
 // Fixed inline storage for an action alias or correlation reference.
@@ -180,36 +180,36 @@ Text :: struct {
 // The initialized prefix is not NUL-terminated; count selects the valid bytes.
 Name :: struct {
     // Inline bytes and initialized prefix length.
-    bytes : [SCENARIO_NAME_CAPACITY]u8,
-    count : int,
+    bytes: [SCENARIO_NAME_CAPACITY]u8,
+    count: int,
 }
 
 // Fully validated, allocation-free scenario instruction.
 Command :: struct {
     // Operation identity and its inline payload or predicate text.
-    kind : Command_Kind,
-    text : Text,
-    view_content_mime : View_Content_Mime,
+    kind: Command_Kind,
+    text: Text,
+    view_content_mime: View_Content_Mime,
 
     // Optional produced alias and alias required by a later event wait.
-    alias : Name,
-    correlation : Name,
+    alias: Name,
+    correlation: Name,
 
     // Bounded wait duration in milliseconds; nonwait commands leave this zero.
-    timeout_ms : u32,
+    timeout_ms: u32,
 
     // Optional one-based animation frame selected by an event wait.
-    frame_number : u32,
+    frame_number: u32,
 
     // Fixed numeric payload used by display-owned viewport actions.
-    value : f32,
-    secondary_value : f32,
-    tertiary_value : f32,
-    dust_count : u32,
-    dust_seed : u64,
-    dust_distribution : Dust_Distribution,
-    key_shift : bool,
-    key_control : bool,
+    value: f32,
+    secondary_value: f32,
+    tertiary_value: f32,
+    dust_count: u32,
+    dust_seed: u64,
+    dust_distribution: Dust_Distribution,
+    key_shift: bool,
+    key_control: bool,
     setting_id: settings.Setting_Id,
     setting_value: settings.Setting_Value,
     arrival_style: uidust.Ui_Dust_Arrival_Style,
@@ -217,8 +217,8 @@ Command :: struct {
 
 // Stable scenario spelling for one retained presentation arrival policy.
 Arrival_Style_Entry :: struct {
-    name : string,
-    style : uidust.Ui_Dust_Arrival_Style,
+    name: string,
+    style: uidust.Ui_Dust_Arrival_Style,
 }
 
 // Debug-only arrival overrides; this is not a preference or persisted setting.
@@ -254,14 +254,14 @@ Raw_Dust_Contact :: struct {
 // Fixed-capacity scenario program produced from one complete JSON Lines source.
 Program :: struct {
     // Command storage; only the count-selected prefix is initialized.
-    commands : [SCENARIO_COMMAND_CAPACITY]Command,
-    count : int,
+    commands: [SCENARIO_COMMAND_CAPACITY]Command,
+    count: int,
 }
 
 // Runtime binding from one inline scenario name to an existing correlation ID.
 Alias :: struct {
-    name : Name,
-    correlation : trace.Identity,
+    name: Name,
+    correlation: trace.Identity,
 }
 
 // Result returned by one synchronous owner-routed scenario action.
@@ -276,40 +276,40 @@ Action_Proc :: proc(user_data: rawptr, command: ^Command) -> Action_Result
 // Optional runtime action destination supplied by the owner control loop.
 Action_Sink :: struct {
     // Opaque state interpreted exclusively by the callback implementation.
-    user_data : rawptr,
+    user_data: rawptr,
 
     // Synchronous action callback; nil leaves ordinary actions without correlation.
-    issue : Action_Proc,
+    issue: Action_Proc,
 }
 
 // Borrowed observations and action boundary for one runner advancement.
 Runner_Frame :: struct {
-    now_ns : u64,
-    events : []trace.Event,
-    display : observe.Display,
-    actions : Action_Sink,
+    now_ns: u64,
+    events: []trace.Event,
+    display: observe.Display,
+    actions: Action_Sink,
 }
 
 // Owner-controlled execution state for one validated fixed program.
 Runner :: struct {
     // Immutable command program copied into the runner at initialization.
-    program : Program,
+    program: Program,
 
     // Bounded action-alias registry; only the alias_count prefix is initialized.
-    aliases : [SCENARIO_COMMAND_CAPACITY]Alias,
-    alias_count : int,
+    aliases: [SCENARIO_COMMAND_CAPACITY]Alias,
+    alias_count: int,
 
     // Lifecycle and next command index. Terminal statuses are sticky.
-    status : Run_Status,
-    step : int,
+    status: Run_Status,
+    step: int,
 
     // Cursor into the cumulative trace snapshot and active monotonic wait deadline.
-    trace_cursor : int,
-    deadline_ns : u64,
+    trace_cursor: int,
+    deadline_ns: u64,
 
     // Cumulative assertion and failure evidence for the current run.
-    assertion_count : u32,
-    failure_count : u32,
+    assertion_count: u32,
+    failure_count: u32,
 }
 
 // Temporary JSON decoding shape for exactly one source line.
@@ -318,51 +318,51 @@ Runner :: struct {
 // decoder-managed storage only until command_from_raw copies accepted values inline.
 Raw_Command :: struct {
     // Named payload-free action selected through the public `do` field.
-    action : string `json:"do"`,
+    action: string `json:"do"`,
 
     // Text-bearing runtime and capture actions.
-    select_animation : string,
-    inject_reload_failure : string,
-    type_text : string `json:"type"`,
-    type_library_name : string,
-    screenshot : string,
-    start_gif : string,
-    set_arrival_style : string,
-    set_library_search : string,
-    favorite_control : string,
-    library_placement : string,
-    assert_favorites : string,
-    apply_library_search_suggestion : bool,
-    clear_library_search : bool,
-    set_view_content : Raw_View_Content,
-    emit_dust : Raw_Dust_Emission,
-    contact_dust : Raw_Dust_Contact,
+    select_animation: string,
+    inject_reload_failure: string,
+    type_text: string `json:"type"`,
+    type_library_name: string,
+    screenshot: string,
+    start_gif: string,
+    set_arrival_style: string,
+    set_library_search: string,
+    favorite_control: string,
+    library_placement: string,
+    assert_favorites: string,
+    apply_library_search_suggestion: bool,
+    clear_library_search: bool,
+    set_view_content: Raw_View_Content,
+    emit_dust: Raw_Dust_Emission,
+    contact_dust: Raw_Dust_Contact,
 
     // Event waits and display-state predicates.
-    wait_event : string,
-    wait_state : string,
-    wait_terminal_contains : string,
-    assert_state : string,
-    assert_focus : string,
-    assert_library_search : string,
-    assert_terminal_contains : string,
+    wait_event: string,
+    wait_state: string,
+    wait_terminal_contains: string,
+    assert_state: string,
+    assert_focus: string,
+    assert_library_search: string,
+    assert_terminal_contains: string,
 
     // State checkpoint action.
-    checkpoint : string,
+    checkpoint: string,
 
     // Allocation checkpoint and assertion actions.
-    allocation_checkpoint : string,
-    assert_allocation_baseline : string,
-    assert_no_bad_frees : bool,
+    allocation_checkpoint: string,
+    assert_allocation_baseline: string,
+    assert_no_bad_frees: bool,
 
     // Optional produced alias, event correlation reference, and wait bound.
-    alias : string `json:"as"`,
-    correlation : string,
-    timeout_ms : u32,
-    frame_number : u32,
+    alias: string `json:"as"`,
+    correlation: string,
+    timeout_ms: u32,
+    frame_number: u32,
 
     // Payload-free terminal action represented directly in JSON.
-    shutdown : bool,
+    shutdown: bool,
 }
 
 // Temporary decoded representations and stable outcome for one JSONL line.
@@ -378,14 +378,19 @@ scenario_setting_enum :: proc(
     id: settings.Setting_Id, name: string) -> (settings.Setting_Value, bool) {
     if id == .Window_Mode {
         switch name {
-        case "fixed": return settings.window_mode_value(.Fixed), true
-        case "resizable": return settings.window_mode_value(.Resizable), true
+        case "fixed":
+            return settings.window_mode_value(.Fixed), true
+        case "resizable":
+            return settings.window_mode_value(.Resizable), true
         }
     } else if id == .Window_Layout {
         switch name {
-        case "auto": return settings.layout_preference_value(.Auto), true
-        case "landscape": return settings.layout_preference_value(.Landscape), true
-        case "portrait": return settings.layout_preference_value(.Portrait), true
+        case "auto":
+            return settings.layout_preference_value(.Auto), true
+        case "landscape":
+            return settings.layout_preference_value(.Landscape), true
+        case "portrait":
+            return settings.layout_preference_value(.Portrait), true
         }
     }
     return {}, false
@@ -495,9 +500,12 @@ scenario_view_content_action_select :: proc(
 // Decode one stable public dust-distribution spelling.
 scenario_dust_distribution :: proc(name: string) -> (Dust_Distribution, bool) {
     switch name {
-    case "point": return .Point, true
-    case "disc": return .Disc, true
-    case "grid": return .Grid, true
+    case "point":
+        return .Point, true
+    case "disc":
+        return .Disc, true
+    case "grid":
+        return .Grid, true
     }
     return {}, false
 }
@@ -635,19 +643,29 @@ scenario_numeric_action_select :: proc(
 scenario_parse_line :: proc(line: string) -> Scenario_Parsed_Line {
     raw: Raw_Command
     if json.unmarshal_string(line, &raw, allocator = context.temp_allocator) != nil {
-        return {error = .Invalid_Json}
+        return {
+            error = .Invalid_Json,
+        }
     }
     parsed, parse_error := json.parse_string(
         line, parse_integers = true, allocator = context.temp_allocator)
     if parse_error != .None {
-        return {error = .Invalid_Json}
+        return {
+            error = .Invalid_Json,
+        }
     }
     root, root_ok := parsed.(json.Object)
     if !root_ok {
         json.destroy_value(parsed, allocator = context.temp_allocator)
-        return {error = .Invalid_Command}
+        return {
+            error = .Invalid_Command,
+        }
     }
-    return {raw = raw, value = parsed, root = root}
+    return {
+        raw = raw,
+        value = parsed,
+        root = root,
+    }
 }
 
 //   Parse and validate a complete bounded JSON Lines program.
@@ -713,7 +731,10 @@ parse :: proc(source: string, program: ^Program) -> Parse_Error {
 // Side effects:
 //   - Clears aliases, progress, deadlines, and counters, then sets status to Ready.
 runner_init :: proc(runner: ^Runner, program: Program) {
-    runner^ = {program = program, status = .Ready}
+    runner^ = {
+        program = program,
+        status = .Ready,
+    }
 }
 
 //   Mark the current runner command as failed and stop command advancement.
@@ -786,7 +807,9 @@ runner_update_action_wait :: proc(
 //   Issue one ordinary action and retain any requested correlation alias.
 runner_issue_action :: proc(
     runner: ^Runner, command: ^Command, actions: Action_Sink) -> bool {
-    result := Action_Result{accepted = actions.issue != nil}
+    result: Action_Result = {
+        accepted = actions.issue != nil,
+    }
     if actions.issue != nil {
         result = actions.issue(actions.user_data, command)
     }
@@ -1343,10 +1366,14 @@ event_kind :: proc(name: string) -> (trace.Kind, bool) {
 //   Evaluate one stable scalar-state predicate.
 terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
-    case "terminal_ready": return display.terminal_ready
-    case "terminal_idle": return display.terminal_idle
-    case "terminal_continuation": return display.terminal_continuation
-    case "terminal_completion_ready": return display.terminal_completion_ready
+    case "terminal_ready":
+        return display.terminal_ready
+    case "terminal_idle":
+        return display.terminal_idle
+    case "terminal_continuation":
+        return display.terminal_continuation
+    case "terminal_completion_ready":
+        return display.terminal_completion_ready
     }
     return false
 }
@@ -1408,7 +1435,8 @@ dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
             (display.dust_airborne_count > 0 ||
                 display.dust_peak_speed_sq >
                     particlemodel.DUST_SETTLED_SPEED_SQ)
-    case "dust_airborne": return display.dust_airborne_count > 0
+    case "dust_airborne":
+        return display.dust_airborne_count > 0
     }
     return false
 }
@@ -1423,13 +1451,20 @@ dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
 //   - True when the named predicate currently holds; false for unknown names.
 state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
-    case "dynview_enabled": return display.dynview_enabled
-    case "gif_active": return display.gif_capture_active
-    case "gif_idle": return !display.gif_capture_active
-    case "library_search_idle": return display.library_search_idle
-    case "library_search_has_matches": return display.library_search_has_matches
-    case "tooltip_visible": return display.tooltip_visible
-    case "tooltip_hidden": return !display.tooltip_visible
+    case "dynview_enabled":
+        return display.dynview_enabled
+    case "gif_active":
+        return display.gif_capture_active
+    case "gif_idle":
+        return !display.gif_capture_active
+    case "library_search_idle":
+        return display.library_search_idle
+    case "library_search_has_matches":
+        return display.library_search_has_matches
+    case "tooltip_visible":
+        return display.tooltip_visible
+    case "tooltip_hidden":
+        return !display.tooltip_visible
     }
     return runtime_state_matches(name, display) ||
         dust_state_matches(name, display) || terminal_state_matches(name, display) ||
@@ -1447,10 +1482,14 @@ presentation_effects_state_matches :: proc(
         return dust_active || effects.arrival_active
     case "presentation_effects_settled":
         return !dust_active && !effects.arrival_active
-    case "presentation_dust_active": return dust_active
-    case "presentation_arrival_active": return effects.arrival_active
-    case "presentation_arrival_idle": return !effects.arrival_active
-    case "presentation_arrival_particles": return effects.arrival_particle_count > 0
+    case "presentation_dust_active":
+        return dust_active
+    case "presentation_arrival_active":
+        return effects.arrival_active
+    case "presentation_arrival_idle":
+        return !effects.arrival_active
+    case "presentation_arrival_particles":
+        return effects.arrival_particle_count > 0
     }
     return presentation_material_state_matches(name, effects)
 }
@@ -1459,12 +1498,18 @@ presentation_effects_state_matches :: proc(
 presentation_material_state_matches :: proc(
     name: string, effects: observe.Presentation_Effects) -> bool {
     switch name {
-    case "presentation_reclaimed": return effects.reclaimed_count > 0
-    case "presentation_fresh": return effects.fresh_count > 0
-    case "presentation_floor_dust": return effects.resting_count > 0
-    case "presentation_evicted": return effects.eviction_count > 0
-    case "presentation_cancelled": return effects.arrival_cancelled_count > 0
-    case "presentation_reclaim_mode": return effects.transition == .Reclaim
+    case "presentation_reclaimed":
+        return effects.reclaimed_count > 0
+    case "presentation_fresh":
+        return effects.fresh_count > 0
+    case "presentation_floor_dust":
+        return effects.resting_count > 0
+    case "presentation_evicted":
+        return effects.eviction_count > 0
+    case "presentation_cancelled":
+        return effects.arrival_cancelled_count > 0
+    case "presentation_reclaim_mode":
+        return effects.transition == .Reclaim
     case "presentation_pool_bounded":
         return effects.live_count >= 0 &&
             effects.live_count <= uidust.UI_DUST_TOTAL_PARTICLES
@@ -1480,14 +1525,22 @@ presentation_material_state_matches :: proc(
 // interface_state_matches evaluates logical visibility and display-owned motion policy.
 interface_state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
-    case "accordion_transitioning": return display.accordion_transition_running
-    case "accordion_settled": return !display.accordion_transition_running
-    case "tree_transitioning": return display.tree_transition_count > 0
-    case "tree_settled": return display.tree_transition_count == 0
-    case "collection_delete_ready": return display.collection_delete_ready
-    case "interface_reduced_motion": return display.interface_reduce_motion
-    case "presentation_visible": return display.presentation_visible
-    case "presentation_hidden": return !display.presentation_visible
+    case "accordion_transitioning":
+        return display.accordion_transition_running
+    case "accordion_settled":
+        return !display.accordion_transition_running
+    case "tree_transitioning":
+        return display.tree_transition_count > 0
+    case "tree_settled":
+        return display.tree_transition_count == 0
+    case "collection_delete_ready":
+        return display.collection_delete_ready
+    case "interface_reduced_motion":
+        return display.interface_reduce_motion
+    case "presentation_visible":
+        return display.presentation_visible
+    case "presentation_hidden":
+        return !display.presentation_visible
     }
     return false
 }
@@ -1498,10 +1551,14 @@ settings_state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "settings_saved":
         return display.settings_save_status == .Saved &&
             !display.settings_save_active && display.settings_pending_count == 0
-    case "settings_saving": return display.settings_save_active
-    case "settings_unavailable": return display.settings_save_status == .Unavailable
-    case "settings_failed": return display.settings_save_status == .Failed
-    case "settings_worker_only": return display.settings_save_owner_execution_count == 0
+    case "settings_saving":
+        return display.settings_save_active
+    case "settings_unavailable":
+        return display.settings_save_status == .Unavailable
+    case "settings_failed":
+        return display.settings_save_status == .Failed
+    case "settings_worker_only":
+        return display.settings_save_owner_execution_count == 0
     }
     return false
 }
@@ -1549,7 +1606,10 @@ runner_store_alias :: proc(
         }
     }
     if runner.alias_count < len(runner.aliases) {
-        runner.aliases[runner.alias_count] = {name = name^, correlation = correlation}
+        runner.aliases[runner.alias_count] = {
+            name = name^,
+            correlation = correlation,
+        }
         runner.alias_count += 1
         return true
     }

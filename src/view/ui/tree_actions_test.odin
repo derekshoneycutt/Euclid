@@ -55,12 +55,17 @@ tree_actions_test_semantic_frame :: proc(
 tree_actions_test_key :: proc(
     t: ^testing.T, params: ^uilibrary.Tree_List_Params,
     key: input.Input_Key, shift: bool = false) {
-    events := [1]input.Input_Event{{kind = .Press, key = key}}
+    events: [1]input.Input_Event = {{
+        kind = .Press,
+        key = key,
+    }}
     if shift {
         events[0].modifiers = {.Shift}
     }
-    claims := uisemantics.semantic_route_keyboard(params^.ui_runtime^.semantic_focus,
-        {events = events[:], window_focused = true})
+    claims := uisemantics.semantic_route_keyboard(params^.ui_runtime^.semantic_focus, {
+        events = events[:],
+        window_focused = true,
+    })
     focus := params^.ui_runtime^.semantic_focus^.logical_focus
     if focus.domain != .Library_Action ||
         focus.local_id != uilibrary.TREE_ENTRY_NAME_INPUT {
@@ -95,7 +100,7 @@ tree_actions_test_fixture :: proc(
     set := &state^.preferences_runtime.collections_state
     collections.initialize(set)
     for index in 0..<len(nodes^) {
-        entry_id := uuid.Identifier{}
+        entry_id: uuid.Identifier = {}
         entry_id[0] = byte(90 + index)
         assert(collections.favorites_add(
             set, entry_id, nodes[index].stable_id) == .None)
@@ -107,13 +112,21 @@ tree_actions_test_fixture :: proc(
     state^.ui_runtime.layout.active_accordion_section = .Library
     state^.ui_runtime.platform_reduce_motion = true
     state^.ui_runtime.library.tree.selected_item_id = set^.entries[1].id
-    params := uilibrary.Tree_List_Params{
-        general_state = state, ji = ji, collections = set,
-        collections_revision = 1, ui_runtime = &state^.ui_runtime,
+    params: uilibrary.Tree_List_Params = {
+        general_state = state,
+        ji = ji,
+        collections = set,
+        collections_revision = 1,
+        ui_runtime = &state^.ui_runtime,
         list_panel = {10, 20, 220, 180},
         scroll_y = &state^.ui_runtime.library.tree.scroll_y,
-        mouse_input = {sample_time_seconds = 1, mouse_position = {-1, -1}},
-        visibility = {search = &state^.ui_runtime.library.search},
+        mouse_input = {
+            sample_time_seconds = 1,
+            mouse_position = {-1, -1},
+        },
+        visibility = {
+            search = &state^.ui_runtime.library.search,
+        },
         reduce_motion = state^.ui_runtime.preferences.values.interface.reduce_motion ||
             state^.ui_runtime.platform_reduce_motion,
     }
@@ -325,9 +338,10 @@ tree_actions_test_closing_controls :: proc(
         params^.list_panel.y + row^.actions.move_down_rect.y + 4,
     }
     prepared: uilibrary.Tree_List_Preparation
-    uilibrary.tree_actions_prepare_controls(
-        params^, row, &prepared,
-        {panel = params^.list_panel, allow_clicks = true}, &hit)
+    uilibrary.tree_actions_prepare_controls(params^, row, &prepared, {
+        panel = params^.list_panel,
+        allow_clicks = true,
+    }, &hit)
     testing.expect_value(t, hit.actions_move_id, uuid.Identifier{})
 }
 
@@ -489,9 +503,11 @@ tree_actions_draw_geometry_balances_clips :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {800, 800}, {800, 800}))
-    uilibrary.draw_tree_actions_drawer_surfaces(
-        {encoder = &encoder, panel = params.list_panel,
-            scroll_y = prepared.scroll.scroll_y_out}, row^)
+    uilibrary.draw_tree_actions_drawer_surfaces({
+        encoder = &encoder,
+        panel = params.list_panel,
+        scroll_y = prepared.scroll.scroll_y_out,
+    }, row^)
     testing.expect_value(t, encoder.scissor_count, 1)
     testing.expect_value(t, encoder.statistics.scissor_overflows, u32(0))
     testing.expect_value(t, encoder.statistics.command_overflows, u32(0))
@@ -517,19 +533,23 @@ tree_actions_button_surface_is_borderless_feedback :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {800, 800}, {800, 800}))
-    rect := geometry.Rectangle{10, 20, 80, 24}
+    rect: geometry.Rectangle = {10, 20, 80, 24}
     uilibrary.draw_tree_actions_button_surface(&encoder, rect, {}, true)
     for vertex in vertices[:4] {
         testing.expect_value(t, vertex.color, theme.UI_COMPONENT_BACKGROUND_COLOR)
     }
-    uilibrary.draw_tree_actions_button_surface(&encoder, rect, {hovered = true}, false)
+    uilibrary.draw_tree_actions_button_surface(&encoder, rect, {
+        hovered = true,
+    }, false)
     testing.expect_value(t, encoder.vertex_count, 8)
     disabled := theme.UI_COMPONENT_BACKGROUND_COLOR
     disabled.a = 150
     for vertex in vertices[4:8] {
         testing.expect_value(t, vertex.color, disabled)
     }
-    uilibrary.draw_tree_actions_button_surface(&encoder, rect, {hovered = true}, true)
+    uilibrary.draw_tree_actions_button_surface(&encoder, rect, {
+        hovered = true,
+    }, true)
     testing.expect_value(t, encoder.vertex_count, 16)
     highlight := theme.UI_HOVER_COLOR
     for vertex in vertices[12:16] {
@@ -545,9 +565,19 @@ tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
     batches: [8]native.Draw_Batch
     commands: [8]native.Draw_Command
     encoder: native.Draw_Encoder
-    rect := geometry.Rectangle{10, 20, 22, theme.TREE_ROW_HEIGHT}
-    styles := [4]uilibrary.Tree_Action_Toggle_Style{
-        {}, {open = true}, {selected = true}, {open = true, selected = true},
+    rect: geometry.Rectangle = {10, 20, 22, theme.TREE_ROW_HEIGHT}
+    styles: [4]uilibrary.Tree_Action_Toggle_Style = {
+        {},
+        {
+            open = true,
+        },
+        {
+            selected = true,
+        },
+        {
+            open = true,
+            selected = true,
+        },
     }
     for style in styles {
         testing.expect(t, native.draw_encoder_begin(&encoder,
@@ -572,6 +602,8 @@ tree_actions_toggle_inverts_only_while_open :: proc(t: ^testing.T) {
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {800, 800}, {800, 800}))
-    uilibrary.draw_tree_actions_toggle(&encoder, rect, {hovered = true}, {})
+    uilibrary.draw_tree_actions_toggle(&encoder, rect, {
+        hovered = true,
+    }, {})
     testing.expect_value(t, vertices[0].color, theme.UI_HOVER_COLOR)
 }

@@ -88,9 +88,12 @@ texture_source_byte_count :: proc(
     pixel_count := u64(width) * u64(height)
     bytes_per_pixel: u64
     switch format {
-    case .Gray_Alpha8: bytes_per_pixel = 2
-    case .Rgb8: bytes_per_pixel = 3
-    case .Rgba8: bytes_per_pixel = 4
+    case .Gray_Alpha8:
+        bytes_per_pixel = 2
+    case .Rgb8:
+        bytes_per_pixel = 3
+    case .Rgba8:
+        bytes_per_pixel = 4
     }
     byte_count := pixel_count * bytes_per_pixel
     if pixel_count == 0 || byte_count > u64(max(u32)) {
@@ -104,9 +107,12 @@ texture_normalize_rgba8 :: proc(
     destination, source: []u8, format: Texture_Pixel_Format) -> bool {
     source_stride: int
     switch format {
-    case .Gray_Alpha8: source_stride = 2
-    case .Rgb8: source_stride = 3
-    case .Rgba8: source_stride = 4
+    case .Gray_Alpha8:
+        source_stride = 2
+    case .Rgb8:
+        source_stride = 3
+    case .Rgba8:
+        source_stride = 4
     }
     if len(source) == 0 || len(source) % source_stride != 0 ||
         len(destination) != len(source) / source_stride * 4 {

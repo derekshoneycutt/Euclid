@@ -1,5 +1,6 @@
 package taskpool
 
+import "base:runtime"
 import "core:mem"
 import tlsf "core:mem/tlsf"
 import vmem "core:mem/virtual"
@@ -74,45 +75,46 @@ Task_Cancellation_Token :: struct {
 // The payload and every writable object reachable from it must remain exclusively
 // task-owned from successful submission through join. The token may be polled at
 // bounded interruption points but does not shorten payload ownership.
+// Temporary allocations expire when the procedure returns, before join.
 Task_Procedure :: #type proc(
     payload: rawptr, token: Task_Cancellation_Token) -> Task_Result
 
 // Generational capability identifying one live slot lifetime.
 // Reuse keeps the index but increments generation so old handles become stale.
 Task_Handle :: struct {
-    index : int,
-    generation : u64,
+    index: int,
+    generation: u64,
 }
 
 // Internal storage shared across the owner/worker handoff.
 // Workers access procedure, payload, policy, and result only while owning dispatch.
 Task_Slot :: struct {
-    generation : u64,
-    state : Task_Slot_State,
-    procedure : Task_Procedure,
-    payload : rawptr,
-    result : Task_Result,
-    execution_policy : Task_Execution_Policy,
-    cancellation_requested : bool,
+    generation: u64,
+    state: Task_Slot_State,
+    procedure: Task_Procedure,
+    payload: rawptr,
+    result: Task_Result,
+    execution_policy: Task_Execution_Policy,
+    cancellation_requested: bool,
 }
 
 // Fixed-capacity ring storing slot indices, never task-owned payloads.
 Task_Index_Queue :: struct {
-    items : []int,
-    head : int,
-    count : int,
+    items: []int,
+    head: int,
+    count: int,
 }
 
 // Per-thread stable entry context for one repository-owned worker.
 Task_Worker_Data :: struct {
-    pool : ^Task_Pool,
+    pool: ^Task_Pool,
 }
 
 // Owner-side group of handles joined in deterministic submission order.
 // Handle storage comes from the pool allocator and is released by `task_fence_wait`.
 Task_Fence :: struct {
-    handles : []Task_Handle,
-    count : int,
+    handles: []Task_Handle,
+    count: int,
 }
 
 // Fixed-capacity task service owned and coordinated by one application thread.
@@ -123,36 +125,36 @@ Task_Fence :: struct {
 // before startup. Scheduler state is protected independently from slot lifecycle.
 Task_Pool :: struct {
     // Pool-owned workers, policy queues, completion publication, and task slots.
-    workers : []^thread.Thread,
-    worker_data : []Task_Worker_Data,
-    slots : []Task_Slot,
-    helpable_ready : Task_Index_Queue,
-    worker_only_ready : Task_Index_Queue,
-    completions : Task_Index_Queue,
+    workers: []^thread.Thread,
+    worker_data: []Task_Worker_Data,
+    slots: []Task_Slot,
+    helpable_ready: Task_Index_Queue,
+    worker_only_ready: Task_Index_Queue,
+    completions: Task_Index_Queue,
 
     // Worker/owner dispatch synchronization; workers never mutate owner lifecycle.
-    scheduler_mutex : sync.Mutex,
-    scheduler_changed : sync.Cond,
-    worker_exit : bool,
-    worker_started_count : int,
-    executing_count : int,
-    next_worker_policy : Task_Execution_Policy,
+    scheduler_mutex: sync.Mutex,
+    scheduler_changed: sync.Cond,
+    worker_exit: bool,
+    worker_started_count: int,
+    executing_count: int,
+    next_worker_policy: Task_Execution_Policy,
 
     // Fixed allocator ownership. `backing` owns the region managed by TLSF;
     // Synchronized access is required for startup and fence allocation.
-    backing : []byte,
-    tlsf_allocator : tlsf.Allocator,
-    synchronized_allocator : mem.Mutex_Allocator,
-    allocator_capacity : int,
+    backing: []byte,
+    tlsf_allocator: tlsf.Allocator,
+    synchronized_allocator: mem.Mutex_Allocator,
+    allocator_capacity: int,
 
     // Owner-controlled lifecycle and bounded occupancy.
-    state : Task_Pool_State,
-    worker_count : int,
-    outstanding_count : int,
+    state: Task_Pool_State,
+    worker_count: int,
+    outstanding_count: int,
 
     // Cumulative diagnostics for owner-side helping and abandoned joined results.
-    helping_execution_count : u64,
-    abandoned_terminal_count : u64,
+    helping_execution_count: u64,
+    abandoned_terminal_count: u64,
 }
 
 //   Derive a worker count while reserving processors for display and Julia work.
@@ -442,13 +444,27 @@ task_pool_init :: proc(
 //   - The procedure's terminal result, not yet published to the owner.
 task_pool_execute_slot :: proc(pool: ^Task_Pool, index: int) -> Task_Result {
     slot := &pool.slots[index]
+    assert(context.temp_allocator.procedure == runtime.default_temp_allocator_proc,
+        "Task execution requires Odin's default temporary allocator")
+    scratch := runtime.default_temp_allocator_temp_begin()
+    assert(scratch.arena != nil, "Task scratch must belong to the executing thread")
+    scratch_used := scratch.arena.total_used
     saved_allocator := context.allocator
+    defer {
+        context.allocator = saved_allocator
+        runtime.default_temp_allocator_temp_end(scratch)
+        // An empty entry mark has no block for Odin's scope rewind to restore.
+        if scratch.block == nil {
+            free_all(context.temp_allocator)
+        } else {
+            // Odin's overflow-block rewind does not subtract those blocks' used bytes.
+            scratch.arena.total_used = scratch_used
+        }
+    }
     context.allocator = mem.nil_allocator()
-    result := slot.procedure(slot.payload, {
+    return slot.procedure(slot.payload, {
         requested = &slot.cancellation_requested,
     })
-    context.allocator = saved_allocator
-    return result
 }
 
 //   Publish one terminal result and wake owner waiters and worker drainers.
@@ -585,7 +601,10 @@ task_pool_submit :: proc(
         task_pool_queue_push(queue, index)
         sync.cond_signal(&pool.scheduler_changed)
         sync.mutex_unlock(&pool.scheduler_mutex)
-        return {index = index, generation = slot.generation}, .Queued
+        return {
+            index = index,
+            generation = slot.generation,
+        }, .Queued
     }
     return {}, .Queue_Full
 }
@@ -737,7 +756,9 @@ task_fence_begin :: proc(pool: ^Task_Pool) -> (Task_Fence, bool) {
     if alloc_error != nil {
         return {}, false
     }
-    return {handles = handles}, true
+    return {
+        handles = handles,
+    }, true
 }
 
 //   Submit one task and retain its handle in deterministic fence order.

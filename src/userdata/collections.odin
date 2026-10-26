@@ -15,15 +15,22 @@ store_load_collections :: proc(
     store: ^Store, destination: ^collections.Set) -> Store_Error {
     if store == nil || destination == nil ||
         (store^.status != .Ready && store^.status != .Read_Only) {
-        return {kind = .Closed}
+        return {
+            kind = .Closed,
+        }
     }
     staged := &store^.collection_replay_workspace
     if !staged^.initialized {
-        return {kind = .Unusable}
+        return {
+            kind = .Unusable,
+        }
     }
     begin_error := store_exec(store, "BEGIN")
     if !store_sqlite_error_is_clear(begin_error) {
-        return {kind = .Read, sqlite_error = begin_error}
+        return {
+            kind = .Read,
+            sqlite_error = begin_error,
+        }
     }
     failure := store_read_collection_snapshot(store, staged)
     if !store_error_is_clear(failure) {
@@ -34,7 +41,9 @@ store_load_collections :: proc(
         return store_rollback_failure(store, .Read, commit_error)
     }
     if destination != staged && !collections.clone(destination, staged) {
-        return {kind = .Allocation}
+        return {
+            kind = .Allocation,
+        }
     }
     return {}
 }
@@ -44,17 +53,26 @@ store_replace_collections :: proc(
     store: ^Store, snapshot: ^collections.Set) -> Store_Error {
     if store == nil || snapshot == nil ||
         (store^.status != .Ready && store^.status != .Read_Only) {
-        return {kind = .Closed}
+        return {
+            kind = .Closed,
+        }
     }
     if collections.validate(snapshot) != .None {
-        return {kind = .Invalid_Batch}
+        return {
+            kind = .Invalid_Batch,
+        }
     }
     if store^.status == .Read_Only {
-        return {kind = .Not_Writable}
+        return {
+            kind = .Not_Writable,
+        }
     }
     begin_error := store_exec(store, "BEGIN IMMEDIATE")
     if !store_sqlite_error_is_clear(begin_error) {
-        return {kind = .Write, sqlite_error = begin_error}
+        return {
+            kind = .Write,
+            sqlite_error = begin_error,
+        }
     }
     failure := store_exec(store, "PRAGMA defer_foreign_keys=ON")
     if store_sqlite_error_is_clear(failure) {
@@ -78,7 +96,9 @@ store_apply_collection_mutations :: proc(
     }
     snapshot := &store^.collection_replay_workspace
     if !snapshot^.initialized {
-        return {kind = .Unusable}
+        return {
+            kind = .Unusable,
+        }
     }
     read_error := store_read_collection_snapshot(store, snapshot)
     if !store_error_is_clear(read_error) {
@@ -87,7 +107,9 @@ store_apply_collection_mutations :: proc(
     for mutation in mutations {
         failure := collections.apply_mutation(snapshot, mutation)
         if failure == .Allocation_Failed {
-            return {kind = .Allocation}
+            return {
+                kind = .Allocation,
+            }
         }
         if failure != .None {
             return {
@@ -99,11 +121,17 @@ store_apply_collection_mutations :: proc(
     }
     write_error := store_exec(store, "PRAGMA defer_foreign_keys=ON")
     if !store_sqlite_error_is_clear(write_error) {
-        return {kind = .Write, sqlite_error = write_error}
+        return {
+            kind = .Write,
+            sqlite_error = write_error,
+        }
     }
     write_error = store_apply_collection_snapshot(store, snapshot)
     if !store_sqlite_error_is_clear(write_error) {
-        return {kind = .Write, sqlite_error = write_error}
+        return {
+            kind = .Write,
+            sqlite_error = write_error,
+        }
     }
     return {}
 }
@@ -117,7 +145,9 @@ store_read_collection_snapshot :: proc(
         failure = store_read_collection_entry_rows(store, snapshot)
     }
     if store_error_is_clear(failure) && collections.validate(snapshot) != .None {
-        failure = {kind = .Invalid_Schema}
+        failure = {
+            kind = .Invalid_Schema,
+        }
     }
     return failure
 }
@@ -128,7 +158,10 @@ store_read_collection_rows :: proc(
     statement := &store^.read_collections
     failure := sqlite.statement_reset(statement)
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Read, sqlite_error = failure}
+        return {
+            kind = .Read,
+            sqlite_error = failure,
+        }
     }
     for {
         status, step_error := sqlite.statement_step(statement)
@@ -235,7 +268,10 @@ store_read_collection_entry_rows :: proc(
     statement := &store^.read_collection_entries
     failure := sqlite.statement_reset(statement)
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Read, sqlite_error = failure}
+        return {
+            kind = .Read,
+            sqlite_error = failure,
+        }
     }
     for {
         status, step_error := sqlite.statement_step(statement)
@@ -398,7 +434,9 @@ store_read_nullable_uuid :: proc(
     statement: ^sqlite.Statement,
     column: int) -> Collection_Uuid_Decode_Result {
     if sqlite.column_type(statement, column) == .Null {
-        return {valid = true}
+        return {
+            valid = true,
+        }
     }
     return store_read_uuid(statement, column)
 }
@@ -548,7 +586,10 @@ store_execute_prepared :: proc(
 store_collection_read_failure :: proc(
     statement: ^sqlite.Statement, failure: sqlite.Error) -> Store_Error {
     reset_error := store_reset_preserving(statement, failure)
-    return {kind = .Read, sqlite_error = reset_error}
+    return {
+        kind = .Read,
+        sqlite_error = reset_error,
+    }
 }
 
 // Reset the active query while preserving an owned-record allocation failure.
@@ -557,12 +598,19 @@ store_collection_read_append_failure :: proc(
     failure: collections.Policy_Error) -> Store_Error {
     reset_error := sqlite.statement_reset(statement)
     if !store_sqlite_error_is_clear(reset_error) {
-        return {kind = .Read, sqlite_error = reset_error}
+        return {
+            kind = .Read,
+            sqlite_error = reset_error,
+        }
     }
     if failure == .Allocation_Failed || failure == .Capacity {
-        return {kind = .Allocation}
+        return {
+            kind = .Allocation,
+        }
     }
-    return {kind = .Invalid_Schema}
+    return {
+        kind = .Invalid_Schema,
+    }
 }
 
 // Reset one completed collection query and surface finalization-state errors.
@@ -570,7 +618,10 @@ store_collection_read_reset :: proc(
     statement: ^sqlite.Statement) -> Store_Error {
     failure := sqlite.statement_reset(statement)
     if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Read, sqlite_error = failure}
+        return {
+            kind = .Read,
+            sqlite_error = failure,
+        }
     }
     return {}
 }

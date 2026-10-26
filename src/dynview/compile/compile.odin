@@ -23,8 +23,7 @@ Compile_Command_Handler :: #type proc(
     cmd: dynviewmodel.Dynview_Command) -> i32
 
 //   Dispatch table mapping each dynview command kind to its compile handler.
-COMPILE_COMMAND_HANDLERS ::
-    [dynviewmodel.Dynview_Command_Kind]Compile_Command_Handler{
+COMPILE_COMMAND_HANDLERS :: [dynviewmodel.Dynview_Command_Kind]Compile_Command_Handler{
     .Begin_Block = compile_handle_begin_block,
     .End_Block = compile_handle_end_block,
     .Text_Run = compile_text_run,
@@ -521,7 +520,7 @@ rebuild_compiled_plain_text :: proc(
     cache^.compiled_plain_text = nil
     cache^.compiled_plain_text_len = 0
 
-    compile_state := Dynview_Compile_State{}
+    compile_state: Dynview_Compile_State = {}
     init_status := compiled_builders_init(cache, &compile_state, cache_arena)
     if init_status != dyncore.DYNVIEW_STATUS_OK {
         return init_status

@@ -48,18 +48,18 @@ encode_rule :: proc(
 encode_box :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     origin: geometry.Vector2, draw_color: dynviewmodel.Color, filled: bool) {
-    rectangle := geometry.Rectangle{
+    rectangle: geometry.Rectangle = {
         origin.x, origin.y, item.draw_width, item.draw_height}
     if filled {
         _ = native.draw_encoder_rectangle(encoder, rectangle, draw_color)
     }
     stroke := max(1, item.inline_atom_stroke)
     if !filled || item.inline_outline_stroke > 0 {
-        top_left := geometry.Vector2{rectangle.x, rectangle.y}
-        top_right := geometry.Vector2{rectangle.x + rectangle.width, rectangle.y}
-        bottom_right := geometry.Vector2{
+        top_left: geometry.Vector2 = {rectangle.x, rectangle.y}
+        top_right: geometry.Vector2 = {rectangle.x + rectangle.width, rectangle.y}
+        bottom_right: geometry.Vector2 = {
             rectangle.x + rectangle.width, rectangle.y + rectangle.height}
-        bottom_left := geometry.Vector2{rectangle.x, rectangle.y + rectangle.height}
+        bottom_left: geometry.Vector2 = {rectangle.x, rectangle.y + rectangle.height}
         _ = native.draw_encoder_line(encoder, top_left, top_right, stroke,
             encode_edge_color(item.shape_edge_color_1, draw_color))
         _ = native.draw_encoder_line(encoder, top_right, bottom_right, stroke,
@@ -75,7 +75,7 @@ encode_box :: proc(
 encode_circle :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     origin: geometry.Vector2, draw_color: dynviewmodel.Color, filled: bool) {
-    center := geometry.Vector2{origin.x + item.draw_width * 0.5,
+    center: geometry.Vector2 = {origin.x + item.draw_width * 0.5,
         origin.y + item.draw_height * 0.5}
     radius := max(0.5, min(item.draw_width, item.draw_height) * 0.5)
     if filled {
@@ -117,21 +117,21 @@ encode_inline_polygon :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32, draw_color: dynviewmodel.Color) {
     if item.kind == .Inline_Triangle {
-        points := [3]geometry.Vector2{{item_x + item.draw_width * 0.5, item_y},
+        points: [3]geometry.Vector2 = {{item_x + item.draw_width * 0.5, item_y},
             {item_x, item_y + item.draw_height},
             {item_x + item.draw_width, item_y + item.draw_height}}
-        edge_colors := [3]dynviewmodel.Color{item.shape_edge_color_1,
+        edge_colors: [3]dynviewmodel.Color = {item.shape_edge_color_1,
             item.shape_edge_color_2, item.shape_edge_color_3}
         encode_polygon(encoder, points[:], {edge_colors[:], draw_color,
             item.shape_is_filled, max(1, item.inline_atom_stroke)})
         return
     }
-    points := [5]geometry.Vector2{{item_x + item.draw_width * 0.5, item_y},
+    points: [5]geometry.Vector2 = {{item_x + item.draw_width * 0.5, item_y},
         {item_x + item.draw_width, item_y + item.draw_height * 0.38},
         {item_x + item.draw_width * 0.81, item_y + item.draw_height},
         {item_x + item.draw_width * 0.19, item_y + item.draw_height},
         {item_x, item_y + item.draw_height * 0.38}}
-    edge_colors := [5]dynviewmodel.Color{item.shape_edge_color_1,
+    edge_colors: [5]dynviewmodel.Color = {item.shape_edge_color_1,
         item.shape_edge_color_2, item.shape_edge_color_3,
         item.shape_edge_color_4, item.shape_edge_color_5}
     encode_polygon(encoder, points[:], {edge_colors[:], draw_color,
@@ -167,7 +167,7 @@ encode_pie_section :: proc(
     if sweep <= 0 {
         return
     }
-    center := geometry.Vector2{item_x + item.pie_center_offset_x,
+    center: geometry.Vector2 = {item_x + item.pie_center_offset_x,
         item_y + item.pie_center_offset_y}
     visual_radius := max(
         max(item.pie_center_offset_x, item.draw_width-item.pie_center_offset_x),
@@ -247,7 +247,9 @@ encode_inline_shape :: proc(
 encode_inline_rule :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     origin: geometry.Vector2, draw_color: dynviewmodel.Color) {
-    rule := Rule_Encode_Geometry{origin = {origin.x, origin.y + item.ascent}}
+    rule: Rule_Encode_Geometry = {
+        origin = {origin.x, origin.y + item.ascent},
+    }
     switch item.kind {
     case .Frac:
         rule.left, rule.right = item.fraction_rule_left, item.fraction_rule_right
@@ -275,9 +277,11 @@ encode_inline_rule :: proc(
 encode_inline_item :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32, selected_rule_color := dynviewmodel.Color{}) {
-    style := layout_draw_style({encoder = encoder}, item.style_id)
+    style := layout_draw_style({
+        encoder = encoder,
+    }, item.style_id)
     draw_color := dynlayout.inline_draw_color(style, item)
-    origin := geometry.Vector2{item_x, item_y}
+    origin: geometry.Vector2 = {item_x, item_y}
     if encode_inline_shape(encoder, item, origin, draw_color) {
         return
     }

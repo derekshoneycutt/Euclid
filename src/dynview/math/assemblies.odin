@@ -114,8 +114,9 @@ math_stretch_position_recipe :: proc(
     overlaps: []f32,
     assembly: fontmodel.Font_Math_Glyph_Assembly) -> Math_Stretch_Construction {
 
-    result := Math_Stretch_Construction{
-        valid = true, assembled = true,
+    result: Math_Stretch_Construction = {
+        valid = true,
+        assembled = true,
         generation = assembly.generation,
         base_glyph_id = assembly.base_glyph_id,
         italic_correction = f32(assembly.italic_correction),
@@ -182,13 +183,18 @@ math_stretch_select :: proc(
     }
     variant, ready := math_stretch_ready_variant(variants, target_advance)
     if variants.generation == generation && ready {
-        result := Math_Stretch_Construction{
-            valid = true, generation = generation,
+        result: Math_Stretch_Construction = {
+            valid = true,
+            generation = generation,
             base_glyph_id = variants.base_glyph_id,
-            advance = f32(variant.advance), count = 1,
+            advance = f32(variant.advance),
+            count = 1,
             top_accent_attachment = f32(variant.top_accent_attachment),
         }
-        result.parts[0] = {glyph_id = variant.glyph_id, extents = variant.extents}
+        result.parts[0] = {
+            glyph_id = variant.glyph_id,
+            extents = variant.extents,
+        }
         return result
     }
     return math_stretch_select_assembly(assembly, generation, target_advance)

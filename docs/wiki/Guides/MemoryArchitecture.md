@@ -12,6 +12,7 @@
 1. [Allocation And Lifetime Standard](#allocation-and-lifetime-standard)
    - [Choose Storage By Lifetime](#choose-storage-by-lifetime)
    - [Reusable Allocators](#reusable-allocators)
+   - [Resource Capabilities And Effects](#resource-capabilities-and-effects)
    - [Allocation Source Visibility](#allocation-source-visibility)
    - [Initialize, Reuse, And Retire](#initialize-reuse-and-retire)
    - [Analyzer Policy And Exceptions](#analyzer-policy-and-exceptions)
@@ -150,6 +151,47 @@ context allocations in `*_test.odin`; use a reviewed
 test-file rule. Tests MUST still use explicit allocation sites and matching
 release. This fixture exception does not authorize context defaults or fallbacks
 in shared production APIs.
+
+### Resource Capabilities And Effects
+
+Resource parameters and fields express authority to perform effects in a particular
+domain, not merely implementation plumbing. Contributors MUST pass or retain an
+allocator, resource owner, or managed-runtime handle only where its capabilities
+serve the operation's contract. Availability alone is not a reason to propagate it
+through another layer.
+
+| Capability | Expressed authority and obligation |
+| --- | --- |
+| Borrowed allocator in an object | The object may acquire storage from that domain during its lifetime. The backing owner must remain valid through use and teardown; reclamation follows the domain's policy. |
+| Writable destination slice | The operation may write within supplied storage. It does not acquire authority to grow or replace that storage. |
+| SQLite connection or statement | The operation may affect SQLite-managed resources, subject to connection ownership and statement/text lifetimes. |
+| Julia value or rooting interface | The operation may interact with Julia-managed values, subject to host-thread, rooting, and GC lifetime rules. A value handle alone does not establish a root. |
+
+An explicit borrowed allocator is therefore more than encapsulated implementation
+detail: it declares possible allocation effects and a dependency on an externally
+owned domain. Passing the containing object can convey that capability without
+repeating allocator parameters on every method. Procedures that may acquire or grow
+storage MUST document that meaningful effect; a particular call need not allocate
+for the capability contract to matter.
+
+Contributors MUST NOT add native allocator capabilities merely because SQLite or
+Julia may allocate internally. Those effects belong to their respective resource
+domains and MUST be expressed through the appropriate interfaces and lifetime rules.
+Conversely, an operation with no application-side allocation may still create,
+mutate, or release managed resources; it must not be described as having no resource
+effects.
+
+For example, a SQLite text read can accept a statement and caller-owned destination
+bytes, copy into that destination, and report a capacity error. It needs no native
+result allocator. If growable storage is genuinely required, its owner decides how
+to acquire it and supplies the resulting destination; the copy operation does not
+inherit that owner's allocation policy.
+
+Keep ownership policy at the boundary that establishes the domain and lifetime.
+Lower layers SHOULD receive only the capabilities they need. Replacing an owner's
+backing storage should not require changing buffer-only operations into
+allocator-aware APIs. Odin's implicit context does not remove the obligation to
+express meaningful effects and resource dependencies explicitly.
 
 ### Allocation Source Visibility
 
@@ -380,7 +422,7 @@ not imply that their owners or lifetimes should be merged.
 | Mechanism | Euclid use and contract | Official reference |
 | --- | --- | --- |
 | Explicit ordinary allocator | Direct allocations use an explicit allocator expression and paired release. `context.allocator` is limited to root/bootstrap or narrowly reviewed sites, not ambient backing for a reusable domain; it is not a promise that the backing is an uninstrumented system heap. | [Odin allocators](https://pkg.odin-lang.org/core/mem/#overview-allocators) |
-| Temporary allocator | Operation or frame scratch that cannot escape its reset boundary. Display and Julia-host loops reset their own temporary storage. | [Odin context system](https://odin-lang.org/docs/overview/#implicit-context-system) |
+| Temporary allocator | Thread-local operation or frame scratch that cannot escape its reset boundary. Display/Julia loops, task invocations, and catalogue requests reclaim their own scratch; see [Temporary Storage And Joined Work](#temporary-storage-and-joined-work). | [Odin context system](https://odin-lang.org/docs/overview/#implicit-context-system) |
 | Growing virtual arena | Shared animation storage, view snapshot slots, content generations, and derived Dynview cache storage. Bulk reset invalidates all allocations. | [`core:mem/virtual`](https://pkg.odin-lang.org/core/mem/virtual/) |
 | Static virtual arena | Bounded renderer staging and serialized font preparation. Reservation and commitment are distinct; fixed reservation does not mean every byte is initially committed. | [`core:mem/virtual`](https://pkg.odin-lang.org/core/mem/virtual/) |
 | TLSF allocator | Reusable, individually freed variable-sized allocations: bridge messages, scheduler/service storage, and optional font metadata. | [`core:mem/tlsf`](https://pkg.odin-lang.org/core/mem/tlsf/) |
@@ -736,24 +778,56 @@ rules are defined by the [native value store](../../../src/core/animation/value_
 Temporary allocation is intentionally convenient, but still has an owner and an
 invalidation boundary.
 
-- The [display frame](../../../src/view/frame.odin) releases
-  `context.temp_allocator` at frame completion.
-- The [Julia worker loop](../../../src/bridge/runtime_service.odin) resets its
-  temporary storage independently; it does not borrow a display-frame lifetime.
-- Startup and operation loops can also reset temporary storage. "Valid until the
-  next display frame" is not a universal promise.
-- A message, queued job, retained UI label, or native callback must not keep a
-  pointer into scratch that can reset before consumption.
+Repository threads started through `core:thread` without an explicit initial
+context receive a default context with their own thread-local temporary arena.
+Odin destroys that arena at thread exit, but persistent workers still need
+operation-level reclamation. A display-frame reset does not reclaim another
+thread's scratch. Copying a context is shallow: it preserves allocator references,
+not independent arenas. The Julia bridge saves its callback context on the Julia
+owner thread; restoring that context does not create a new scratch lifetime.
+
+| Owner | Reclamation boundary | Preservation contract |
+| --- | --- | --- |
+| [Display frame](../../../src/view/frame.odin) | Frame completion | Frame consumers must finish before the reset. |
+| [Julia host](../../../src/bridge/runtime_service.odin) | Host-loop iteration | Native callbacks use the host context; no scratch may escape to later Julia work or messages. |
+| [Task invocation](../../../src/taskpool/taskpool.odin) | Procedure return, before completion publication | Rewind only task allocations; preserve scratch already owned by an owner thread helping the pool. |
+| [Catalogue SQLite owner](../../../src/view/content/worker.odin) | Startup admission and every completed request, including controls and failures | Database statements and sealed generations must not retain request scratch. |
+
+"Valid until the next display frame" is not a universal promise. A message,
+queued job, retained UI label, Julia task, or native callback MUST NOT keep a
+pointer into scratch that can reset before consumption. Longer-lived data must
+be copied into its owning payload, generation, or subsystem storage.
 
 The [task pool](../../../src/taskpool/taskpool.odin) provisions fixed scheduler
 storage before startup. Task payloads and result storage have their own owner
 contracts; submitting a pointer does not make the scheduler own its pointee.
-Worker execution substitutes a nil ordinary allocator to prevent accidental use
-of the pool's inherited allocator as an arbitrary task heap.
+The allocator used to create a thread handle owns that handle, not the worker's
+default context. Task execution substitutes a nil ordinary allocator to prohibit
+an ambient task heap; this does not disable `context.temp_allocator`.
+
+Task execution requires the executing thread's default temporary allocator.
+Its scope preserves pre-existing caller scratch even when waiting or draining
+executes Helpable work on the owner thread. Unconditional whole-arena reset in
+that shared execution path would invalidate the caller's allocations. The scope
+also handles an initially blockless arena and restores used-byte accounting when
+Odin's scope rewind frees overflow blocks. A dedicated catalogue worker, in
+contrast, can reset its whole arena after each request because persistent state
+uses independent storage. Query coalescing does not extend that lifetime across
+control requests.
 
 A task join establishes that the worker no longer accesses its payload/result
-storage. It does not automatically free that storage. Owners then consume,
-publish, reset, or release it. Likewise, requesting cancellation is not a join.
+storage. Scratch has already expired before the completion is published, so
+joined results MUST use independently owned storage. Joining does not
+automatically free that storage. Owners then consume, publish, reset, or release
+it. Requesting cancellation is neither a join nor a scratch reset; all ordinary
+task return outcomes reclaim scratch.
+
+The [task-pool regressions](../../../src/taskpool/taskpool_test.odin) verify cold
+start, repeated task outcomes, overflow-block reclamation, and preservation of
+owner-helping scratch. The [catalogue regressions](../../../src/view/content/scratch_test.odin)
+observe resets during startup, failed admission, and control-only staging before
+checking published results. These assert used-pressure reclamation, not zero
+retained backing capacity or a latency budget.
 
 ## Shutdown And Reclamation Order
 

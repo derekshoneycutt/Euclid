@@ -102,7 +102,7 @@ resolve_animation_content_specification :: proc(
     if !found {
         return .Missing_Default
     }
-    result := Animation_Content_Specification{
+    result: Animation_Content_Specification = {
         selection_revision = 1,
         animation_identity = subject,
         content_generation_identity = generation^.generation,

@@ -104,12 +104,14 @@ reserve_vertical_extent :: proc(
         return {}, false
     }
     row_count := span_for_extent(exact_height, cell_height)
-    top := f32(row_start)*cell_height
-    bottom := f32(row_start+row_count)*cell_height
+    top := f32(row_start) * cell_height
+    bottom := f32(row_start + row_count) * cell_height
     return {
-        row_start = row_start, row_count = row_count,
-        top = top, bottom = bottom,
-        trailing_padding = bottom-top-exact_height,
+        row_start = row_start,
+        row_count = row_count,
+        top = top,
+        bottom = bottom,
+        trailing_padding = bottom - top - exact_height,
     }, true
 }
 

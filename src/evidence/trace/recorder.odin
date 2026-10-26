@@ -11,20 +11,20 @@ TRACE_RING_CAPACITY :: 256
 // or drain a ring only after establishing an ownership or lifecycle boundary.
 Ring :: struct {
     // Inline circular storage and producer identity assigned to retained events.
-    events : [TRACE_RING_CAPACITY]Event,
-    producer : Producer,
+    events: [TRACE_RING_CAPACITY]Event,
+    producer: Producer,
 
     // Circular read/write positions and number of currently retained records.
-    read_index : int,
-    write_index : int,
-    count : int,
+    read_index: int,
+    write_index: int,
+    count: int,
 
     // Next owner-local sequence, including identities consumed by dropped events.
-    next_sequence : u64,
+    next_sequence: u64,
 
     // Drops awaiting a synthesized Trace_Gap and sticky correctness-evidence loss.
-    pending_drops : u64,
-    required_evidence_lost : bool,
+    pending_drops: u64,
+    required_evidence_lost: bool,
 }
 
 //   Initialize empty storage for one runtime producer.
@@ -39,7 +39,10 @@ Ring :: struct {
 // Notes:
 //   - The first recorded or dropped event receives sequence one.
 ring_init :: proc(ring: ^Ring, producer: Producer) {
-    ring^ = {producer = producer, next_sequence = 1}
+    ring^ = {
+        producer = producer,
+        next_sequence = 1,
+    }
 }
 
 //   Append one event when bounded capacity permits.
@@ -78,16 +81,18 @@ ring_record :: proc(ring: ^Ring, event: Event) -> bool {
     }
 
     if ring.pending_drops > 0 && ring.count < TRACE_RING_CAPACITY - 1 {
-        gap := Event{
+        gap: Event = {
             sequence = ring.next_sequence,
             timestamp_ns = event.timestamp_ns,
             producer = ring.producer,
             lane = .Diagnostic,
             kind = .Trace_Gap,
             flags = {.Failure},
-            payload = {counts = {
-                first = u32(min(ring.pending_drops, u64(max(u32)))),
-            }},
+            payload = {
+                counts = {
+                    first = u32(min(ring.pending_drops, u64(max(u32)))),
+                },
+            },
         }
         ring.next_sequence += 1
         ring_append(ring, gap)

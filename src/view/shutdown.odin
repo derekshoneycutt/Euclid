@@ -14,7 +14,6 @@ import time "core:time"
 import viewcapture "capture"
 import viewscenario "scenario"
 import terminalservice "terminal/service"
-import viewpreferences "preferences"
 import uilibrary "ui/library"
 import collections "../collections"
 import viewmodel "ui/model"
@@ -28,15 +27,15 @@ shutdown_window_runtime :: proc(
     artifact_output: string = "") -> int {
     if session.state != nil {
         if !uilibrary.library_entry_name_flush(session.state) {
-            viewpreferences.settings_save_shutdown(
-                session.state, &session.state^.simulation_executor^.pool)
+            shutdown_shared_user_data(
+                session.state, &session.state^.simulation_executor^.pool, false)
             if session.state^.ui_runtime.library.entry_name.active &&
                 session.state^.ui_runtime.library.entry_name.dirty {
                 _ = uilibrary.library_entry_name_flush(session.state)
             }
         }
-        viewpreferences.settings_save_shutdown(
-            session.state, &session.state^.simulation_executor^.pool)
+        shutdown_shared_user_data(
+            session.state, &session.state^.simulation_executor^.pool, false)
         font.cache_shutdown_service(
             &session.state^.font_cache,
             &session.state^.simulation_executor^.pool)
@@ -93,7 +92,7 @@ shutdown_julia_runtime :: proc(
 //
 // Notes:
 //   - Must be paired with initiate_animations_state to release owned allocations.
-free_animations_state :: proc(state : ^core.Euclid_General_State) {
+free_animations_state :: proc(state: ^core.Euclid_General_State) {
     if state == nil {
         return
     }

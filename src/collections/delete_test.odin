@@ -11,12 +11,27 @@ collections_delete_retires_only_the_exact_custom_owner :: proc(t: ^testing.T) {
     owner := collections_test_id(2)
     group := collections_test_id(20)
     for entry in ([]Entry{
-        {id = group, collection_id = owner, kind = .Group, sibling_order = 1},
-        {id = collections_test_id(21), collection_id = owner,
-            parent_entry_id = group, kind = .Animation,
-            animation_id = collections_test_id(90), sibling_order = 1},
-        {id = collections_test_id(22), collection_id = collections_test_id(3),
-            kind = .Animation, animation_id = collections_test_id(90), sibling_order = 1},
+        {
+            id = group,
+            collection_id = owner,
+            kind = .Group,
+            sibling_order = 1,
+        },
+        {
+            id = collections_test_id(21),
+            collection_id = owner,
+            parent_entry_id = group,
+            kind = .Animation,
+            animation_id = collections_test_id(90),
+            sibling_order = 1,
+        },
+        {
+            id = collections_test_id(22),
+            collection_id = collections_test_id(3),
+            kind = .Animation,
+            animation_id = collections_test_id(90),
+            sibling_order = 1,
+        },
     }) {
         testing.expect_value(t, append_entry(set, entry), Policy_Error.None)
     }
@@ -54,7 +69,9 @@ collections_delete_policy_and_allocation_free_commit :: proc(t: ^testing.T) {
     mutation, failure := make_collection_delete_mutation(set, collections_test_id(3))
     testing.expect_value(t, failure, Policy_Error.None)
     backing := set.allocator.backing_allocator
-    set.allocator.backing_allocator = {procedure = collections_test_reject_backing}
+    set.allocator.backing_allocator = {
+        procedure = collections_test_reject_backing,
+    }
     testing.expect_value(t, apply_mutation(set, mutation), Mutation_Error.None)
     set.allocator.backing_allocator = backing
     testing.expect_value(t, validate(set), Validation_Error.None)

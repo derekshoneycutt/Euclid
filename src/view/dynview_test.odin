@@ -118,8 +118,11 @@ view_snapshot_test_payloads_init :: proc(
     fallback_text: string, block_id: i32) {
 
     view_snapshot_test_text_builders_init(t, snapshot, fallback_text, "")
-    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
-        {commands = []dynviewmodel.Dynview_Command{{block_id = block_id}}}))
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot, {
+        commands = []dynviewmodel.Dynview_Command{{
+            block_id = block_id,
+        }},
+    }))
 }
 
 //   Rebuild text and one command payload after a prepared slot reset.
@@ -129,8 +132,11 @@ view_snapshot_test_payloads_build :: proc(
 
     testing.expect(t, app_bridge.build_view_snapshot_text_payloads(
         snapshot, fallback_text, nil))
-    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
-        {commands = []dynviewmodel.Dynview_Command{{block_id = block_id}}}))
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot, {
+        commands = []dynviewmodel.Dynview_Command{{
+            block_id = block_id,
+        }},
+    }))
 }
 
 //   Require a retired slot to be free without resetting its arena early.
@@ -327,7 +333,9 @@ scene_command_test_entity :: proc(
     entity: shapemodel.Shape_Entity
     assert(shapemodel.shape_world_create_entity(world, &entity) == .Ok)
     assert(shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
-        entity, shapemodel.Shape_Transform{position = position}) == .Ok)
+        entity, shapemodel.Shape_Transform{
+            position = position,
+        }) == .Ok)
     assert(shapemodel.shape_component_insert(&world^.render_styles, &world^.registry,
         entity, shapemodel.Shape_Render_Style{}) == .Ok)
     return entity
@@ -347,7 +355,9 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
     state^.julia_interface^.current_animation = animation
     first := scene_command_test_entity(world, {})
     second := scene_command_test_entity(world, {})
-    batch := app_bridge.Scene_Command_Batch{animation = animation}
+    batch: app_bridge.Scene_Command_Batch = {
+        animation = animation,
+    }
 
     state^.scene_command_batch_target = &batch
     first_command, first_captured := app_bridge.capture_shape_command(
@@ -382,14 +392,23 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     entity := scene_command_test_entity(world, {9, 9, 9})
-    batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
+    batch: app_bridge.Scene_Command_Batch = {
+        animation = animation,
+        command_count = 2,
+    }
     batch.commands[0] = app_bridge.Scene_Command{
         kind = .Set_Shape_Position,
-        entity = shapemodel.shape_entity_pack(entity), position = {1, 2, 3}}
+        entity = shapemodel.shape_entity_pack(entity),
+        position = {1, 2, 3},
+    }
     batch.commands[1] = app_bridge.Scene_Command{
         kind = .Set_Shape_Position,
-        entity = shapemodel.shape_entity_pack({slot = 2, generation = 1}),
-        position = {4, 5, 6}}
+        entity = shapemodel.shape_entity_pack({
+            slot = 2,
+            generation = 1,
+        }),
+        position = {4, 5, 6},
+    }
 
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
@@ -411,8 +430,13 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
 
-    overflowed := app_bridge.Scene_Command_Batch{animation = current, overflowed = true}
-    stale_batch := app_bridge.Scene_Command_Batch{animation = stale}
+    overflowed: app_bridge.Scene_Command_Batch = {
+        animation = current,
+        overflowed = true,
+    }
+    stale_batch: app_bridge.Scene_Command_Batch = {
+        animation = stale,
+    }
     testing.expect(t, !app_bridge.validate_scene_command_batch(state, &overflowed))
     testing.expect(t, !app_bridge.validate_scene_command_batch(state, &stale_batch))
 }
@@ -469,11 +493,18 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     entity := scene_command_test_entity(world, {9, 9, 9})
-    batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
+    batch: app_bridge.Scene_Command_Batch = {
+        animation = animation,
+        command_count = 2,
+    }
     batch.commands[0] = app_bridge.Scene_Command{
         kind = .Set_Shape_Position,
-        entity = shapemodel.shape_entity_pack(entity), position = {1, 2, 3}}
-    batch.commands[1] = app_bridge.Scene_Command{kind = .Set_Tool_Lock}
+        entity = shapemodel.shape_entity_pack(entity),
+        position = {1, 2, 3},
+    }
+    batch.commands[1] = app_bridge.Scene_Command{
+        kind = .Set_Tool_Lock,
+    }
 
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
@@ -490,8 +521,9 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
     status := shapemodel.shape_world_create_entity(world, &state^.world_pen.joint1)
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     status = shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
-        state^.world_pen.joint1,
-        shapemodel.Shape_Transform{position = {1, 2, 3}})
+        state^.world_pen.joint1, shapemodel.Shape_Transform{
+            position = {1, 2, 3},
+        })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     snapshot: app_bridge.Animation_Query_Snapshot
     app_bridge.capture_animation_query_snapshot(state, &snapshot)
@@ -525,7 +557,10 @@ animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
     slot := new(app_bridge.Animation_Tick_Slot, context.allocator)
     defer free(slot)
     slot^ = app_bridge.Animation_Tick_Slot{
-        generation = 4, sequence = 9, animation = animation}
+        generation = 4,
+        sequence = 9,
+        animation = animation,
+    }
 
     testing.expect(t, app_bridge.animation_tick_matches_current(state, service, slot))
     slot^.generation = 3
@@ -568,7 +603,7 @@ julia_runtime_failure_event_records_request_identity :: proc(t: ^testing.T) {
     defer free(service)
     service^.active_request_id = 8
     service^.active_request_kind = .Animation_Tick
-    event := app_bridge.Julia_Event{
+    event: app_bridge.Julia_Event = {
         kind = .Invoke_Complete,
         request_kind = .Invoke,
         request_id = 7,
@@ -598,7 +633,7 @@ julia_runtime_terminal_failure_does_not_report_stopped :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
     service^.lifecycle = .Shutdown_Requested
-    event := app_bridge.Julia_Event{
+    event: app_bridge.Julia_Event = {
         kind = .Shutdown_Complete,
         request_kind = .Shutdown,
         request_id = 4,
@@ -715,18 +750,27 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
 
-    commands := []dynviewmodel.Dynview_Command{{kind = .Math_Block}}
-    programs := []dynviewmodel.Dynview_Math_Program{{
+    commands: []dynviewmodel.Dynview_Command = {{
+        kind = .Math_Block,
+    }}
+    programs: []dynviewmodel.Dynview_Math_Program = {{
         valid = true,
         root_node_index = 0,
         node_count = 1,
         command_count = 1,
     }}
-    math_commands := []dynviewmodel.Dynview_Command{{kind = .Math_Glyph_Run}}
-    nodes := []dynviewmodel.Dynview_Math_Node{{kind = .Glyph_Run}}
-    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, {commands = commands, math_programs = programs,
-            math_commands = math_commands, math_nodes = nodes}))
+    math_commands: []dynviewmodel.Dynview_Command = {{
+        kind = .Math_Glyph_Run,
+    }}
+    nodes: []dynviewmodel.Dynview_Math_Node = {{
+        kind = .Glyph_Run,
+    }}
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot, {
+        commands = commands,
+        math_programs = programs,
+        math_commands = math_commands,
+        math_nodes = nodes,
+    }))
     runtime^.compile_cache.is_valid = true
     runtime^.compile_cache.layout_is_valid = true
 
@@ -762,7 +806,7 @@ view_snapshot_expect_publication_evidence :: proc(
 //   Verify valid snapshot publication records the immutable animation identity.
 @(test)
 view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
-    fixture := View_Snapshot_Publication_Fixture{
+    fixture: View_Snapshot_Publication_Fixture = {
         new(app_core.Euclid_General_State, context.allocator),
         new(app_bridge.Julia_Runtime_Service, context.allocator),
         new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)}
@@ -819,7 +863,7 @@ dynview_publication_requires_valid_view_snapshot :: proc(t: ^testing.T) {
 //   Verify malformed presentation semantics retain the prior published fallback atomically.
 @(test)
 presentation_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.T) {
-    fixture := View_Snapshot_Publication_Fixture{
+    fixture: View_Snapshot_Publication_Fixture = {
         new(app_core.Euclid_General_State, context.allocator),
         new(app_bridge.Julia_Runtime_Service, context.allocator),
         new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)}
@@ -841,7 +885,9 @@ presentation_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.
     defer storage.arena_owner_destroy(&candidate^.arena)
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(candidate, {
         document_text = []u8{'x'},
-        documents = []dynviewmodel.Dynview_Document{{source_count = 2}},
+        documents = []dynviewmodel.Dynview_Document{{
+            source_count = 2,
+        }},
     }))
 
     testing.expect(t, !app_bridge.publish_available_view_snapshot(fixture.state))
@@ -878,21 +924,40 @@ view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T)
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "same", "text")
     defer storage.arena_owner_destroy(&snapshot^.arena)
-    malformed := [5]dynviewmodel.Dynview_Command{
-        {text_offset = 4, text_len = 1},
-        {script_base_text_offset = 4, script_base_text_len = 1},
-        {script_sup_text_offset = 4, script_sup_text_len = 1},
-        {script_sub_text_offset = 4, script_sub_text_len = 1},
-        {radical_index_text_offset = 4, radical_index_text_len = 1},
+    malformed: [5]dynviewmodel.Dynview_Command = {
+        {
+            text_offset = 4,
+            text_len = 1,
+        },
+        {
+            script_base_text_offset = 4,
+            script_base_text_len = 1,
+        },
+        {
+            script_sup_text_offset = 4,
+            script_sup_text_len = 1,
+        },
+        {
+            script_sub_text_offset = 4,
+            script_sub_text_len = 1,
+        },
+        {
+            radical_index_text_offset = 4,
+            radical_index_text_len = 1,
+        },
     }
-    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, {commands = []dynviewmodel.Dynview_Command{{}}}))
+    testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot, {
+        commands = []dynviewmodel.Dynview_Command{{}},
+    }))
     for command in malformed {
         snapshot^.commands[0] = command
         testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
     }
 
-    snapshot^.commands[0] = {text_offset = 0, text_len = 4}
+    snapshot^.commands[0] = {
+        text_offset = 0,
+        text_len = 4,
+    }
     testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
     snapshot^.math_commands = snapshot^.commands
     testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
@@ -928,7 +993,7 @@ view_snapshot_expect_replacement_published :: proc(
     view_snapshot_test_complete(second, fixture.animation, 3, 2, 3)
     testing.expect(t, app_bridge.publish_available_view_snapshot(fixture.state))
     view_snapshot_expect_released_without_reset(t, first)
-    expected := View_Snapshot_Published_Expected{
+    expected: View_Snapshot_Published_Expected = {
         "second", raw_data(second^.presentation_bytes), raw_data(second^.commands), 2}
     view_snapshot_expect_published_generation(t, fixture.state, expected)
     testing.expect(t, app_bridge.prepare_view_snapshot_slot(first))
@@ -961,11 +1026,11 @@ view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
     first_storage := raw_data(first^.presentation_bytes)
     first_records := raw_data(first^.commands)
-    first_expected := View_Snapshot_Published_Expected{
+    first_expected: View_Snapshot_Published_Expected = {
         "first", first_storage, first_records, 1}
     view_snapshot_expect_published_generation(t, state, first_expected)
 
-    fixture := View_Snapshot_Publication_Fixture{state, service, animation}
+    fixture: View_Snapshot_Publication_Fixture = {state, service, animation}
     second := &service^.view_snapshots[1]
     view_snapshot_expect_stale_candidate_rejected(t, fixture, first_expected)
     defer storage.arena_owner_destroy(&second^.arena)
@@ -1061,7 +1126,7 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
     out_of_bounds := dyncore.text_span_from_buffer(buffer, 2, 5)
     testing.expect_value(t, out_of_bounds, "")
 
-    cmd := dynviewmodel.Dynview_Command{
+    cmd: dynviewmodel.Dynview_Command = {
         script_base_text_offset = 0,
         script_base_text_len = 3,
         script_sup_text_offset = 1,
@@ -1091,9 +1156,18 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
         storage.Bounded_Builder_Status.Ok)
     cache^.layout_items = cache^.layout_item_builder.storage[:1]
     cache^.layout_item_count = 1
-    state := app_dynlayout.Dynview_Layout_State{col = 2, line_index = 0}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{item_start = 0, item_count = 1}
-    style := dyncore.Dynview_Text_Style{force_line_start = true, indent_cols = 3}
+    state: app_dynlayout.Dynview_Layout_State = {
+        col = 2,
+        line_index = 0,
+    }
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {
+        item_start = 0,
+        item_count = 1,
+    }
+    style: dyncore.Dynview_Text_Style = {
+        force_line_start = true,
+        indent_cols = 3,
+    }
 
     status := app_dynlayout.layout_prepare_style_placement(cache, &state, &acc, style, 12)
 
@@ -1117,10 +1191,13 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
     dynview_test_layout_builders_init(t, cache, &arena)
     defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
-    state := app_dynlayout.Dynview_Layout_State{
-        active_block_id = 7, line_index = 2, col = 1}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
-    item := dynviewmodel.Dynview_Layout_Item{
+    state: app_dynlayout.Dynview_Layout_State = {
+        active_block_id = 7,
+        line_index = 2,
+        col = 1,
+    }
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
+    item: dynviewmodel.Dynview_Layout_Item = {
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         col_span = 3,
         ascent = 8,
@@ -1153,8 +1230,8 @@ dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
     cache^.last_cell_height = 22
     buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
 
     ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
     text_height := ctx.base_ascent + ctx.base_descent
@@ -1175,9 +1252,11 @@ dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&arena)
     cache^.last_panel_width = 80
     cache^.last_cell_width = 8
-    state := app_dynlayout.Dynview_Layout_State{col = 3}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
-    item := dynviewmodel.Dynview_Layout_Item{
+    state: app_dynlayout.Dynview_Layout_State = {
+        col = 3,
+    }
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
+    item: dynviewmodel.Dynview_Layout_Item = {
         kind = .Text_Run,
         style_id = dyncore.DYNVIEW_STYLE_BOLD,
         col_span = 2,
@@ -1200,13 +1279,23 @@ dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    state := app_dynlayout.Dynview_Layout_State{row = 3}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {
+        row = 3,
+    }
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
-    text := dynviewmodel.Dynview_Layout_Item{
-        kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
-    shape := dynviewmodel.Dynview_Layout_Item{
-        kind = .Inline_Box, col_span = 1, draw_height = 50}
+    text: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Text_Run,
+        col_span = 1,
+        draw_height = 16,
+        ascent = 12,
+        descent = 4,
+    }
+    shape: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Inline_Box,
+        col_span = 1,
+        draw_height = 50,
+    }
 
     text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
     shape_status := app_dynlayout.layout_push_item(cache, &state, &acc, shape)
@@ -1233,8 +1322,8 @@ dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
     cache^.last_cell_height = 22
     buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
     ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
 
     first_status := app_dynlayout.layout_apply_block_spacing(&ctx, 22)
@@ -1258,11 +1347,14 @@ dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
     cache^.last_cell_height = 22
     buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
     ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
-    item := dynviewmodel.Dynview_Layout_Item{
-        kind = .Inline_Box, col_span = 1, draw_height = 50}
+    item: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Inline_Box,
+        col_span = 1,
+        draw_height = 50,
+    }
     push_status := app_dynlayout.layout_push_item(cache, &state, &acc, item)
 
     final_status := app_dynlayout.layout_finalize_metrics(&ctx)
@@ -1284,15 +1376,17 @@ dynview_presentation_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
     runtime^.compile_cache.layout_is_valid = true
     runtime^.compile_cache.layout_total_height = 66
     runtime^.compile_cache.layout_average_line_height = 44
-    fallback := app_dynlayout.Presentation_Fallback_Layout{
+    fallback: app_dynlayout.Presentation_Fallback_Layout = {
         text_padding = 4,
         wrap_advance = 8,
         row_height = 22,
         text = "fallback",
     }
 
-    content_height := app_dynlayout.presentation_content_height_or_fallback(
-        runtime, {width = 80, height = 100}, fallback)
+    content_height := app_dynlayout.presentation_content_height_or_fallback(runtime, {
+        width = 80,
+        height = 100,
+    }, fallback)
     scroll_step := app_dynlayout.presentation_scroll_step_or_fallback(runtime, 22)
 
     testing.expect_value(t, content_height, f32(74))
@@ -1304,8 +1398,10 @@ dynview_presentation_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
 dynview_document_scroll_metrics_override_legacy_rows :: proc(t: ^testing.T) {
     runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    documents := [1]dynviewmodel.Dynview_Document{{block_count = 1}}
-    lines := [2]dynviewmodel.Dynview_Document_Layout_Line{{}, {}}
+    documents: [1]dynviewmodel.Dynview_Document = {{
+        block_count = 1,
+    }}
+    lines: [2]dynviewmodel.Dynview_Document_Layout_Line = {{}, {}}
     runtime^.enabled = true
     runtime^.content.documents = documents[:]
     runtime^.compile_cache.document_layout_is_valid = true
@@ -1313,11 +1409,17 @@ dynview_document_scroll_metrics_override_legacy_rows :: proc(t: ^testing.T) {
     runtime^.compile_cache.document_layout_total_height = 75
     runtime^.compile_cache.layout_is_valid = true
     runtime^.compile_cache.layout_total_height = 22
-    fallback := app_dynlayout.Presentation_Fallback_Layout{
-        text_padding = 4, wrap_advance = 8, row_height = 22, text = "fallback"}
+    fallback: app_dynlayout.Presentation_Fallback_Layout = {
+        text_padding = 4,
+        wrap_advance = 8,
+        row_height = 22,
+        text = "fallback",
+    }
 
-    content_height := app_dynlayout.presentation_content_height_or_fallback(
-        runtime, {width = 80, height = 100}, fallback)
+    content_height := app_dynlayout.presentation_content_height_or_fallback(runtime, {
+        width = 80,
+        height = 100,
+    }, fallback)
     scroll_step := app_dynlayout.presentation_scroll_step_or_fallback(runtime, 22)
 
     testing.expect_value(t, content_height, f32(83))
@@ -1346,7 +1448,7 @@ dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    item := dynviewmodel.Dynview_Layout_Item{
+    item: dynviewmodel.Dynview_Layout_Item = {
         kind = .Math_Block,
         col_span = 2,
         draw_width = 13,
@@ -1379,7 +1481,7 @@ dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    program := dynviewmodel.Dynview_Math_Program{
+    program: dynviewmodel.Dynview_Math_Program = {
         draw_width = 24,
         ascent = 12,
         descent = 4,
@@ -1412,15 +1514,26 @@ dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
-    text := dynviewmodel.Dynview_Layout_Item{
-        kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
-    math_item := dynviewmodel.Dynview_Layout_Item{
-        kind = .Math_Block, col_span = 2, draw_width = 13, draw_height = 32,
-        ascent = 25, descent = 7,
-        visual_padding_top = 3, visual_padding_bottom = 4}
+    text: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Text_Run,
+        col_span = 1,
+        draw_height = 16,
+        ascent = 12,
+        descent = 4,
+    }
+    math_item: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Math_Block,
+        col_span = 2,
+        draw_width = 13,
+        draw_height = 32,
+        ascent = 25,
+        descent = 7,
+        visual_padding_top = 3,
+        visual_padding_bottom = 4,
+    }
 
     text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
     math_status := app_dynlayout.layout_push_item(cache, &state, &acc, math_item)
@@ -1447,9 +1560,14 @@ dynview_test_finalize_math_line :: proc(
     acc: ^app_dynlayout.Dynview_Layout_Line_Accumulator,
     ascent, descent: f32) -> i32 {
 
-    item := dynviewmodel.Dynview_Layout_Item{
-        kind = .Math_Block, col_span = 1, draw_width = 8,
-        draw_height = ascent + descent, ascent = ascent, descent = descent}
+    item: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Math_Block,
+        col_span = 1,
+        draw_width = 8,
+        draw_height = ascent + descent,
+        ascent = ascent,
+        descent = descent,
+    }
     if status := app_dynlayout.layout_push_item(cache, state, acc, item);
         status != dyncore.DYNVIEW_STATUS_OK {
         return status
@@ -1467,12 +1585,17 @@ dynview_line_permits_ink_overflow_into_neighbor_leading :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
 
-    text := dynviewmodel.Dynview_Layout_Item{
-        kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
+    text: dynviewmodel.Dynview_Layout_Item = {
+        kind = .Text_Run,
+        col_span = 1,
+        draw_height = 16,
+        ascent = 12,
+        descent = 4,
+    }
     text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
     first_status := app_dynlayout.layout_finalize_line(cache, &state, &acc, 12, 4)
     second_status := dynview_test_finalize_math_line(cache, &state, &acc, 17, 4)
@@ -1495,8 +1618,8 @@ dynview_line_reserves_row_when_ink_exceeds_allowance :: proc(t: ^testing.T) {
     defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
 
     status := dynview_test_finalize_math_line(cache, &state, &acc, 19, 4)
@@ -1513,7 +1636,7 @@ expect_oversized_inline_line_grid_placement :: proc(
     style: dyncore.Dynview_Text_Style,
     cells: app_dynlayout.Cell_Metrics) {
 
-    cmd := dynviewmodel.Dynview_Command{
+    cmd: dynviewmodel.Dynview_Command = {
         kind = .Inline_Line,
         inline_atom_dimension = 4,
         inline_atom_stroke = 4,
@@ -1523,7 +1646,10 @@ expect_oversized_inline_line_grid_placement :: proc(
         cache = cache,
         cmd = cmd,
         style = style,
-        metrics = {max_cols = 2, cols = cols},
+        metrics = {
+            max_cols = 2,
+            cols = cols,
+        },
     })
     placement, ok := app_dynlayout.layout_place_item_on_grid(&item, cells)
 
@@ -1543,7 +1669,7 @@ dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
         last_cell_width = 8,
         last_cell_height = 22,
     }
-    cmd := dynviewmodel.Dynview_Command{
+    cmd: dynviewmodel.Dynview_Command = {
         kind = .Inline_Line,
         inline_atom_dimension = 2.25,
         inline_atom_stroke = 4,
@@ -1554,7 +1680,10 @@ dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
         cache = cache,
         cmd = cmd,
         style = style,
-        metrics = {max_cols = 10, cols = cols},
+        metrics = {
+            max_cols = 10,
+            cols = cols,
+        },
     })
     cells := app_dynlayout.layout_cell_metrics(cache, 12, 4)
 
@@ -1577,26 +1706,45 @@ dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
 @(test)
 dynview_inline_shape_families_report_intrinsic_bounds :: proc(t: ^testing.T) {
     box := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Box, inline_atom_dimension = 2.5,
-        inline_box_height = 3, inline_atom_stroke = 2}, 8)
+        kind = .Inline_Box,
+        inline_atom_dimension = 2.5,
+        inline_box_height = 3,
+        inline_atom_stroke = 2,
+    }, 8)
     filled_box := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Filled_Box, inline_atom_dimension = 2.5,
-        inline_box_height = 3, inline_outline_stroke = 3}, 8)
+        kind = .Inline_Filled_Box,
+        inline_atom_dimension = 2.5,
+        inline_box_height = 3,
+        inline_outline_stroke = 3,
+    }, 8)
     circle := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Circle, inline_atom_dimension = 1.25,
-        inline_atom_stroke = 2}, 8)
+        kind = .Inline_Circle,
+        inline_atom_dimension = 1.25,
+        inline_atom_stroke = 2,
+    }, 8)
     filled_circle := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Filled_Circle, inline_atom_dimension = 1.25,
-        inline_outline_stroke = 3}, 8)
+        kind = .Inline_Filled_Circle,
+        inline_atom_dimension = 1.25,
+        inline_outline_stroke = 3,
+    }, 8)
     perpendicular := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Perpendicular, inline_atom_dimension = 4,
-        inline_box_height = 5, inline_atom_stroke = 2}, 8)
+        kind = .Inline_Perpendicular,
+        inline_atom_dimension = 4,
+        inline_box_height = 5,
+        inline_atom_stroke = 2,
+    }, 8)
     triangle := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Triangle, inline_atom_dimension = 4,
-        inline_box_height = 5, inline_atom_stroke = 2}, 8)
+        kind = .Inline_Triangle,
+        inline_atom_dimension = 4,
+        inline_box_height = 5,
+        inline_atom_stroke = 2,
+    }, 8)
     pentagon := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
-        kind = .Inline_Pentagon, inline_atom_dimension = 4,
-        inline_box_height = 5, inline_atom_stroke = 2}, 8)
+        kind = .Inline_Pentagon,
+        inline_atom_dimension = 4,
+        inline_box_height = 5,
+        inline_atom_stroke = 2,
+    }, 8)
 
     testing.expect_value(t, box.draw_width, f32(22))
     testing.expect_value(t, box.draw_height, f32(26))
@@ -1619,7 +1767,7 @@ expect_tall_inline_box_grid_placement :: proc(
     bold: dyncore.Dynview_Text_Style,
     cells: app_dynlayout.Cell_Metrics) {
 
-    box_cmd := dynviewmodel.Dynview_Command{
+    box_cmd: dynviewmodel.Dynview_Command = {
         kind = .Inline_Box,
         inline_atom_dimension = 2.5,
         inline_box_height = 4,
@@ -1630,7 +1778,10 @@ expect_tall_inline_box_grid_placement :: proc(
         cache = cache,
         cmd = box_cmd,
         style = bold,
-        metrics = {max_cols = 10, cols = box_cols},
+        metrics = {
+            max_cols = 10,
+            cols = box_cols,
+        },
     })
     box_placement, box_ok :=
         app_dynlayout.layout_place_item_on_grid(&box_item, cells)
@@ -1651,7 +1802,7 @@ expect_oversized_inline_triangle_grid_placement :: proc(
     bold: dyncore.Dynview_Text_Style,
     cells: app_dynlayout.Cell_Metrics) {
 
-    triangle_cmd := dynviewmodel.Dynview_Command{
+    triangle_cmd: dynviewmodel.Dynview_Command = {
         kind = .Inline_Triangle,
         inline_atom_dimension = 10,
         inline_box_height = 2,
@@ -1662,7 +1813,10 @@ expect_oversized_inline_triangle_grid_placement :: proc(
         cache = cache,
         cmd = triangle_cmd,
         style = bold,
-        metrics = {max_cols = 4, cols = triangle_cols},
+        metrics = {
+            max_cols = 4,
+            cols = triangle_cols,
+        },
     })
     triangle_placement, triangle_ok :=
         app_dynlayout.layout_place_item_on_grid(&triangle_item, cells)
@@ -1690,7 +1844,7 @@ dynview_inline_shapes_use_centered_grid_placement :: proc(t: ^testing.T) {
 //   Verify pie sections retain tight wedge bounds including outline stroke.
 @(test)
 dynview_inline_pie_section_retains_tight_visual_bounds :: proc(t: ^testing.T) {
-    cmd := dynviewmodel.Dynview_Command{
+    cmd: dynviewmodel.Dynview_Command = {
         kind = .Inline_Pie_Section,
         inline_atom_dimension = 1,
         inline_outline_stroke = 2,
@@ -1728,9 +1882,9 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
 
     buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
-    state := app_dynlayout.Dynview_Layout_State{}
-    acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
-    cmd := dynviewmodel.Dynview_Command{
+    state: app_dynlayout.Dynview_Layout_State = {}
+    acc: app_dynlayout.Dynview_Layout_Line_Accumulator = {}
+    cmd: dynviewmodel.Dynview_Command = {
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         has_brush_color = true,
         brush_color = {64, 99, 216, 255},
@@ -1885,7 +2039,7 @@ dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
     buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
 
-    invalid_program := dynviewmodel.Dynview_Math_Program{}
+    invalid_program: dynviewmodel.Dynview_Math_Program = {}
     invalid_program.valid = false
     testing.expect(t, !app_math.measure_math_program(
         cache, buffer, &invalid_program, 12))

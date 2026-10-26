@@ -74,7 +74,7 @@ storage_test_bounded_element_builder_bounds_geometric_waste :: proc(t: ^testing.
     testing.expect_value(t, bounded_element_builder_init(
         &builder, 10, &owner), Bounded_Builder_Status.Ok)
 
-    values := []u32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+    values: []u32 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
     for value in values {
         testing.expect_value(t, bounded_element_builder_append(
             &builder, []u32{value}), Bounded_Builder_Status.Ok)

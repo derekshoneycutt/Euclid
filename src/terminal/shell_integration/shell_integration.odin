@@ -64,7 +64,10 @@ shell_integration_init :: proc(
     if allocation_error != nil {
         return false 
     }
-    state^ = {allocator = allocator, command_blocks = blocks}
+    state^ = {
+        allocator = allocator,
+        command_blocks = blocks,
+    }
     return true
 }
 
@@ -138,14 +141,20 @@ shell_command_close_active :: proc(state: ^Shell_Integration_State) {
 shell_command_start :: proc(
     state: ^Shell_Integration_State, kind: termmodel.Shell_Marker_Kind,
     position: termmodel.Terminal_Semantic_Position) {
-    state.active_command = {generation = shell_command_next_generation(state)}
+    state.active_command = {
+        generation = shell_command_next_generation(state),
+    }
     state.active_command_present = true
     state.active_command.present += {kind}
     switch kind {
-    case .Prompt: state.active_command.prompt = position
-    case .Command: state.active_command.command = position
-    case .Execution: state.active_command.execution = position
-    case .Finished: state.active_command.finished = position
+    case .Prompt:
+        state.active_command.prompt = position
+    case .Command:
+        state.active_command.command = position
+    case .Execution:
+        state.active_command.execution = position
+    case .Finished:
+        state.active_command.finished = position
     }
 }
 
@@ -155,8 +164,10 @@ shell_command_apply_marker :: proc(
     position: termmodel.Terminal_Semantic_Position) {
     block.present += {admission.kind}
     switch admission.kind {
-    case .Command: block.command = position
-    case .Execution: block.execution = position
+    case .Command:
+        block.command = position
+    case .Execution:
+        block.execution = position
     case .Finished:
         block.finished = position
         block.status = admission.status
@@ -358,12 +369,27 @@ shell_integration_parse_status :: proc(bytes: []u8) -> (i32, bool) {
 // Parse one exact OSC 133 marker payload without mutating retained state.
 shell_integration_parse_marker :: proc(payload: []u8) -> Shell_Marker_Admission {
     switch payload[0] {
-    case 'A': return {kind = .Prompt, valid = len(payload) == 1}
-    case 'B': return {kind = .Command, valid = len(payload) == 1}
-    case 'C': return {kind = .Execution, valid = len(payload) == 1}
+    case 'A':
+        return {
+            kind = .Prompt,
+            valid = len(payload) == 1,
+        }
+    case 'B':
+        return {
+            kind = .Command,
+            valid = len(payload) == 1,
+        }
+    case 'C':
+        return {
+            kind = .Execution,
+            valid = len(payload) == 1,
+        }
     case 'D':
         if len(payload) == 1 {
-            return {kind = .Finished, valid = true}
+            return {
+                kind = .Finished,
+                valid = true,
+            }
         }
         if payload[1] != ';' {
             return {} 

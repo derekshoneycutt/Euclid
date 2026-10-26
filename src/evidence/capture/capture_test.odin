@@ -15,7 +15,11 @@ capture_test_sink :: proc(user_data: rawptr, checkpoint: Checkpoint) -> bool {
 @(test)
 capture_test_first_presented_frame :: proc(t: ^testing.T) {
     coordinator: Coordinator
-    trigger := trace.Identity{kind = .Checkpoint, id = 42, generation = 3}
+    trigger: trace.Identity = {
+        kind = .Checkpoint,
+        id = 42,
+        generation = 3,
+    }
     testing.expect(t, checkpoint_request(&coordinator, 7, trigger))
     testing.expect(t, !checkpoint_request(&coordinator, 8, {}))
     captured: Checkpoint
@@ -47,7 +51,9 @@ capture_test_rejects_unsafe_path :: proc(t: ^testing.T) {
 capture_test_missing_sink_is_explicit_failure :: proc(t: ^testing.T) {
     coordinator: Coordinator
     testing.expect(t, checkpoint_request(&coordinator, 2, {
-        kind = .Scenario_Action, id = 9, generation = 1,
+        kind = .Scenario_Action,
+        id = 9,
+        generation = 1,
     }))
     testing.expect_value(t,
         checkpoint_after_present(&coordinator, 4, 3, {}),

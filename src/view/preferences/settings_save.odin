@@ -11,6 +11,7 @@ import preferencesmodel "model"
 import core "../../core"
 import collections "../../collections"
 import viewmodel "../ui/model"
+import viewuserdata "../userdata"
 
 SETTINGS_SAVE_MAX_ATTEMPTS :: 3
 SETTINGS_SAVE_RETRY_DELAY_FRAMES :: 60
@@ -31,6 +32,18 @@ settings_save_has_pending :: proc(
     runtime: ^preferencesmodel.Settings_Save_Runtime) -> bool {
     return runtime^.settings_pending.count > 0 ||
         runtime^.collection_mutation_count > 0
+}
+
+// Report whether a save can currently compete for the shared connection.
+settings_save_ready :: proc(state: ^core.Euclid_General_State) -> bool {
+    if state == nil {
+        return false
+    }
+    runtime := &state^.preferences_runtime
+    status := state^.ui_runtime.preferences.save_status
+    return runtime^.settings_store != nil && !runtime^.settings_save_active &&
+        settings_save_has_pending(runtime) && runtime^.settings_retry_frames == 0 &&
+        status != .Unavailable && status != .Failed
 }
 
 // Record an accepted user-data edit and preserve unresolved failure context.
@@ -163,11 +176,15 @@ settings_save_poll :: proc(
     if joined != .Joined {
         log.error("settings_save_join_failed")
         state^.ui_runtime.preferences.save_status = .Failed
-        runtime^.settings_save_active = false
         return
     }
     runtime^.settings_save_active = false
     settings_save_apply_result(state, result)
+    if !viewuserdata.connection_admission_release_joined(
+        &state^.user_data_admission, .Settings_Save) {
+        log.error("settings_save_admission_release_failed")
+        state^.ui_runtime.preferences.save_status = .Failed
+    }
 }
 
 // Update visible status and bounded retry state for one joined result.
@@ -302,7 +319,7 @@ settings_save_requeue :: proc(
 // Submit one pending batch without allowing owner-help execution of its SQLite IO.
 settings_save_service :: proc(
     state: ^core.Euclid_General_State,
-    pool: ^taskpool.Task_Pool) {
+    pool: ^taskpool.Task_Pool, history_ready: bool = false) {
     if state == nil || pool == nil {
         return
     }
@@ -323,13 +340,26 @@ settings_save_service :: proc(
         runtime^.settings_retry_frames -= 1
         return
     }
-    settings_save_submit(state, pool)
+    settings_save_submit(state, pool, false, history_ready)
 }
 
 // Preserve pending edits when the shared pool cannot admit save work.
 settings_save_submit :: proc(
     state: ^core.Euclid_General_State,
-    pool: ^taskpool.Task_Pool) {
+    pool: ^taskpool.Task_Pool,
+    drain_work: bool = false,
+    history_ready: bool = false) {
+    admission := &state^.user_data_admission
+    if !viewuserdata.connection_admission_claim(
+        admission, .Settings_Save, history_ready, drain_work) {
+        return
+    }
+    settings_save_prepare_payload(state)
+    settings_save_submit_claimed(state, pool)
+}
+
+// Snapshot pending edits into the stable payload before task-pool admission.
+settings_save_prepare_payload :: proc(state: ^core.Euclid_General_State) {
     runtime := &state^.preferences_runtime
     runtime^.settings_save_payload = {
         store = runtime^.settings_store,
@@ -339,17 +369,37 @@ settings_save_submit :: proc(
         user_data_revision = runtime^.user_data_revision,
         owner_thread_id = sync.current_thread_id(),
     }
+}
+
+// Submit a previously claimed immutable batch and release admission on rejection.
+settings_save_submit_claimed :: proc(
+    state: ^core.Euclid_General_State, pool: ^taskpool.Task_Pool) {
+    runtime := &state^.preferences_runtime
+    admission := &state^.user_data_admission
     handle, outcome := taskpool.task_pool_submit(
         pool, settings_save_worker, &runtime^.settings_save_payload, .Worker_Only)
     if outcome != .Queued {
+        if !viewuserdata.connection_admission_release_rejected(
+            admission, .Settings_Save) {
+            log.error("settings_save_rejected_admission_release_failed")
+        }
         state^.ui_runtime.preferences.save_status = .Pending
         return
     }
+    if !viewuserdata.connection_admission_mark_submitted(admission, .Settings_Save) {
+        log.error("settings_save_admission_submit_transition_failed")
+    }
     runtime^.settings_save_handle = handle
     runtime^.settings_save_active = true
+    settings_save_publish_submission(state)
+}
+
+// Publish the accepted immutable batch and its existing durable-save status.
+settings_save_publish_submission :: proc(state: ^core.Euclid_General_State) {
+    runtime := &state^.preferences_runtime
     runtime^.settings_failure_count += 1
-    state^.preferences_runtime.settings_pending = {}
-    state^.preferences_runtime.collection_mutation_count = 0
+    runtime^.settings_pending = {}
+    runtime^.collection_mutation_count = 0
     state^.ui_runtime.preferences.save_status = .Saving
     settings_save_record_event(state, .Settings_Save_Submitted)
 }
@@ -387,13 +437,19 @@ settings_save_record_event :: proc(
     }
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
-            lane = .Domain, kind = kind, flags = flags,
+            lane = .Domain,
+            kind = kind,
+            flags = flags,
             correlation_kind = .Task,
             correlation = u64(runtime^.settings_save_handle.index + 1),
             generation = runtime^.settings_save_handle.generation,
-            payload = {counts = {
-                u32(runtime^.settings_save_payload.changes.count +
-                    runtime^.settings_save_payload.mutation_count), detail}},
+            payload = {
+                counts = {
+                    u32(runtime^.settings_save_payload.changes.count +
+                        runtime^.settings_save_payload.mutation_count),
+                    detail,
+                },
+            },
         })
 }
 
@@ -404,32 +460,77 @@ settings_save_shutdown :: proc(
         return
     }
     runtime := &state^.preferences_runtime
+    viewuserdata.connection_admission_begin_drain(&state^.user_data_admission)
     for {
-        if runtime^.settings_save_active {
-            result, joined := taskpool.task_pool_wait(
-                pool, runtime^.settings_save_handle)
-            if joined != .Joined {
-                log.error("settings_save_shutdown_join_failed")
-                state^.ui_runtime.preferences.save_status = .Failed
-                return
-            }
-            runtime^.settings_save_active = false
-            settings_save_apply_result(state, result)
+        if runtime^.settings_save_active &&
+           !settings_save_shutdown_join_active(state, pool) {
+            return
         }
         if !settings_save_has_pending(runtime) {
             return
         }
-        if runtime^.settings_store == nil ||
-            state^.ui_runtime.preferences.save_status == .Unavailable ||
-            state^.ui_runtime.preferences.save_status == .Failed {
+        if !settings_save_shutdown_can_retry(state, runtime) {
             return
         }
         runtime^.settings_retry_frames = 0
-        settings_save_submit(state, pool)
+        settings_save_submit(state, pool, true)
         if !runtime^.settings_save_active {
             log.error("settings_save_shutdown_admission_failed")
             state^.ui_runtime.preferences.save_status = .Failed
             return
         }
     }
+}
+
+// Advance one save-drain step while allowing the other connection borrower to finish.
+settings_save_shutdown_step :: proc(
+    state: ^core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool,
+    history_ready: bool) -> bool {
+    if state == nil || pool == nil {
+        return true
+    }
+    runtime := &state^.preferences_runtime
+    if runtime^.settings_save_active {
+        if !settings_save_shutdown_join_active(state, pool) {
+            return false
+        }
+    }
+    if !settings_save_has_pending(runtime) ||
+       !settings_save_shutdown_can_retry(state, runtime) {
+        return true
+    }
+    runtime^.settings_retry_frames = 0
+    settings_save_submit(state, pool, true, history_ready)
+    return false
+}
+
+// Join, consume, and release the connection for one shutdown-owned save task.
+settings_save_shutdown_join_active :: proc(
+    state: ^core.Euclid_General_State, pool: ^taskpool.Task_Pool) -> bool {
+    runtime := &state^.preferences_runtime
+    result, joined := taskpool.task_pool_wait(pool, runtime^.settings_save_handle)
+    if joined != .Joined {
+        log.error("settings_save_shutdown_join_failed")
+        state^.ui_runtime.preferences.save_status = .Failed
+        return false
+    }
+    runtime^.settings_save_active = false
+    settings_save_apply_result(state, result)
+    if !viewuserdata.connection_admission_release_joined(
+        &state^.user_data_admission, .Settings_Save) {
+        log.error("settings_save_shutdown_admission_release_failed")
+        state^.ui_runtime.preferences.save_status = .Failed
+        return false
+    }
+    return true
+}
+
+// Continue shutdown retries only while durable settings remain eligible to save.
+settings_save_shutdown_can_retry :: proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^preferencesmodel.Settings_Save_Runtime) -> bool {
+    return runtime^.settings_store != nil &&
+        state^.ui_runtime.preferences.save_status != .Unavailable &&
+        state^.ui_runtime.preferences.save_status != .Failed
 }

@@ -162,7 +162,7 @@ update_icon_button :: proc(
         press_t = 1
     }
 
-    result := Icon_Button_Result{
+    result: Icon_Button_Result = {
         icon_drawn_rect = icon_button_icon_draw_rect(
             slot_rect, params.inset_scale * (1.0 +
                 ICON_BUTTON_HOVER_SCALE_ADD * hover_t -

@@ -21,7 +21,7 @@ jsonl_test_highlight_event_names :: proc(t: ^testing.T) {
 // Verify the exact version-one typed JSONL envelope and stable event spelling.
 @(test)
 jsonl_test_representative_event_contract :: proc(t: ^testing.T) {
-    event := trace.Event{
+    event: trace.Event = {
         sequence = 7,
         producer = .Display,
         lane = .Lifecycle,
@@ -32,7 +32,12 @@ jsonl_test_representative_event_contract :: proc(t: ^testing.T) {
         revision = 2,
         kind = .Runtime_Ready,
         flags = {.Required},
-        payload = {counts = {first = 4, second = 5}},
+        payload = {
+            counts = {
+                first = 4,
+                second = 5,
+            },
+        },
     }
     actual := jsonl_event("run-test", event)
     expected := "{\"schema\":\"euclid.semantic-evidence\",\"version\":1," +

@@ -51,8 +51,11 @@ cache_next_optional_raster_slot :: proc(
             selected_tick = raster.first_pending_demand_tick
         }
     }
-    return {key = selected_key, slot_index = selected_index,
-        found = selected_index >= 0}
+    return {
+        key = selected_key,
+        slot_index = selected_index,
+        found = selected_index >= 0,
+    }
 }
 
 //   Prepare one task-owned font result without touching display resources.
@@ -61,7 +64,7 @@ prepare_task_execute :: proc(
     token: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     task := cast(^Font_Prepare_Task)payload
     cancellation_token := token
-    cancellation := Font_Prepare_Cancellation{
+    cancellation: Font_Prepare_Cancellation = {
         user_data = &cancellation_token,
         requested = prepare_task_cancel_requested,
     }

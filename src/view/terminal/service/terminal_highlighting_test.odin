@@ -26,7 +26,10 @@ terminal_service_test_highlight_failure_preserves_presentation :: proc(t: ^testi
     terminalview.terminal_highlight_observe_live(term, 0)
     request, ready := terminalview.terminal_highlight_take_request(term, 1)
     testing.expect(t, ready)
-    runs := [1]protocol.Highlight_Run{{end_byte = 2, weight = .Bold}}
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = 2,
+        weight = .Bold,
+    }}
     testing.expect(t, terminalview.terminal_highlight_publish(term,
         {request.identity, request.source, runs[:]}))
     testing.expect(t, termhist.termhist_insert_text(term.history, "X"))
@@ -64,7 +67,10 @@ terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     testing.expect(t, received && envelope != nil)
     request, typed := envelope^.(protocol.Highlight_Requested)
     testing.expect(t, typed && request.source == "α")
-    runs := [1]protocol.Highlight_Run{{end_byte = 2, weight = .Bold}}
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = 2,
+        weight = .Bold,
+    }}
     testing.expect_value(t, bridge.send_terminal_highlight_result(
         state.julia_runtime_service, {request.identity, request.source, runs[:]}),
         bridgemodel.Communication_Send_Outcome.Sent)
@@ -104,10 +110,18 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
     term.julia_session_ready = true
     termhist.termhist_insert_text(term.history, "x = 1")
     source := terminalview.terminal_submit(term)
+    terminalview.terminal_highlight_end_submission(term, 100, 1, source)
     testing.expect(t, terminalview.terminal_begin_eval(term, source))
-    prepared := uiterminal.Terminal_Prepared_Frame{
-        available = true, layout = {line_height = 20},
-        scroll = {view_rect = {height = 200}},
+    prepared: uiterminal.Terminal_Prepared_Frame = {
+        available = true,
+        layout = {
+            line_height = 20,
+        },
+        scroll = {
+            view_rect = {
+                height = 200,
+            },
+        },
     }
     terminal_highlight_service_update(state, prepared, 1)
     envelope, received := bridge.communication_link_try_recv(
@@ -123,7 +137,70 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
     _, duplicate := bridge.communication_link_try_recv(
         &state.julia_runtime_service.request_link)
     testing.expect(t, !duplicate)
-    testing.expect(t, term.awaiting_eval && term.history.history_len == 1)
+    testing.expect(t, term.awaiting_eval)
+}
+
+// Joined speculative history reads copy source into the exact revision cache slot.
+@(test)
+terminal_service_test_highlight_source_read_publication :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    term := &state.terminal
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        term, context.allocator, 1))
+    defer terminalview.terminal_destroy(term, context.allocator)
+    term.julia_session_ready = true
+    termhist.termhist_insert_text(term.history, "cached source")
+    source := terminalview.terminal_submit(term)
+    terminalview.terminal_highlight_end_submission(term, 55, 1, source)
+    terminalview.terminal_highlight_observe_history(term, 0, 1)
+    slot := terminalview.terminal_highlight_cache_slot(term, 55, 1)
+    testing.expect(t, slot != nil)
+    if slot == nil {
+        return
+    }
+    slot.source_length = 0
+    slot.phase = .Empty
+    source_request, requested :=
+        terminalview.terminal_highlight_source_request_next(term)
+    id := source_request.submission_id
+    revision := source_request.source_revision
+    testing.expect(t, requested)
+    testing.expect(t, terminalview.terminal_highlight_source_fetch_begin(
+        term, id, revision, 100))
+    terminal_service_test_set_highlight_read_result(state, id, revision)
+    terminal_service_consume_history_read(state)
+    highlight, ready := terminalview.terminal_highlight_take_request(term, 1)
+    testing.expect(t, ready)
+    testing.expect_value(t, highlight.source, "cached source")
+}
+
+// Prepare one joined result as though the history worker completed a keyed read.
+terminal_service_test_set_highlight_read_result :: proc(
+    state: ^core.Euclid_General_State, id, revision: u64) {
+    history := &state^.terminal_history_runtime
+    source := "cached source"
+    history^.read_result_request = {
+        kind = .By_Id,
+        priority = .Speculative,
+        submission_id = id,
+        request_id = 100,
+        terminal_generation = state^.terminal.animation_generation,
+        source_revision = revision,
+        face_generation = state^.terminal.highlighting.face_generation,
+    }
+    history^.read_result = {
+        outcome = .Found,
+        record = {
+            submission_id = id,
+            mode = .Normal,
+            terminal_generation = state^.terminal.animation_generation,
+            source_revision = revision,
+        },
+        source_length = len(source),
+    }
+    copy(history^.read_result_source[:len(source)], transmute([]u8)source)
+    history^.read_result_ready = true
 }
 
 // Stale, malformed, and failed replies remain distinct from publication in typed evidence.
@@ -140,7 +217,9 @@ terminal_service_test_highlight_outcome_evidence :: proc(t: ^testing.T) {
     term.banner_ready = true
     term.julia_session_ready = true
     termhist.termhist_insert_text(term.history, "x")
-    runs := [1]protocol.Highlight_Run{{end_byte = 1}}
+    runs: [1]protocol.Highlight_Run = {{
+        end_byte = 1,
+    }}
     for outcome in 0..<3 {
         trace.ring_init(&state.evidence_ring, .Display)
         terminalview.terminal_highlight_invalidate(term)

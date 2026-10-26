@@ -52,8 +52,8 @@ checkbox_label_layout :: proc(
     label_y := box_rect.y + params.label_offset_y
     measured_width, _ := viewtext.ui_text_measure_monospace(
         params.label, params.font, params.label_font_size, 0)
-    measured := geometry.Vector2{measured_width, params.label_font_size}
-    label_rect := geometry.Rectangle{label_x, label_y,
+    measured: geometry.Vector2 = {measured_width, params.label_font_size}
+    label_rect: geometry.Rectangle = {label_x, label_y,
         max(0.0, measured.x), max(0.0, measured.y)}
     return label_rect, checkbox_union_rect(hit_rect, label_rect)
 }
@@ -198,7 +198,7 @@ checkbox_apply_semantics :: proc(
         result^.toggled = true
         result^.checked_out = !params.checked
     }
-    states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
+    states: viewmodel.Ui_Node_State = {.Visible, .Focusable, .Tab_Stop}
     if params.enabled {
         states += {.Enabled}
     }
@@ -206,8 +206,11 @@ checkbox_apply_semantics :: proc(
         states += {.Checked}
     }
     _ = uisemantics.semantic_register_control(params.semantic_focus, {
-        id = id, role = .Checkbox, states = states,
-        actions = {.Focus, .Toggle}, region = .Accordion_Content,
+        id = id,
+        role = .Checkbox,
+        states = states,
+        actions = {.Focus, .Toggle},
+        region = .Accordion_Content,
         traversal_order = params.semantic_order,
         bounds = result^.control_geometry.bounds,
         clip_bounds = result^.control_geometry.clip_bounds,
@@ -224,7 +227,7 @@ checkbox_draw_result :: proc(params: Checkbox_Params) -> Checkbox_Result {
     drawn_rect.height = max(f32(0), drawn_rect.height)
     box_rect := checkbox_box_drawn_rect(drawn_rect)
     hit_rect := drawn_rect
-    label_rect := geometry.Rectangle{}
+    label_rect: geometry.Rectangle = {}
     label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
 
     return Checkbox_Result{

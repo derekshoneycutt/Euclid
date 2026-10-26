@@ -56,7 +56,9 @@ adapter_prepare_memory :: proc(owner: ^Adapter) -> bool {
     if owner^.memory.initialized {
         return owner^.native_ids.count != 0
     }
-    heap_allocator := runtime.Allocator{procedure = runtime.heap_allocator_proc}
+    heap_allocator: runtime.Allocator = {
+        procedure = runtime.heap_allocator_proc,
+    }
     if storage.tlsf_owner_init(&owner^.memory, heap_allocator) != .Ok {
         return false
     }
@@ -322,7 +324,8 @@ adapter_controls_unchanged :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -
         }
     }
     return portable.control_tree_matches_input(&owner^.control_publication.current, {
-        root_bounds = input.root_bounds, bounds_scale = input.bounds_scale,
+        root_bounds = input.root_bounds,
+        bounds_scale = input.bounds_scale,
         window_focused = input.window_focused,
         controls = owner^.staged_controls[:len(input.controls)],
     })
@@ -504,7 +507,10 @@ adapter_validate_action :: proc(
     }
     if request.kind == u16(accesskit.Action.Focus) &&
        publication.child_supports_focus {
-        destination^ = {kind = .Focus, identity = identity}
+        destination^ = {
+            kind = .Focus,
+            identity = identity,
+        }
         return .Ok
     }
     if request.kind == u16(accesskit.Action.Click) &&
@@ -512,7 +518,10 @@ adapter_validate_action :: proc(
         if !publication.child_enabled {
            return .Disabled_Target
         }
-        destination^ = {kind = .Activate, identity = identity}
+        destination^ = {
+            kind = .Activate,
+            identity = identity,
+        }
         return .Ok
     }
     return .Unsupported_Action
@@ -619,15 +628,24 @@ adapter_map_click_action :: proc(
 adapter_simple_action_mapping :: proc(
     action: accesskit.Action) -> Adapter_Action_Mapping {
     #partial switch action {
-    case .Focus: return {.Focus, .Focus, 0, true}
-    case .Show_Context_Menu: return {.Show_Context_Menu, .Show_Context_Menu, 0, true}
-    case .Increment: return {.Increment, .Increment, 0, true}
-    case .Decrement: return {.Decrement, .Decrement, 0, true}
-    case .Expand: return {.Expand, .Expand, 0, true}
-    case .Collapse: return {.Collapse, .Collapse, 0, true}
-    case .Scroll_Up: return {.Scroll, .Scroll, -1, true}
-    case .Scroll_Down: return {.Scroll, .Scroll, 1, true}
-    case: return {}
+    case .Focus:
+        return {.Focus, .Focus, 0, true}
+    case .Show_Context_Menu:
+        return {.Show_Context_Menu, .Show_Context_Menu, 0, true}
+    case .Increment:
+        return {.Increment, .Increment, 0, true}
+    case .Decrement:
+        return {.Decrement, .Decrement, 0, true}
+    case .Expand:
+        return {.Expand, .Expand, 0, true}
+    case .Collapse:
+        return {.Collapse, .Collapse, 0, true}
+    case .Scroll_Up:
+        return {.Scroll, .Scroll, -1, true}
+    case .Scroll_Down:
+        return {.Scroll, .Scroll, 1, true}
+    case:
+        return {}
     }
 }
 
@@ -743,7 +761,8 @@ accesskit_action_supported :: proc(action: accesskit.Action) -> bool {
          .Replace_Selected_Text, .Set_Text_Selection, .Expand, .Collapse,
          .Scroll_Up, .Scroll_Down:
         return true
-    case: return false
+    case:
+        return false
     }
 }
 
@@ -855,7 +874,7 @@ accesskit_copy_action_request :: proc(
     if !accesskit_action_supported(request^.action) {
        return .Invalid_Target
     }
-    copied := portable.Queued_Action{
+    copied: portable.Queued_Action = {
         kind = u16(request^.action),
         target_native_id = u64(request^.target_node),
         publication_generation = generation,

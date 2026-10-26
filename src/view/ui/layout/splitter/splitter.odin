@@ -108,7 +108,7 @@ splitter_axis_preparation :: proc(
         orientation = .Horizontal
         present = layout^.current_layout_mode == .Landscape
     }
-    window_rect := geometry.Rectangle{
+    window_rect: geometry.Rectangle = {
         0, 0, f32(layout^.window.width), f32(layout^.window.height)}
     return {{geometry.Rectangle(shape.hit_rect), window_rect},
         shape.visible_rect, value, minimum, maximum, 8, value != original,
@@ -287,7 +287,11 @@ splitter_try_capture :: proc(
         split_position = layout^.horizontal_split_y
         mouse_position = mouse_input.mouse_position.y
     }
-    press_owner^ = {active = true, kind = .Splitter, id = press_id}
+    press_owner^ = {
+        active = true,
+        kind = .Splitter,
+        id = press_id,
+    }
     layout^.splitter_drag_offset = split_position - mouse_position
 }
 
@@ -388,7 +392,7 @@ splitter_resolve_values :: proc(ctx: Splitter_Update_Context) -> Splitter_Value_
     press_owner := ctx.press_owner
     semantic_focus := ctx.semantic_focus
     mouse_input := ctx.mouse_input
-    result := Splitter_Value_Result{
+    result: Splitter_Value_Result = {
         layout^.vertical_split_x, layout^.horizontal_split_y, {}}
     if ctx.locked {
         splitter_release_capture(layout, press_owner)
@@ -478,11 +482,11 @@ register_splitter_semantics :: proc(
     if prepared.locked {
         return
     }
-    axes := [2]struct {
+    axes: [2]struct {
         axis: Splitter_Axis,
         prepared: Splitter_Axis_Preparation,
         label: string,
-    }{
+    } = {
         {.Vertical, prepared.vertical, "Resize left and right panes"},
         {.Horizontal, prepared.horizontal, "Resize upper and lower panes"},
     }
@@ -491,16 +495,22 @@ register_splitter_semantics :: proc(
             continue
         }
         _ = uisemantics.semantic_register_control(focus, {
-            id = splitter_semantic_id(entry.axis), role = .Slider,
+            id = splitter_semantic_id(entry.axis),
+            role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound, .Set_Value},
             region = .Pane_Layout,
             traversal_order = u32(order),
             bounds = entry.prepared.control_geometry.bounds,
             clip_bounds = entry.prepared.control_geometry.clip_bounds,
-            numeric_range = {f64(entry.prepared.minimum),
-                f64(entry.prepared.maximum), f64(entry.prepared.value),
-                f64(entry.prepared.step), entry.prepared.orientation, true},
+            numeric_range = {
+                f64(entry.prepared.minimum),
+                f64(entry.prepared.maximum),
+                f64(entry.prepared.value),
+                f64(entry.prepared.step),
+                entry.prepared.orientation,
+                true,
+            },
             label = entry.label,
         })
     }

@@ -65,8 +65,12 @@ sdl_framebuffer_load :: proc(user_data: rawptr) -> capturemodel.Framebuffer_Pixe
     owner^.readback_count += 1
     owner^.fence_wait_ns += timing.fence_wait_ns
     owner^.map_copy_ns += timing.map_copy_ns
-    return {pixels = pixels, width = int(width), height = int(height),
-        pitch_bytes = pitch_bytes}
+    return {
+        pixels = pixels,
+        width = int(width),
+        height = int(height),
+        pitch_bytes = pitch_bytes,
+    }
 }
 
 // sdl_framebuffer_unload retires one image before capture-domain reset.

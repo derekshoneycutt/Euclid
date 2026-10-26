@@ -32,9 +32,12 @@ Animated_Gif_Decode_Result :: struct {
 // static_image_type returns the explicit SDL_image type for one admitted format.
 static_image_type :: proc(format: Static_Image_Format) -> cstring {
     switch format {
-    case .Png: return "PNG"
-    case .Jpeg: return "JPG"
-    case .Gif: return "GIF"
+    case .Png:
+        return "PNG"
+    case .Jpeg:
+        return "JPG"
+    case .Gif:
+        return "GIF"
     }
     return ""
 }
@@ -125,6 +128,26 @@ animated_gif_decoder_has_exact_frame_count :: proc(
     return false
 }
 
+// Decode every admitted GIF frame into its assigned caller-owned output region.
+animated_gif_decode_frames :: proc(
+    request: ^Animated_Gif_Decode_Request, decoder: ^image.AnimationDecoder,
+    result: ^Animated_Gif_Decode_Result) -> bool {
+    canvas_byte_count := request.width * request.height * 4
+    for index in 0..<request.frame_count {
+        if animated_gif_decode_cancelled(request) {
+            return false
+        }
+        destination := request.frame_bytes[
+            index * canvas_byte_count:][:canvas_byte_count]
+        if !animated_gif_decode_frame(
+            decoder, destination, request.width, request.height) {
+            return false
+        }
+        result^.frame_count += 1
+    }
+    return true
+}
+
 // Decode_Animated_Gif streams composited GIF frames into caller-owned RGBA32 storage.
 decode_animated_gif :: proc(
     request: ^Animated_Gif_Decode_Request) -> Animated_Gif_Decode_Result {
@@ -142,21 +165,13 @@ decode_animated_gif :: proc(
     }
     defer image.CloseAnimationDecoder(decoder)
     result: Animated_Gif_Decode_Result
-    canvas_byte_count := request.width * request.height * 4
-    for index in 0..<request.frame_count {
-        if animated_gif_decode_cancelled(request) {
-           return {}
-        }
-        destination := request.frame_bytes[
-            index * canvas_byte_count:][:canvas_byte_count]
-        if !animated_gif_decode_frame(
-            decoder, destination, request.width, request.height) {return {}}
-        result.frame_count += 1
+    if !animated_gif_decode_frames(request, decoder, &result) {
+        return {}
     }
     if animated_gif_decode_cancelled(request) {
        return {}
     }
-     if !animated_gif_decoder_has_exact_frame_count(decoder) {
+    if !animated_gif_decoder_has_exact_frame_count(decoder) {
         return {}
     }
     result.complete = image.GetAnimationDecoderStatus(decoder) == .COMPLETE

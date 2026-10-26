@@ -50,8 +50,14 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
     service^.reload_state = .Idle
     service^.published_view_snapshot_index = 0
     service^.view_snapshots[0].state = .Published
-    state^.dynview.content.commands = []dynviewmodel.Dynview_Command{{kind = .Divider}}
-    return {state = state, service = service, presentation = presentation}
+    state^.dynview.content.commands = []dynviewmodel.Dynview_Command{{
+        kind = .Divider,
+    }}
+    return {
+        state = state,
+        service = service,
+        presentation = presentation,
+    }
 }
 
 //   Release all test-owned transport and runtime storage after returned envelopes drain.
@@ -93,7 +99,10 @@ presentation_test_message :: proc(
         animation_generation = 5,
         presentation_generation = generation,
         animation = state^.julia_interface^.current_animation,
-        content = {mime = .Text_Latex, bytes = bytes},
+        content = {
+            mime = .Text_Latex,
+            bytes = bytes,
+        },
     })
     return message
 }
@@ -130,11 +139,13 @@ presentation_literal_staging_preserves_exact_bytes :: proc(t: ^testing.T) {
     staging := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(staging)
     staging^.enabled = true
-    source_bytes := []u8{'a', 0, '\\', 'b'}
+    source_bytes: []u8 = {'a', 0, '\\', 'b'}
     source := transmute(string)source_bytes
 
-    testing.expect(t, bridge.stage_presentation_snapshot(
-        staging, {source = source, mode = .Plain}))
+    testing.expect(t, bridge.stage_presentation_snapshot(staging, {
+        source = source,
+        mode = .Plain,
+    }))
     testing.expect_value(t, staging^.command_buffer.command_count, 3)
     text_command := staging^.command_buffer.commands[1]
     testing.expect_value(t, text_command.kind, dynviewmodel.Dynview_Command_Kind.Text_Run)
@@ -151,8 +162,8 @@ presentation_admission_is_bounded_and_clears_visible_state :: proc(t: ^testing.T
     defer presentation_test_fixture_destroy(fixture)
     state, service, presentation :=
         fixture.state, fixture.service, fixture.presentation
-    first_bytes := []u8{'$', 'x', '$'}
-    second_bytes := []u8{'$', 'y', '$'}
+    first_bytes: []u8 = {'$', 'x', '$'}
+    second_bytes: []u8 = {'$', 'y', '$'}
     first := presentation_test_message(state, 11, first_bytes)
     second := presentation_test_message(state, 12, second_bytes)
 
@@ -188,7 +199,7 @@ presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
         &state^.font_cache, {40, 50}, {80, 160, 240, 255}, 192)
     viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
     viewfont.cache_ink_capture_publish(&state^.font_cache)
-    bytes := []u8{'$', 'x', '$'}
+    bytes: []u8 = {'$', 'x', '$'}
     message := presentation_test_message(state, 13, bytes)
     content, _ := message^.(bridgemodel.View_Content_Ready)
 
@@ -213,15 +224,21 @@ presentation_departure_survives_blank_frame_and_scroll_reset :: proc(
     defer presentation_test_fixture_destroy(fixture)
     state, presentation := fixture.state, fixture.presentation
     state^.ui_runtime.presentation.visible = true
-    viewport := geometry.Rectangle{10, 20, 200, 120}
+    viewport: geometry.Rectangle = {10, 20, 200, 120}
     uidust.ui_dust_validate_context(&presentation^.dust, {
-        visible = true, viewport = viewport, scroll_y = 40, visual_signature = 1,
+        visible = true,
+        viewport = viewport,
+        scroll_y = 40,
+        visual_signature = 1,
     })
     uidust.ui_dust_begin_departure(&presentation^.dust, 23)
     testing.expect(t, uidust.ui_dust_emit(
         &presentation^.dust, {30, 50}, {240, 160, 80, 255}, 255, 1))
-    blank_frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = viewport, scroll_y_out = 0},
+    blank_frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = viewport,
+            scroll_y_out = 0,
+        },
     }
 
     presentation_effects_update(state, presentation, 0.016, blank_frame, 1)
@@ -257,8 +274,10 @@ presentation_formation_targets_first_new_ink :: proc(t: ^testing.T) {
     uidust.ui_dust_begin_arrival(&presentation^.dust, 50, .Falling_Ink)
     presentation^.arrival_ink_serial =
         viewfont.cache_visible_ink_serial(&state^.font_cache)
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = {0, 0, 200, 120}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = {0, 0, 200, 120},
+        },
     }
 
     presentation_effects_update(state, presentation, 0.016, frame, 1)
@@ -289,8 +308,10 @@ presentation_formation_draws_in_first_new_ink :: proc(t: ^testing.T) {
     uidust.ui_dust_begin_arrival(&presentation^.dust, 52, .Draw_In)
     presentation^.arrival_ink_serial =
         viewfont.cache_visible_ink_serial(&state^.font_cache)
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = {0, 0, 200, 120}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = {0, 0, 200, 120},
+        },
     }
 
     presentation_effects_update(state, presentation, 0.016, frame, 1)
@@ -320,8 +341,10 @@ presentation_formation_without_ink_uses_fade :: proc(t: ^testing.T) {
     presentation^.arrival_ink_serial =
         viewfont.cache_visible_ink_serial(&state^.font_cache)
     presentation_test_publish_ink(state, {})
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = {0, 0, 200, 120}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = {0, 0, 200, 120},
+        },
     }
 
     presentation_effects_update(state, presentation, 0.016, frame, 1)
@@ -415,8 +438,10 @@ presentation_pending_reset_preserves_ink_and_effects :: proc(t: ^testing.T) {
     testing.expect(t, uidust.ui_dust_emit(
         &presentation^.dust, {30, 50}, {240, 160, 80, 255}, 255, 1))
     uidust.ui_dust_begin_arrival(&presentation^.dust, 24, .Fade)
-    frame := uipresentation.Presentation_Preparation{
-        scroll = {view_rect = {0, 0, 200, 120}},
+    frame: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = {0, 0, 200, 120},
+        },
     }
     state^.julia_interface^.pending_animation_reset = true
 
@@ -444,7 +469,7 @@ presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
     defer presentation_test_fixture_destroy(fixture)
     state, service, presentation :=
         fixture.state, fixture.service, fixture.presentation
-    source_bytes := []u8{'$', 'x', '^', '2', '$'}
+    source_bytes: []u8 = {'$', 'x', '^', '2', '$'}
     first := presentation_test_message(state, 21, source_bytes)
     first_content, _ := first^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, first, first_content)
@@ -483,7 +508,7 @@ presentation_rejected_tex_publishes_exact_literal :: proc(t: ^testing.T) {
     defer presentation_test_fixture_destroy(fixture)
     state, service, presentation :=
         fixture.state, fixture.service, fixture.presentation
-    source_bytes := []u8{'\\', 't', 'e', 'x', 't', 'b', 'f', '{', 'x'}
+    source_bytes: []u8 = {'\\', 't', 'e', 'x', 't', 'b', 'f', '{', 'x'}
     message := presentation_test_message(state, 31, source_bytes)
     content, _ := message^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, message, content)
@@ -519,7 +544,8 @@ presentation_lifecycle_change_cancels_stale_parse :: proc(t: ^testing.T) {
         fixture.state, fixture.service, fixture.presentation
     presentation_sync_lifecycle(state, presentation)
     uidust.ui_dust_begin_arrival(&presentation^.dust, 40, .Fade)
-    source_bytes := []u8{'$', '\\', 'f', 'r', 'a', 'c', '{', '1', '}', '{', '2', '}', '$'}
+    source_bytes: []u8 = {
+        '$', '\\', 'f', 'r', 'a', 'c', '{', '1', '}', '{', '2', '}', '$'}
     message := presentation_test_message(state, 41, source_bytes)
     content, _ := message^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, message, content)

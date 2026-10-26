@@ -173,7 +173,9 @@ graphics_iterm2_parse_token :: proc(
 //   - Valid controls after every recognized token passes validation, or a zero value on
 //     the first malformed recognized token.
 graphics_iterm2_parse_controls :: proc(header: []u8) -> Iterm2_Controls {
-    controls := Iterm2_Controls{preserve_aspect_ratio = true}
+    controls: Iterm2_Controls = {
+        preserve_aspect_ratio = true,
+    }
     start := 0
     for index in 0..=len(header) {
         if index != len(header) && header[index] != ';' {
@@ -326,8 +328,10 @@ graphics_iterm2_advance_cursor :: proc(
         return 
     }
     rows := graphics_placement_rows(
-        semantics_context, request.geometry,
-        {width = request.width, height = request.height})
+        semantics_context, request.geometry, {
+            width = request.width,
+            height = request.height,
+        })
     if rows > 1 {
         graphics_kitty_advance_cursor(semantics_context, rows - 1)
     }

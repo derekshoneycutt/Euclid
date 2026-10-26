@@ -306,7 +306,7 @@ make_tool_brush_occluder :: #force_inline proc(
     p0, p1: geometry.Vector3, thickness: f32) -> Tool_Brush_Occluder {
 
     direction := p1 - p0
-    tangent := geometry.Vector3{}
+    tangent: geometry.Vector3 = {}
     if linalg.dot(direction, direction) > 0.00000001 {
         tangent = linalg.normalize(tool_brush_light_to_view(direction))
     }
@@ -336,19 +336,19 @@ tool_brush_occluder_overlaps :: #force_inline proc(
     caster_radius := caster.thickness * 0.5
     padding := receiver_radius + caster_radius * 4.0
 
-    receiver_min := geometry.Vector2{
+    receiver_min: geometry.Vector2 = {
         math.min(receiver.p0.x, receiver.p1.x) - padding,
         math.min(receiver.p0.y, receiver.p1.y) - padding,
     }
-    receiver_max := geometry.Vector2{
+    receiver_max: geometry.Vector2 = {
         math.max(receiver.p0.x, receiver.p1.x) + padding,
         math.max(receiver.p0.y, receiver.p1.y) + padding,
     }
-    caster_min := geometry.Vector2{
+    caster_min: geometry.Vector2 = {
         math.min(caster.p0.x, caster.p1.x),
         math.min(caster.p0.y, caster.p1.y),
     }
-    caster_max := geometry.Vector2{
+    caster_max: geometry.Vector2 = {
         math.max(caster.p0.x, caster.p1.x),
         math.max(caster.p0.y, caster.p1.y),
     }
@@ -389,7 +389,7 @@ draw_encoded_drawing_surface :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
     room := &state^.draw_surface
     edge_size := room.edge_size
-    world_points := [8]geometry.Vector3{room.zeros, room.right_up, room.left_down,
+    world_points: [8]geometry.Vector3 = {room.zeros, room.right_up, room.left_down,
         room.right_down, room^.zeros + {edge_size, edge_size, 0},
         room^.right_up + {-edge_size, edge_size, 0},
         room^.left_down + {edge_size, -edge_size, 0},
@@ -397,8 +397,12 @@ draw_encoded_drawing_surface :: proc(
     xs, ys, zs: [8]f32
     projected: [8]geometry.Vector2
     _ = project_iso_points_batch_with_components(state, {
-        world_points = world_points[:], xs = xs[:], ys = ys[:],
-        zs = zs[:], out = projected[:]})
+        world_points = world_points[:],
+        xs = xs[:],
+        ys = ys[:],
+        zs = zs[:],
+        out = projected[:],
+    })
     edge_color := room.edge_color
     surface_color := room.color
     _ = native.draw_encoder_triangle(encoder, geometry.Vector2(projected[0]),
@@ -580,14 +584,14 @@ encoded_tool_segment_vertices :: proc(
     delta := draw.second - draw.first
     segment_length := linalg.length(delta)
     direction := delta / segment_length
-    perpendicular := geometry.Vector2{-direction.y, direction.x}
+    perpendicular: geometry.Vector2 = {-direction.y, direction.x}
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
     coverage_radius := draw.thickness * 0.5 + 1 / min(scale_x, scale_y)
     start := draw.first - direction * coverage_radius
     finish := draw.second + direction * coverage_radius
     offset := perpendicular * coverage_radius
-    corners := [4]geometry.Vector2{start - offset, start + offset,
+    corners: [4]geometry.Vector2 = {start - offset, start + offset,
         finish - offset, finish + offset}
     return {
         encoded_stroke_vertex(corners[0], draw.color),
@@ -611,10 +615,15 @@ draw_encoded_tool_segment :: proc(
         return
     }
     if !encoder^.strokes_enabled {
-        points := [2]geometry.Vector2{geometry.Vector2(p0), geometry.Vector2(p1)}
-        style := native.Draw_Polyline_Style{width = thickness,
-            miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
-            topology = .Open, start_cap = .Round, finish_cap = .Round}
+        points: [2]geometry.Vector2 = {geometry.Vector2(p0), geometry.Vector2(p1)}
+        style: native.Draw_Polyline_Style = {
+            width = thickness,
+            miter_limit = COLORED_STROKE_MITER_LIMIT,
+            color = draw_color,
+            topology = .Open,
+            start_cap = .Round,
+            finish_cap = .Round,
+        }
         _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
         return
     }
@@ -626,10 +635,15 @@ draw_encoded_tool_segment :: proc(
     appended := native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), fragment_uniforms)
     if !appended {
-        points := [2]geometry.Vector2{geometry.Vector2(p0), geometry.Vector2(p1)}
-        style := native.Draw_Polyline_Style{width = thickness,
-            miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
-            topology = .Open, start_cap = .Round, finish_cap = .Round}
+        points: [2]geometry.Vector2 = {geometry.Vector2(p0), geometry.Vector2(p1)}
+        style: native.Draw_Polyline_Style = {
+            width = thickness,
+            miter_limit = COLORED_STROKE_MITER_LIMIT,
+            color = draw_color,
+            topology = .Open,
+            start_cap = .Round,
+            finish_cap = .Round,
+        }
         _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
     }
 }
@@ -653,7 +667,7 @@ draw_encoded_cached_pen :: proc(
         _ = native.draw_encoder_circle(
             encoder, geometry.Vector2(center), pen^.brush_size, active)
     }
-    occluders := Tool_Brush_Occluder_Context{}
+    occluders: Tool_Brush_Occluder_Context = {}
     if compass_caster != nil {
         receiver := make_tool_brush_occluder(
             state, pen^.joint1, pen^.joint2, pen^.brush_size)
@@ -665,8 +679,12 @@ draw_encoded_cached_pen :: proc(
         append_tool_brush_occluder(&occluders, receiver, second_leg)
     }
     draw_encoded_tool_segment(state, encoder, {
-        first = first, second = second, thickness = pen^.brush_size,
-        color = pen^.color, occluders = &occluders})
+        first = first,
+        second = second,
+        thickness = pen^.brush_size,
+        color = pen^.color,
+        occluders = &occluders,
+    })
 }
 
 // draw_encoded_cached_shadow_pass encodes ordinary floor shadows in cache order.
@@ -750,7 +768,7 @@ build_trochoid_tool_ring_samples :: proc(
         parameter := f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
         angle := 2 * math.PI * parameter
         center3d := trochoid_tool_ring_point(center, radius, angle)
-        tangent3d := geometry.Vector3{-math.sin(angle), math.cos(angle), 0}
+        tangent3d: geometry.Vector3 = {-math.sin(angle), math.cos(angle), 0}
         projected := projection.iso_to_cartesian(center3d, state^.iso_scale)
         tangent_point := projection.iso_to_cartesian(
             center3d + tangent3d, state^.iso_scale)
@@ -762,7 +780,7 @@ build_trochoid_tool_ring_samples :: proc(
         }
 
         tangent /= tangent_length
-        perpendicular := geometry.Vector2{-tangent.y, tangent.x}
+        perpendicular: geometry.Vector2 = {-tangent.y, tangent.x}
         samples^.tangents_view[index] =
             linalg.normalize(tool_brush_light_to_view(tangent3d))
         samples^.left[index] = projected - perpendicular * coverage_radius
@@ -971,7 +989,9 @@ curve_visible_count_edge :: #force_inline proc(counts: ^Curve_Visible_Run_Counts
 // Count clipped curve points and contiguous runs without mutating output storage.
 curve_visible_run_counts :: proc(
     points: []geometry.Vector3, keep_above: bool) -> Curve_Visible_Run_Counts {
-    counts := Curve_Visible_Run_Counts{unchanged = true}
+    counts: Curve_Visible_Run_Counts = {
+        unchanged = true,
+    }
     active := false
     for index in 1..<len(points) {
         first_in := z_split_point_in_halfspace(points[index - 1], keep_above)
@@ -1057,7 +1077,10 @@ build_projected_curve_visible_runs :: proc(input: Curve_Visible_Run_Input,
     if counts.unchanged && counts.run_count == 1 {
         output_topology = input.topology
     }
-    writer := Curve_Visible_Run_Writer{input = input, buffers = buffers}
+    writer: Curve_Visible_Run_Writer = {
+        input = input,
+        buffers = buffers,
+    }
     for index in 1..<len(input.points) {
         first_in := z_split_point_in_halfspace(input.points[index - 1], input.keep_above)
         second_in := z_split_point_in_halfspace(input.points[index], input.keep_above)
@@ -1171,7 +1194,9 @@ curve_reduction_next_index :: proc(
 curve_reduction_summarize_run :: proc(
     points: []geometry.Vector2, kinds: []shapemodel.Curve_Point_Kind,
     width: f32, budget: Curve_Reduction_Budget) -> Curve_Reduction_Run_Summary {
-    summary := Curve_Reduction_Run_Summary{retained_count = 1}
+    summary: Curve_Reduction_Run_Summary = {
+        retained_count = 1,
+    }
     previous, anchor, last := -1, 0, len(points) - 1
     for anchor < last {
         next := curve_reduction_next_index(
@@ -1556,7 +1581,7 @@ pen_polygon_resolve_crossing_point :: proc(
     ctx: ^Pen_Polygon_Clip_Context,
     out: ^geometry.Vector3) -> bool {
 
-    intersection := geometry.Vector3{}
+    intersection: geometry.Vector3 = {}
     if !segment_plane_intersection(
         ctx^.clip_start,
         ctx^.clip_end,
@@ -1590,7 +1615,7 @@ pen_polygon_split_part :: proc(
     ctx: ^Pen_Polygon_Clip_Context,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    intersection_unbiased := geometry.Vector3{}
+    intersection_unbiased: geometry.Vector3 = {}
     if !pen_polygon_resolve_crossing_point(
         state, polygon, ctx, &intersection_unbiased) {
         return false
@@ -1643,7 +1668,7 @@ build_pen_polygon_crossing :: proc(
 find_cached_pen_item :: proc(
     cache: ^shapemodel.Shapes_Draw_Cache) -> (shapemodel.Shapes_Pen_Draw, int) {
 
-    pen := shapemodel.Shapes_Pen_Draw{}
+    pen: shapemodel.Shapes_Pen_Draw = {}
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case shapemodel.Shapes_Pen_Draw:
@@ -1667,7 +1692,7 @@ find_cached_pen_item :: proc(
 find_cached_trochoid_tool_item :: proc(
     cache: ^shapemodel.Shapes_Draw_Cache) -> (
         shapemodel.Shapes_Trochoid_Tool_Draw, int) {
-    tool := shapemodel.Shapes_Trochoid_Tool_Draw{}
+    tool: shapemodel.Shapes_Trochoid_Tool_Draw = {}
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case shapemodel.Shapes_Trochoid_Tool_Draw:
@@ -1690,7 +1715,7 @@ find_cached_trochoid_tool_item :: proc(
 //   Find the first cached compass draw item in the merged cache.
 find_cached_compass_item :: proc(
     cache: ^shapemodel.Shapes_Draw_Cache) -> (shapemodel.Shapes_Compass_Draw, int) {
-    compass := shapemodel.Shapes_Compass_Draw{}
+    compass: shapemodel.Shapes_Compass_Draw = {}
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case shapemodel.Shapes_Compass_Draw:
@@ -1725,7 +1750,7 @@ find_pen_crossing_polygon :: proc(
                 continue
             }
 
-            trial := Pen_Polygon_Crossing{}
+            trial: Pen_Polygon_Crossing = {}
             if !build_pen_polygon_crossing(state, pen, &item_typed, &trial) {
                 continue
             }
@@ -1904,11 +1929,15 @@ draw_encoded_cached_line :: proc(
     }
     first := projection.iso_to_cartesian(clipped0, state^.iso_scale)
     second := projection.iso_to_cartesian(clipped1, state^.iso_scale)
-    points := [2]geometry.Vector2{geometry.Vector2(first), geometry.Vector2(second)}
-    style := native.Draw_Polyline_Style{width = line^.brush_size,
+    points: [2]geometry.Vector2 = {geometry.Vector2(first), geometry.Vector2(second)}
+    style: native.Draw_Polyline_Style = {
+        width = line^.brush_size,
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = color.Color_RGBA8(draw_color), topology = .Open,
-        start_cap = .Round, finish_cap = .Round}
+        color = color.Color_RGBA8(draw_color),
+        topology = .Open,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
     _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
 }
 
@@ -1926,9 +1955,14 @@ draw_encoded_curve_visible_runs :: proc(
         if run.topology != .Open {
             topology = .Closed
         }
-        style := native.Draw_Polyline_Style{width = width,
-            miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
-            topology = topology, start_cap = .Round, finish_cap = .Round}
+        style: native.Draw_Polyline_Style = {
+            width = width,
+            miter_limit = COLORED_STROKE_MITER_LIMIT,
+            color = draw_color,
+            topology = topology,
+            start_cap = .Round,
+            finish_cap = .Round,
+        }
         _ = native.draw_encoder_polyline(encoder, points, kinds, style)
     }
 }
@@ -1945,7 +1979,7 @@ draw_encoded_cached_curve :: proc(
     projected: [MAX_CURVE_VISIBLE_POINTS]geometry.Vector2
     projected_kinds: [MAX_CURVE_VISIBLE_POINTS]shapemodel.Curve_Point_Kind
     runs: [MAX_CURVE_VISIBLE_RUNS]Curve_Visible_Run
-    buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
+    buffers: Curve_Visible_Run_Buffers = {projected[:], projected_kinds[:], runs[:]}
     result := build_projected_curve_visible_runs({state^.iso_scale,
         vertices, kinds, curve^.topology, keep_above, false}, buffers)
     if !result.ok {
@@ -1992,13 +2026,21 @@ draw_encoded_cached_circle :: proc(
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     projected: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector2
     _ = project_iso_points_batch_with_components(state, {
-        world_points = arc_world[:], xs = xs[:], ys = ys[:],
-        zs = zs[:], out = projected[:]})
+        world_points = arc_world[:],
+        xs = xs[:],
+        ys = ys[:],
+        zs = zs[:],
+        out = projected[:],
+    })
     topology := circle_arc_polyline_topology(circle^.sweep_theta)
-    style := native.Draw_Polyline_Style{width = circle^.brush_size,
+    style: native.Draw_Polyline_Style = {
+        width = circle^.brush_size,
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = color.Color_RGBA8(circle^.color), topology = topology,
-        start_cap = .Round, finish_cap = .Round}
+        color = color.Color_RGBA8(circle^.color),
+        topology = topology,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
@@ -2007,7 +2049,7 @@ draw_encoded_cached_filled_circle :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
-    owner := shapemodel.Shape_Entity{
+    owner: shapemodel.Shape_Entity = {
         slot = u32(circle^.source_index + 1),
         generation = circle^.source_generation,
     }
@@ -2019,8 +2061,12 @@ draw_encoded_cached_filled_circle :: proc(
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     projected: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector2
     _ = project_iso_points_batch_with_components(state, {
-        world_points = arc_world[:], xs = xs[:], ys = ys[:],
-        zs = zs[:], out = projected[:]})
+        world_points = arc_world[:],
+        xs = xs[:],
+        ys = ys[:],
+        zs = zs[:],
+        out = projected[:],
+    })
     center := geometry.Vector2(
         projection.iso_to_cartesian(geometry_value.center, state^.iso_scale))
     for index in 1..<len(projected) {
@@ -2045,7 +2091,7 @@ draw_encoded_cached_polygon :: proc(
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
     draw_color := color.Color_RGBA8(polygon^.color)
-    owner := shapemodel.Shape_Entity{
+    owner: shapemodel.Shape_Entity = {
         slot = u32(polygon^.source_index + 1),
         generation = polygon^.source_generation,
     }
@@ -2084,7 +2130,7 @@ draw_encoded_cached_point_shadow :: proc(
 draw_encoded_cached_line_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     line: ^shapemodel.Shapes_Line_Draw) {
-    points := [2]geometry.Vector3{line^.point1, line^.point2}
+    points: [2]geometry.Vector3 = {line^.point1, line^.point2}
     if !has_any_elevated_shadow_point(points[:]) {
         return
     }
@@ -2093,15 +2139,19 @@ draw_encoded_cached_line_shadow :: proc(
         line^.point1, line^.point2, true, &clipped0, &clipped1) {
         return
     }
-    clipped := [2]geometry.Vector3{clipped0, clipped1}
+    clipped: [2]geometry.Vector3 = {clipped0, clipped1}
     draw_color := encoded_shadow_color(average_shadow_height(clipped[:]))
-    projected := [2]geometry.Vector2{
+    projected: [2]geometry.Vector2 = {
         geometry.Vector2(shadow_to_screen(clipped0, state)),
         geometry.Vector2(shadow_to_screen(clipped1, state))}
-    style := native.Draw_Polyline_Style{
+    style: native.Draw_Polyline_Style = {
         width = math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
-        miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
-        topology = .Open, start_cap = .Round, finish_cap = .Round}
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = draw_color,
+        topology = .Open,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
@@ -2120,7 +2170,7 @@ draw_encoded_cached_curve_shadow :: proc(
     projected: [MAX_CURVE_VISIBLE_POINTS]geometry.Vector2
     projected_kinds: [MAX_CURVE_VISIBLE_POINTS]shapemodel.Curve_Point_Kind
     runs: [MAX_CURVE_VISIBLE_RUNS]Curve_Visible_Run
-    buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
+    buffers: Curve_Visible_Run_Buffers = {projected[:], projected_kinds[:], runs[:]}
     result := build_projected_curve_visible_runs({state^.iso_scale,
         vertices, kinds, curve^.topology, true, true}, buffers)
     if !result.ok {
@@ -2155,11 +2205,14 @@ draw_encoded_cached_circle_shadow :: proc(
         projected[index] = shadow_to_screen(point, state)
     }
     topology := circle_arc_polyline_topology(circle^.sweep_theta)
-    style := native.Draw_Polyline_Style{
+    style: native.Draw_Polyline_Style = {
         width = math.max(circle^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = encoded_shadow_color(circle^.center.z), topology = topology,
-        start_cap = .Round, finish_cap = .Round}
+        color = encoded_shadow_color(circle^.center.z),
+        topology = topology,
+        start_cap = .Round,
+        finish_cap = .Round,
+    }
     _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
@@ -2170,7 +2223,7 @@ draw_encoded_cached_filled_circle_shadow :: proc(
     if !shadow_point_is_elevated(circle^.center) {
         return
     }
-    owner := shapemodel.Shape_Entity{
+    owner: shapemodel.Shape_Entity = {
         slot = u32(circle^.source_index + 1),
         generation = circle^.source_generation,
     }
@@ -2255,7 +2308,7 @@ project_cached_polygon_vertices :: #force_inline proc(
 //   - ok: true when the leg vectors are non-degenerate and radius is positive.
 compass_top_circle_basis :: proc(
     p0, p1, p2: geometry.Vector3) -> (Compass_Top_Circle_Basis, bool) {
-    basis := Compass_Top_Circle_Basis{}
+    basis: Compass_Top_Circle_Basis = {}
 
     a := p0 - p1
     b := p2 - p1
@@ -2328,7 +2381,7 @@ build_compass_arc_samples :: proc(
             return false
         }
         tangent /= tangent_length
-        perpendicular := geometry.Vector2{-tangent.y, tangent.x}
+        perpendicular: geometry.Vector2 = {-tangent.y, tangent.x}
         samples^.tangents_view[i] =
             linalg.normalize(tool_brush_light_to_view(tangent3d))
         samples^.left[i] = projected - perpendicular * coverage_radius

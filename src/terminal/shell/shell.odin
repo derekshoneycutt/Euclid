@@ -247,7 +247,7 @@ shell_parser_parse_word :: proc(parser: ^Shell_Parser) -> bool {
     word := &template.words[word_index]
     word.source_span.start = parser.cursor
     word.first_part = template.part_count
-    state := Word_Parse_State {
+    state: Word_Parse_State = {
         word = word,
         literal_source_start = parser.cursor,
         literal_text_start = template.decoded_count,
@@ -494,7 +494,7 @@ shell_parser_parse_interpolation :: proc(
 shell_parser_parse_expression_interpolation :: proc(
     parser: ^Shell_Parser, word: ^Word_Template, start: int) -> bool {
     parser.cursor += 1
-    state := Interpolation_Scan_State {
+    state: Interpolation_Scan_State = {
         depth = 1,
         start = start,
         text_start = parser.result.template.decoded_count,
@@ -701,7 +701,10 @@ shell_parser_append_byte :: proc(parser: ^Shell_Parser, byte: u8) -> bool {
 shell_parser_fail :: proc(parser: ^Shell_Parser, kind: Shell_Parse_Error_Kind,
     start, end: int) {
     parser.result.kind = .Error
-    parser.result.error = {kind = kind, source_span = {start, end}}
+    parser.result.error = {
+        kind = kind,
+        source_span = {start, end},
+    }
 }
 
 //   Advance over ASCII shell whitespace between words.

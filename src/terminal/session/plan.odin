@@ -379,8 +379,14 @@ process_plan_append_environment :: proc(
     copy(plan.environment_bytes[key_end:end], transmute([]u8)value)
     plan.environment[index] = {
         kind = change.kind,
-        key = {start = u16(plan.environment_byte_count), end = u16(key_end)},
-        value = {start = u16(key_end), end = u16(end)},
+        key = {
+            start = u16(plan.environment_byte_count),
+            end = u16(key_end),
+        },
+        value = {
+            start = u16(key_end),
+            end = u16(end),
+        },
     }
     plan.environment_count += 1
     plan.environment_byte_count = end
@@ -401,7 +407,9 @@ process_plan_build :: proc(
     arguments: []string, working_directory: string,
     environment: []Environment_Change,
     inherit_environment := true) -> Process_Plan_Result {
-    result := Process_Plan_Result{kind = .Error}
+    result: Process_Plan_Result = {
+        kind = .Error,
+    }
     if error := process_plan_validate_build_inputs(
         arguments, working_directory, environment); error != .None {
         result.error = error
@@ -446,10 +454,16 @@ process_plan_build_resolved :: proc(
     environment: []Environment_Change,
     inherit_environment := true) -> Process_Plan_Result {
     if command == nil || command.argument_count <= 0 {
-        return {kind = .Error, error = .Empty_Arguments}
+        return {
+            kind = .Error,
+            error = .Empty_Arguments,
+        }
     }
     if command.argument_count > PROCESS_PLAN_ARGUMENT_CAPACITY {
-        return {kind = .Error, error = .Too_Many_Arguments}
+        return {
+            kind = .Error,
+            error = .Too_Many_Arguments,
+        }
     }
     arguments: [PROCESS_PLAN_ARGUMENT_CAPACITY]string
     for index in 0..<command.argument_count {

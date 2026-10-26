@@ -29,7 +29,11 @@ ui_dust_matching_build :: proc(system: ^Ui_Dust_System) {
             {system^.particles.pos_x[index], system^.particles.pos_y[index]})
         next := system^.match_bins[bin]
         newer := system^.match_head
-        system^.match_links[index] = {next = next, newer = newer, bin = bin}
+        system^.match_links[index] = {
+            next = next,
+            newer = newer,
+            bin = bin,
+        }
         if next != 0 {
             system^.match_links[next - 1].previous = index + 1
         }
@@ -89,7 +93,10 @@ ui_dust_matching_find :: proc(
     system: ^Ui_Dust_System, target: geometry.Vector2) -> int {
     cell := ui_dust_matching_bin(system, target)
     x, y := cell % UI_DUST_MATCH_GRID, cell / UI_DUST_MATCH_GRID
-    search := Ui_Dust_Match_Search{best = -1, distance = math.F32_MAX}
+    search: Ui_Dust_Match_Search = {
+        best = -1,
+        distance = math.F32_MAX,
+    }
     for radius in 0..=2 {
         for row in max(0, y-radius)..=min(UI_DUST_MATCH_GRID-1, y+radius) {
             for column in max(0, x-radius)..=min(UI_DUST_MATCH_GRID-1, x+radius) {
@@ -112,7 +119,9 @@ ui_dust_target_include :: proc(
     system: ^Ui_Dust_System, position: geometry.Vector2, ink: [4]u8, coverage: u8) {
     assert(system^.target_count < UI_DUST_MAX_ARRIVAL_PARTICLES)
     system^.targets[system^.target_count] = {
-        position = position, ink = ink, coverage = coverage,
+        position = position,
+        ink = ink,
+        coverage = coverage,
     }
     system^.target_count += 1
 }
@@ -170,7 +179,7 @@ ui_dust_claim_target :: proc(system: ^Ui_Dust_System, target_index: int) {
     if index < 0 {
         return
     }
-    reference := Ui_Dust_Slot_Ref{index, system^.order[index].generation}
+    reference: Ui_Dust_Slot_Ref = {index, system^.order[index].generation}
     appearance, valid := ui_dust_evaluate(system, reference)
     assert(valid)
     ui_dust_matching_remove(system, index)
@@ -230,7 +239,7 @@ ui_dust_release_arrivals :: proc(system: ^Ui_Dust_System) {
         if !ui_dust_phase_is_arrival(system^.particles.phase[index]) {
             continue
         }
-        reference := Ui_Dust_Slot_Ref{index, system^.order[index].generation}
+        reference: Ui_Dust_Slot_Ref = {index, system^.order[index].generation}
         appearance, valid := ui_dust_evaluate(system, reference)
         assert(valid)
         if appearance.alpha <= 0 {

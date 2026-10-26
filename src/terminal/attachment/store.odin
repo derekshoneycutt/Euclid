@@ -219,7 +219,7 @@ store_init_with_allocators :: proc(
     if store == nil || len(store.attachments) != 0 || !limits_valid(limits) {
         return false
     }
-    candidate := Store {
+    candidate: Store = {
         table_allocator = table_allocator,
         payload_allocator = payload_allocator,
         limits = limits,
@@ -445,7 +445,11 @@ attachment_eviction_candidate :: proc(store: ^Store) -> int {
     for &entry, index in store.attachments {
         if !entry.active || entry.protocol_retained ||
             entry.placement_reference_count > 0 || entry.pin_count > 0 ||
-            residency_entry(store, {slot = index, generation = entry.generation}) != nil {
+            residency_entry(store,
+                {
+                    slot = index,
+                    generation = entry.generation,
+                }) != nil {
             continue
         }
         if entry.last_used < oldest {
@@ -484,7 +488,9 @@ attachment_entry_remove :: proc(store: ^Store, slot: int, evicted: bool) {
     delete(entry.animation_frames, store.payload_allocator)
     delete(entry.payload, store.payload_allocator)
     generation := entry.generation
-    entry^ = {generation = generation}
+    entry^ = {
+        generation = generation,
+    }
     store.attachment_count -= 1
 }
 
@@ -507,7 +513,10 @@ attachment_evict_one :: proc(store: ^Store) -> (Attachment_Id, bool) {
     if slot < 0 {
         return {}, false
     }
-    id := Attachment_Id{slot = slot, generation = store.attachments[slot].generation}
+    id: Attachment_Id = {
+        slot = slot,
+        generation = store.attachments[slot].generation,
+    }
     attachment_entry_remove(store, slot, true)
     return id, true
 }
@@ -565,7 +574,10 @@ attachment_entry_commit :: proc(
         store.animated_attachment_count += 1
     }
     store.diagnostics.attachment_admission_count += 1
-    return {slot = slot, generation = committed.generation}
+    return {
+        slot = slot,
+        generation = committed.generation,
+    }
 }
 
 //   Validate and copy one immutable raster into a reusable attachment slot.
@@ -772,7 +784,10 @@ attachment_prepared_id_at :: proc(
     if !entry.active || !entry.prepared || entry.removal_requested {
         return {}, false
     }
-    return {slot = slot, generation = entry.generation}, true
+    return {
+        slot = slot,
+        generation = entry.generation,
+    }, true
 }
 
 //   Borrow one immutable payload and mark its attachment recently used.
@@ -975,12 +990,19 @@ placement_admit :: proc(
     }
     entry := &store.placements[slot]
     generation := store_next_generation(entry.generation)
-    entry^ = {generation = generation, active = true, metadata = metadata}
+    entry^ = {
+        generation = generation,
+        active = true,
+        metadata = metadata,
+    }
     attachment.placement_reference_count += 1
     attachment.last_used = store_next_sequence(store)
     store.placement_count += 1
     store.diagnostics.placement_admission_count += 1
-    return {slot = slot, generation = generation}, .Admitted
+    return {
+        slot = slot,
+        generation = generation,
+    }, .Admitted
 }
 
 //   Borrow immutable placement metadata for one live generation.
@@ -1110,7 +1132,9 @@ placement_remove :: proc(store: ^Store, id: Placement_Id) -> Handle_Outcome {
         attachment.last_used = store_next_sequence(store)
     }
     generation := entry.generation
-    entry^ = {generation = generation}
+    entry^ = {
+        generation = generation,
+    }
     store.placement_count -= 1
     return .Found
 }
@@ -1132,7 +1156,10 @@ placements_remove_attachment :: proc(
         if !entry.active || entry.metadata.attachment_id != attachment_id {
             continue
         }
-        id := Placement_Id{slot = slot, generation = entry.generation}
+        id: Placement_Id = {
+            slot = slot,
+            generation = entry.generation,
+        }
         if placement_remove(store, id) == .Found {
             removed += 1
         }
@@ -1163,7 +1190,10 @@ placements_remove_row :: proc(
             entry.metadata.geometry.logical_row != logical_row {
             continue
         }
-        id := Placement_Id{slot = slot, generation = entry.generation}
+        id: Placement_Id = {
+            slot = slot,
+            generation = entry.generation,
+        }
         if placement_remove(store, id) == .Found {
             removed += 1
         }
@@ -1191,7 +1221,10 @@ placements_remove_screen :: proc(store: ^Store, screen: Screen_Identity) -> int 
         if !entry.active || entry.metadata.geometry.screen != screen {
             continue
         }
-        id := Placement_Id{slot = slot, generation = entry.generation}
+        id: Placement_Id = {
+            slot = slot,
+            generation = entry.generation,
+        }
         if placement_remove(store, id) == .Found {
             removed += 1
         }
@@ -1213,8 +1246,11 @@ placements_remove_position :: proc(
             geometry.logical_row != logical_row || geometry.column != column {
             continue
         }
-        if placement_remove(store, {slot = slot, generation = entry.generation}) ==
-            .Found {
+        if placement_remove(store,
+            {
+                slot = slot,
+                generation = entry.generation,
+            }) == .Found {
             removed += 1
         }
     }
@@ -1244,8 +1280,11 @@ placements_remove_resident_position_origin_except :: proc(
             continue
         }
         attachment_id := entry.metadata.attachment_id
-        if placement_remove(store, {slot = slot, generation = entry.generation}) ==
-            .Found {
+        if placement_remove(store,
+            {
+                slot = slot,
+                generation = entry.generation,
+            }) == .Found {
             attachment_remove(store, attachment_id)
             removed += 1
         }
@@ -1267,8 +1306,11 @@ placements_remove_row_range :: proc(
             geometry.logical_row < first_row || geometry.logical_row > last_row {
             continue
         }
-        if placement_remove(store, {slot = slot, generation = entry.generation}) ==
-            .Found {
+        if placement_remove(store,
+            {
+                slot = slot,
+                generation = entry.generation,
+            }) == .Found {
             removed += 1
         }
     }
@@ -1287,8 +1329,11 @@ placements_remove_column :: proc(
         if !entry.active || geometry.screen != screen || geometry.column != column {
             continue
         }
-        if placement_remove(store, {slot = slot, generation = entry.generation}) ==
-            .Found {
+        if placement_remove(store,
+            {
+                slot = slot,
+                generation = entry.generation,
+            }) == .Found {
             removed += 1
         }
     }
@@ -1308,8 +1353,10 @@ placements_remove_z_index :: proc(
             geometry.z_index != z_index {
             continue
         }
-        if placement_remove(store, {slot = slot, generation = entry.generation}) ==
-            .Found {
+        if placement_remove(store, {
+            slot = slot,
+            generation = entry.generation,
+        }) == .Found {
             removed += 1
         }
     }
@@ -1471,7 +1518,9 @@ placement_checkpoint_relocate :: proc(
         geometry, keep := relocate(user_data, entry.metadata.geometry)
         if !keep {
             generation := entry.generation
-            entry = {generation = generation}
+            entry = {
+                generation = generation,
+            }
             retained -= 1
             continue
         }
@@ -1505,7 +1554,10 @@ placement_checkpoint_restore :: proc(
     }
     for &entry, slot in store.placements {
         if entry.active {
-            placement_remove(store, {slot = slot, generation = entry.generation})
+            placement_remove(store, {
+                slot = slot,
+                generation = entry.generation,
+            })
         }
     }
     copy(store.placements, checkpoint.placements)
@@ -1581,7 +1633,10 @@ transfer_begin :: proc(
     }
     store.transfer_count += 1
     store.diagnostics.transfer_admission_count += 1
-    return {slot = slot, generation = generation}, .Admitted
+    return {
+        slot = slot,
+        generation = generation,
+    }, .Admitted
 }
 
 //   Append bytes to an existing transfer without growing its reservation.
@@ -1651,7 +1706,9 @@ transfer_remove :: proc(store: ^Store, id: Transfer_Id) -> Handle_Outcome {
     }
     delete(entry.bytes, store.payload_allocator)
     generation := entry.generation
-    entry^ = {generation = generation}
+    entry^ = {
+        generation = generation,
+    }
     store.transfer_count -= 1
     return .Found
 }
@@ -1816,31 +1873,45 @@ residency_admit :: proc(
     evict_handler: Residency_Evict_Handler = nil,
     user_data: rawptr = nil) -> Residency_Admission {
     if store == nil || byte_count <= 0 {
-        return {outcome = .Invalid}
+        return {
+            outcome = .Invalid,
+        }
     }
     if byte_count > store.limits.gpu_byte_limit {
-        return {outcome = .Byte_Limit_Exceeded}
+        return {
+            outcome = .Byte_Limit_Exceeded,
+        }
     }
     attachment, outcome := attachment_entry(store, id)
     if outcome != .Found {
-        return {outcome = .Invalid}
+        return {
+            outcome = .Invalid,
+        }
     }
     existing := residency_entry(store, id)
     if existing != nil {
         outcome: Admission_Outcome = .Admitted if
             residency_update_existing(store, existing, byte_count) else
             .No_Evictable_Entry
-        return {outcome = outcome}
+        return {
+            outcome = outcome,
+        }
     }
     eviction_count, room_outcome := residency_make_room(
         store, byte_count, evict_handler, user_data)
     if room_outcome != .Admitted {
-        return {outcome = room_outcome, eviction_count = eviction_count}
+        return {
+            outcome = room_outcome,
+            eviction_count = eviction_count,
+        }
     }
     admission_outcome: Admission_Outcome = .Admitted if
         residency_commit(store, attachment, id, byte_count) else
         .No_Evictable_Entry
-    return {outcome = admission_outcome, eviction_count = eviction_count}
+    return {
+        outcome = admission_outcome,
+        eviction_count = eviction_count,
+    }
 }
 
 //   Release GPU accounting after the display owner destroys a native resource.

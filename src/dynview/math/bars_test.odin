@@ -6,8 +6,11 @@ import "core:testing"
 
 //   Build deterministic overbar and underbar constants at the native test size.
 math_bar_test_constants :: proc() -> fontmodel.Font_Math_Constants {
-    constants := fontmodel.Font_Math_Constants{
-        valid = true, generation = 15, base_pixel_size = 32}
+    constants: fontmodel.Font_Math_Constants = {
+        valid = true,
+        generation = 15,
+        base_pixel_size = 32,
+    }
     constants.values[int(Math_Constant.Overbar_Vertical_Gap)] = 3 * 64
     constants.values[int(Math_Constant.Overbar_Rule_Thickness)] = 2 * 64
     constants.values[int(Math_Constant.Overbar_Extra_Ascender)] = 4 * 64
@@ -21,8 +24,13 @@ math_bar_test_constants :: proc() -> fontmodel.Font_Math_Constants {
 @(test)
 math_bar_geometry_resolves_overbar_extent :: proc(t: ^testing.T) {
     geometry := math_bar_geometry({
-        constants = math_bar_test_constants(), generation = 15, font_size = 32,
-        kind = .Overbar, child_width = 12, child_ascent = 8, child_descent = 2,
+        constants = math_bar_test_constants(),
+        generation = 15,
+        font_size = 32,
+        kind = .Overbar,
+        child_width = 12,
+        child_ascent = 8,
+        child_descent = 2,
     })
 
     rule_bottom := geometry.rule_center + geometry.rule_thickness * 0.5
@@ -37,8 +45,13 @@ math_bar_geometry_resolves_overbar_extent :: proc(t: ^testing.T) {
 @(test)
 math_bar_geometry_resolves_underbar_extent :: proc(t: ^testing.T) {
     geometry := math_bar_geometry({
-        constants = math_bar_test_constants(), generation = 15, font_size = 32,
-        kind = .Underbar, child_width = 12, child_ascent = 8, child_descent = 2,
+        constants = math_bar_test_constants(),
+        generation = 15,
+        font_size = 32,
+        kind = .Underbar,
+        child_width = 12,
+        child_ascent = 8,
+        child_descent = 2,
     })
 
     rule_top := geometry.rule_center - geometry.rule_thickness * 0.5
@@ -52,8 +65,13 @@ math_bar_geometry_resolves_underbar_extent :: proc(t: ^testing.T) {
 @(test)
 math_bar_geometry_rejects_stale_constants :: proc(t: ^testing.T) {
     geometry := math_bar_geometry({
-        constants = math_bar_test_constants(), generation = 16, font_size = 32,
-        kind = .Overbar, child_width = 12, child_ascent = 8, child_descent = 2,
+        constants = math_bar_test_constants(),
+        generation = 16,
+        font_size = 32,
+        kind = .Overbar,
+        child_width = 12,
+        child_ascent = 8,
+        child_descent = 2,
     })
     testing.expect(t, !geometry.valid)
 }

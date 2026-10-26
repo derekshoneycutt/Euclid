@@ -11,7 +11,8 @@ import "core:unicode/utf8"
 
 // Find a prompt row when a caller supplies shell metadata without an initialized index.
 terminal_find_shell_prompt_row :: proc(
-    term: ^viewterminalmodel.Terminal_State, start_line, direction: int) -> (int, bool) {
+    term: ^viewterminalmodel.Terminal_State,
+    start_line, direction: int) -> (int, bool) {
     line_count := terminal_line_count(term)
     for line := start_line + direction;
         line >= 0 && line < line_count;
@@ -37,22 +38,12 @@ terminal_find_logical_row :: proc(
     return 0, false
 }
 
-// Find the nearest indexed prompt before or after one presented line.
-terminal_find_shell_prompt :: proc(
-    term: ^viewterminalmodel.Terminal_State, start_line, direction: int) -> (int, bool) {
-    if term == nil || direction == 0 {
-        return 0, false
-    }
-    current_id, current_present := terminal_output_logical_row(term, start_line)
-    if !current_present {
-        return 0, false
-    }
+// Select the nearest indexed prompt identity on the requested side of a logical row.
+terminal_find_indexed_shell_prompt :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    current_id: i64, direction, count: int) -> (i64, bool) {
     target_id: i64
     found := false
-    count := termshellintegration.shell_command_block_count(term.shell_integration)
-    if count == 0 {
-        return terminal_find_shell_prompt_row(term, start_line, direction)
-    }
     for index in 0..<count {
         block, present := termshellintegration.shell_command_block(
             term.shell_integration, index)
@@ -70,10 +61,47 @@ terminal_find_shell_prompt :: proc(
             found = true
         }
     }
+    return target_id, found
+}
+
+// Find the nearest indexed prompt before or after one presented line.
+terminal_find_shell_prompt :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    start_line, direction: int) -> (int, bool) {
+    if term == nil || direction == 0 {
+        return 0, false
+    }
+    current_id, current_present := terminal_output_logical_row(term, start_line)
+    if !current_present {
+        return 0, false
+    }
+    count := termshellintegration.shell_command_block_count(term.shell_integration)
+    if count == 0 {
+        return terminal_find_shell_prompt_row(term, start_line, direction)
+    }
+    target_id, found := terminal_find_indexed_shell_prompt(
+        term, current_id, direction, count)
     if !found {
         return 0, false
     }
     return terminal_find_logical_row(term, target_id)
+}
+
+// Map a row-relative grapheme boundary to its physical column, skipping continuation cells.
+terminal_semantic_grapheme_column :: proc(cells: []termgrid.Cell, offset: u32) -> int {
+    remaining := offset
+    column := 0
+    for &cell, cell_index in cells {
+        if cell.continuation || cell.grapheme_len == 0 {
+            continue
+        }
+        if remaining == 0 {
+            break
+        }
+        remaining -= 1
+        column = cell_index + max(int(cell.width), 1)
+    }
+    return column
 }
 
 // Resolve one semantic command position into the current byte-based view model.
@@ -92,25 +120,19 @@ terminal_semantic_view_position :: proc(
         if !cells_found {
             continue
         }
-        count := termgrid.grid_row_grapheme_count(&termgrid.Row{cells = cells})
+        count := termgrid.grid_row_grapheme_count(&termgrid.Row{
+            cells = cells,
+        })
         if position.grapheme_offset >
             semantic_row.grapheme_offset + count {
             continue
         }
-        column_offset := position.grapheme_offset - semantic_row.grapheme_offset
-        column := 0
-        for &cell, cell_index in cells {
-            if cell.continuation || cell.grapheme_len == 0 {
-                continue
-            }
-            if column_offset == 0 {
-                break
-            }
-            column_offset -= 1
-            column = cell_index + max(int(cell.width), 1)
-        }
-        return {line = line,
-            byte_offset = terminal_output_row_byte_offset(cells, column)}, true
+        column := terminal_semantic_grapheme_column(
+            cells, position.grapheme_offset - semantic_row.grapheme_offset)
+        return {
+            line = line,
+            byte_offset = terminal_output_row_byte_offset(cells, column),
+        }, true
     }
     return {}, false
 }
@@ -152,7 +174,7 @@ terminal_command_range :: proc(
     term: ^viewterminalmodel.Terminal_State, block: ^termmodel.Command_Block,
     kind: Terminal_Command_Range) -> Terminal_Command_View_Range {
     start, end := block.command, block.execution
-    required := bit_set[termmodel.Shell_Marker_Kind; u8]{
+    required: bit_set[termmodel.Shell_Marker_Kind; u8] = {
         .Command, .Execution,
     }
     if kind == .Output {
@@ -164,8 +186,11 @@ terminal_command_range :: proc(
     }
     first, first_ok := terminal_semantic_view_position(term, start)
     last, last_ok := terminal_semantic_view_position(term, end)
-    return {start = first, end = last,
-        valid = first_ok && last_ok && first != last}
+    return {
+        start = first,
+        end = last,
+        valid = first_ok && last_ok && first != last,
+    }
 }
 
 // Append one selected row segment and its retained cell boundaries to search scratch.
@@ -191,7 +216,10 @@ terminal_command_search_append_row :: proc(
         }
         mapped := destination + offset - first
         workspace.boundaries[mapped] = true
-        workspace.positions[mapped] = {line = line, byte_offset = offset}
+        workspace.positions[mapped] = {
+            line = line,
+            byte_offset = offset,
+        }
     }
     workspace.byte_count += count
     return true
@@ -212,7 +240,10 @@ terminal_command_search_append_row_separator :: proc(
         return false
     }
     workspace.boundaries[workspace.byte_count] = true
-    workspace.positions[workspace.byte_count] = {line = line, byte_offset = row_end}
+    workspace.positions[workspace.byte_count] = {
+        line = line,
+        byte_offset = row_end,
+    }
     workspace.text[workspace.byte_count] = '\n'
     workspace.byte_count += 1
     return true
@@ -308,8 +339,10 @@ terminal_command_search_consider :: proc(
 terminal_command_search_current :: proc(
     shell: ^termshellintegration.Shell_Integration_State) ->
     Terminal_Command_Search_Match {
-    result := Terminal_Command_Search_Match{
-        block = {generation = shell.search_match_generation},
+    result: Terminal_Command_Search_Match = {
+        block = {
+            generation = shell.search_match_generation,
+        },
         byte_offset = shell.search_match_byte_offset,
         valid = shell.search_match_generation != 0,
     }
@@ -341,12 +374,13 @@ terminal_command_search_block :: proc(
         if !terminal_command_search_matches(workspace, query, offset) {
             continue
         }
-        candidate := Terminal_Command_Search_Match{
+        candidate: Terminal_Command_Search_Match = {
             block = block,
             start = workspace.positions[offset],
             end = workspace.positions[offset + len(query)],
             block_index = accumulator^.block_index,
-            byte_offset = offset, valid = true,
+            byte_offset = offset,
+            valid = true,
         }
         terminal_command_search_consider(
             candidate, accumulator^.current, accumulator^.direction,
@@ -363,8 +397,9 @@ terminal_command_search :: proc(
     }
     query := shell.search_query[:shell.search_query_byte_count]
     count := termshellintegration.shell_command_block_count(shell)
-    accumulator := Terminal_Command_Search_Accumulator{
-        current = terminal_command_search_current(shell), direction = direction,
+    accumulator: Terminal_Command_Search_Accumulator = {
+        current = terminal_command_search_current(shell),
+        direction = direction,
     }
     workspace: Terminal_Command_Search_Workspace
     for index in 0..<count {

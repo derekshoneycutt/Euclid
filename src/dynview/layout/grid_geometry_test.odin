@@ -9,8 +9,15 @@ import test_helpers "../../test_helpers"
 @(test)
 grid_geometry_exact_multiples_have_zero_offsets :: proc(t: ^testing.T) {
     placement, ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = 16, height = 44})
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = 16,
+            height = 44,
+        })
 
     testing.expect(t, ok)
     testing.expect_value(t, placement.column_span, 2)
@@ -23,8 +30,15 @@ grid_geometry_exact_multiples_have_zero_offsets :: proc(t: ^testing.T) {
 @(test)
 grid_geometry_fractional_content_rounds_outward :: proc(t: ^testing.T) {
     placement, ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = 17, height = 23})
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = 17,
+            height = 23,
+        })
 
     testing.expect(t, ok)
     testing.expect_value(t, placement.column_span, 3)
@@ -42,24 +56,65 @@ grid_geometry_invalid_metrics_are_rejected :: proc(t: ^testing.T) {
     not_a_number := zero / zero
     infinity := 1 / zero
     _, zero_cell_ok := place_embedded_content(
-        Cell_Metrics{cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = 8, height = 22})
-    _, invalid_cell_baseline_ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 23},
-        Embedded_Content_Metrics{width = 8, height = 22})
-    _, zero_content_ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = 8})
-    _, invalid_content_baseline_ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
+        Cell_Metrics{
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
         Embedded_Content_Metrics{
-            width = 8, height = 22, has_baseline = true, baseline_from_top = 23})
+            width = 8,
+            height = 22,
+        })
+    _, invalid_cell_baseline_ok := place_embedded_content(
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 23,
+        },
+        Embedded_Content_Metrics{
+            width = 8,
+            height = 22,
+        })
+    _, zero_content_ok := place_embedded_content(
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = 8,
+        })
+    _, invalid_content_baseline_ok := place_embedded_content(
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = 8,
+            height = 22,
+            has_baseline = true,
+            baseline_from_top = 23,
+        })
     _, nan_content_ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = not_a_number, height = 22})
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = not_a_number,
+            height = 22,
+        })
     _, infinite_content_ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = 8, height = infinity})
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = 8,
+            height = infinity,
+        })
 
     testing.expect(t, !zero_cell_ok)
     testing.expect(t, !invalid_cell_baseline_ok)
@@ -72,8 +127,12 @@ grid_geometry_invalid_metrics_are_rejected :: proc(t: ^testing.T) {
 // Verify baseline content remains contained and aligned to the canonical lattice.
 @(test)
 grid_geometry_baseline_content_is_aligned_and_contained :: proc(t: ^testing.T) {
-    cells := Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16}
-    content := Embedded_Content_Metrics{
+    cells: Cell_Metrics = {
+        cell_width = 8,
+        cell_height = 22,
+        baseline_from_top = 16,
+    }
+    content: Embedded_Content_Metrics = {
         width = 19,
         height = 50,
         has_baseline = true,
@@ -99,9 +158,17 @@ grid_geometry_baseline_content_is_aligned_and_contained :: proc(t: ^testing.T) {
 @(test)
 grid_geometry_baseline_boundary_is_deterministic :: proc(t: ^testing.T) {
     placement, ok := place_embedded_content(
-        Cell_Metrics{cell_width = 10, cell_height = 20, baseline_from_top = 14},
+        Cell_Metrics{
+            cell_width = 10,
+            cell_height = 20,
+            baseline_from_top = 14,
+        },
         Embedded_Content_Metrics{
-            width = 10, height = 40, has_baseline = true, baseline_from_top = 34})
+            width = 10,
+            height = 40,
+            has_baseline = true,
+            baseline_from_top = 34,
+        })
 
     testing.expect(t, ok)
     testing.expect_value(t, placement.baseline_row, 1)
@@ -113,7 +180,11 @@ grid_geometry_baseline_boundary_is_deterministic :: proc(t: ^testing.T) {
 // Verify the first valid baseline row gives the minimum containing row span.
 @(test)
 grid_geometry_asymmetric_baseline_uses_minimum_rows :: proc(t: ^testing.T) {
-    cells := Cell_Metrics{cell_width = 10, cell_height = 20, baseline_from_top = 14}
+    cells: Cell_Metrics = {
+        cell_width = 10,
+        cell_height = 20,
+        baseline_from_top = 14,
+    }
     placement, ok := place_embedded_content(cells, Embedded_Content_Metrics{
         width = 10,
         height = 66,
@@ -134,8 +205,15 @@ grid_geometry_asymmetric_baseline_uses_minimum_rows :: proc(t: ^testing.T) {
 @(test)
 grid_geometry_large_content_preserves_containment :: proc(t: ^testing.T) {
     placement, ok := place_embedded_content(
-        Cell_Metrics{cell_width = 8, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = 8000.5, height = 22000.25})
+        Cell_Metrics{
+            cell_width = 8,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = 8000.5,
+            height = 22000.25,
+        })
 
     testing.expect(t, ok)
     testing.expect_value(t, placement.column_span, 1001)
@@ -148,8 +226,15 @@ grid_geometry_large_content_preserves_containment :: proc(t: ^testing.T) {
 @(test)
 grid_geometry_unrepresentable_span_is_rejected :: proc(t: ^testing.T) {
     _, ok := place_embedded_content(
-        Cell_Metrics{cell_width = 1, cell_height = 22, baseline_from_top = 16},
-        Embedded_Content_Metrics{width = max(f32), height = 22})
+        Cell_Metrics{
+            cell_width = 1,
+            cell_height = 22,
+            baseline_from_top = 16,
+        },
+        Embedded_Content_Metrics{
+            width = max(f32),
+            height = 22,
+        })
 
     testing.expect(t, !ok)
 }
@@ -157,12 +242,17 @@ grid_geometry_unrepresentable_span_is_rejected :: proc(t: ^testing.T) {
 // Verify ascent within the overflow allowance keeps one row and raises ink above it.
 @(test)
 grid_geometry_ascent_overflow_allowance_avoids_extra_row :: proc(t: ^testing.T) {
-    cells := Cell_Metrics{
-        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+    cells: Cell_Metrics = {
+        cell_width = 8,
+        cell_height = 22,
+        baseline_from_top = 16,
         ascent_overflow = 3,
     }
-    content := Embedded_Content_Metrics{
-        width = 8, height = 22, has_baseline = true, baseline_from_top = 18,
+    content: Embedded_Content_Metrics = {
+        width = 8,
+        height = 22,
+        has_baseline = true,
+        baseline_from_top = 18,
     }
     placement, ok := place_embedded_content(cells, content)
 
@@ -179,12 +269,17 @@ grid_geometry_ascent_overflow_allowance_avoids_extra_row :: proc(t: ^testing.T) 
 // Verify ascent beyond the overflow allowance still reserves a preceding row.
 @(test)
 grid_geometry_ascent_beyond_allowance_reserves_row :: proc(t: ^testing.T) {
-    cells := Cell_Metrics{
-        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+    cells: Cell_Metrics = {
+        cell_width = 8,
+        cell_height = 22,
+        baseline_from_top = 16,
         ascent_overflow = 3,
     }
     placement, ok := place_embedded_content(cells, Embedded_Content_Metrics{
-        width = 8, height = 24, has_baseline = true, baseline_from_top = 20,
+        width = 8,
+        height = 24,
+        has_baseline = true,
+        baseline_from_top = 20,
     })
 
     testing.expect(t, ok)
@@ -195,12 +290,17 @@ grid_geometry_ascent_beyond_allowance_reserves_row :: proc(t: ^testing.T) {
 // Verify descent never protrudes past its own allocation even with an allowance.
 @(test)
 grid_geometry_descent_always_reserves_rows :: proc(t: ^testing.T) {
-    cells := Cell_Metrics{
-        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+    cells: Cell_Metrics = {
+        cell_width = 8,
+        cell_height = 22,
+        baseline_from_top = 16,
         ascent_overflow = 6,
     }
-    content := Embedded_Content_Metrics{
-        width = 8, height = 30, has_baseline = true, baseline_from_top = 12,
+    content: Embedded_Content_Metrics = {
+        width = 8,
+        height = 30,
+        has_baseline = true,
+        baseline_from_top = 12,
     }
     placement, ok := place_embedded_content(cells, content)
 
@@ -213,15 +313,22 @@ grid_geometry_descent_always_reserves_rows :: proc(t: ^testing.T) {
 // Verify an out-of-range or non-finite overflow allowance is rejected.
 @(test)
 grid_geometry_invalid_ascent_overflow_is_rejected :: proc(t: ^testing.T) {
-    content := Embedded_Content_Metrics{
-        width = 8, height = 22, has_baseline = true, baseline_from_top = 16,
+    content: Embedded_Content_Metrics = {
+        width = 8,
+        height = 22,
+        has_baseline = true,
+        baseline_from_top = 16,
     }
     _, negative_ok := place_embedded_content(Cell_Metrics{
-        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        cell_width = 8,
+        cell_height = 22,
+        baseline_from_top = 16,
         ascent_overflow = -1,
     }, content)
     _, oversized_ok := place_embedded_content(Cell_Metrics{
-        cell_width = 8, cell_height = 22, baseline_from_top = 16,
+        cell_width = 8,
+        cell_height = 22,
+        baseline_from_top = 16,
         ascent_overflow = 23,
     }, content)
 

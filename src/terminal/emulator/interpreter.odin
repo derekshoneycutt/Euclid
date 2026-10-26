@@ -562,15 +562,21 @@ interpreter_ingest_ground_byte :: proc(interpreter: ^Interpreter, byte: u8) {
 interpreter_apply_escape_final :: proc(
     interpreter: ^Interpreter, byte: u8) -> bool {
     switch byte {
-    case 'D': interpreter_index_forward(interpreter, false)
-    case 'E': interpreter_index_forward(interpreter, true)
+    case 'D':
+        interpreter_index_forward(interpreter, false)
+    case 'E':
+        interpreter_index_forward(interpreter, true)
     case 'H':
         termgrid.grid_set_tab_stop(
             interpreter.grid, interpreter.grid.cursor.column, true)
-    case 'M': interpreter_index_reverse(interpreter)
-    case '7': interpreter_save_dec_state(interpreter)
-    case '8': interpreter_restore_dec_state(interpreter)
-    case: return false
+    case 'M':
+        interpreter_index_reverse(interpreter)
+    case '7':
+        interpreter_save_dec_state(interpreter)
+    case '8':
+        interpreter_restore_dec_state(interpreter)
+    case :
+        return false
     }
     return true
 }
@@ -589,11 +595,16 @@ interpreter_apply_escape_control :: proc(
 interpreter_enter_escape_family :: proc(
     interpreter: ^Interpreter, byte: u8) -> bool {
     switch byte {
-    case '[': interpreter.state = .Csi
-    case ']': interpreter.state = .Osc
-    case '_': interpreter.state = .Apc
-    case 'P': interpreter.state = .Dcs
-    case: return false
+    case '[':
+        interpreter.state = .Csi
+    case ']':
+        interpreter.state = .Osc
+    case '_':
+        interpreter.state = .Apc
+    case 'P':
+        interpreter.state = .Dcs
+    case :
+        return false
     }
     interpreter.sequence_bytes = 2
     return true
@@ -725,13 +736,18 @@ interpreter_restart_escape_sequence :: proc(
 interpreter_ingest_control_sequence_byte :: proc(
     interpreter: ^Interpreter, byte: u8) -> bool {
     #partial switch interpreter.state {
-    case .Ground: interpreter_ingest_ground_byte(interpreter, byte)
-    case .Escape: interpreter_ingest_escape_byte(interpreter, byte)
+    case .Ground:
+        interpreter_ingest_ground_byte(interpreter, byte)
+    case .Escape:
+        interpreter_ingest_escape_byte(interpreter, byte)
     case .Escape_Intermediate:
         interpreter_ingest_escape_intermediate_byte(interpreter, byte)
-    case .Csi, .Csi_Intermediate: interpreter_ingest_csi_byte(interpreter, byte)
-    case .Csi_Discard: interpreter_ingest_csi_discard_byte(interpreter, byte)
-    case: return false
+    case .Csi, .Csi_Intermediate:
+        interpreter_ingest_csi_byte(interpreter, byte)
+    case .Csi_Discard:
+        interpreter_ingest_csi_discard_byte(interpreter, byte)
+    case:
+        return false
     }
     return true
 }
@@ -1366,7 +1382,7 @@ interpreter_finish_osc :: proc(interpreter: ^Interpreter) {
 
 // Mark every cell in both retained screens dirty after a palette mutation.
 interpreter_invalidate_palette_rendering :: proc(interpreter: ^Interpreter) {
-    grids := [2]^termgrid.Grid{interpreter.grid, interpreter.alternate_grid}
+    grids: [2]^termgrid.Grid = {interpreter.grid, interpreter.alternate_grid}
     for grid in grids {
         if grid == nil {
             continue 
@@ -1670,10 +1686,14 @@ interpreter_ingest_csi_private_marker :: proc(
 interpreter_csi_private_marker :: proc(
     byte: u8) -> (marker: Csi_Private_Marker, recognized: bool) {
     switch byte {
-    case '<': return .Less_Than, true
-    case '=': return .Equal, true
-    case '>': return .Greater_Than, true
-    case '?': return .Question, true
+    case '<':
+        return .Less_Than, true
+    case '=':
+        return .Equal, true
+    case '>':
+        return .Greater_Than, true
+    case '?':
+        return .Question, true
     }
     return .None, false
 }
@@ -1863,10 +1883,14 @@ interpreter_apply_unprefixed_csi :: proc(interpreter: ^Interpreter, final: u8) {
 interpreter_apply_unprefixed_query :: proc(
     interpreter: ^Interpreter, final: u8) -> bool {
     switch final {
-    case 'c': return interpreter_apply_primary_device_attributes(interpreter)
-    case 'n': return interpreter_apply_device_status_report(interpreter)
-    case 'p': return interpreter_apply_mode_query(interpreter)
-    case 't': return interpreter_apply_window_report(interpreter)
+    case 'c':
+        return interpreter_apply_primary_device_attributes(interpreter)
+    case 'n':
+        return interpreter_apply_device_status_report(interpreter)
+    case 'p':
+        return interpreter_apply_mode_query(interpreter)
+    case 't':
+        return interpreter_apply_window_report(interpreter)
     }
     return false
 }
@@ -1886,7 +1910,8 @@ interpreter_apply_mode_query :: proc(interpreter: ^Interpreter) -> bool {
     }
     interpreter_enqueue_response(interpreter, {
         kind = .Mode_Status,
-        first = u32(parameter), second = status,
+        first = u32(parameter),
+        second = status,
         producer = interpreter_sequence_producer(interpreter),
     })
     return true
@@ -1928,7 +1953,7 @@ interpreter_apply_device_status_report :: proc(
         return false
     }
     parameter := interpreter_parameter(interpreter, 0, 0)
-    response := termmodel.Terminal_Response{
+    response: termmodel.Terminal_Response = {
         producer = interpreter_sequence_producer(interpreter),
     }
     switch parameter {
@@ -1950,7 +1975,7 @@ interpreter_apply_window_report :: proc(interpreter: ^Interpreter) -> bool {
     if interpreter.csi_intermediate != 0 || interpreter.parameter_count != 1 {
         return false
     }
-    response := termmodel.Terminal_Response{
+    response: termmodel.Terminal_Response = {
         producer = interpreter_sequence_producer(interpreter),
     }
     geometry: termmodel.Terminal_Query_Geometry
@@ -2037,12 +2062,18 @@ interpreter_input_mode_status :: proc(
     interpreter: ^Interpreter, parameter: int) -> (u32, bool) {
     mode := interpreter.input_mode
     switch parameter {
-    case 1000: return 1 if mode.mouse_tracking == .Button else 2, true
-    case 1002: return 1 if mode.mouse_tracking == .Button_Motion else 2, true
-    case 1003: return 1 if mode.mouse_tracking == .Any_Motion else 2, true
-    case 1004: return 1 if mode.focus_reporting else 2, true
-    case 1006: return 1 if mode.mouse_sgr_encoding else 2, true
-    case 1016: return 1 if mode.mouse_pixel_coordinates else 2, true
+    case 1000:
+        return 1 if mode.mouse_tracking == .Button else 2, true
+    case 1002:
+        return 1 if mode.mouse_tracking == .Button_Motion else 2, true
+    case 1003:
+        return 1 if mode.mouse_tracking == .Any_Motion else 2, true
+    case 1004:
+        return 1 if mode.focus_reporting else 2, true
+    case 1006:
+        return 1 if mode.mouse_sgr_encoding else 2, true
+    case 1016:
+        return 1 if mode.mouse_pixel_coordinates else 2, true
     }
     return 0, false
 }
@@ -2052,11 +2083,16 @@ interpreter_grid_mode_status :: proc(
     interpreter: ^Interpreter, parameter: int) -> (u32, bool) {
     editing := interpreter.grid.editing
     switch parameter {
-    case 6: return 1 if editing.origin_mode else 2, true
-    case 7: return 1 if editing.autowrap_mode else 2, true
-    case 80: return 1 if editing.sixel_scrolling_mode else 2, true
-    case 8452: return 1 if editing.sixel_cursor_right_mode else 2, true
-    case 1048: return 1 if editing.dec_saved.valid else 2, true
+    case 6:
+        return 1 if editing.origin_mode else 2, true
+    case 7:
+        return 1 if editing.autowrap_mode else 2, true
+    case 80:
+        return 1 if editing.sixel_scrolling_mode else 2, true
+    case 8452:
+        return 1 if editing.sixel_cursor_right_mode else 2, true
+    case 1048:
+        return 1 if editing.dec_saved.valid else 2, true
     }
     return 0, false
 }
@@ -2065,8 +2101,10 @@ interpreter_grid_mode_status :: proc(
 interpreter_display_mode_status :: proc(
     interpreter: ^Interpreter, parameter: int) -> (u32, bool) {
     switch parameter {
-    case 25: return 1 if interpreter.cursor_visible else 2, true
-    case 1049: return 1 if interpreter.alternate_screen_active else 2, true
+    case 25:
+        return 1 if interpreter.cursor_visible else 2, true
+    case 1049:
+        return 1 if interpreter.alternate_screen_active else 2, true
     case 2026:
         synchronized := interpreter.synchronized_output
         if synchronized == nil {
@@ -2307,7 +2345,9 @@ interpreter_apply_kitty_keyboard :: proc(interpreter: ^Interpreter) -> bool {
             producer = interpreter.title_state.sequence_producer
         }
         interpreter_enqueue_response(interpreter, {
-            kind = .Kitty_Keyboard, first = u32(value), producer = producer,
+            kind = .Kitty_Keyboard,
+            first = u32(value),
+            producer = producer,
         })
         return true
     }
@@ -2535,7 +2575,8 @@ interpreter_apply_dec_state_private_mode :: proc(
         } else {
             interpreter_restore_dec_state(interpreter)
         }
-    case: return false
+    case :
+        return false
     }
     return true
 }
@@ -2781,8 +2822,10 @@ interpreter_move_cursor :: proc(interpreter: ^Interpreter, final: u8) {
         if interpreter.grid.editing.origin_mode {
             row = min(row, interpreter.grid.editing.scroll_bottom)
         }
-    case 'C': column += amount
-    case 'D': column -= amount
+    case 'C':
+        column += amount
+    case 'D':
+        column -= amount
     }
     termgrid.grid_set_cursor(interpreter.grid, row, column)
 }
@@ -3089,13 +3132,20 @@ interpreter_apply_sgr_parameter :: proc(grid: ^termgrid.Grid, parameter: int) ->
 //   - Toggles bold, italic, or underline state, or restores the default foreground.
 interpreter_apply_sgr_attribute :: proc(grid: ^termgrid.Grid, parameter: int) -> bool {
     switch parameter {
-    case 1: grid.style.bold = true
-    case 3: grid.style.italic = true
-    case 4: grid.style.underline = true
-    case 22: grid.style.bold = false
-    case 23: grid.style.italic = false
-    case 24: grid.style.underline = false
-    case 39: grid.style.foreground = {}
+    case 1:
+        grid.style.bold = true
+    case 3:
+        grid.style.italic = true
+    case 4:
+        grid.style.underline = true
+    case 22:
+        grid.style.bold = false
+    case 23:
+        grid.style.italic = false
+    case 24:
+        grid.style.underline = false
+    case 39:
+        grid.style.foreground = {}
     case:
         return false
     }

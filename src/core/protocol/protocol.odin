@@ -8,6 +8,28 @@ package protocol
 // Zero means no active request; request owners issue monotonically increasing IDs.
 Request_Id :: distinct u64
 
+// User_Data_Connection_Client names one display-owned SQLite connection borrower.
+User_Data_Connection_Client :: enum u8 {
+    None,
+    Settings_Save,
+    Terminal_History,
+}
+
+// User_Data_Connection_Admission_Phase tracks a borrow through task submission.
+User_Data_Connection_Admission_Phase :: enum u8 {
+    Idle,
+    Claimed,
+    Submitted,
+}
+
+// User_Data_Connection_Admission serializes nonconcurrent connection tasks.
+User_Data_Connection_Admission :: struct {
+    owner: User_Data_Connection_Client,
+    phase: User_Data_Connection_Admission_Phase,
+    next_turn: User_Data_Connection_Client,
+    draining: bool,
+}
+
 // Positive terminal viewport size measured in character cells.
 Terminal_Dimensions :: struct {
     columns: u16,

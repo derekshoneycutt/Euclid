@@ -20,10 +20,15 @@ tree_pressed_feedback_requires_owned_hover :: proc(t: ^testing.T) {
     node.key[0], other.key[0] = 1, 2
     node.kind, other.kind = .Animation, .Animation
     node.first_child, other.first_child = uilibrary.TREE_NO_ITEM, uilibrary.TREE_NO_ITEM
-    frame := input.Input_Frame{mouse_down = {.Left}}
+    frame: input.Input_Frame = {
+        mouse_down = {.Left},
+    }
     testing.expect_value(t, uilibrary.tree_pressed_item(owner, frame, &node), nil)
     owner = {
-        active = true, kind = .List_Item, id = uilibrary.tree_placement_press_id(&node)}
+        active = true,
+        kind = .List_Item,
+        id = uilibrary.tree_placement_press_id(&node),
+    }
     testing.expect_value(t, uilibrary.tree_pressed_item(owner, frame, &node), &node)
     testing.expect_value(t, uilibrary.tree_pressed_item(owner, frame, &other), nil)
     testing.expect_value(t, uilibrary.tree_pressed_item(owner, frame, nil), nil)
@@ -48,11 +53,15 @@ tree_draw_encodes_pressed_row_overlay :: proc(t: ^testing.T) {
     node.key[0] = 1
     node.kind = .Animation
     node.first_child = uilibrary.TREE_NO_ITEM
-    row := geometry.Rectangle{10, 20, 100, theme.TREE_ROW_HEIGHT}
-    ctx := uilibrary.Encoded_Tree_Walk_Context{state = state,
-        encoder = &encoder, panel = row, row_height = theme.TREE_ROW_HEIGHT,
-        pressed_node = &node}
-    selections := [2]bool{false, true}
+    row: geometry.Rectangle = {10, 20, 100, theme.TREE_ROW_HEIGHT}
+    ctx: uilibrary.Encoded_Tree_Walk_Context = {
+        state = state,
+        encoder = &encoder,
+        panel = row,
+        row_height = theme.TREE_ROW_HEIGHT,
+        pressed_node = &node,
+    }
+    selections: [2]bool = {false, true}
     for selected in selections {
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
@@ -86,7 +95,9 @@ tree_draw_selected_disclosure_preserves_keyboard_focus :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(focus, context.allocator)
-    node := viewmodel.Ui_Tree_Item{first_child = 0}
+    node: viewmodel.Ui_Tree_Item = {
+        first_child = 0,
+    }
     node.key[0] = 1
     state^.ui_runtime.semantic_focus = focus
     focus^.window_focused = true
@@ -100,9 +111,11 @@ tree_draw_selected_disclosure_preserves_keyboard_focus :: proc(t: ^testing.T) {
         state^.ui_runtime.library.tree.selected_item_id =
             node.key if selected else uuid.Identifier{}
         uilibrary.draw_encoded_tree_row({
-            state = state, encoder = &encoder,
+            state = state,
+            encoder = &encoder,
             panel = {10, 20, 100, theme.TREE_ROW_HEIGHT},
-            row_height = theme.TREE_ROW_HEIGHT}, &node, 0, 20, true)
+            row_height = theme.TREE_ROW_HEIGHT,
+        }, &node, 0, 20, true)
         testing.expect(t, encoder.vertex_count > 16)
         tint := theme.UI_TREE_SELECTION_TEXT_COLOR if selected else theme.UI_TEXT_COLOR
         testing.expect_value(t, vertices[encoder.vertex_count - 1].color, tint)

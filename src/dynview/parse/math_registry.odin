@@ -195,17 +195,29 @@ tex_math_registry_is_fixed_delimiter :: proc(command: string) -> bool {
 tex_math_registry_fixed_symbol :: proc(
     command: string) -> (Tex_Math_Symbol_Result, bool) {
     if result, ok := tex_math_registry_find_symbol(
-        command, TEX_MATH_GREEK_SYMBOLS, .Math_Italic, .Ord); ok {return result, true}
+        command, TEX_MATH_GREEK_SYMBOLS, .Math_Italic, .Ord); ok {
+        return result, true
+    }
     if result, ok := tex_math_registry_find_symbol(
-        command, TEX_MATH_BINARY_SYMBOLS, .Math_Upright, .Bin); ok {return result, true}
+        command, TEX_MATH_BINARY_SYMBOLS, .Math_Upright, .Bin); ok {
+        return result, true
+    }
     if result, ok := tex_math_registry_find_symbol(
-        command, TEX_MATH_RELATION_SYMBOLS, .Math_Upright, .Rel); ok {return result, true}
+        command, TEX_MATH_RELATION_SYMBOLS, .Math_Upright, .Rel); ok {
+        return result, true
+    }
     if result, ok := tex_math_registry_find_symbol(
-        command, TEX_MATH_OPEN_SYMBOLS, .Math_Upright, .Open); ok {return result, true}
+        command, TEX_MATH_OPEN_SYMBOLS, .Math_Upright, .Open); ok {
+        return result, true
+    }
     if result, ok := tex_math_registry_find_symbol(
-        command, TEX_MATH_CLOSE_SYMBOLS, .Math_Upright, .Close); ok {return result, true}
+        command, TEX_MATH_CLOSE_SYMBOLS, .Math_Upright, .Close); ok {
+        return result, true
+    }
     if result, ok := tex_math_registry_find_symbol(
-        command, TEX_MATH_ORDINARY_SYMBOLS, .Math_Upright, .Ord); ok {return result, true}
+        command, TEX_MATH_ORDINARY_SYMBOLS, .Math_Upright, .Ord); ok {
+        return result, true
+    }
     return {}, false
 }
 
@@ -218,7 +230,13 @@ tex_math_registry_find_symbol :: proc(
 
     for entry in entries {
         if entry.command == command {
-            return {entry.text, {role = role, atom_class = atom_class}}, true
+            return {
+                text = entry.text,
+                properties = {
+                    role = role,
+                    atom_class = atom_class,
+                },
+            }, true
         }
     }
     return {}, false

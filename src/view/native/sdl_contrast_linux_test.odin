@@ -63,11 +63,20 @@ sdl_contrast_test_decode_symbols :: proc() -> Sdl_Contrast_Gio {
 @(test)
 sdl_contrast_portal_decodes_standard_and_unknown_values :: proc(t: ^testing.T) {
     gio := sdl_contrast_test_decode_symbols()
-    values := [4]u32{0, 1, 2, 0xffff_ffff}
+    values: [4]u32 = {0, 1, 2, 0xffff_ffff}
     for value in values {
-        payload := Sdl_Contrast_Test_Variant{type_name = "u", value = value}
-        wrapper := Sdl_Contrast_Test_Variant{type_name = "v", child = &payload}
-        reply := Sdl_Contrast_Test_Variant{type_name = "(v)", child = &wrapper}
+        payload: Sdl_Contrast_Test_Variant = {
+            type_name = "u",
+            value = value,
+        }
+        wrapper: Sdl_Contrast_Test_Variant = {
+            type_name = "v",
+            child = &payload,
+        }
+        reply: Sdl_Contrast_Test_Variant = {
+            type_name = "(v)",
+            child = &wrapper,
+        }
         requested, status := sdl_contrast_portal_decode_reply(gio, &reply)
         testing.expect_value(t, status, Sdl_Contrast_Status.Supported)
         testing.expect_value(t, requested, value == 1)
@@ -80,9 +89,17 @@ sdl_contrast_portal_decodes_standard_and_unknown_values :: proc(t: ^testing.T) {
 @(test)
 sdl_contrast_portal_rejects_malformed_response :: proc(t: ^testing.T) {
     gio := sdl_contrast_test_decode_symbols()
-    payload := Sdl_Contrast_Test_Variant{type_name = "s"}
-    wrapper := Sdl_Contrast_Test_Variant{type_name = "v", child = &payload}
-    reply := Sdl_Contrast_Test_Variant{type_name = "()", child = &wrapper}
+    payload: Sdl_Contrast_Test_Variant = {
+        type_name = "s",
+    }
+    wrapper: Sdl_Contrast_Test_Variant = {
+        type_name = "v",
+        child = &payload,
+    }
+    reply: Sdl_Contrast_Test_Variant = {
+        type_name = "()",
+        child = &wrapper,
+    }
     _, status := sdl_contrast_portal_decode_reply(gio, &reply)
     testing.expect_value(t, status, Sdl_Contrast_Status.Failed)
     testing.expect_value(t, reply.extractions, 0)

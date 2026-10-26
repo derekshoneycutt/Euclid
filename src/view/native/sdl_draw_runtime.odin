@@ -271,13 +271,31 @@ sdl_draw_pipeline_create :: proc(
 
 // sdl_draw_vertex_input describes the fixed Draw_Vertex ABI.
 sdl_draw_vertex_input :: proc(textured: bool) -> Sdl_Draw_Vertex_Input {
-    input := Sdl_Draw_Vertex_Input{}
+    input: Sdl_Draw_Vertex_Input = {}
     input.descriptions = {{
-        slot = 0, pitch = size_of(Draw_Vertex), input_rate = .VERTEX}}
+        slot = 0,
+        pitch = size_of(Draw_Vertex),
+        input_rate = .VERTEX,
+    }}
     input.attributes = {
-        {location = 0, buffer_slot = 0, format = .FLOAT2, offset = 0},
-        {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 8},
-        {location = 2, buffer_slot = 0, format = .UBYTE4_NORM, offset = 16},
+        {
+            location = 0,
+            buffer_slot = 0,
+            format = .FLOAT2,
+            offset = 0,
+        },
+        {
+            location = 1,
+            buffer_slot = 0,
+            format = .FLOAT2,
+            offset = 8,
+        },
+        {
+            location = 2,
+            buffer_slot = 0,
+            format = .UBYTE4_NORM,
+            offset = 16,
+        },
     }
     input.attribute_count = 2
     if textured {
@@ -295,7 +313,7 @@ sdl_draw_pipeline_create_from_shaders :: proc(
     textured: bool,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     input := sdl_draw_vertex_input(textured)
-    targets := [1]sdl.GPUColorTargetDescription{
+    targets: [1]sdl.GPUColorTargetDescription = {
         sdl_stroke_target_description()}
     return sdl.CreateGPUGraphicsPipeline(device, {
         vertex_shader = vertex_shader,
@@ -308,10 +326,13 @@ sdl_draw_pipeline_create_from_shaders :: proc(
         },
         primitive_type = .TRIANGLELIST,
         rasterizer_state = {
-            fill_mode = .FILL, cull_mode = .NONE,
+            fill_mode = .FILL,
+            cull_mode = .NONE,
             front_face = .COUNTER_CLOCKWISE,
         },
-        multisample_state = {sample_count = sample_count},
+        multisample_state = {
+            sample_count = sample_count,
+        },
         target_info = {
             color_target_descriptions = raw_data(targets[:]),
             num_color_targets = 1,
@@ -341,7 +362,9 @@ sdl_draw_runtime_allocate_core_storage :: proc(
     commands, command_error := make(
         []Draw_Command, DRAW_COMMAND_CAPACITY, allocator)
     if vertex_error != nil || index_error != nil || batch_error != nil ||
-        command_error != nil {return false}
+        command_error != nil {
+        return false
+    }
     runtime^.storage = {vertices, indices, batches, commands, nil}
     return true
 }
@@ -364,7 +387,9 @@ sdl_draw_runtime_allocate_custom_storage :: proc(
     if stroke_vertex_error != nil || stroke_draw_error != nil ||
         dust_instance_error != nil ||
         dust_draw_error != nil || dust_expanded_vertex_error != nil ||
-        dust_expanded_draw_error != nil {return false}
+        dust_expanded_draw_error != nil {
+        return false
+    }
     runtime^.custom_storage = {
         stroke_vertices = stroke_vertices,
         stroke_draws = stroke_draws,
@@ -387,7 +412,9 @@ sdl_draw_runtime_allocate_storage :: proc(runtime: ^Sdl_Draw_Runtime) -> bool {
     runtime^.arena_initialized = true
     allocator := vmem.arena_allocator(&runtime^.arena)
     if !sdl_draw_runtime_allocate_core_storage(runtime, allocator) ||
-        !sdl_draw_runtime_allocate_custom_storage(runtime, allocator) {return false}
+        !sdl_draw_runtime_allocate_custom_storage(runtime, allocator) {
+        return false
+    }
     return true
 }
 
@@ -402,15 +429,23 @@ sdl_draw_runtime_create_gpu_resources :: proc(
     candidate^.nearest_sampler = sdl_draw_sampler_create(device, .NEAREST)
     candidate^.linear_sampler = sdl_draw_sampler_create(device, .LINEAR)
     candidate^.vertex_buffer = sdl.CreateGPUBuffer(device, {
-        usage = {.VERTEX}, size = u32(size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY)})
+        usage = {.VERTEX},
+        size = u32(size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY),
+    })
     candidate^.index_buffer = sdl.CreateGPUBuffer(device, {
-        usage = {.INDEX}, size = u32(size_of(u32) * DRAW_INDEX_CAPACITY)})
+        usage = {.INDEX},
+        size = u32(size_of(u32) * DRAW_INDEX_CAPACITY),
+    })
     upload_size := size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY +
         size_of(u32) * DRAW_INDEX_CAPACITY
     candidate^.upload_buffer = sdl.CreateGPUTransferBuffer(device, {
-        usage = .UPLOAD, size = u32(upload_size)})
+        usage = .UPLOAD,
+        size = u32(upload_size),
+    })
     candidate^.texture_upload_buffer = sdl.CreateGPUTransferBuffer(device, {
-        usage = .UPLOAD, size = TEXTURE_UPLOAD_BYTE_CAPACITY})
+        usage = .UPLOAD,
+        size = TEXTURE_UPLOAD_BYTE_CAPACITY,
+    })
     return candidate^.colored_pipeline != nil && candidate^.textured_pipeline != nil &&
         candidate^.nearest_sampler != nil && candidate^.linear_sampler != nil &&
         candidate^.vertex_buffer != nil && candidate^.index_buffer != nil &&
@@ -458,7 +493,11 @@ sdl_sampled_texture_create :: proc(
         num_levels = 1,
         sample_count = ._1,
     })
-    return {handle = handle, width = width, height = height}
+    return {
+        handle = handle,
+        width = width,
+        height = height,
+    }
 }
 
 // sdl_sampled_texture_release immediately releases one owner-held texture.
@@ -499,7 +538,9 @@ sdl_draw_tool_command_valid :: proc(
 sdl_draw_instanced_dust_command_valid :: proc(
     encoder: ^Draw_Encoder, command: Draw_Command) -> bool {
     if !encoder^.dust_instancing_enabled ||
-        command.index >= u32(encoder^.dust_draw_count) {return false}
+        command.index >= u32(encoder^.dust_draw_count) {
+        return false
+    }
     draw := encoder^.dust_draws[command.index]
     return (draw.texture != nil || draw.light) && draw.count > 0 &&
         draw.first + draw.count <= u32(encoder^.dust_instance_count)
@@ -520,10 +561,14 @@ sdl_draw_expanded_dust_command_valid :: proc(
 sdl_draw_command_valid :: proc(
     encoder: ^Draw_Encoder, command: Draw_Command) -> bool {
     switch command.kind {
-    case .Batch:          return sdl_draw_batch_command_valid(encoder, command)
-    case .Tool:           return sdl_draw_tool_command_valid(encoder, command)
-    case .Dust_Instanced: return sdl_draw_instanced_dust_command_valid(encoder, command)
-    case .Dust_Expanded:  return sdl_draw_expanded_dust_command_valid(encoder, command)
+    case .Batch:
+        return sdl_draw_batch_command_valid(encoder, command)
+    case .Tool:
+        return sdl_draw_tool_command_valid(encoder, command)
+    case .Dust_Instanced:
+        return sdl_draw_instanced_dust_command_valid(encoder, command)
+    case .Dust_Expanded:
+        return sdl_draw_expanded_dust_command_valid(encoder, command)
     }
     return false
 }
@@ -602,7 +647,7 @@ sdl_draw_accumulate_statistics :: proc(
 // sdl_draw_upload_statistics calculates custom-stream upload counts and bytes.
 sdl_draw_upload_statistics :: proc(
     encoder: ^Draw_Encoder) -> Sdl_Draw_Upload_Statistics {
-    result := Sdl_Draw_Upload_Statistics{
+    result: Sdl_Draw_Upload_Statistics = {
         stroke_bytes = u32(
             encoder^.stroke_vertex_count * size_of(Stroke_Vertex)),
         dust_bytes = u32(
@@ -625,7 +670,7 @@ sdl_draw_record_statistics :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
     pipeline_bindings, vertex_bytes, index_bytes: u32) {
     upload := sdl_draw_upload_statistics(encoder)
-    frame := Sdl_Draw_Frame_Statistics{
+    frame: Sdl_Draw_Frame_Statistics = {
         vertices = u32(encoder^.vertex_count),
         indices = u32(encoder^.index_count),
         batches = u32(encoder^.batch_count),
@@ -663,13 +708,24 @@ sdl_draw_issue_buffer_uploads :: proc(
     vertex_bytes, index_bytes: u32) {
     if vertex_bytes > 0 {
         sdl.UploadToGPUBuffer(copy_pass,
-            {transfer_buffer = runtime^.upload_buffer},
-            {buffer = runtime^.vertex_buffer, size = vertex_bytes}, true)
+            {
+                transfer_buffer = runtime^.upload_buffer,
+            },
+            {
+                buffer = runtime^.vertex_buffer,
+                size = vertex_bytes,
+            }, true)
     }
     if index_bytes > 0 {
         sdl.UploadToGPUBuffer(copy_pass,
-            {transfer_buffer = runtime^.upload_buffer, offset = vertex_bytes},
-            {buffer = runtime^.index_buffer, size = index_bytes}, true)
+            {
+                transfer_buffer = runtime^.upload_buffer,
+                offset = vertex_bytes,
+            },
+            {
+                buffer = runtime^.index_buffer,
+                size = index_bytes,
+            }, true)
     }
     sdl.EndGPUCopyPass(copy_pass)
 }
@@ -842,7 +898,7 @@ sdl_draw_record_batch :: proc(
         if batch.sampler == .Linear {
            sampler = runtime^.linear_sampler
         }
-        binding := [1]sdl.GPUTextureSamplerBinding{{
+        binding: [1]sdl.GPUTextureSamplerBinding = {{
             texture = cast(^sdl.GPUTexture)batch.texture,
             sampler = sampler,
         }}
@@ -855,7 +911,7 @@ sdl_draw_record_batch :: proc(
 // sdl_draw_push_2d_uniform restores the viewport cbuffer after a custom draw.
 sdl_draw_push_2d_uniform :: proc(
     command_buffer: ^sdl.GPUCommandBuffer, encoder: ^Draw_Encoder) {
-    viewport_uniform := [4]f32{
+    viewport_uniform: [4]f32 = {
         encoder^.logical_extent.x, encoder^.logical_extent.y, 0, 0}
     sdl.PushGPUVertexUniformData(
         command_buffer, 0, raw_data(viewport_uniform[:]), size_of(viewport_uniform))
@@ -864,8 +920,12 @@ sdl_draw_push_2d_uniform :: proc(
 // sdl_draw_bind_2d_buffers restores the core vertex and index bindings.
 sdl_draw_bind_2d_buffers :: proc(
     runtime: ^Sdl_Draw_Runtime, pass: ^sdl.GPURenderPass) {
-    vertex_binding := [1]sdl.GPUBufferBinding{{buffer = runtime^.vertex_buffer}}
-    index_binding := sdl.GPUBufferBinding{buffer = runtime^.index_buffer}
+    vertex_binding: [1]sdl.GPUBufferBinding = {{
+        buffer = runtime^.vertex_buffer,
+    }}
+    index_binding: sdl.GPUBufferBinding = {
+        buffer = runtime^.index_buffer,
+    }
     sdl.BindGPUVertexBuffers(pass, 0, raw_data(vertex_binding[:]), 1)
     sdl.BindGPUIndexBuffer(pass, index_binding, ._32BIT)
 }
@@ -917,12 +977,21 @@ sdl_draw_record_expanded_dust_command :: proc(
 sdl_draw_record_commands :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
     command_buffer: ^sdl.GPUCommandBuffer, pass: ^sdl.GPURenderPass) {
-    ctx := Sdl_Draw_Record_Context{runtime, encoder, command_buffer, pass}
-    state := Sdl_Draw_Command_State{active_kind = .Batch}
+    ctx: Sdl_Draw_Record_Context = {
+        runtime,
+        encoder,
+        command_buffer,
+        pass,
+    }
+    state: Sdl_Draw_Command_State = {
+        active_kind = .Batch,
+    }
     for command in encoder^.commands[:encoder^.command_count] {
         switch command.kind {
-        case .Batch: sdl_draw_record_batch_command(ctx, &state, command)
-        case .Tool: sdl_draw_record_tool_command(ctx, &state, command)
+        case .Batch:
+            sdl_draw_record_batch_command(ctx, &state, command)
+        case .Tool:
+            sdl_draw_record_tool_command(ctx, &state, command)
         case .Dust_Instanced:
             draw := &encoder^.dust_draws[command.index]
             if draw^.light {
@@ -944,7 +1013,7 @@ sdl_draw_record_scene :: proc(
     encoder: ^Draw_Encoder, command_buffer: ^sdl.GPUCommandBuffer,
     clear_color: sdl.FColor) -> bool {
     sdl_draw_push_2d_uniform(command_buffer, encoder)
-    target := [1]sdl.GPUColorTargetInfo{
+    target: [1]sdl.GPUColorTargetInfo = {
         sdl_scene_color_target_info(platform, clear_color)}
     pass := sdl.BeginGPURenderPass(
         command_buffer, raw_data(target[:]), len(target), nil)
@@ -953,8 +1022,11 @@ sdl_draw_record_scene :: proc(
     }
     sdl_draw_bind_2d_buffers(runtime, pass)
     sdl.SetGPUViewport(pass, {
-        w = f32(platform^.scene_width), h = f32(platform^.scene_height),
-        min_depth = 0, max_depth = 1})
+        w = f32(platform^.scene_width),
+        h = f32(platform^.scene_height),
+        min_depth = 0,
+        max_depth = 1,
+    })
     sdl_draw_record_commands(runtime, encoder, command_buffer, pass)
     sdl.EndGPURenderPass(pass)
     return true
@@ -972,7 +1044,9 @@ sdl_draw_prepare_submission :: proc(
         !sdl_stroke_upload(runtime, encoder, platform^.device,
             submission.command_buffer) ||
         !sdl_dust_upload(runtime, encoder, platform^.device,
-            submission.command_buffer) {return false}
+            submission.command_buffer) {
+        return false
+    }
     return sdl_draw_record_scene(platform, runtime, encoder,
         submission.command_buffer, submission.clear_color)
 }
@@ -1007,10 +1081,16 @@ sdl_draw_submit :: proc(
         return false
     }
     sdl.BlitGPUTexture(submission.command_buffer, {
-        source = {texture = platform^.scene_target,
-            w = platform^.scene_width, h = platform^.scene_height},
-        destination = {texture = submission.image.texture,
-            w = submission.image.width, h = submission.image.height},
+        source = {
+            texture = platform^.scene_target,
+            w = platform^.scene_width,
+            h = platform^.scene_height,
+        },
+        destination = {
+            texture = submission.image.texture,
+            w = submission.image.width,
+            h = submission.image.height,
+        },
         load_op = .DONT_CARE,
         filter = .NEAREST,
     })

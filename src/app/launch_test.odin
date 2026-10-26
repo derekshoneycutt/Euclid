@@ -210,7 +210,9 @@ scenario_arguments_configure_debug_automation :: proc(t: ^testing.T) {
 // Verify retained semantic-trace options configure the typed evidence session.
 @(test)
 semantic_trace_arguments_configure_evidence_policy :: proc(t: ^testing.T) {
-    config := evidence_session.Config{lanes = evidence_session.ALL_LANES}
+    config: evidence_session.Config = {
+        lanes = evidence_session.ALL_LANES,
+    }
 
     handled, valid := parse_semantic_trace_argument("--semantic-trace", &config)
     testing.expect(t, handled)
@@ -248,7 +250,9 @@ semantic_trace_arguments_configure_evidence_policy :: proc(t: ^testing.T) {
 // Verify invalid evidence selections are recognized without changing lane policy.
 @(test)
 semantic_trace_arguments_reject_unknown_lane :: proc(t: ^testing.T) {
-    config := evidence_session.Config{lanes = evidence_session.ALL_LANES}
+    config: evidence_session.Config = {
+        lanes = evidence_session.ALL_LANES,
+    }
     original_lanes := config.lanes
 
     handled, valid := parse_semantic_trace_argument(
@@ -267,7 +271,7 @@ semantic_trace_arguments_reject_unknown_lane :: proc(t: ^testing.T) {
 // Verify final command-line values and presence masks cover every CLI preference.
 launch_expect_cli_override_ids :: proc(
     t: ^testing.T, overrides: setting_model.Setting_Set) {
-    ids := [10]setting_model.Setting_Id{
+    ids: [10]setting_model.Setting_Id = {
         .Window_Width, .Window_Height, .Window_Mode, .Window_Layout,
         .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
         .Rendering_Simd, .Rendering_Gpu_Dust_Instancing, .Drawing_Dust_Limit,

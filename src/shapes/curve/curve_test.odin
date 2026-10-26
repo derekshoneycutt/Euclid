@@ -37,12 +37,21 @@ curve_test_has_marked_point :: proc(vertices: []Vector3,
 // Verify an external equal-circle trochoid starts at its contact-aligned cusp.
 @(test)
 trochoid_curve_external_cardioid_starts_at_fixed_contact :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 2,
-        rolling_radius = 2, tracer_distance = 2, parameter_start = 0,
-        parameter_finish = 2 * math.PI, draw_parameter = 2 * math.PI}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 2,
+        rolling_radius = 2,
+        tracer_distance = 2,
+        parameter_start = 0,
+        parameter_finish = 2 * math.PI,
+        draw_parameter = 2 * math.PI,
+    }
     point := trochoid_point({}, value, 0)
-    pose := trochoid_tool_pose({}, {mode = .External, fixed_radius = 2,
-        rolling_radius = 2})
+    pose := trochoid_tool_pose({}, {
+        mode = .External,
+        fixed_radius = 2,
+        rolling_radius = 2,
+    })
 
     test_helpers.expect_vec3_close(t, pose.rolling_center, {4, 0, 0},
         "external rolling center should start outside the fixed circle")
@@ -55,12 +64,21 @@ trochoid_curve_external_cardioid_starts_at_fixed_contact :: proc(t: ^testing.T) 
 // Verify an internal rolling circle starts at the outward fixed-circle contact.
 @(test)
 trochoid_curve_internal_contact_and_orientation_are_outward :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .Internal, fixed_radius = 4,
-        rolling_radius = 1, tracer_distance = 1, parameter_start = 0,
-        parameter_finish = 2 * math.PI, draw_parameter = 2 * math.PI}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .Internal,
+        fixed_radius = 4,
+        rolling_radius = 1,
+        tracer_distance = 1,
+        parameter_start = 0,
+        parameter_finish = 2 * math.PI,
+        draw_parameter = 2 * math.PI,
+    }
     point := trochoid_point({1, 2, 3}, value, 0)
-    pose := trochoid_tool_pose({1, 2, 3}, {mode = .Internal,
-        fixed_radius = 4, rolling_radius = 1})
+    pose := trochoid_tool_pose({1, 2, 3}, {
+        mode = .Internal,
+        fixed_radius = 4,
+        rolling_radius = 1,
+    })
 
     test_helpers.expect_vec3_close(t, pose.rolling_center, {4, 2, 3},
         "internal rolling center should start inside the fixed circle")
@@ -73,10 +91,17 @@ trochoid_curve_internal_contact_and_orientation_are_outward :: proc(t: ^testing.
 // Verify planar rotation and independent tracer phase transform the evaluator.
 @(test)
 trochoid_curve_rotation_and_tracer_phase_are_independent :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 1,
-        rolling_radius = 1, tracer_distance = 0.5, tracer_phase = math.PI / 2,
-        rotation = math.PI / 2, parameter_start = 0, parameter_finish = 1,
-        draw_parameter = 0}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 1,
+        rolling_radius = 1,
+        tracer_distance = 0.5,
+        tracer_phase = math.PI / 2,
+        rotation = math.PI / 2,
+        parameter_start = 0,
+        parameter_finish = 1,
+        draw_parameter = 0,
+    }
     point := trochoid_point({}, value, 0)
 
     test_helpers.expect_vec3_close(t, point, {0.5, 2, 0},
@@ -86,9 +111,15 @@ trochoid_curve_rotation_and_tracer_phase_are_independent :: proc(t: ^testing.T) 
 // Verify reveal growth retains every established adaptive vertex and adds its endpoint.
 @(test)
 trochoid_curve_explication_preserves_revealed_prefix :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.2,
-        rolling_radius = 0.2, tracer_distance = 0.2, parameter_start = 0,
-        parameter_finish = 2 * math.PI, draw_parameter = math.PI * 0.73}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 0.2,
+        rolling_radius = 0.2,
+        tracer_distance = 0.2,
+        parameter_start = 0,
+        parameter_finish = 2 * math.PI,
+        draw_parameter = math.PI * 0.73,
+    }
     partial: [TROCHOID_MAX_VERTICES]Vector3
     partial_result := trochoid_explicate({}, value, partial[:])
     value.draw_parameter = value.parameter_finish
@@ -110,9 +141,15 @@ trochoid_curve_explication_preserves_revealed_prefix :: proc(t: ^testing.T) {
 // Verify reverse directed domains explicate from their start toward their frontier.
 @(test)
 trochoid_curve_explication_supports_reverse_domains :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.2,
-        rolling_radius = 0.1, tracer_distance = 0.1, parameter_start = math.PI,
-        parameter_finish = -math.PI, draw_parameter = 0}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 0.2,
+        rolling_radius = 0.1,
+        tracer_distance = 0.1,
+        parameter_start = math.PI,
+        parameter_finish = -math.PI,
+        draw_parameter = 0,
+    }
     vertices: [TROCHOID_MAX_VERTICES]Vector3
     result := trochoid_explicate({}, value, vertices[:])
 
@@ -128,9 +165,15 @@ trochoid_curve_explication_supports_reverse_domains :: proc(t: ^testing.T) {
 // Verify insufficient output storage is rejected without writing a partial curve.
 @(test)
 trochoid_curve_explication_rejects_short_output :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 1,
-        rolling_radius = 1, tracer_distance = 1, parameter_start = 0,
-        parameter_finish = 1, draw_parameter = 1}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 1,
+        rolling_radius = 1,
+        tracer_distance = 1,
+        parameter_start = 0,
+        parameter_finish = 1,
+        draw_parameter = 1,
+    }
     vertices: [2]Vector3
     result := trochoid_explicate({}, value, vertices[:])
 
@@ -144,10 +187,15 @@ trochoid_curve_eleven_half_hypocycloid_is_complete_and_closed :: proc(
     t: ^testing.T) {
     fixed_radius := f32(0.25)
     rolling_radius := fixed_radius / 5.5
-    value := shapemodel.Shape_Trochoid{mode = .Internal,
-        fixed_radius = fixed_radius, rolling_radius = rolling_radius,
-        tracer_distance = rolling_radius, parameter_start = 0,
-        parameter_finish = 4 * math.PI, draw_parameter = 4 * math.PI}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .Internal,
+        fixed_radius = fixed_radius,
+        rolling_radius = rolling_radius,
+        tracer_distance = rolling_radius,
+        parameter_start = 0,
+        parameter_finish = 4 * math.PI,
+        draw_parameter = 4 * math.PI,
+    }
     vertices: [TROCHOID_MAX_VERTICES]Vector3
     result := trochoid_explicate({}, value, vertices[:])
 
@@ -167,9 +215,15 @@ trochoid_curve_eleven_half_hypocycloid_is_complete_and_closed :: proc(
 @(test)
 trochoid_curve_five_point_hypotrochoid_is_complete_and_closed :: proc(
     t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .Internal, fixed_radius = 0.25,
-        rolling_radius = 0.15, tracer_distance = 0.25, parameter_start = 0,
-        parameter_finish = 6 * math.PI, draw_parameter = 6 * math.PI}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .Internal,
+        fixed_radius = 0.25,
+        rolling_radius = 0.15,
+        tracer_distance = 0.25,
+        parameter_start = 0,
+        parameter_finish = 6 * math.PI,
+        draw_parameter = 6 * math.PI,
+    }
     vertices: [TROCHOID_MAX_VERTICES]Vector3
     result := trochoid_explicate({}, value, vertices[:])
 
@@ -188,11 +242,15 @@ trochoid_curve_five_point_hypotrochoid_is_complete_and_closed :: proc(
 // Verify two revolutions are centered on the literal rail with three cusp contacts.
 @(test)
 cycloid_curve_two_revolutions_use_literal_line :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Cycloid{rolling_radius = 0.05,
-        tracer_distance = 0.05, parameter_start = 0,
-        parameter_finish = 4 * math.PI, draw_parameter = 4 * math.PI}
-    first := Vector3{-0.4, 0, 2}
-    second := Vector3{0.4, 0, 2}
+    value: shapemodel.Shape_Cycloid = {
+        rolling_radius = 0.05,
+        tracer_distance = 0.05,
+        parameter_start = 0,
+        parameter_finish = 4 * math.PI,
+        draw_parameter = 4 * math.PI,
+    }
+    first: Vector3 = {-0.4, 0, 2}
+    second: Vector3 = {0.4, 0, 2}
 
     start := cycloid_point(first, second, value, 0)
     middle := cycloid_point(first, second, value, 2 * math.PI)
@@ -210,8 +268,12 @@ cycloid_curve_two_revolutions_use_literal_line :: proc(t: ^testing.T) {
 // Verify rotated rails determine both rolling centers and material orientation.
 @(test)
 cycloid_tool_pose_follows_endpoint_direction :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Cycloid_Tool{rolling_radius = 0.1,
-        parameter_start = -1, parameter_finish = 1, parameter = 0}
+    value: shapemodel.Shape_Cycloid_Tool = {
+        rolling_radius = 0.1,
+        parameter_start = -1,
+        parameter_finish = 1,
+        parameter = 0,
+    }
     pose := cycloid_tool_pose({1, 1, 3}, {1, 2, 3}, value)
 
     test_helpers.expect_vec3_close(t, pose.baseline_start, {1, 1, 3},
@@ -227,11 +289,15 @@ cycloid_tool_pose_follows_endpoint_direction :: proc(t: ^testing.T) {
 // Verify adaptive reveal preserves completed boundaries and exact frontier.
 @(test)
 cycloid_curve_explication_preserves_revealed_prefix :: proc(t: ^testing.T) {
-    first := Vector3{-0.5, 0, 0}
-    second := Vector3{0.5, 0, 0}
-    value := shapemodel.Shape_Cycloid{rolling_radius = 0.05,
-        tracer_distance = 0.08, parameter_start = 0,
-        parameter_finish = 4 * math.PI, draw_parameter = 1.7 * math.PI}
+    first: Vector3 = {-0.5, 0, 0}
+    second: Vector3 = {0.5, 0, 0}
+    value: shapemodel.Shape_Cycloid = {
+        rolling_radius = 0.05,
+        tracer_distance = 0.08,
+        parameter_start = 0,
+        parameter_finish = 4 * math.PI,
+        draw_parameter = 1.7 * math.PI,
+    }
     partial: [CYCLOID_MAX_VERTICES]Vector3
     partial_result := cycloid_explicate(first, second, value, partial[:])
     value.draw_parameter = value.parameter_finish
@@ -253,18 +319,38 @@ cycloid_curve_explication_preserves_revealed_prefix :: proc(t: ^testing.T) {
 @(test)
 trochoid_curve_marks_canonical_cusp_families :: proc(t: ^testing.T) {
     values := [?]shapemodel.Shape_Trochoid{
-        {mode = .External, fixed_radius = 0.2, rolling_radius = 0.2,
-            tracer_distance = 0.2, parameter_finish = 2 * math.PI,
-            draw_parameter = 2 * math.PI},
-        {mode = .Internal, fixed_radius = 0.2, rolling_radius = 0.05,
-            tracer_distance = 0.05, parameter_finish = 2 * math.PI,
-            draw_parameter = 2 * math.PI},
-        {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
-            tracer_distance = 0.1, parameter_finish = 2 * math.PI,
-            draw_parameter = 2 * math.PI},
-        {mode = .Internal, fixed_radius = 0.22, rolling_radius = 0.04,
-            tracer_distance = 0.04, parameter_finish = 4 * math.PI,
-            draw_parameter = 4 * math.PI},
+        {
+            mode = .External,
+            fixed_radius = 0.2,
+            rolling_radius = 0.2,
+            tracer_distance = 0.2,
+            parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI,
+        },
+        {
+            mode = .Internal,
+            fixed_radius = 0.2,
+            rolling_radius = 0.05,
+            tracer_distance = 0.05,
+            parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI,
+        },
+        {
+            mode = .External,
+            fixed_radius = 0.2,
+            rolling_radius = 0.1,
+            tracer_distance = 0.1,
+            parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI,
+        },
+        {
+            mode = .Internal,
+            fixed_radius = 0.22,
+            rolling_radius = 0.04,
+            tracer_distance = 0.04,
+            parameter_finish = 4 * math.PI,
+            draw_parameter = 4 * math.PI,
+        },
     }
     expected := [?]int{1, 4, 2, 11}
     for value, case_index in values {
@@ -283,9 +369,14 @@ trochoid_curve_marks_canonical_cusp_families :: proc(t: ^testing.T) {
 trochoid_curve_rejects_noncontact_cusp_candidates :: proc(t: ^testing.T) {
     distances := [?]f32{0.05, 0.15}
     for distance in distances {
-        value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.2,
-            rolling_radius = 0.1, tracer_distance = distance,
-            parameter_finish = 2 * math.PI, draw_parameter = 2 * math.PI}
+        value: shapemodel.Shape_Trochoid = {
+            mode = .External,
+            fixed_radius = 0.2,
+            rolling_radius = 0.1,
+            tracer_distance = distance,
+            parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI,
+        }
         vertices: [TROCHOID_MAX_VERTICES]Vector3
         kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
         result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])
@@ -297,9 +388,15 @@ trochoid_curve_rejects_noncontact_cusp_candidates :: proc(t: ^testing.T) {
 // Verify reverse domains retain the same exact cusp family in reverse order.
 @(test)
 trochoid_curve_marks_reverse_domain_cusps :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .Internal, fixed_radius = 0.2,
-        rolling_radius = 0.05, tracer_distance = 0.05,
-        parameter_start = 2 * math.PI, parameter_finish = 0, draw_parameter = 0}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .Internal,
+        fixed_radius = 0.2,
+        rolling_radius = 0.05,
+        tracer_distance = 0.05,
+        parameter_start = 2 * math.PI,
+        parameter_finish = 0,
+        draw_parameter = 0,
+    }
     vertices: [TROCHOID_MAX_VERTICES]Vector3
     kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
     result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])
@@ -313,9 +410,14 @@ trochoid_curve_marks_reverse_domain_cusps :: proc(t: ^testing.T) {
 // Verify pathological cusp density reports a deterministic bounded result.
 @(test)
 trochoid_curve_cusp_capacity_is_bounded_and_deterministic :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.1,
-        rolling_radius = 0.1, tracer_distance = 0.1,
-        parameter_finish = 1000 * math.TAU, draw_parameter = 1000 * math.TAU}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 0.1,
+        rolling_radius = 0.1,
+        tracer_distance = 0.1,
+        parameter_finish = 1000 * math.TAU,
+        draw_parameter = 1000 * math.TAU,
+    }
     first_vertices, second_vertices: [TROCHOID_MAX_VERTICES]Vector3
     first_kinds, second_kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
     first := trochoid_explicate_marked(
@@ -339,11 +441,15 @@ trochoid_curve_cusp_capacity_is_bounded_and_deterministic :: proc(t: ^testing.T)
 // Verify phase-shifted cycloid cusps are inserted at their exact parameters.
 @(test)
 cycloid_curve_marks_phase_shifted_cusps :: proc(t: ^testing.T) {
-    first := Vector3{-2, 0, 0}
-    second := Vector3{2, 0, 0}
-    value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
-        tracer_distance = 0.1, tracer_phase = math.PI / 2,
-        parameter_finish = 4 * math.PI, draw_parameter = 4 * math.PI}
+    first: Vector3 = {-2, 0, 0}
+    second: Vector3 = {2, 0, 0}
+    value: shapemodel.Shape_Cycloid = {
+        rolling_radius = 0.1,
+        tracer_distance = 0.1,
+        tracer_phase = math.PI / 2,
+        parameter_finish = 4 * math.PI,
+        draw_parameter = 4 * math.PI,
+    }
     vertices: [CYCLOID_MAX_VERTICES]Vector3
     kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
     result := cycloid_explicate_marked(first, second, value, vertices[:], kinds[:])
@@ -362,11 +468,15 @@ cycloid_curve_frontier_preserves_cusp_transition :: proc(t: ^testing.T) {
         parameter: f32,
         cusps: int,
     }
-    first := Vector3{-1, 0, 0}
-    second := Vector3{1, 0, 0}
-    value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
-        tracer_distance = 0.1, parameter_start = math.PI,
-        parameter_finish = 3 * math.PI, draw_parameter = 1.9 * math.PI}
+    first: Vector3 = {-1, 0, 0}
+    second: Vector3 = {1, 0, 0}
+    value: shapemodel.Shape_Cycloid = {
+        rolling_radius = 0.1,
+        tracer_distance = 0.1,
+        parameter_start = math.PI,
+        parameter_finish = 3 * math.PI,
+        draw_parameter = 1.9 * math.PI,
+    }
     cases := [?]Frontier_Case{
         {1.9 * math.PI, 0}, {2 * math.PI, 1}, {2.1 * math.PI, 1}}
     for test_case in cases {
@@ -384,13 +494,16 @@ cycloid_curve_frontier_preserves_cusp_transition :: proc(t: ^testing.T) {
 // Verify noncontact cycloids remain ordinary for both tracer-distance directions.
 @(test)
 cycloid_curve_rejects_curtate_and_prolate_cusps :: proc(t: ^testing.T) {
-    first := Vector3{-2, 0, 0}
-    second := Vector3{2, 0, 0}
+    first: Vector3 = {-2, 0, 0}
+    second: Vector3 = {2, 0, 0}
     distances := [?]f32{0.05, 0.15}
     for distance in distances {
-        value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
-            tracer_distance = distance, parameter_finish = 4 * math.PI,
-            draw_parameter = 4 * math.PI}
+        value: shapemodel.Shape_Cycloid = {
+            rolling_radius = 0.1,
+            tracer_distance = distance,
+            parameter_finish = 4 * math.PI,
+            draw_parameter = 4 * math.PI,
+        }
         vertices: [CYCLOID_MAX_VERTICES]Vector3
         kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
         result := cycloid_explicate_marked(
@@ -403,9 +516,12 @@ cycloid_curve_rejects_curtate_and_prolate_cusps :: proc(t: ^testing.T) {
 // Verify marked explication rejects a kind stream that cannot remain aligned.
 @(test)
 cycloid_curve_marked_explication_rejects_short_kinds :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
-        tracer_distance = 0.1, parameter_finish = math.TAU,
-        draw_parameter = math.TAU}
+    value: shapemodel.Shape_Cycloid = {
+        rolling_radius = 0.1,
+        tracer_distance = 0.1,
+        parameter_finish = math.TAU,
+        draw_parameter = math.TAU,
+    }
     vertices: [CYCLOID_MAX_VERTICES]Vector3
     kinds: [2]Curve_Point_Kind
     result := cycloid_explicate_marked(
@@ -418,9 +534,14 @@ cycloid_curve_marked_explication_rejects_short_kinds :: proc(t: ^testing.T) {
 // Verify optional refinement saturation remains bounded after mandatory cusp work.
 @(test)
 trochoid_curve_refinement_capacity_is_bounded :: proc(t: ^testing.T) {
-    value := shapemodel.Shape_Trochoid{mode = .Internal, fixed_radius = 0.25,
-        rolling_radius = 0.001, tracer_distance = 0.0005,
-        parameter_finish = math.TAU, draw_parameter = math.TAU}
+    value: shapemodel.Shape_Trochoid = {
+        mode = .Internal,
+        fixed_radius = 0.25,
+        rolling_radius = 0.001,
+        tracer_distance = 0.0005,
+        parameter_finish = math.TAU,
+        draw_parameter = math.TAU,
+    }
     vertices: [TROCHOID_MAX_VERTICES]Vector3
     kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
     result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])

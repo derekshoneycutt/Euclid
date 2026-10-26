@@ -12,7 +12,7 @@ LOGGING_TEST_PRODUCERS :: 4
 LOGGING_TEST_RECORDS_PER_PRODUCER :: 100
 
 Logging_Test_Producer :: struct {
-    id : int,
+    id: int,
 }
 
 // Verify zero-valued diagnostics own no sink until explicitly started.

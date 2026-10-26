@@ -98,7 +98,8 @@ sdl_input_append_text :: proc(
     unowned_count := runtime^.unowned_text_event_count
     if input.input_runtime_append_text_event(
         runtime, .Text_Commit, source, metadata = {
-            preedit_start = -1, preedit_length = -1,
+            preedit_start = -1,
+            preedit_length = -1,
             modifiers = accumulation^.modifiers,
         }) {
         accumulation^.diagnostics.text_runes += u64(utf8.rune_count(source))
@@ -122,9 +123,10 @@ sdl_input_append_preedit :: proc(
     invalid_count := runtime^.invalid_text_payload_count
     oversized_count := runtime^.oversized_text_payload_count
     unowned_count := runtime^.unowned_text_event_count
-    if input.input_runtime_append_text_event(
-        runtime, .Text_Preedit, string(event.text), {
-            preedit_start = event.start, preedit_length = event.length,
+    if input.input_runtime_append_text_event(runtime, .Text_Preedit, string(event.text),
+        {
+            preedit_start = event.start,
+            preedit_length = event.length,
             modifiers = accumulation^.modifiers,
         }) {
         accumulation^.diagnostics.text_preedit_events += 1
@@ -206,8 +208,10 @@ sdl_input_consume_focus_event :: proc(
         return
     }
     _ = input.input_runtime_append_event(runtime, {
-        kind = .Text_Cancel, text_target = runtime^.text_target,
-        origin = .Device})
+        kind = .Text_Cancel,
+        text_target = runtime^.text_target,
+        origin = .Device,
+    })
     _ = input.input_runtime_set_text_target(runtime, .None, 0)
 }
 
@@ -324,7 +328,7 @@ sdl_platform_refresh_observed_metrics :: proc(platform: ^native.Sdl_Platform) {
 sdl_platform_poll_events :: proc(
     platform: ^native.Sdl_Platform,
     runtime: ^input.Input_Runtime = nil) -> input.Input_Frame {
-    accumulation := Sdl_Input_Accumulation{
+    accumulation: Sdl_Input_Accumulation = {
         modifiers = sdl_input_modifiers(sdl.GetModState()),
         focused = .INPUT_FOCUS in sdl.GetWindowFlags(platform^.window),
     }

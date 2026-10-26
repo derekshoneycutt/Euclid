@@ -7,9 +7,9 @@ import "../core"
 
 // Carry one animation key and deterministic schema identity across the C ABI.
 Animation_Value_Abi_Identity :: struct {
-    key : u64,
-    schema_low : u64,
-    schema_high : u64,
+    key: u64,
+    schema_low: u64,
+    schema_high: u64,
 }
 
 // Return the copied path length and native catalogue node kind.

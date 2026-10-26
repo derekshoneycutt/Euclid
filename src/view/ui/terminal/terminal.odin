@@ -74,8 +74,11 @@ terminal_semantic_id :: #force_inline proc(
     if state == nil {
         return {}
     }
-    return {domain = .Terminal, local_id = 0,
-        generation = state^.terminal.animation_generation}
+    return {
+        domain = .Terminal,
+        local_id = 0,
+        generation = state^.terminal.animation_generation,
+    }
 }
 
 // Resolve row-local prompt coordinates for one editable byte offset.
@@ -108,7 +111,7 @@ terminal_editable_text_geometry :: proc(
     anchor_position := terminal_editable_cursor_position(term, text, anchor)
     column_width := layout.column_width
     origin_y := scroll.view_rect.y - scroll.scroll_y_out
-    caret := geometry.Rectangle{
+    caret: geometry.Rectangle = {
         layout.padded_bounds.x +
             f32(cursor_position.prompt_prefix_columns + cursor_position.column) *
                 column_width,
@@ -119,7 +122,8 @@ terminal_editable_text_geometry :: proc(
         layout, caret, cursor_position, anchor_position)
     control := scroll.control_geometry
     return {
-        control = control, caret = caret,
+        control = control,
+        caret = caret,
         selection = selection,
         cursor_column = cursor_position.column,
         anchor_column = anchor_position.column,
@@ -131,7 +135,7 @@ terminal_editable_selection_geometry :: proc(
     layout: terminalview.Terminal_Draw_Layout, caret: geometry.Rectangle,
     cursor, anchor: Terminal_Editable_Cursor_Position) ->
         geometry.Rectangle {
-    selection := geometry.Rectangle{caret.x, caret.y, 0, caret.height}
+    selection: geometry.Rectangle = {caret.x, caret.y, 0, caret.height}
     if cursor.row != anchor.row {
         return selection
     }
@@ -156,10 +160,14 @@ terminal_editable_text_adapter :: proc(
     cursor := termhist.termhist_cursor(term.history)
     anchor := termhist.termhist_anchor(term.history)
     geometry := terminal_editable_text_geometry(state, layout, scroll, text, cursor)
-    descriptor := viewmodel.Ui_Editable_Text_Descriptor{
-        id = terminal_semantic_id(state), region = .Presentation,
-        label = "Terminal input", text = text, mode = .Editable,
-        cursor_byte = cursor, anchor_byte = anchor,
+    descriptor: viewmodel.Ui_Editable_Text_Descriptor = {
+        id = terminal_semantic_id(state),
+        region = .Presentation,
+        label = "Terminal input",
+        text = text,
+        mode = .Editable,
+        cursor_byte = cursor,
+        anchor_byte = anchor,
         content_revision = termhist.termhist_content_revision(term.history),
     }
     return descriptor, geometry
@@ -172,15 +180,23 @@ register_terminal_semantics :: proc(
     scroll: uiwidgets.Scroll_Container_Update_Result) {
     id := terminal_semantic_id(state)
     _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
-        id = id, role = .Terminal,
+        id = id,
+        role = .Terminal,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Scroll, .Show_Context_Menu},
-        region = .Presentation, traversal_order = 0,
+        region = .Presentation,
+        traversal_order = 0,
         bounds = geometry.Rectangle(bounds),
         clip_bounds = geometry.Rectangle(
             uiaccordion.ui_presentation_clip(&state^.ui_runtime.layout, bounds)),
-        numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
-            f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
+        numeric_range = {
+            f64(scroll.minimum),
+            f64(scroll.maximum),
+            f64(scroll.scroll_y_out),
+            f64(scroll.step),
+            scroll.orientation,
+            true,
+        },
         label = viewmessages.shell_message(state, .Terminal_Accessible_Label),
     })
     semantic := state^.ui_runtime.semantic_focus
@@ -316,31 +332,44 @@ terminal_prepare_scroll :: proc(
     initial_scroll := terminalview.terminal_initial_scroll_offset(
         term, layout.padded_bounds, layout.content_height)
     max_scroll := max(0.0, layout.content_height - layout.padded_bounds.height)
-    preview := uiwidgets.build_vertical_scrollbar(
-        {geometry.Rectangle(layout.padded_bounds), layout.content_height,
-            initial_scroll, max_scroll},
-        theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)
+    preview := uiwidgets.build_vertical_scrollbar({
+        geometry.Rectangle(layout.padded_bounds),
+        layout.content_height,
+        initial_scroll,
+        max_scroll,
+    }, theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)
     mouse := uiwidgets.input_frame_mouse_position(resolved)
     over_track := preview.has_scrollbar && geometry.rectangle_contains(
         preview.track_rect, mouse)
     scroll_frame := terminal_scroll_input(term, resolved, over_track)
     scroll := uiwidgets.scroll_container_update({
-        id = 1002, rect = geometry.Rectangle(layout.padded_bounds),
+        id = 1002,
+        rect = geometry.Rectangle(layout.padded_bounds),
         scroll_y_in = initial_scroll,
-        content_height = layout.content_height, mouse_input = scroll_frame,
+        content_height = layout.content_height,
+        mouse_input = scroll_frame,
         interaction_space_rect = bounds,
         wheel_step = layout.line_height * theme.WHEEL_SCROLL_MULTIPLIER,
         press_owner = &state^.ui_runtime.input.press_owner,
-        state_in = {state^.ui_runtime.terminal.scroll_dragging,
-            state^.ui_runtime.terminal.scroll_drag_off},
+        state_in = {
+            state^.ui_runtime.terminal.scroll_dragging,
+            state^.ui_runtime.terminal.scroll_drag_off,
+        },
         semantic_focus = state^.ui_runtime.semantic_focus,
         semantic_id = terminal_semantic_id(state),
     })
-    route := Terminal_Content_Route{
-        resolved, bounds, layout,
-        child_pointer_capture, over_track}
+    route: Terminal_Content_Route = {
+        resolved = resolved,
+        bounds = bounds,
+        layout = layout,
+        child_pointer_capture = child_pointer_capture,
+        over_track = over_track,
+    }
     content_frame := terminal_commit_prepared_scroll(state, route, scroll)
-    return {scroll, content_frame}
+    return {
+        scroll,
+        content_frame,
+    }
 }
 
 // Prepare Terminal geometry, scroll ownership, and routed content input.
@@ -385,7 +414,7 @@ terminal_draw_encoded :: proc(
     layout := prepared.layout
     layout.encoder = encoder
     scroll := prepared.scroll
-    origin := geometry.Vector2{
+    origin: geometry.Vector2 = {
         scroll.view_rect.x,
         scroll.view_rect.y - scroll.scroll_y_out,
     }
@@ -426,5 +455,10 @@ terminal_prepare_visual :: proc(
     scroll := uiwidgets.scroll_container_visual(
         layout.padded_bounds, layout.content_height,
         initial_scroll, layout.line_height * theme.WHEEL_SCROLL_MULTIPLIER)
-    return {available = true, bounds = bounds, layout = layout, scroll = scroll}
+    return {
+        available = true,
+        bounds = bounds,
+        layout = layout,
+        scroll = scroll,
+    }
 }

@@ -7,8 +7,7 @@ import "core:testing"
 @(test)
 termhist_test_reset_revision :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(
-        &state, 8, 1, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 8, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "αx"))
     testing.expect(t, termhist_move_left(&state))
@@ -20,9 +19,11 @@ termhist_test_reset_revision :: proc(t: ^testing.T) {
     testing.expect(t, termhist_accept_current(&state))
     testing.expect_value(t, termhist_reset_revision(&state), u64(2))
     testing.expect(t, termhist_insert_text(&state, "draft"))
-    testing.expect(t, termhist_history_prev(&state))
+    testing.expect(t, termhist_backup_current(&state))
+    command := "command"
+    testing.expect(t, termhist_load_entry(&state, transmute([]u8)command))
     testing.expect_value(t, termhist_reset_revision(&state), u64(3))
-    testing.expect(t, termhist_history_next(&state))
+    testing.expect(t, termhist_restore_backup(&state))
     testing.expect_value(t, termhist_current_text(&state), "draft")
     testing.expect_value(t, termhist_reset_revision(&state), u64(4))
     termhist_clear(&state)
@@ -34,13 +35,12 @@ termhist_test_reset_revision :: proc(t: ^testing.T) {
 @(test)
 termhist_test_initialization :: proc(t: ^testing.T) {
     state: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(
-        &state, 0, -1, context.allocator))
+    testing.expect(t, termhist_init_with_allocator(&state, 0, context.allocator))
     defer termhist_destroy(&state)
 
     testing.expect_value(t, state.borrowed_allocator, context.allocator)
     testing.expect_value(t, len(state.text), 1)
-    testing.expect_value(t, len(state.history), 1)
+    testing.expect_value(t, len(state.backup), 1)
     testing.expect_value(t, termhist_current_text(&state), "")
     testing.expect_value(t, termhist_cursor(&state), 0)
 }
@@ -50,7 +50,7 @@ termhist_test_initialization :: proc(t: ^testing.T) {
 termhist_test_utf8_editing :: proc(t: ^testing.T) {
     state: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state, 1, 1, context.allocator))
+        &state, 1, context.allocator))
     state_ptr := &state
     defer termhist_destroy(state_ptr)
 
@@ -71,7 +71,7 @@ termhist_test_utf8_editing :: proc(t: ^testing.T) {
 termhist_test_grapheme_editing :: proc(t: ^testing.T) {
     state: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state, 1, 1, context.allocator))
+        &state, 1, context.allocator))
     defer termhist_destroy(&state)
     text := "e\u0301🇺🇳👩‍💻"
     testing.expect(t, termhist_insert_text(&state, text))
@@ -88,7 +88,7 @@ termhist_test_grapheme_editing :: proc(t: ^testing.T) {
 termhist_test_selection_replacement_and_deletion :: proc(t: ^testing.T) {
     state: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state, 16, 1, context.allocator))
+        &state, 16, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "Aé🙂Z"))
     testing.expect(t, termhist_set_cursor(&state, len("A")))
@@ -109,7 +109,7 @@ termhist_test_selection_replacement_and_deletion :: proc(t: ^testing.T) {
 termhist_test_word_line_and_vertical_editing :: proc(t: ^testing.T) {
     state: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state, 16, 1, context.allocator))
+        &state, 16, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "one two\n界x\nlong"))
     testing.expect(t, termhist_move_buffer_home(&state))
@@ -131,7 +131,7 @@ termhist_test_word_line_and_vertical_editing :: proc(t: ^testing.T) {
 termhist_test_preedit_commit_and_stale_rejection :: proc(t: ^testing.T) {
     state: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state, 16, 1, context.allocator))
+        &state, 16, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "ab"))
     testing.expect(t, termhist_move_left(&state))
@@ -152,7 +152,7 @@ termhist_test_insert_normalizes_newlines_and_rejects_invalid_text :: proc(
     t: ^testing.T) {
     state: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state, 1, 1, context.allocator))
+        &state, 1, context.allocator))
     defer termhist_destroy(&state)
     testing.expect(t, termhist_insert_text(&state, "a\r\nb\rc"))
     testing.expect_value(t, termhist_current_text(&state), "a\nb\nc")
@@ -173,7 +173,7 @@ termhist_test_insert_normalizes_newlines_and_rejects_invalid_text :: proc(
 termhist_test_completion_range_replacement :: proc(t: ^testing.T) {
     state_storage: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state_storage, 8, 1, context.allocator))
+        &state_storage, 8, context.allocator))
     state := &state_storage
     defer termhist_destroy(state)
 
@@ -197,63 +197,12 @@ termhist_test_completion_range_replacement :: proc(t: ^testing.T) {
     testing.expect_value(t, termhist_cursor(state), cursor)
 }
 
-// Verify history traversal restores the draft that preceded browsing.
-@(test)
-termhist_test_history_restores_draft :: proc(t: ^testing.T) {
-    state_storage: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(
-        &state_storage, 8, 1, context.allocator))
-    state := &state_storage
-    defer termhist_destroy(state)
-
-    testing.expect(t, termhist_insert_text(state, "first"))
-    testing.expect(t, termhist_accept_current(state))
-    testing.expect(t, termhist_insert_text(state, "second"))
-    testing.expect(t, termhist_accept_current(state))
-    testing.expect(t, termhist_insert_text(state, "draft"))
-    testing.expect(t, termhist_move_left(state))
-    testing.expect(t, termhist_move_left(state, true))
-    draft_cursor := state.cursor
-    draft_anchor := state.anchor
-
-    testing.expect(t, termhist_history_prev(state))
-    testing.expect_value(t, termhist_current_text(state), "second")
-    testing.expect(t, termhist_history_prev(state))
-    testing.expect_value(t, termhist_current_text(state), "first")
-    testing.expect(t, termhist_history_next(state))
-    testing.expect_value(t, termhist_current_text(state), "second")
-    testing.expect(t, termhist_history_next(state))
-    testing.expect_value(t, termhist_current_text(state), "draft")
-    testing.expect_value(t, state.cursor, draft_cursor)
-    testing.expect_value(t, state.anchor, draft_anchor)
-}
-
-// Verify a completed multiline submission replaces its provisional history entry.
-@(test)
-termhist_test_history_replaces_provisional_entry :: proc(t: ^testing.T) {
-    state_storage: Termhist_State
-    testing.expect(t, termhist_init_with_allocator(
-        &state_storage, 8, 1, context.allocator))
-    state := &state_storage
-    defer termhist_destroy(state)
-
-    testing.expect(t, termhist_insert_text(state, "begin"))
-    testing.expect(t, termhist_accept_current(state, 7))
-    testing.expect(t, termhist_insert_text(state, "begin\nvalue\nend"))
-    testing.expect(t, termhist_accept_current(state, 7, true))
-
-    testing.expect_value(t, state.history_len, 1)
-    testing.expect_value(t, state.history[0].tag, 7)
-    testing.expect(t, termhist_history_prev(state))
-    testing.expect_value(t, termhist_current_text(state), "begin\nvalue\nend")
-}
-
 // Verify Home/End jump the cursor to the line boundaries.
 @(test)
 termhist_test_move_home_end :: proc(t: ^testing.T) {
     state_storage: Termhist_State
     testing.expect(t, termhist_init_with_allocator(
-        &state_storage, 8, 1, context.allocator))
+        &state_storage, 8, context.allocator))
     state := &state_storage
     defer termhist_destroy(state)
 

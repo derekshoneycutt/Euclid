@@ -14,9 +14,11 @@ import "core:testing"
 // Playback fields remain top-level scalars, including distinct selected and effective rates.
 @(test)
 artifact_playback_preserves_top_level_json_contract :: proc(t: ^testing.T) {
-    state := observe.Display{
-        simulation_paused = true, animation_policy_paused = true,
-        animation_controls_hidden = true, animation_playback_rate = .Quadruple,
+    state: observe.Display = {
+        simulation_paused = true,
+        animation_policy_paused = true,
+        animation_controls_hidden = true,
+        animation_playback_rate = .Quadruple,
         animation_effective_rate = .Normal,
     }
     text := artifact_state_json(state, {}, {})
@@ -38,14 +40,25 @@ artifact_playback_preserves_top_level_json_contract :: proc(t: ^testing.T) {
 // Reclamation evidence preserves scalar counts, policy, and logical completion time.
 @(test)
 artifact_reclamation_preserves_json_contract :: proc(t: ^testing.T) {
-    effects := observe.Presentation_Effects{
-        transition = .Independent, airborne_count = 3, resting_count = 4,
-        reclaimed_count = 5, fresh_count = 6, live_count = 18, eviction_count = 7,
-        formation_reclaimed = 8, formation_fresh = 9, arrival_elapsed = 0.12,
-        arrival_duration = 0.30, arrival_completed_count = 10,
-        arrival_cancelled_count = 11, arrival_completed_duration = 0.30,
+    effects: observe.Presentation_Effects = {
+        transition = .Independent,
+        airborne_count = 3,
+        resting_count = 4,
+        reclaimed_count = 5,
+        fresh_count = 6,
+        live_count = 18,
+        eviction_count = 7,
+        formation_reclaimed = 8,
+        formation_fresh = 9,
+        arrival_elapsed = 0.12,
+        arrival_duration = 0.30,
+        arrival_completed_count = 10,
+        arrival_cancelled_count = 11,
+        arrival_completed_duration = 0.30,
     }
-    text := artifact_state_json({presentation_effects = effects}, {}, {})
+    text := artifact_state_json({
+        presentation_effects = effects,
+    }, {}, {})
     decoded: struct {presentation_effects: observe.Presentation_Effects}
     testing.expect(t,
         json.unmarshal_string(text, &decoded, allocator = context.allocator) == nil)
@@ -58,10 +71,21 @@ artifact_library_storage_preserves_domain_diagnostics :: proc(t: ^testing.T) {
     text := artifact_allocations_json({
         library_storage = {
             display = {
-                initialized = true, current_live_bytes = 13, retained_bytes = 4096},
-            replay = {initialized = true, current_live_bytes = 17},
-            native = {initialized = true, current_live_bytes = 19},
-            placement_count = 1024, collection_count = 601, replay_joined = true,
+                initialized = true,
+                current_live_bytes = 13,
+                retained_bytes = 4096,
+            },
+            replay = {
+                initialized = true,
+                current_live_bytes = 17,
+            },
+            native = {
+                initialized = true,
+                current_live_bytes = 19,
+            },
+            placement_count = 1024,
+            collection_count = 601,
+            replay_joined = true,
         },
     })
     decoded: struct {library: observe.Library_Storage}
@@ -79,8 +103,11 @@ artifact_library_storage_preserves_domain_diagnostics :: proc(t: ^testing.T) {
 // Tree facts retain their numeric types and remain separate from accordion state.
 @(test)
 artifact_tree_state_preserves_json_contract :: proc(t: ^testing.T) {
-    state := observe.Display{
-        tree_transition_count = 2, tree_visual_height = 130.5, tree_scroll_y = 10.25}
+    state: observe.Display = {
+        tree_transition_count = 2,
+        tree_visual_height = 130.5,
+        tree_scroll_y = 10.25,
+    }
     text := artifact_state_json(state, {}, {})
     decoded: struct {
         tree: struct {transition_count: int, visual_height: f32, scroll_y: f32},
@@ -95,8 +122,14 @@ artifact_tree_state_preserves_json_contract :: proc(t: ^testing.T) {
 // Host JSON remains valid and keeps lifecycle and trace facts at the snapshot root.
 @(test)
 artifact_host_state_preserves_top_level_json_contract :: proc(t: ^testing.T) {
-    host := observe.Julia_Host{active_request_id = 17, failed_request_count = 3,
-        trace = {event_count = 5, evidence_complete = true}}
+    host: observe.Julia_Host = {
+        active_request_id = 17,
+        failed_request_count = 3,
+        trace = {
+            event_count = 5,
+            evidence_complete = true,
+        },
+    }
     text := artifact_state_json({}, host, {})
     decoded: struct {
         lifecycle: int `json:"julia_lifecycle"`,
@@ -211,8 +244,14 @@ artifact_test_failure_bundle_data :: proc(
             curve_retained_point_count = 25,
             curve_retention_ratio = 0.25,
         },
-        julia_host = {runtime_generation = 2},
-        simulation = {particle = {next_sequence = 7}},
+        julia_host = {
+            runtime_generation = 2,
+        },
+        simulation = {
+            particle = {
+                next_sequence = 7,
+            },
+        },
         arena_baselines = arenas,
     }
 }
@@ -223,9 +262,15 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     directory := ".build/test-artifacts/artifact"
     os.remove_all(directory)
     defer os.remove_all(directory)
-    events := [2]trace.Event{
-        {sequence = 1, kind = .Runtime_Starting},
-        {sequence = 2, kind = .Runtime_Reload_Rolled_Back},
+    events: [2]trace.Event = {
+        {
+            sequence = 1,
+            kind = .Runtime_Starting,
+        },
+        {
+            sequence = 2,
+            kind = .Runtime_Reload_Rolled_Back,
+        },
     }
     arenas: allocation.Arena_Baselines
     arenas.present[allocation.Arena_Domain_Kind.Animation] = true

@@ -25,7 +25,7 @@ Color_Role :: enum {
 }
 
 @(rodata)
-standard_colors := [Color_Role]color.Color_RGBA8{
+standard_colors: [Color_Role]color.Color_RGBA8 = {
     .Text = UI_TEXT_COLOR,
     .Tree_Text = UI_TREE_SELECTION_TEXT_COLOR,
     .Selection_Background = UI_SELECTION_BACKGROUND_COLOR,
@@ -45,7 +45,7 @@ standard_colors := [Color_Role]color.Color_RGBA8{
 }
 
 @(rodata)
-increased_colors := [Color_Role]color.Color_RGBA8{
+increased_colors: [Color_Role]color.Color_RGBA8 = {
     .Text = {214, 191, 195, 255},
     .Tree_Text = {232, 210, 214, 255},
     .Selection_Background = {194, 169, 173, 255},

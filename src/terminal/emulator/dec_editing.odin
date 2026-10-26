@@ -52,12 +52,16 @@ interpreter_apply_cell_row_edit :: proc(
     case 'P':
         termgrid.grid_delete_cells(
             grid, grid.cursor.row, grid.cursor.column, amount)
-    case 'X': termgrid.grid_erase_range(
+    case 'X':
+        termgrid.grid_erase_range(
         grid, grid.cursor.row, grid.cursor.column,
         grid.cursor.column + amount)
-    case 'L': interpreter_edit_lines(interpreter, true)
-    case 'M': interpreter_edit_lines(interpreter, false)
-    case: return false
+    case 'L':
+        interpreter_edit_lines(interpreter, true)
+    case 'M':
+        interpreter_edit_lines(interpreter, false)
+    case:
+        return false
     }
     return true
 }
@@ -84,9 +88,12 @@ interpreter_apply_editing_toggle :: proc(
         return false 
     }
     switch interpreter_parameter(interpreter, 0, -1) {
-    case 4: interpreter.grid.editing.insert_mode = enabled
-    case 80: interpreter.grid.editing.sixel_scrolling_mode = enabled
-    case: return false
+    case 4:
+        interpreter.grid.editing.insert_mode = enabled
+    case 80:
+        interpreter.grid.editing.sixel_scrolling_mode = enabled
+    case:
+        return false
     }
     return true
 }
@@ -95,10 +102,14 @@ interpreter_apply_editing_toggle :: proc(
 interpreter_apply_dec_editing_mode :: proc(
     interpreter: ^Interpreter, final: u8) -> bool {
     switch final {
-    case 'g': return interpreter_apply_tab_clear(interpreter)
-    case 'r': return interpreter_set_margins(interpreter)
-    case 'h', 'l': return interpreter_apply_editing_toggle(interpreter, final == 'h')
-    case: return false
+    case 'g':
+        return interpreter_apply_tab_clear(interpreter)
+    case 'r':
+        return interpreter_set_margins(interpreter)
+    case 'h', 'l':
+        return interpreter_apply_editing_toggle(interpreter, final == 'h')
+    case:
+        return false
     }
 }
 
@@ -111,13 +122,18 @@ interpreter_apply_dec_editing_csi :: proc(
         return true
     }
     switch final {
-    case 'S': termgrid.grid_scroll_region_up(
+    case 'S':
+        termgrid.grid_scroll_region_up(
         grid, grid.editing.scroll_top, grid.editing.scroll_bottom, amount)
-    case 'T': termgrid.grid_scroll_region_down(
+    case 'T':
+        termgrid.grid_scroll_region_down(
         grid, grid.editing.scroll_top, grid.editing.scroll_bottom, amount)
-    case 'I': termgrid.grid_tab_forward(grid, amount)
-    case 'Z': termgrid.grid_tab_backward(grid, amount)
-    case: return interpreter_apply_dec_editing_mode(interpreter, final)
+    case 'I':
+        termgrid.grid_tab_forward(grid, amount)
+    case 'Z':
+        termgrid.grid_tab_backward(grid, amount)
+    case:
+        return interpreter_apply_dec_editing_mode(interpreter, final)
     }
     return true
 }

@@ -246,13 +246,13 @@ prepare_glyph_page_populate :: proc(
     prepared.face_glyph_count = i32(face.info.glyph_count)
     prepared.raster_ascent = face.raster_ascent
     if !prepare_glyph_page_metrics(
-        face, request.glyph_ids, prepared.glyphs,
-        request.cancellation) || !prepare_commit_layout({
-        key = request.key,
-        generation = request.generation,
-        pixel_size = request.pixel_size,
-        cancellation = request.cancellation,
-    }, prepared) {
+        face, request.glyph_ids, prepared.glyphs,request.cancellation) ||
+        !prepare_commit_layout({
+            key = request.key,
+            generation = request.generation,
+            pixel_size = request.pixel_size,
+            cancellation = request.cancellation,
+        }, prepared) {
         prepare_destroy(prepared)
         return false
     }
@@ -438,7 +438,7 @@ prepare_face_glyph_metric :: proc(
     if !rendered {
         return {}, false
     }
-    result := Prepared_Glyph{
+    result: Prepared_Glyph = {
         value = rune(-1 - i32(glyph_id)),
         glyph_id = glyph_id,
         bitmap_width = i32(bitmap.width),
@@ -468,7 +468,7 @@ prepare_glyph_metric :: proc(
     if !metrics_ready {
         return {}, false
     }
-    result := Prepared_Glyph{
+    result: Prepared_Glyph = {
         value = codepoint,
         glyph_id = glyph_id,
     }
@@ -557,7 +557,11 @@ prepare_layout :: proc(
         row_height = max(row_height, glyph.bitmap_height)
         offset_x += glyph.bitmap_width + 2*FONT_GLYPH_PADDING
     }
-    return {width = atlas_width, height = atlas_height, ready = true}
+    return {
+        width = atlas_width,
+        height = atlas_height,
+        ready = true,
+    }
 }
 
 //   Initialize the atlas gray channel while observing cancellation once per row.

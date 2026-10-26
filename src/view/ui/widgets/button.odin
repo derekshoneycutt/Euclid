@@ -38,7 +38,7 @@ Button_Action_Input :: struct {
 // button_semantic_states returns ordinary focusable button state.
 button_semantic_states :: #force_inline proc(
     enabled: bool) -> viewmodel.Ui_Node_State {
-    states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
+    states: viewmodel.Ui_Node_State = {.Visible, .Focusable, .Tab_Stop}
     if enabled {
         states += {.Enabled}
     }
@@ -49,11 +49,17 @@ button_semantic_states :: #force_inline proc(
 button_publish_semantics :: proc(input: Button_Action_Input) {
     semantics := input.semantics
     _ = uisemantics.semantic_register_control(semantics.focus, {
-        id = semantics.id, parent = semantics.parent, role = semantics.role,
-        states = semantics.states, actions = {.Focus, .Activate},
-        region = semantics.region, traversal_order = semantics.traversal_order,
-        bounds = input.bounds, clip_bounds = semantics.clip_bounds,
-        label = semantics.label, value = semantics.value,
+        id = semantics.id,
+        parent = semantics.parent,
+        role = semantics.role,
+        states = semantics.states,
+        actions = {.Focus, .Activate},
+        region = semantics.region,
+        traversal_order = semantics.traversal_order,
+        bounds = input.bounds,
+        clip_bounds = semantics.clip_bounds,
+        label = semantics.label,
+        value = semantics.value,
     })
     _ = uisemantics.semantic_focus_for_press(semantics.focus, input.press_owner,
         input.press_kind, input.press_id, semantics.id)
@@ -62,7 +68,7 @@ button_publish_semantics :: proc(input: Button_Action_Input) {
 // button_resolve_action publishes semantics and converges pointer and addressed input.
 button_resolve_action :: proc(input: Button_Action_Input) -> Button_Action_Result {
     semantics := input.semantics
-    result := Button_Action_Result{}
+    result: Button_Action_Result = {}
     if input.pointer_activated {
         result.activated = true
         result.sources += {.Pointer}

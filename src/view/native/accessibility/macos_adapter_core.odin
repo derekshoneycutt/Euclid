@@ -73,7 +73,9 @@ macos_adapter_admit_with_operations :: proc(
         return false
     }
     if !macos_install_focus_forwarder(
-            owner, window, operations, process_state) {return false}
+        owner, window, operations, process_state) {
+        return false
+    }
     owner^.native = operations.create(operations.user_data, window, owner)
     if owner^.native == nil {
         adapter_record_macos_failure(owner, .Adapter_Creation)
@@ -90,7 +92,7 @@ macos_adapter_notify_control_update_with_operations :: proc(
     }
     publication: portable.Control_Tree_Publication
     if !portable.protected_control_snapshot(
-            &owner^.control_publication, &publication) ||
+        &owner^.control_publication, &publication) ||
        publication.generation == owner^.delivered_generation {
         return
     }
@@ -117,7 +119,9 @@ macos_adapter_publish_controls_with_operations :: proc(
         return true
     }
     if macos_adapter_admit_with_operations(
-        owner, window, operations, process_state) {return true}
+        owner, window, operations, process_state) {
+        return true
+    }
     adapter_close_admission(owner)
     return false
 }

@@ -81,13 +81,21 @@ document_parse_builds_are_isolated_from_store_state :: proc(t: ^testing.T) {
     defer free(document_result, context.temp_allocator)
     math_source := "x^2"
     document_source := "first $x$\n\nsecond"
-    tasks := [2]Dynview_Parse_Test_Task{
-        {source = math_source, generation = 31, result = math_result,
+    tasks: [2]Dynview_Parse_Test_Task = {
+        {
+            source = math_source,
+            generation = 31,
+            result = math_result,
             key = document_store_key(math_source, 1, .Math, .Display,
-                document_store_source_hash(math_source))},
-        {source = document_source, generation = 31, result = document_result,
+                document_store_source_hash(math_source)),
+        },
+        {
+            source = document_source,
+            generation = 31,
+            result = document_result,
             key = document_store_key(document_source, 1, .Document, .Display,
-                document_store_source_hash(document_source))},
+                document_store_source_hash(document_source)),
+        },
     }
     before := document_store_diagnostics(&store)
     document_parse_test_run_concurrently(&tasks)
@@ -487,7 +495,10 @@ document_store_rejects_stale_handles :: proc(t: ^testing.T) {
 
 //   Build a deterministic allocator that fails after its test-owned allowance.
 document_store_test_allocator :: proc(remaining: ^int) -> mem.Allocator {
-    return {procedure = document_store_test_allocator_proc, data = remaining}
+    return {
+        procedure = document_store_test_allocator_proc,
+        data = remaining,
+    }
 }
 
 //   Reject exhausted allocations while forwarding cleanup to the heap allocator.

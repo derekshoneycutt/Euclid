@@ -11,7 +11,7 @@ import "core:thread"
 termsession_test_begin_unix :: proc(
     manager: ^Terminal_Session_Manager, plan: Process_Plan,
     request_id: protocol.Request_Id) -> Terminal_Session_Begin_Result {
-    request := Terminal_Session_Begin_Request{
+    request: Terminal_Session_Begin_Request = {
         request_id = request_id,
         owner = TEST_SESSION_OWNER,
         plan = plan,
@@ -62,7 +62,7 @@ termsession_test_poll_unix_marker :: proc(
 // Verify a child observes a TTY and fixed dimensions through forkpty.
 @(test)
 termsession_test_unix_pty_dimensions_and_exit :: proc(t: ^testing.T) {
-    arguments := [3]string{"/bin/sh", "-c", "test -t 0 && stty size; exit 7"}
+    arguments: [3]string = {"/bin/sh", "-c", "test -t 0 && stty size; exit 7"}
     plan := process_plan_build(arguments[:], "/tmp", nil)
     testing.expect_value(t, plan.kind, Process_Plan_Result_Kind.Success)
 
@@ -88,7 +88,7 @@ termsession_test_unix_pty_dimensions_and_exit :: proc(t: ^testing.T) {
 // Verify a runtime resize reaches the child as SIGWINCH with updated dimensions.
 @(test)
 termsession_test_unix_pty_resize_and_sigwinch :: proc(t: ^testing.T) {
-    arguments := [3]string{
+    arguments: [3]string = {
         "/bin/sh", "-c",
         "trap 'stty size; exit 0' WINCH; printf ready; while :; do :; done",
     }
@@ -106,7 +106,10 @@ termsession_test_unix_pty_resize_and_sigwinch :: proc(t: ^testing.T) {
         owner = TEST_SESSION_OWNER,
         operation_id = result.operation_id,
         geometry_generation = 1,
-        dimensions = {columns = 100, rows = 30},
+        dimensions = {
+            columns = 100,
+            rows = 30,
+        },
     })
     testing.expect_value(t, rejection, Terminal_Session_Rejection.None)
     output: [TERMINAL_SESSION_OUTPUT_MAX_BYTES]u8
@@ -120,7 +123,7 @@ termsession_test_unix_pty_resize_and_sigwinch :: proc(t: ^testing.T) {
 // Verify incremental input reaches the child and final output drains before close.
 @(test)
 termsession_test_unix_pty_input_and_output :: proc(t: ^testing.T) {
-    arguments := [3]string{
+    arguments: [3]string = {
         "/bin/sh", "-c", "IFS= read -r value; printf 'child:%s' \"$value\"",
     }
     plan := process_plan_build(arguments[:], "/tmp", nil)
@@ -131,7 +134,7 @@ termsession_test_unix_pty_input_and_output :: proc(t: ^testing.T) {
         &manager, TEST_SESSION_OWNER, unix_terminal_backend_make(&backend)))
     result := termsession_test_begin_unix(&manager, plan.plan, 902)
     testing.expect(t, result.accepted)
-    input_request := Terminal_Session_Input_Request{
+    input_request: Terminal_Session_Input_Request = {
         owner = TEST_SESSION_OWNER,
         operation_id = result.operation_id,
         byte_count = len("hello\n"),
@@ -151,7 +154,7 @@ termsession_test_unix_pty_input_and_output :: proc(t: ^testing.T) {
 // Verify parent-side executable discovery rejects before creating a PTY child.
 @(test)
 termsession_test_unix_executable_not_found_before_launch :: proc(t: ^testing.T) {
-    arguments := [1]string{"euclid-command-that-does-not-exist"}
+    arguments: [1]string = {"euclid-command-that-does-not-exist"}
     plan := process_plan_build(arguments[:], "/tmp", nil)
     backend: Unix_Terminal_Backend
     testing.expect(t, unix_terminal_backend_init(&backend))
@@ -170,7 +173,7 @@ termsession_test_unix_executable_not_found_before_launch :: proc(t: ^testing.T) 
 // Verify SIGINT targets the child process group and final trap output drains.
 @(test)
 termsession_test_unix_interrupt_process_group :: proc(t: ^testing.T) {
-    arguments := [3]string{
+    arguments: [3]string = {
         "/bin/sh", "-c",
         "trap 'printf interrupted; exit 42' INT; printf ready; while :; do :; done",
     }
@@ -200,12 +203,20 @@ termsession_test_unix_interrupt_process_group :: proc(t: ^testing.T) {
 // Verify cwd and inherited-environment deltas are encoded before fork.
 @(test)
 termsession_test_unix_cwd_and_environment :: proc(t: ^testing.T) {
-    arguments := [3]string{
+    arguments: [3]string = {
         "/bin/sh", "-c", "printf '%s|%s' \"$PWD\" \"$EUCLID_PHASE9\"",
     }
-    environment := [2]Environment_Change{
-        {kind = .Set, key = "EUCLID_PHASE9", value = "superseded"},
-        {kind = .Set, key = "EUCLID_PHASE9", value = "owned"},
+    environment: [2]Environment_Change = {
+        {
+            kind = .Set,
+            key = "EUCLID_PHASE9",
+            value = "superseded",
+        },
+        {
+            kind = .Set,
+            key = "EUCLID_PHASE9",
+            value = "owned",
+        },
     }
     plan := process_plan_build(arguments[:], "/tmp", environment[:])
     backend: Unix_Terminal_Backend
@@ -227,7 +238,7 @@ termsession_test_unix_cwd_and_environment :: proc(t: ^testing.T) {
 // Verify output larger than one update drains without unbounded retention.
 @(test)
 termsession_test_unix_output_saturation :: proc(t: ^testing.T) {
-    arguments := [3]string{
+    arguments: [3]string = {
         "/bin/sh", "-c", "dd if=/dev/zero bs=20000 count=1 2>/dev/null",
     }
     plan := process_plan_build(arguments[:], "/tmp", nil)
@@ -259,7 +270,7 @@ termsession_test_unix_output_saturation :: proc(t: ^testing.T) {
 // Verify graceful cancellation reports the owner-visible cancelled outcome.
 @(test)
 termsession_test_unix_graceful_termination :: proc(t: ^testing.T) {
-    arguments := [3]string{"/bin/sh", "-c", "printf ready; while :; do :; done"}
+    arguments: [3]string = {"/bin/sh", "-c", "printf ready; while :; do :; done"}
     plan := process_plan_build(arguments[:], "/tmp", nil)
     backend: Unix_Terminal_Backend
     testing.expect(t, unix_terminal_backend_init(&backend))
@@ -287,7 +298,7 @@ termsession_test_unix_graceful_termination :: proc(t: ^testing.T) {
 // Verify one backend state repeatedly allocates, closes, and frees its workspace.
 @(test)
 termsession_test_unix_repeated_session_cleanup :: proc(t: ^testing.T) {
-    arguments := [1]string{"/usr/bin/true"}
+    arguments: [1]string = {"/usr/bin/true"}
     plan := process_plan_build(arguments[:], "/tmp", nil)
     backend: Unix_Terminal_Backend
     testing.expect(t, unix_terminal_backend_init(&backend))
@@ -309,7 +320,7 @@ termsession_test_unix_repeated_session_cleanup :: proc(t: ^testing.T) {
 // Verify forced termination ends a process that explicitly ignores SIGTERM.
 @(test)
 termsession_test_unix_forced_termination :: proc(t: ^testing.T) {
-    arguments := [3]string{
+    arguments: [3]string = {
         "/bin/sh", "-c", "trap '' TERM; printf ready; while :; do :; done",
     }
     plan := process_plan_build(arguments[:], "/tmp", nil)

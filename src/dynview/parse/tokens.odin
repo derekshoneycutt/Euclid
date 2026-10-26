@@ -35,14 +35,22 @@ tex_cursor_next_token :: proc(cursor: ^Tex_Cursor) -> (Tex_Token, Tex_Parse_Stat
         return {}, .Unexpected_Token
     }
     if cursor.offset >= len(cursor.source) {
-        return {kind = .End, start = cursor.offset, end = cursor.offset}, .End
+        return {
+            kind = .End,
+            start = cursor.offset,
+            end = cursor.offset,
+        }, .End
     }
     if !tex_cursor_charge(cursor) {
         return {}, cursor.status
     }
     kind, punctuation := tex_token_punctuation_kind(cursor.source[cursor.offset])
     if punctuation {
-        token := Tex_Token{kind = kind, start = cursor.offset, end = cursor.offset + 1}
+        token: Tex_Token = {
+            kind = kind,
+            start = cursor.offset,
+            end = cursor.offset + 1,
+        }
         cursor.offset += 1
         return token, .Ok
     }
@@ -55,13 +63,20 @@ tex_cursor_next_token :: proc(cursor: ^Tex_Cursor) -> (Tex_Token, Tex_Parse_Stat
 //   Classify one ASCII punctuation byte used by the recursive grammar.
 tex_token_punctuation_kind :: proc(value: u8) -> (Tex_Token_Kind, bool) {
     switch value {
-    case '{': return .Left_Brace, true
-    case '}': return .Right_Brace, true
-    case '^': return .Superscript, true
-    case '_': return .Subscript, true
-    case '[': return .Left_Bracket, true
-    case ']': return .Right_Bracket, true
-    case '&': return .Alignment, true
+    case '{':
+        return .Left_Brace, true
+    case '}':
+        return .Right_Brace, true
+    case '^':
+        return .Superscript, true
+    case '_':
+        return .Subscript, true
+    case '[':
+        return .Left_Bracket, true
+    case ']':
+        return .Right_Bracket, true
+    case '&':
+        return .Alignment, true
     }
     return .End, false
 }
@@ -72,7 +87,11 @@ tex_cursor_read_command :: proc(
     start := cursor.offset
     cursor.offset += 1
     if cursor.offset >= len(cursor.source) {
-        return {kind = .Text, start = start, end = cursor.offset}, .Ok
+        return {
+            kind = .Text,
+            start = start,
+            end = cursor.offset,
+        }, .Ok
     }
     width := tex_utf8_sequence_width(cursor.source, cursor.offset)
     if width == 0 {
@@ -80,7 +99,11 @@ tex_cursor_read_command :: proc(
     }
     if !tex_command_letter(cursor.source, cursor.offset, width) {
         cursor.offset += width
-        return {kind = .Command, start = start, end = cursor.offset}, .Ok
+        return {
+            kind = .Command,
+            start = start,
+            end = cursor.offset,
+        }, .Ok
     }
     for cursor.offset < len(cursor.source) {
         width = tex_utf8_sequence_width(cursor.source, cursor.offset)
@@ -95,7 +118,11 @@ tex_cursor_read_command :: proc(
             return {}, tex_cursor_fail(cursor, .Command_Too_Long, start)
         }
     }
-    return {kind = .Command, start = start, end = cursor.offset}, .Ok
+    return {
+        kind = .Command,
+        start = start,
+        end = cursor.offset,
+    }, .Ok
 }
 
 //   Read ordinary text through the next TeX syntax byte.
@@ -113,7 +140,11 @@ tex_cursor_read_text :: proc(
         }
         cursor.offset += width
     }
-    return {kind = .Text, start = start, end = cursor.offset}, .Ok
+    return {
+        kind = .Text,
+        start = start,
+        end = cursor.offset,
+    }, .Ok
 }
 
 //   Return whether one scalar belongs to the lexer control-word class.

@@ -9,7 +9,8 @@ frame_begin :: proc(description: Description, frame: ^Frame) -> Description_Stat
         return status
     }
     frame^ = {
-        count = len(description.nodes), first_root = description.first_root,
+        count = len(description.nodes),
+        first_root = description.first_root,
         generation = description.generation,
         topology_revision = description.topology_revision,
     }
@@ -20,8 +21,10 @@ frame_begin :: proc(description: Description, frame: ^Frame) -> Description_Stat
 // frame_description borrows working facts only while the addressed frame remains alive.
 frame_description :: proc(frame: ^Frame) -> Description {
     return {
-        nodes = frame^.nodes[:frame^.count], first_root = frame^.first_root,
-        generation = frame^.generation, topology_revision = frame^.topology_revision,
+        nodes = frame^.nodes[:frame^.count],
+        first_root = frame^.first_root,
+        generation = frame^.generation,
+        topology_revision = frame^.topology_revision,
     }
 }
 

@@ -16,11 +16,15 @@ import uisettings "settings"
 // accordion_transition_test_context supplies a fixed full-height panel and injected time.
 accordion_transition_test_context :: proc(
     transition: ^viewmodel.Ui_Accordion_Transition) -> uiaccordion.Accordion_Context {
-    return {panel = {10, 20, 300, 700}, transition = transition}
+    return {
+        panel = {10, 20, 300, 700},
+        transition = transition,
+    }
 }
 
 // accordion_test_height_sum measures the conservation contract across all four sections.
-accordion_test_height_sum :: proc(transition: viewmodel.Ui_Accordion_Transition) -> f32 {
+accordion_test_height_sum :: proc(
+    transition: viewmodel.Ui_Accordion_Transition) -> f32 {
     total: f32
     for height in transition.heights {
         total += height
@@ -39,7 +43,7 @@ accordion_transition_conserves_height_and_finishes_at_180_ms :: proc(t: ^testing
     _ = uiaccordion.accordion_transition_layout(ctx, sections, .Settings)
     testing.expect(t, transition.running)
     previous := height
-    test_milliseconds := []f64{20, 40, 70, 100, 140, 160, 179, 180, 200}
+    test_milliseconds: []f64 = {20, 40, 70, 100, 140, 160, 179, 180, 200}
     for milliseconds in test_milliseconds {
         ctx.mouse_input.sample_time_seconds = milliseconds / 1000
         layout := uiaccordion.accordion_transition_layout(ctx, sections, .Settings)
@@ -173,10 +177,17 @@ accordion_child_input_is_clipped_without_discarding_keyboard :: proc(t: ^testing
     clip_index := int(viewmodel.Ui_Accordion_Section.Library)
     runtime^.layout.accordion_transition.clips[clip_index].height = 10
     clip := uiaccordion.accordion_content_clip(&runtime^.layout, .Library)
-    events := [1]input.Input_Event{{kind = .Press, key = .Tab}}
-    frame := input.Input_Frame{mouse_position = {clip.x + 1, clip.y + 20},
-        mouse_pressed = {.Left}, mouse_down = {.Left}, mouse_wheel_delta = 1,
-        events = events[:]}
+    events: [1]input.Input_Event = {{
+        kind = .Press,
+        key = .Tab,
+    }}
+    frame: input.Input_Frame = {
+        mouse_position = {clip.x + 1, clip.y + 20},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+        mouse_wheel_delta = 1,
+        events = events[:],
+    }
     hidden := ui_clip_accordion_child_frame(runtime, frame)
     testing.expect(t, !uiwidgets.input_frame_left_pressed(hidden))
     testing.expect_value(t, hidden.mouse_wheel_delta, f32(0))
@@ -202,12 +213,22 @@ accordion_hidden_release_cancels_only_child_capture :: proc(t: ^testing.T) {
         ctx, uiaccordion.accordion_landscape_sections(), .Library)
     runtime^.layout.accordion_transition.clips[
         int(viewmodel.Ui_Accordion_Section.Library)] = {}
-    runtime^.input.press_owner = {active = true, kind = .Checkbox, id = 4006}
-    frame := input.Input_Frame{mouse_released = {.Left}}
+    runtime^.input.press_owner = {
+        active = true,
+        kind = .Checkbox,
+        id = 4006,
+    }
+    frame: input.Input_Frame = {
+        mouse_released = {.Left},
+    }
     released := ui_clip_accordion_child_frame(runtime, frame)
     testing.expect(t, !runtime^.input.press_owner.active)
     testing.expect(t, !uiwidgets.input_frame_left_released(released))
-    runtime^.input.press_owner = {active = true, kind = .Splitter, id = 1}
+    runtime^.input.press_owner = {
+        active = true,
+        kind = .Splitter,
+        id = 1,
+    }
     _ = ui_clip_accordion_child_frame(runtime, frame)
     testing.expect(t, runtime^.input.press_owner.active)
 }
@@ -220,15 +241,31 @@ accordion_visual_checkbox_preserves_actions_and_press_ownership :: proc(t: ^test
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     id := uisemantics.semantic_control_id(.Settings_Control, 4006)
-    semantic^.commands[0] = {target = id, kind = .Toggle}
+    semantic^.commands[0] = {
+        target = id,
+        kind = .Toggle,
+    }
     semantic^.command_count = 1
-    owner := viewmodel.Ui_Press_Owner_State{active = true, kind = .Checkbox, id = 4006}
+    owner: viewmodel.Ui_Press_Owner_State = {
+        active = true,
+        kind = .Checkbox,
+        id = 4006,
+    }
     before := owner
-    params := uiwidgets.Checkbox_Params{id = 4006, rect = {0, 0, 20, 20},
-        enabled = true, interaction_enabled = true, semantic_focus = semantic,
-        semantic_domain = .Settings_Control, semantic_clip = {0, 0, 100, 100},
+    params: uiwidgets.Checkbox_Params = {
+        id = 4006,
+        rect = {0, 0, 20, 20},
+        enabled = true,
+        interaction_enabled = true,
+        semantic_focus = semantic,
+        semantic_domain = .Settings_Control,
+        semantic_clip = {0, 0, 100, 100},
         interaction_space_rect = {0, 0, 100, 100},
-        mouse = {mouse_released = {.Left}, mouse_position = {5, 5}}}
+        mouse = {
+            mouse_released = {.Left},
+            mouse_position = {5, 5},
+        },
+    }
     drawn := uiwidgets.prepare_checkbox(params, &owner, false)
     testing.expect(t, !drawn.toggled && !drawn.checked_out)
     testing.expect_value(t, owner, before)
@@ -248,10 +285,12 @@ accordion_semantic_children_respect_the_selected_reveal :: proc(t: ^testing.T) {
     semantic^.staging_accordion_clip = {0, 0, 100, 10}
     for index in 0..<2 {
         testing.expect_value(t, uisemantics.semantic_register_control(semantic, {
-            id = uisemantics.semantic_control_id(
-                .Settings_Control, 4006 + index), role = .Checkbox,
-            states = {.Visible, .Enabled, .Focusable, .Tab_Stop}, actions = {.Focus},
-            region = .Accordion_Content, bounds = {0, f32(index * 20), 20, 20},
+            id = uisemantics.semantic_control_id(.Settings_Control, 4006 + index),
+            role = .Checkbox,
+            states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+            actions = {.Focus},
+            region = .Accordion_Content,
+            bounds = {0, f32(index * 20), 20, 20},
             clip_bounds = {0, 0, 100, 100},
         }), viewmodel.Ui_Semantic_Status.Ok)
     }
@@ -273,7 +312,8 @@ accordion_settings_scroll_page_command :: proc(
     testing.expect(t, uisemantics.semantic_begin(semantic))
     semantic^.commands[0] = {
         target = uisemantics.semantic_control_id(.Settings_Control, 6102),
-        kind = .Scroll_Page, amount = 1,
+        kind = .Scroll_Page,
+        amount = 1,
     }
     semantic^.command_count = 1
 }
@@ -288,14 +328,19 @@ accordion_settings_scroll_is_retained_and_visual_preparation_is_pure :: proc(
     defer free(semantic, context.allocator)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     accordion_settings_scroll_page_command(t, state, semantic)
-    command, amount := uisemantics.semantic_command_for_event(
-        {role = .Panel, actions = {.Scroll}},
-        {kind = .Press, key = .Page_Down})
+    command, amount := uisemantics.semantic_command_for_event({
+        role = .Panel,
+        actions = {.Scroll},
+    }, {
+        kind = .Press,
+        key = .Page_Down,
+    })
     testing.expect_value(t, command, viewmodel.Ui_Focus_Command_Kind.Scroll_Page)
     testing.expect_value(t, amount, i32(1))
-    panel := geometry.Rectangle{0, 0, 600, 290}
-    ctx := uisettings.Settings_View_Context{
-        panel = panel, settings_panel = &state^.ui_runtime.settings_panel,
+    panel: geometry.Rectangle = {0, 0, 600, 290}
+    ctx: uisettings.Settings_View_Context = {
+        panel = panel,
+        settings_panel = &state^.ui_runtime.settings_panel,
         press_owner = &state^.ui_runtime.input.press_owner,
         semantic_focus = semantic,
     }

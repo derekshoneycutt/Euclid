@@ -237,10 +237,14 @@ prepare_encoded_image :: proc(
     }
     native_format: termgraphicsnative.Static_Image_Format
     switch inspection.format {
-    case .Png: native_format = .Png
-    case .Jpeg: native_format = .Jpeg
-    case .Gif: native_format = .Gif
-    case .Unknown: return false
+    case .Png:
+        native_format = .Png
+    case .Jpeg:
+        native_format = .Jpeg
+    case .Gif:
+        native_format = .Gif
+    case .Unknown:
+        return false
     }
     decoded := termgraphicsnative.decode_static_image(
         request.input, request.output, request.width, request.height, native_format)
@@ -475,15 +479,18 @@ sixel_apply_command :: proc(
         byte = request.input[index^]
         index^ += 1
         return sixel_paint(request, state, byte, repeat)
-    case '$': state.x = 0
-    case '-': state.x, state.y = 0, state.y + 6
+    case '$':
+        state.x = 0
+    case '-':
+        state.x, state.y = 0, state.y + 6
     case '#':
         values, count := sixel_parameters(request.input, index)
         return sixel_palette(state, values, count)
     case '"':
         _, count := sixel_parameters(request.input, index)
         return count == 4
-    case: return false
+    case:
+        return false
     }
     return true
 }
@@ -502,7 +509,9 @@ prepare_sixel :: proc(
                 request.output, row * request.width + column, background)
         }
     }
-    state := Sixel_State{palette = request.palette}
+    state: Sixel_State = {
+        palette = request.palette,
+    }
     index := 0
     for index < len(request.input) {
         if taskpool.task_cancellation_requested(token) {
@@ -537,11 +546,16 @@ prepare :: proc(
         return false 
     }
     switch request.kind {
-    case .Encoded_Image: return prepare_encoded_image(request, token)
-    case .Animated_Gif: return false
-    case .Zlib_Rgb: return prepare_zlib(request, 3, token)
-    case .Zlib_Rgba: return prepare_zlib(request, 4, token)
-    case .Sixel: return prepare_sixel(request, token)
+    case .Encoded_Image:
+        return prepare_encoded_image(request, token)
+    case .Animated_Gif:
+        return false
+    case .Zlib_Rgb:
+        return prepare_zlib(request, 3, token)
+    case .Zlib_Rgba:
+        return prepare_zlib(request, 4, token)
+    case .Sixel:
+        return prepare_sixel(request, token)
     }
     return false
 }

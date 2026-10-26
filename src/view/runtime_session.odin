@@ -21,6 +21,7 @@ import julia "../bridge"
 import taskpool "../taskpool"
 import fmt "core:fmt"
 import log "core:log"
+import runtime "base:runtime"
 import math "core:math"
 import linalg "core:math/linalg"
 import time "core:time"
@@ -32,6 +33,8 @@ import viewcapture "capture"
 import geometry "../core/geometry"
 import viewpresentation "presentation"
 import terminalservice "terminal/service"
+import terminalview "terminal"
+import viewuserdata "userdata"
 import viewsimulation "simulation"
 import viewscenario "scenario"
 import viewevidence "evidence"
@@ -51,17 +54,17 @@ Session_Startup_Inputs :: struct {
 }
 
 Euclid_Runtime_Session :: struct {
-    state : ^core.Euclid_General_State,
-    julia_service : ^bridgemodel.Julia_Runtime_Service,
-    presentation : ^viewpresentation.Presentation_Runtime,
+    state: ^core.Euclid_General_State,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
+    presentation: ^viewpresentation.Presentation_Runtime,
     content_service: ^viewcontent.Content_Service,
     startup: Session_Startup_Inputs,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
 Session_Julia_Service :: struct {
-    service : ^bridgemodel.Julia_Runtime_Service,
-    initialize_id : u64,
+    service: ^bridgemodel.Julia_Runtime_Service,
+    initialize_id: u64,
 }
 
 // Supply no-database defaults for existing direct runtime-session callers.
@@ -258,7 +261,7 @@ session_finalize_presentation :: proc(
     content_service: ^viewcontent.Content_Service,
     out_session: ^Euclid_Runtime_Session,
     startup: ^Session_Startup_Inputs = nil) -> bool {
-    session := Euclid_Runtime_Session{
+    session: Euclid_Runtime_Session = {
         state = state,
         julia_service = julia_service,
         content_service = content_service,
@@ -290,6 +293,13 @@ session_apply_startup_preferences :: proc(
     }
     state^.ui_runtime.preferences.values = preferences
     state^.preferences_runtime.settings_store = store
+    if store != nil {
+        terminalview.history_runtime_start(
+            &state^.terminal_history_runtime, &store^.connection)
+    } else {
+        terminalview.history_runtime_start(
+            &state^.terminal_history_runtime, nil)
+    }
     if collection_state != nil {
         if !collections.clone(
             &state^.preferences_runtime.collections_state, collection_state) {
@@ -376,20 +386,46 @@ make_drawing_surface :: proc(drawing_surface: ^worldmodel.Euclid_Drawing_Surface
 make_shape_storage :: proc(state: ^core.Euclid_General_State) -> bool {
     world := &state^.shape_world
     world_trochoid_tool, trochoid_tool_status := shapes.world_create_trochoid_tool(
-        world, {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
-            style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
+        world, {
+            mode = .External,
+            fixed_radius = 0.2,
+            rolling_radius = 0.1,
+            style = {
+                color = color.Color_RGBA8(worldmodel.TOOL_COLOR),
+                brush_size = 5,
+            },
+        })
     world_cycloid_tool, cycloid_tool_status := shapes.world_create_cycloid_tool(
-        world, {first = {0.04, 0.38, 0}, second = {0.96, 0.38, 0},
-            rolling_radius = 0.06, parameter_start = 0,
+        world, {
+            first = {0.04, 0.38, 0},
+            second = {0.96, 0.38, 0},
+            rolling_radius = 0.06,
+            parameter_start = 0,
             parameter_finish = 4 * math.PI,
-            style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
+            style = {
+                color = color.Color_RGBA8(worldmodel.TOOL_COLOR),
+                brush_size = 5,
+            },
+        })
     world_compass, compass_status := shapes.world_create_compass(world, {
-        joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
-        joint2 = {0.02, 0.02, 0}, limb_length = worldmodel.TOOL_LENGTH,
-        style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
+        joint1 = {0, 0, 0},
+        pivot = {0.01, 0.01, 0.01},
+        joint2 = {0.02, 0.02, 0},
+        limb_length = worldmodel.TOOL_LENGTH,
+        style = {
+            color = color.Color_RGBA8(worldmodel.TOOL_COLOR),
+            brush_size = 5,
+        },
+    })
     world_pen, pen_status := shapes.world_create_pen(world, {
-        joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = worldmodel.TOOL_LENGTH,
-        style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
+        joint1 = {0, 0, 0},
+        joint2 = {0, 0, 0},
+        length = worldmodel.TOOL_LENGTH,
+        style = {
+            color = color.Color_RGBA8(worldmodel.TOOL_COLOR),
+            brush_size = 5,
+        },
+    })
     if trochoid_tool_status != .Ok || cycloid_tool_status != .Ok ||
         compass_status != .Ok || pen_status != .Ok ||
         shapemodel.shape_world_freeze_baseline(world) != .Ok {
@@ -733,8 +769,8 @@ shutdown_runtime_session :: proc(
     julia_egress_router_detach(session.state, session.presentation)
     viewpresentation.destroy_presentation_runtime(session.presentation)
     terminalservice.terminal_graphics_runtime_destroy(session.state)
-    viewpreferences.settings_save_shutdown(
-        session.state, &session.state^.simulation_executor^.pool)
+    shutdown_shared_user_data(
+        session.state, &session.state^.simulation_executor^.pool, true)
     taskpool.task_pool_shutdown(&session.state^.simulation_executor^.pool)
     simulation := viewevidence.observe_simulation_executor(
         session.state^.simulation_executor)
@@ -752,6 +788,72 @@ shutdown_runtime_session :: proc(
         return 1
     }
     return 0
+}
+
+// Drain both SQLite borrowers before finalizing history statements or closing the pool.
+shutdown_shared_user_data :: proc(
+    state: ^core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool,
+    close_history: bool) {
+    if state == nil || pool == nil {
+        return
+    }
+    viewuserdata.connection_admission_begin_drain(&state^.user_data_admission)
+    history := &state^.terminal_history_runtime
+    if close_history {
+        terminalview.history_runtime_begin_shutdown(history)
+    } else {
+        terminalview.history_runtime_retire_reads(history)
+    }
+    for {
+        settings_ready := viewpreferences.settings_save_ready(state)
+        history_ready := terminalview.history_runtime_has_work(history)
+        settings_done := viewpreferences.settings_save_shutdown_step(
+            state, pool, history_ready)
+        history_done := false
+        if close_history {
+            history_done = terminalview.history_runtime_shutdown_step(
+                history, &state^.user_data_admission, pool, settings_ready)
+        } else {
+            terminalview.history_runtime_service(
+                history, &state^.user_data_admission, pool, settings_ready, true)
+            history_done = !terminalview.history_runtime_has_pending_tasks(history)
+        }
+        shutdown_shared_user_data_validate(state)
+        if settings_done && history_done {
+            return
+        }
+        taskpool.task_pool_wait_for_progress(pool)
+    }
+}
+
+// Refuse teardown if a stale task handle leaves SQLite ownership unresolved.
+shutdown_shared_user_data_validate :: proc(state: ^core.Euclid_General_State) {
+    settings := &state^.preferences_runtime
+    history := &state^.terminal_history_runtime
+    if settings^.settings_save_active &&
+       state^.ui_runtime.preferences.save_status == .Failed {
+        fmt.eprintln("Unable to join settings work before database teardown.")
+        runtime.exit(1)
+    }
+    if history^.task_active && history^.status == .Failed {
+        fmt.eprintln("Unable to join Terminal history work before database teardown.")
+        runtime.exit(1)
+    }
+    if state^.user_data_admission.owner == .Settings_Save &&
+       !settings^.settings_save_active {
+        fmt.eprintln("Settings connection admission remained owned after join.")
+        runtime.exit(1)
+    }
+    if state^.user_data_admission.owner == .Terminal_History &&
+       !history^.task_active {
+        fmt.eprintln("History connection admission remained owned after join.")
+        runtime.exit(1)
+    }
+    if history^.shutdown_failed {
+        fmt.eprintln("Terminal history shutdown could not complete safely.")
+        runtime.exit(1)
+    }
 }
 
 // Retire content only after Julia lifecycle readers have acknowledged shutdown.

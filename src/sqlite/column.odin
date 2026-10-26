@@ -10,11 +10,16 @@ column_type :: proc(statement: ^Statement, column: int) -> Column_Type {
         return .Invalid
     }
     switch raw.sqlite3_column_type(statement.handle, c.int(column)) {
-    case .Integer: return .Integer
-    case .Float: return .Float
-    case .Text: return .Text
-    case .Blob: return .Blob
-    case .Null: return .Null
+    case .Integer:
+        return .Integer
+    case .Float:
+        return .Float
+    case .Text:
+        return .Text
+    case .Blob:
+        return .Blob
+    case .Null:
+        return .Null
     }
     return .Invalid
 }

@@ -114,7 +114,7 @@ harfbuzz_math_constants_capture :: proc(
         base_pixel_size <= 0 || output == nil || text_match_scale <= 0 {
         return false
     }
-    candidate := Font_Math_Constants{
+    candidate: Font_Math_Constants = {
         generation = generation,
         base_pixel_size = base_pixel_size,
         text_match_scale = text_match_scale,
@@ -635,7 +635,11 @@ math_projection_decode_utf8 :: proc(
     }
     valid := scalar >= minimum && scalar <= 0x10ffff &&
         !(scalar >= 0xd800 && scalar <= 0xdfff)
-    return {value = rune(scalar), width = width, valid = valid}
+    return {
+        value = rune(scalar),
+        width = width,
+        valid = valid,
+    }
 }
 
 //   Encode one valid Unicode scalar into caller-provided four-byte storage.
@@ -757,7 +761,7 @@ math_shaping_shape :: proc(
     hb.hb_buffer_set_script(buffer, harfbuzz_tag('m', 'a', 't', 'h'))
     hb.hb_buffer_add_utf8(
         buffer, cstring(raw_data(shaping_text)), c.int(len(shaping_text)), 0, -1)
-    feature := Harfbuzz_Feature{
+    feature: Harfbuzz_Feature = {
         tag = harfbuzz_tag('f', 'l', 'a', 'c'),
         value = 1 if input.flattened_accent else 0,
         end = max(u32),
@@ -815,7 +819,7 @@ harfbuzz_shape :: proc(
     hb.hb_buffer_add_utf8(
         buffer, cstring(raw_data(text)), c.int(len(text)), 0, -1)
     hb.hb_buffer_guess_segment_properties(buffer)
-    feature := Harfbuzz_Feature{
+    feature: Harfbuzz_Feature = {
         tag = harfbuzz_tag('c', 'a', 'l', 't'),
         value = 1 if calt_enabled else 0,
         end = max(u32),

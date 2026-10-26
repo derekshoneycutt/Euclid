@@ -104,7 +104,8 @@ tree_motion_reset :: proc(
             "tree motion workspace is smaller than the admitted projection")
         motion^.branches[motion^.count] = {
             stable_id = item.key,
-            expanded = tree_item_is_effectively_expanded(policy, item^)}
+            expanded = tree_item_is_effectively_expanded(policy, item^),
+        }
         motion^.count += 1
     }
 }
@@ -141,14 +142,24 @@ tree_motion_measure_step :: proc(
         frame^.next_child = child^.next_sibling
         frame^.sibling_steps += 1
         if !tree_item_is_visible(ctx.visibility, child^) {
-            return {stack_count = stack_count, valid = true}
+            return {
+                stack_count = stack_count,
+                valid = true,
+            }
         }
         if stack_count >= len(frames) {
-            return {stack_count = stack_count}
+            return {
+                stack_count = stack_count,
+            }
         }
         frames[stack_count] = {
-            item_index = child_index, next_child = child^.first_child}
-        return {stack_count = stack_count + 1, valid = true}
+            item_index = child_index,
+            next_child = child^.first_child,
+        }
+        return {
+            stack_count = stack_count + 1,
+            valid = true,
+        }
     }
     item := projection^.items[frame^.item_index]
     motion_index := tree_motion_index(ctx.motion, item^.key)
@@ -157,10 +168,17 @@ tree_motion_measure_step :: proc(
     tree_motion_sample_branch(branch, frame^.children_height, ctx.now_seconds)
     extent := ctx.row_height + tree_actions_sample(ctx, item) + branch^.height
     if stack_count == 1 {
-        return {extent = extent, complete = true, valid = true}
+        return {
+            extent = extent,
+            complete = true,
+            valid = true,
+        }
     }
     frames[stack_count - 2].children_height += extent
-    return {stack_count = stack_count - 1, valid = true}
+    return {
+        stack_count = stack_count - 1,
+        valid = true,
+    }
 }
 
 // tree_motion_measure_subtree samples descendant extents with owner-backed frames.
@@ -178,7 +196,10 @@ tree_motion_measure_subtree :: proc(
     if len(frames) == 0 {
         return 0, false
     }
-    frames[0] = {item_index = root_index, next_child = root^.first_child}
+    frames[0] = {
+        item_index = root_index,
+        next_child = root^.first_child,
+    }
     stack_count := 1
     for stack_count > 0 {
         step := tree_motion_measure_step(ctx, stack_count)
@@ -245,7 +266,7 @@ tree_frame_context :: proc(params: Tree_List_Params) -> Tree_Frame_Context {
     runtime := params.ui_runtime
     projection := &runtime^.library.tree.projection
     reduce_motion := params.reduce_motion
-    geometry_ctx := Tree_Geometry_Context{
+    geometry_ctx: Tree_Geometry_Context = {
         ji = params.ji,
         projection = projection,
         motion = &runtime^.library.motion,
@@ -333,11 +354,15 @@ tree_layout_enter_frame :: proc(
         return stack_count, false
     }
     ctx.layout^.rows[ctx.layout^.count] = {
-        item = item, depth = frame^.depth,
-        content_y = frame^.content_y, canonical_y = frame^.content_y,
+        item = item,
+        depth = frame^.depth,
+        content_y = frame^.content_y,
+        canonical_y = frame^.content_y,
         row_height = ctx.geometry.row_height,
-        reveal = frame^.reveal, logical = frame^.logical,
-        expanded = branch^.expanded, actions = actions,
+        reveal = frame^.reveal,
+        logical = frame^.logical,
+        expanded = branch^.expanded,
+        actions = actions,
     }
     ctx.layout^.count += 1
     if branch^.height <= 0 && !branch^.expanded {
@@ -394,8 +419,11 @@ tree_layout_append :: proc(
         return false
     }
     projection^.traversal_frames[0] = {
-        item_index = root_index, depth = row.depth,
-        content_y = row.content_y, reveal = row.reveal, logical = row.logical,
+        item_index = root_index,
+        depth = row.depth,
+        content_y = row.content_y,
+        reveal = row.reveal,
+        logical = row.logical,
     }
     stack_count := 1
     for stack_count > 0 {
@@ -515,15 +543,23 @@ tree_layout_append_roots :: proc(
     ctx: Tree_Geometry_Context,
     layout: ^viewmodel.Ui_Tree_Prepared_Layout) -> bool {
     projection := ctx.projection
-    walk := Tree_Layout_Context{geometry = ctx, layout = layout}
+    walk: Tree_Layout_Context = {
+        geometry = ctx,
+        layout = layout,
+    }
     y: f32
-    clip := geometry.Rectangle{0, 0, ctx.panel.width, layout^.content_height}
+    clip: geometry.Rectangle = {0, 0, ctx.panel.width, layout^.content_height}
     for root, steps := projection^.first_root, 0;
         root != TREE_NO_ITEM && steps < projection^.count;
         root, steps = projection^.items[root].next_sibling, steps + 1 {
         item := projection^.items[root]
-        if !tree_layout_append(walk, {item = item, content_y = y,
-            reveal = clip, logical = true}) {
+        if !tree_layout_append(
+            walk, {
+                item = item,
+                content_y = y,
+                reveal = clip,
+                logical = true,
+            }) {
             log.error("library_tree_layout_traversal_failed")
             layout^.count = 0
             return false
@@ -539,12 +575,18 @@ tree_layout_append_roots :: proc(
 tree_row_screen_geometry :: proc(
     row: viewmodel.Ui_Tree_Prepared_Row, panel: geometry.Rectangle,
     scroll_y: f32) -> viewmodel.Ui_Control_Geometry {
-    bounds := geometry.Rectangle{
-        panel.x + row.offset_x, panel.y + row.content_y - scroll_y, panel.width,
-        tree_prepared_row_height(row)}
+    bounds: geometry.Rectangle = {
+        panel.x + row.offset_x,
+        panel.y + row.content_y - scroll_y,
+        panel.width,
+        tree_prepared_row_height(row),
+    }
     clip := row.reveal
     clip.x += panel.x
     clip.y += panel.y - scroll_y
     clip = tree_reveal_intersection(clip, panel)
-    return {bounds = geometry.Rectangle(bounds), clip_bounds = geometry.Rectangle(clip)}
+    return {
+        bounds = geometry.Rectangle(bounds),
+        clip_bounds = geometry.Rectangle(clip),
+    }
 }

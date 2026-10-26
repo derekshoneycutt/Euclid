@@ -141,16 +141,21 @@ graphics_test_decode_animated_gif :: proc(t: ^testing.T) {
     descriptors: [2]termattachment.Animation_Frame
     result, decoded := decode_gif_animation(
         bytes[:], graphics_test_gif_limits(), {
-            frame_bytes = frames[:], frames = descriptors[:],
-        },
-        termattachment.limits_default())
+            frame_bytes = frames[:],
+            frames = descriptors[:],
+        }, termattachment.limits_default())
+
     testing.expect(t, decoded)
     testing.expect(t, result.valid)
-    testing.expect_value(t, descriptors[0].pixels,
-        termattachment.Payload_Range{offset = 0, count = 8})
+    testing.expect_value(t, descriptors[0].pixels, termattachment.Payload_Range{
+        offset = 0,
+        count = 8,
+    })
     testing.expect_value(t, descriptors[0].duration_ns, u64(20_000_000))
-    testing.expect_value(t, descriptors[1].pixels,
-        termattachment.Payload_Range{offset = 8, count = 8})
+    testing.expect_value(t, descriptors[1].pixels, termattachment.Payload_Range{
+        offset = 8,
+        count = 8,
+    })
     testing.expect_value(t, descriptors[1].duration_ns, u64(30_000_000))
     testing.expect_value(t, frames, [16]u8{
         255, 0, 0, 255, 255, 0, 0, 255,
@@ -168,7 +173,8 @@ graphics_test_decode_animated_gif_transparency_and_disposal :: proc(t: ^testing.
     frames: [2]termattachment.Animation_Frame
     _, decoded := decode_gif_animation(
         bytes[:], graphics_test_gif_limits(), {
-            frame_bytes = pixels[:], frames = frames[:],
+            frame_bytes = pixels[:],
+            frames = frames[:],
         }, termattachment.limits_default())
     testing.expect(t, decoded)
     testing.expect_value(t, pixels, [16]u8{
@@ -187,13 +193,18 @@ graphics_test_decode_animated_gif_normalizes_zero_delays :: proc(t: ^testing.T) 
     frames: [2]termattachment.Animation_Frame
     _, decoded := decode_gif_animation(
         bytes[:], graphics_test_gif_limits(), {
-            frame_bytes = pixels[:], frames = frames[:],
+            frame_bytes = pixels[:],
+            frames = frames[:],
         }, termattachment.limits_default())
     testing.expect(t, decoded)
-    testing.expect_value(t, frames[0].pixels,
-        termattachment.Payload_Range{offset = 0, count = 8})
-    testing.expect_value(t, frames[1].pixels,
-        termattachment.Payload_Range{offset = 8, count = 8})
+    testing.expect_value(t, frames[0].pixels, termattachment.Payload_Range{
+        offset = 0,
+        count = 8,
+    })
+    testing.expect_value(t, frames[1].pixels, termattachment.Payload_Range{
+        offset = 8,
+        count = 8,
+    })
     testing.expect_value(t, frames[0].duration_ns, u64(10_000_000))
     testing.expect_value(t, frames[1].duration_ns, u64(10_000_000))
 }
@@ -203,10 +214,15 @@ graphics_test_decode_animated_gif_normalizes_zero_delays :: proc(t: ^testing.T) 
 graphics_test_decode_animated_gif_cancels_between_frames :: proc(t: ^testing.T) {
     bytes := GRAPHICS_TEST_ANIMATED_GIF
     pixels: [16]u8
-    cancellation := Gif_Decode_Cancellation{cancel_at = 3}
+    cancellation: Gif_Decode_Cancellation = {
+        cancel_at = 3,
+    }
     result := termgraphicsnative.decode_animated_gif(&{
-        bytes = bytes[:], frame_bytes = pixels[:],
-        width = 2, height = 1, frame_count = 2,
+        bytes = bytes[:],
+        frame_bytes = pixels[:],
+        width = 2,
+        height = 1,
+        frame_count = 2,
         cancellation_user_data = &cancellation,
         cancellation_requested = graphics_test_gif_cancel_at_poll,
     })
@@ -228,7 +244,8 @@ graphics_test_decode_animated_gif_preserves_loop_metadata :: proc(t: ^testing.T)
     frames: [2]termattachment.Animation_Frame
     decoded_inspection, decoded := decode_gif_animation(
         bytes[:], graphics_test_gif_limits(), {
-            frame_bytes = pixels[:], frames = frames[:],
+            frame_bytes = pixels[:],
+            frames = frames[:],
         }, termattachment.limits_default())
     testing.expect(t, decoded)
     testing.expect(t, decoded_inspection.infinite)
@@ -239,7 +256,14 @@ graphics_test_decode_animated_gif_preserves_loop_metadata :: proc(t: ^testing.T)
 @(test)
 graphics_test_decode_animated_gif_supports_concurrent_workers :: proc(t: ^testing.T) {
     gate: Gif_Concurrent_Gate
-    payloads := [2]Gif_Concurrent_Payload{{gate = &gate}, {gate = &gate}}
+    payloads: [2]Gif_Concurrent_Payload = {
+        {
+            gate = &gate,
+        },
+        {
+            gate = &gate,
+        },
+    }
     pool: taskpool.Task_Pool
     testing.expect(t, taskpool.task_pool_init(&pool, 2, 2))
     defer taskpool.task_pool_destroy(&pool)
@@ -263,7 +287,7 @@ graphics_test_prepare_animated_gif :: proc(t: ^testing.T) {
     bytes := GRAPHICS_TEST_ANIMATED_GIF
     pixels: [16]u8
     frames: [2]termattachment.Animation_Frame
-    request := Prepare_Request{
+    request: Prepare_Request = {
         kind = .Animated_Gif,
         input = bytes[:],
         width = 2,
@@ -296,7 +320,10 @@ graphics_test_rejects_mismatched_gif_preflight :: proc(t: ^testing.T) {
         bytes[:], {
             limits = graphics_test_gif_limits(),
             inspection = inspection,
-            destination = {frame_bytes = pixels[:], frames = frames[:]},
+            destination = {
+                frame_bytes = pixels[:],
+                frames = frames[:],
+            },
             attachment_limits = termattachment.limits_default(),
         })
     testing.expect(t, !decoded)
@@ -362,7 +389,8 @@ graphics_test_rejects_animated_gif_capacity_mismatch :: proc(t: ^testing.T) {
     descriptors: [2]termattachment.Animation_Frame
     _, decoded := decode_gif_animation(
         bytes[:], graphics_test_gif_limits(), {
-            frame_bytes = frames[:], frames = descriptors[:],
+            frame_bytes = frames[:],
+            frames = descriptors[:],
         },
         termattachment.limits_default())
     testing.expect(t, !decoded)

@@ -67,7 +67,9 @@ graphics_test_init :: proc(
         termattachment.store_destroy(store)
         return false
     }
-    return interpreter_init(interpreter, grid, {title_state = title})
+    return interpreter_init(interpreter, grid, {
+        title_state = title,
+    })
 }
 
 // Initialize one graphics fixture with caller-selected attachment limits.
@@ -85,8 +87,9 @@ graphics_test_init_with_limits :: proc(
         termattachment.store_destroy(targets.store)
         return false
     }
-    return interpreter_init(
-        targets.interpreter, targets.grid, {title_state = targets.title})
+    return interpreter_init(targets.interpreter, targets.grid, {
+        title_state = targets.title,
+    })
 }
 
 // Release one graphics framing fixture in transfer-before-store order.
@@ -145,11 +148,17 @@ graphics_test_write_kitty_status :: proc(
 // Return the larger bounded policy needed by the iTerm2 animation sequence.
 graphics_test_iterm2_animation_limits :: proc() -> termattachment.Limits {
     return {
-        attachment_capacity = 5, placement_capacity = 5, transfer_capacity = 5,
-        transfer_byte_limit = 512, dimension_limit = 64,
-        image_pixel_limit = 4096, cpu_byte_limit = 4096,
-        gpu_byte_limit = 4096, animated_attachment_limit = 2,
-        animation_frame_limit = 4, animation_decode_byte_limit = 4096,
+        attachment_capacity = 5,
+        placement_capacity = 5,
+        transfer_capacity = 5,
+        transfer_byte_limit = 512,
+        dimension_limit = 64,
+        image_pixel_limit = 4096,
+        cpu_byte_limit = 4096,
+        gpu_byte_limit = 4096,
+        animated_attachment_limit = 2,
+        animation_frame_limit = 4,
+        animation_decode_byte_limit = 4096,
         animation_min_frame_duration_ns = 1_000_000,
         animation_max_frame_duration_ns = 100_000_000,
         animation_duration_ns_limit = 1_000_000_000,
@@ -183,7 +192,7 @@ graphics_test_iterm2_pixel_height_advances_cursor :: proc(t: ^testing.T) {
     title: Terminal_Title_State
     grid: termgrid.Grid
     interpreter: Interpreter
-    limits := termattachment.Limits{
+    limits: termattachment.Limits = {
         attachment_capacity = 2,
         placement_capacity = 4,
         transfer_capacity = 2,
@@ -200,11 +209,18 @@ graphics_test_iterm2_pixel_height_advances_cursor :: proc(t: ^testing.T) {
         animation_duration_ns_limit = 1_000_000_000,
     }
     testing.expect(t, graphics_test_init_with_limits({
-        store = &store, graphics = &graphics, title = &title,
-        grid = &grid, interpreter = &interpreter,
+        store = &store,
+        graphics = &graphics,
+        title = &title,
+        grid = &grid,
+        interpreter = &interpreter,
     }, limits, 8))
     defer graphics_test_destroy(&store, &graphics, &grid)
-    title.query_geometry = {cell_width = 8, cell_height = 16, valid = true}
+    title.query_geometry = {
+        cell_width = 8,
+        cell_height = 16,
+        valid = true,
+    }
     gfxsemantics.graphics_semantics_enable(&graphics)
 
     testing.expect(t, interpreter_write(&interpreter,
@@ -226,11 +242,18 @@ graphics_test_iterm2_timg_animation_retains_anchor :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     interpreter: Interpreter
     testing.expect(t, graphics_test_init_with_limits({
-        store = &store, graphics = &graphics, title = &title,
-        grid = &grid, interpreter = &interpreter,
+        store = &store,
+        graphics = &graphics,
+        title = &title,
+        grid = &grid,
+        interpreter = &interpreter,
     }, graphics_test_iterm2_animation_limits(), 8))
     defer graphics_test_destroy(&store, &graphics, &grid)
-    title.query_geometry = {cell_width = 8, cell_height = 16, valid = true}
+    title.query_geometry = {
+        cell_width = 8,
+        cell_height = 16,
+        valid = true,
+    }
     gfxsemantics.graphics_semantics_enable(&graphics)
     termgrid.grid_set_cursor(&grid, 3, 0)
 
@@ -294,7 +317,7 @@ graphics_test_expect_sixel_request :: proc(
 graphics_test_expect_every_split :: proc(
     t: ^testing.T, sequence: string, expected_kind: gfxprotocol.Graphics_Frame_Kind,
     expected_header, expected_payload: string) {
-    producer := Terminal_Producer{.Terminal_Session, 9, 4}
+    producer: Terminal_Producer = {.Terminal_Session, 9, 4}
     for split in 0..=len(sequence) {
         store: termattachment.Store
         graphics: gfxprotocol.Graphics_Parser_State
@@ -331,7 +354,7 @@ graphics_test_expect_every_split :: proc(
 @(test)
 graphics_test_kitty_apc_every_split :: proc(t: ^testing.T) {
     sequence := "\e_Ga=t;SGVsbG8=\e\\"
-    producer := Terminal_Producer{.Terminal_Session, 7, 3}
+    producer: Terminal_Producer = {.Terminal_Session, 7, 3}
     for split in 0..=len(sequence) {
         store: termattachment.Store
         graphics: gfxprotocol.Graphics_Parser_State
@@ -417,8 +440,8 @@ graphics_test_transfer_pressure_and_producer_recovery :: proc(t: ^testing.T) {
     testing.expect(t, graphics_test_init(
         &store, &graphics, &title, &grid, &interpreter))
     defer graphics_test_destroy(&store, &graphics, &grid)
-    first := Terminal_Producer{.Terminal_Session, 1, 1}
-    second := Terminal_Producer{.Julia_Evaluation, 2, 1}
+    first: Terminal_Producer = {.Terminal_Session, 1, 1}
+    second: Terminal_Producer = {.Julia_Evaluation, 2, 1}
 
     testing.expect(t, interpreter_write(
         &interpreter,
@@ -587,7 +610,7 @@ graphics_test_kitty_raw_transmit_and_place :: proc(t: ^testing.T) {
     testing.expect(t, graphics_test_init(
         &store, &graphics, &title, &grid, &interpreter))
     defer graphics_test_destroy(&store, &graphics, &grid)
-    producer := Terminal_Producer{.Terminal_Session, 17, 2}
+    producer: Terminal_Producer = {.Terminal_Session, 17, 2}
     gfxsemantics.graphics_semantics_enable(&graphics)
 
     testing.expect(t, interpreter_write(
@@ -644,8 +667,11 @@ graphics_test_kitty_timg_animation_retains_anchor :: proc(t: ^testing.T) {
     limits.cpu_byte_limit = 256
     limits.gpu_byte_limit = 256
     testing.expect(t, graphics_test_init_with_limits({
-        store = &store, graphics = &graphics, title = &title,
-        grid = &grid, interpreter = &interpreter,
+        store = &store,
+        graphics = &graphics,
+        title = &title,
+        grid = &grid,
+        interpreter = &interpreter,
     }, limits, row_count = 8))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
@@ -663,7 +689,7 @@ graphics_test_kitty_animation_setup :: proc(
     testing.expect(t, graphics_test_init_with_limits(
         targets, graphics_test_kitty_animation_limits()))
     gfxsemantics.graphics_semantics_enable(targets.graphics)
-    producer := Terminal_Producer{.Terminal_Session, 18, 2}
+    producer: Terminal_Producer = {.Terminal_Session, 18, 2}
     testing.expect(t, interpreter_write(targets.interpreter,
         "\e_Ga=t,f=32,s=2,v=1,i=7;/wAA/wAA//8=\e\\", producer))
     _, response_present := gfxprotocol.graphics_parser_take_kitty_response(
@@ -677,8 +703,9 @@ graphics_test_kitty_animation_setup :: proc(
     testing.expect(t, frame_response_present)
     testing.expect_value(t,
         frame_response.status, gfxprotocol.Kitty_Graphics_Response_Status.Ok)
-    identity_index := gfxsemantics.graphics_kitty_find_image(
-        targets.graphics, {image_id = 7})
+    identity_index := gfxsemantics.graphics_kitty_find_image(targets.graphics, {
+        image_id = 7,
+    })
     testing.expect(t, identity_index >= 0)
     id := targets.graphics.kitty_images[identity_index].attachment_id
     _, refresh_present := gfxprotocol.graphics_parser_take_animation_command(
@@ -733,7 +760,7 @@ graphics_test_kitty_animation_control_delete_chunk :: proc(t: ^testing.T) {
     producer, id := graphics_test_kitty_animation_setup(
         t, {&store, &graphics, &title, &grid, &interpreter})
     defer graphics_test_destroy(&store, &graphics, &grid)
-    targets := Graphics_Test_Targets{&store, &graphics, &title, &grid, &interpreter}
+    targets: Graphics_Test_Targets = {&store, &graphics, &title, &grid, &interpreter}
     graphics_test_write_kitty_status(t, targets,
         "\e_Ga=a,i=7,s=3,c=2,v=2;\e\\", producer, .Ok)
     control, control_present := gfxprotocol.graphics_parser_take_animation_command(
@@ -777,9 +804,9 @@ graphics_test_kitty_animation_response_matrix :: proc(t: ^testing.T) {
         {&store, &graphics, &title, &grid, &interpreter}, limits))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    producer := Terminal_Producer{.Terminal_Session, 20, 2}
+    producer: Terminal_Producer = {.Terminal_Session, 20, 2}
 
-    targets := Graphics_Test_Targets{&store, &graphics, &title, &grid, &interpreter}
+    targets: Graphics_Test_Targets = {&store, &graphics, &title, &grid, &interpreter}
     graphics_test_write_kitty_status(t, targets,
         "\e_Ga=a,i=99,s=3;\e\\", producer, .Not_Found)
     graphics_test_write_kitty_status(t, targets,
@@ -807,13 +834,17 @@ graphics_test_kitty_animation_response_pressure :: proc(t: ^testing.T) {
         "\e_Ga=t,f=32,s=1,v=1,i=8;/wAA/w==\e\\", producer))
     graphics_test_expect_kitty_status(
         t, &graphics, gfxprotocol.Kitty_Graphics_Response_Status.Ok)
-    identity_index := gfxsemantics.graphics_kitty_find_image(
-        &graphics, {image_id = 8})
+    identity_index := gfxsemantics.graphics_kitty_find_image(&graphics, {
+        image_id = 8,
+    })
     testing.expect(t, identity_index >= 0)
     id := graphics.kitty_images[identity_index].attachment_id
     for _ in 0..<gfxprotocol.KITTY_ANIMATION_COMMAND_CAPACITY {
         testing.expect(t, gfxprotocol.graphics_parser_queue_animation_command(
-            &graphics, {attachment_id = id, kind = .Refresh}))
+            &graphics, {
+                attachment_id = id,
+                kind = .Refresh,
+            }))
     }
     testing.expect(t, interpreter_write(&interpreter,
         "\e_Ga=f,f=32,s=1,v=1,i=8;AP8A/w==\e\\", producer))
@@ -837,7 +868,7 @@ graphics_test_kitty_encoded_frame_orders_control :: proc(t: ^testing.T) {
         {&store, &graphics, &title, &grid, &interpreter}, limits))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    producer := Terminal_Producer{.Terminal_Session, 19, 2}
+    producer: Terminal_Producer = {.Terminal_Session, 19, 2}
 
     testing.expect(t, interpreter_write(&interpreter,
         "\e_Ga=t,f=32,s=1,v=1,i=9;/wAA/w==\e\\", producer))
@@ -872,7 +903,7 @@ graphics_test_kitty_identity_replacement_and_delete :: proc(t: ^testing.T) {
         &store, &graphics, &title, &grid, &interpreter))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    targets := Graphics_Test_Write_Targets{&interpreter, &store}
+    targets: Graphics_Test_Write_Targets = {&interpreter, &store}
 
     graphics_test_expect_write_counts(t, targets,
         "\e_Ga=t,f=24,s=1,v=1,i=7;AQID\e\\", 1, 0)
@@ -924,13 +955,22 @@ graphics_test_kitty_png_decode_request :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     interpreter: Interpreter
     testing.expect(t, graphics_test_init_with_limits({
-        store = &store, graphics = &graphics, title = &title,
-        grid = &grid, interpreter = &interpreter,
+        store = &store,
+        graphics = &graphics,
+        title = &title,
+        grid = &grid,
+        interpreter = &interpreter,
     }, {
-        attachment_capacity = 2, placement_capacity = 4, transfer_capacity = 2,
-        transfer_byte_limit = 256, dimension_limit = 4, image_pixel_limit = 16,
-        cpu_byte_limit = 256, gpu_byte_limit = 256,
-        animated_attachment_limit = 2, animation_frame_limit = 4,
+        attachment_capacity = 2,
+        placement_capacity = 4,
+        transfer_capacity = 2,
+        transfer_byte_limit = 256,
+        dimension_limit = 4,
+        image_pixel_limit = 16,
+        cpu_byte_limit = 256,
+        gpu_byte_limit = 256,
+        animated_attachment_limit = 2,
+        animation_frame_limit = 4,
         animation_decode_byte_limit = 256,
         animation_min_frame_duration_ns = 1_000_000,
         animation_max_frame_duration_ns = 100_000_000,
@@ -958,13 +998,22 @@ graphics_test_iterm2_original_and_multipart :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     interpreter: Interpreter
     testing.expect(t, graphics_test_init_with_limits({
-        store = &store, graphics = &graphics, title = &title,
-        grid = &grid, interpreter = &interpreter,
+        store = &store,
+        graphics = &graphics,
+        title = &title,
+        grid = &grid,
+        interpreter = &interpreter,
     }, {
-        attachment_capacity = 2, placement_capacity = 4, transfer_capacity = 2,
-        transfer_byte_limit = 256, dimension_limit = 4, image_pixel_limit = 16,
-        cpu_byte_limit = 256, gpu_byte_limit = 256,
-        animated_attachment_limit = 2, animation_frame_limit = 4,
+        attachment_capacity = 2,
+        placement_capacity = 4,
+        transfer_capacity = 2,
+        transfer_byte_limit = 256,
+        dimension_limit = 4,
+        image_pixel_limit = 16,
+        cpu_byte_limit = 256,
+        gpu_byte_limit = 256,
+        animated_attachment_limit = 2,
+        animation_frame_limit = 4,
         animation_decode_byte_limit = 256,
         animation_min_frame_duration_ns = 1_000_000,
         animation_max_frame_duration_ns = 100_000_000,
@@ -972,7 +1021,7 @@ graphics_test_iterm2_original_and_multipart :: proc(t: ^testing.T) {
     }))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    producer := Terminal_Producer{.Terminal_Session, 2, 5}
+    producer: Terminal_Producer = {.Terminal_Session, 2, 5}
 
     graphics_test_expect_iterm2_original(
         t, &interpreter, &graphics, &store, producer)
@@ -1002,21 +1051,21 @@ graphics_test_sixel_semantics_and_recovery :: proc(t: ^testing.T) {
         grid = &grid,
         interpreter = &interpreter,
     }, {
-            attachment_capacity = 2,
-            placement_capacity = 4,
-            transfer_capacity = 2,
-            transfer_byte_limit = 512,
-            dimension_limit = 32,
-            image_pixel_limit = 256,
-            cpu_byte_limit = 256,
-            gpu_byte_limit = 256,
-            animated_attachment_limit = 2,
-            animation_frame_limit = 4,
-            animation_decode_byte_limit = 256,
-            animation_min_frame_duration_ns = 1_000_000,
-            animation_max_frame_duration_ns = 100_000_000,
-            animation_duration_ns_limit = 1_000_000_000,
-        }))
+        attachment_capacity = 2,
+        placement_capacity = 4,
+        transfer_capacity = 2,
+        transfer_byte_limit = 512,
+        dimension_limit = 32,
+        image_pixel_limit = 256,
+        cpu_byte_limit = 256,
+        gpu_byte_limit = 256,
+        animated_attachment_limit = 2,
+        animation_frame_limit = 4,
+        animation_decode_byte_limit = 256,
+        animation_min_frame_duration_ns = 1_000_000,
+        animation_max_frame_duration_ns = 100_000_000,
+        animation_duration_ns_limit = 1_000_000_000,
+    }))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
 
@@ -1109,8 +1158,12 @@ graphics_test_sixel_reset_decsdm_redraw :: proc(t: ^testing.T) {
     }, {2, 32, 128, 1024, 4}))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    title.query_geometry = {cell_width = 8, cell_height = 16, valid = true}
-    targets := Graphics_Test_Targets{&store, &graphics, &title, &grid, &interpreter}
+    title.query_geometry = {
+        cell_width = 8,
+        cell_height = 16,
+        valid = true,
+    }
+    targets: Graphics_Test_Targets = {&store, &graphics, &title, &grid, &interpreter}
 
     first := graphics_test_expect_sixel_frame(
         t, targets, "\e[?80l\ePq\"1;1;4;32!4~\e\\\n", 2, 1)
@@ -1138,12 +1191,19 @@ graphics_test_sixel_timg_animation_retains_anchor :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     interpreter: Interpreter
     testing.expect(t, graphics_test_init_sixel_animation({
-        store = &store, graphics = &graphics, title = &title,
-        grid = &grid, interpreter = &interpreter,
+        store = &store,
+        graphics = &graphics,
+        title = &title,
+        grid = &grid,
+        interpreter = &interpreter,
     }, {4, 160, 4096, 65_536, 16}))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    title.query_geometry = {cell_width = 8, cell_height = 16, valid = true}
+    title.query_geometry = {
+        cell_width = 8,
+        cell_height = 16,
+        valid = true,
+    }
     termgrid.grid_set_cursor(&grid, 1, 0)
 
     attachment_ids: [4]termattachment.Attachment_Id
@@ -1169,8 +1229,8 @@ graphics_test_kitty_chunk_assembly_and_boundary :: proc(t: ^testing.T) {
         &store, &graphics, &title, &grid, &interpreter))
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
-    first := Terminal_Producer{.Terminal_Session, 4, 1}
-    second := Terminal_Producer{.Julia_Evaluation, 8, 1}
+    first: Terminal_Producer = {.Terminal_Session, 4, 1}
+    second: Terminal_Producer = {.Julia_Evaluation, 8, 1}
 
     testing.expect(t, interpreter_write(&interpreter,
         "\e_Ga=t,f=32,s=1,v=1,i=5,m=1;AQI=\e\\", first))

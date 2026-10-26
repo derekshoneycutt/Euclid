@@ -6,9 +6,13 @@ import dyncore "../core"
 block_format_for_kind :: #force_inline proc(block_kind: i32) -> Dynview_Block_Format {
     switch block_kind {
     case 1, 2:
-        return Dynview_Block_Format{line_height_multiplier = 1.0}
+        return Dynview_Block_Format{
+            line_height_multiplier = 1.0,
+        }
     }
-    return Dynview_Block_Format{line_height_multiplier = 1.0}
+    return Dynview_Block_Format{
+        line_height_multiplier = 1.0,
+    }
 }
 
 //   Merge per-style values with active block format controls.

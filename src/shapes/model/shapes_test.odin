@@ -10,7 +10,10 @@ Shape_Test_Value :: struct {
 // Verify packed entities preserve both ABI-width identity fields.
 @(test)
 core_test_shape_entity_pack_round_trip :: proc(t: ^testing.T) {
-    entity := Shape_Entity{slot = 0x1234_5678, generation = 0x9abc_def0}
+    entity: Shape_Entity = {
+        slot = 0x1234_5678,
+        generation = 0x9abc_def0,
+    }
     testing.expect_value(t, shape_entity_unpack(shape_entity_pack(entity)), entity)
     testing.expect_value(t, shape_entity_pack({}), u64(0))
 }
@@ -18,9 +21,15 @@ core_test_shape_entity_pack_round_trip :: proc(t: ^testing.T) {
 // Verify trochoid validation preserves directed domains and internal-circle limits.
 @(test)
 core_test_shape_trochoid_validation :: proc(t: ^testing.T) {
-    external := Shape_Trochoid{mode = .External, fixed_radius = 2,
-        rolling_radius = 1, tracer_distance = 0.5, parameter_start = 3,
-        parameter_finish = -1, draw_parameter = 1}
+    external: Shape_Trochoid = {
+        mode = .External,
+        fixed_radius = 2,
+        rolling_radius = 1,
+        tracer_distance = 0.5,
+        parameter_start = 3,
+        parameter_finish = -1,
+        draw_parameter = 1,
+    }
     testing.expect(t, shape_trochoid_is_valid(external))
 
     external.draw_parameter = 4
@@ -29,9 +38,15 @@ core_test_shape_trochoid_validation :: proc(t: ^testing.T) {
     external.rolling_radius = 0
     testing.expect(t, !shape_trochoid_is_valid(external))
 
-    internal := Shape_Trochoid{mode = .Internal, fixed_radius = 2,
-        rolling_radius = 1, tracer_distance = 1, parameter_start = 0,
-        parameter_finish = 2, draw_parameter = 2}
+    internal: Shape_Trochoid = {
+        mode = .Internal,
+        fixed_radius = 2,
+        rolling_radius = 1,
+        tracer_distance = 1,
+        parameter_start = 0,
+        parameter_finish = 2,
+        draw_parameter = 2,
+    }
     testing.expect(t, shape_trochoid_is_valid(internal))
     internal.rolling_radius = internal.fixed_radius
     testing.expect(t, !shape_trochoid_is_valid(internal))
@@ -40,8 +55,11 @@ core_test_shape_trochoid_validation :: proc(t: ^testing.T) {
 // Verify guide validation rejects degenerate circles and invalid internal rolling.
 @(test)
 core_test_shape_trochoid_tool_validation :: proc(t: ^testing.T) {
-    guide := Shape_Trochoid_Tool{mode = .External, fixed_radius = 1,
-        rolling_radius = 1}
+    guide: Shape_Trochoid_Tool = {
+        mode = .External,
+        fixed_radius = 1,
+        rolling_radius = 1,
+    }
     testing.expect(t, shape_trochoid_tool_is_valid(guide))
     guide.mode = .Internal
     testing.expect(t, !shape_trochoid_tool_is_valid(guide))
@@ -52,8 +70,13 @@ core_test_shape_trochoid_tool_validation :: proc(t: ^testing.T) {
 // Verify cycloid scalar and literal-line validation preserve no-slip travel.
 @(test)
 core_test_shape_cycloid_validation :: proc(t: ^testing.T) {
-    value := Shape_Cycloid{rolling_radius = 0.1, tracer_distance = 0.1,
-        parameter_start = 0, parameter_finish = 2, draw_parameter = 1}
+    value: Shape_Cycloid = {
+        rolling_radius = 0.1,
+        tracer_distance = 0.1,
+        parameter_start = 0,
+        parameter_finish = 2,
+        draw_parameter = 1,
+    }
     testing.expect(t, shape_cycloid_is_valid(value))
     testing.expect(t, shape_cycloid_line_is_valid(
         {0, 0, 2}, {1, 0, 2}, value.rolling_radius,
@@ -72,8 +95,12 @@ core_test_shape_cycloid_validation :: proc(t: ^testing.T) {
 // Verify cycloid-guide validation requires a directed in-domain parameter.
 @(test)
 core_test_shape_cycloid_tool_validation :: proc(t: ^testing.T) {
-    guide := Shape_Cycloid_Tool{rolling_radius = 0.1,
-        parameter_start = 2, parameter_finish = -2, parameter = 0}
+    guide: Shape_Cycloid_Tool = {
+        rolling_radius = 0.1,
+        parameter_start = 2,
+        parameter_finish = -2,
+        parameter = 0,
+    }
     testing.expect(t, shape_cycloid_tool_is_valid(guide))
     guide.parameter = 3
     testing.expect(t, !shape_cycloid_tool_is_valid(guide))
@@ -117,11 +144,17 @@ core_test_shape_registry_rejects_capacity_exhaustion :: proc(t: ^testing.T) {
             &registry, &entity), Shape_World_Status.Ok)
     }
     before := registry.entity_count
-    rejected := Shape_Entity{slot = 77, generation = 88}
+    rejected: Shape_Entity = {
+        slot = 77,
+        generation = 88,
+    }
     testing.expect_value(t, shape_registry_create(
         &registry, &rejected), Shape_World_Status.Out_Of_Capacity)
     testing.expect_value(t, registry.entity_count, before)
-    testing.expect_value(t, rejected, Shape_Entity{slot = 77, generation = 88})
+    testing.expect_value(t, rejected, Shape_Entity{
+        slot = 77,
+        generation = 88,
+    })
 }
 
 // Verify sparse membership, duplicate rejection, and mutable lookup use dense values.
@@ -133,11 +166,13 @@ core_test_shape_component_lookup_and_duplicate_rejection :: proc(t: ^testing.T) 
     testing.expect_value(t, shape_registry_create(
         &registry, &entity), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, entity, Shape_Test_Value{number = 12}),
-        Shape_World_Status.Ok)
+        &set, &registry, entity, Shape_Test_Value{
+            number = 12,
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, entity, Shape_Test_Value{number = 13}),
-        Shape_World_Status.Already_Present)
+        &set, &registry, entity, Shape_Test_Value{
+            number = 13,
+        }), Shape_World_Status.Already_Present)
 
     value, found := shape_component_get_mut(&set, &registry, entity)
     testing.expect(t, found)
@@ -159,11 +194,13 @@ core_test_shape_component_rejects_out_of_order_insertion :: proc(t: ^testing.T) 
     testing.expect_value(t, shape_registry_create(
         &registry, &second), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, second, Shape_Test_Value{number = 2}),
-        Shape_World_Status.Ok)
+        &set, &registry, second, Shape_Test_Value{
+            number = 2,
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, first, Shape_Test_Value{number = 1}),
-        Shape_World_Status.Illegal_State)
+        &set, &registry, first, Shape_Test_Value{
+            number = 1,
+        }), Shape_World_Status.Illegal_State)
     testing.expect_value(t, set.count, u16(1))
 }
 
@@ -180,13 +217,15 @@ core_test_shape_component_freeze_and_rewind :: proc(t: ^testing.T) {
     testing.expect_value(t, shape_component_freeze_baseline(
         &set), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, baseline, Shape_Test_Value{number = 1}),
-        Shape_World_Status.Illegal_State)
+        &set, &registry, baseline, Shape_Test_Value{
+            number = 1,
+        }), Shape_World_Status.Illegal_State)
     testing.expect_value(t, shape_registry_create(
         &registry, &animation), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, animation, Shape_Test_Value{number = 2}),
-        Shape_World_Status.Ok)
+        &set, &registry, animation, Shape_Test_Value{
+            number = 2,
+        }), Shape_World_Status.Ok)
 
     testing.expect_value(t, shape_component_rewind_animation(
         &set), Shape_World_Status.Ok)
@@ -207,8 +246,9 @@ core_test_shape_component_rejects_stale_generation :: proc(t: ^testing.T) {
     testing.expect_value(t, shape_registry_create(
         &registry, &stale), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, stale, Shape_Test_Value{number = 4}),
-        Shape_World_Status.Ok)
+        &set, &registry, stale, Shape_Test_Value{
+            number = 4,
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_freeze_baseline(
         &set), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_rewind_animation(
@@ -220,8 +260,9 @@ core_test_shape_component_rejects_stale_generation :: proc(t: ^testing.T) {
     testing.expect_value(t, shape_registry_create(
         &registry, &current), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &set, &registry, current, Shape_Test_Value{number = 5}),
-        Shape_World_Status.Ok)
+        &set, &registry, current, Shape_Test_Value{
+            number = 5,
+        }), Shape_World_Status.Ok)
     testing.expect(t, !shape_component_contains(&set, &registry, stale))
     _, found := shape_component_get(&set, &registry, stale)
     testing.expect(t, !found)
@@ -234,17 +275,22 @@ shape_test_create_rewind_entity :: proc(
     testing.expect_value(t, shape_world_create_entity(
         world, &animation), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(&world.transforms,
-        &world.registry, animation, Shape_Transform{position = {4, 5, 6}}),
-        Shape_World_Status.Ok)
+        &world.registry, animation, Shape_Transform{
+            position = {4, 5, 6},
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(&world.arcs,
-        &world.registry, animation, Shape_Arc{radius = 1, sweep_theta = 2}),
-        Shape_World_Status.Ok)
+        &world.registry, animation, Shape_Arc{
+            radius = 1,
+            sweep_theta = 2,
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(&world.render_styles,
-        &world.registry, animation, Shape_Render_Style{visible = true}),
-        Shape_World_Status.Ok)
+        &world.registry, animation, Shape_Render_Style{
+            visible = true,
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(&world.active_features,
-        &world.registry, animation, Shape_Active_Feature{index = 2}),
-        Shape_World_Status.Ok)
+        &world.registry, animation, Shape_Active_Feature{
+            index = 2,
+        }), Shape_World_Status.Ok)
     return animation
 }
 
@@ -257,8 +303,9 @@ core_test_shape_world_repeated_rewind_restores_frontiers :: proc(t: ^testing.T) 
     testing.expect_value(t, shape_world_create_entity(
         world, &baseline), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
-        &world.transforms, &world.registry, baseline,
-        Shape_Transform{position = {1, 2, 3}}), Shape_World_Status.Ok)
+        &world.transforms, &world.registry, baseline, Shape_Transform{
+            position = {1, 2, 3},
+        }), Shape_World_Status.Ok)
     testing.expect_value(t, shape_world_freeze_baseline(
         world), Shape_World_Status.Ok)
 
@@ -270,7 +317,7 @@ core_test_shape_world_repeated_rewind_restores_frontiers :: proc(t: ^testing.T) 
             world), Shape_World_Status.Ok)
         testing.expect_value(t, world.registry.entity_count, u32(1))
         testing.expect_value(t, world.transforms.count, u16(1))
-        empty_counts := [3]u16{world.arcs.count, world.render_styles.count,
+        empty_counts: [3]u16 = {world.arcs.count, world.render_styles.count,
                               world.active_features.count}
         for count in empty_counts {
             testing.expect_value(t, count, u16(0))
@@ -300,7 +347,7 @@ core_test_shape_labels_store_unicode_source :: proc(t: ^testing.T) {
 // Verify malformed, multiline, control, empty, and unsupported label source is rejected.
 @(test)
 core_test_shape_labels_reject_invalid_source :: proc(t: ^testing.T) {
-    malformed_bytes := [1]u8{0xff}
+    malformed_bytes: [1]u8 = {0xff}
     malformed := string(malformed_bytes[:])
     testing.expect_value(t, shape_label_validate_source(
         .Text_Plain, malformed), Shape_World_Status.Invalid_Utf8)

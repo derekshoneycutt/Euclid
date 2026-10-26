@@ -56,12 +56,15 @@ draw_encoded_prepared_tree :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: ^Tree_List_Preparation, text: bool) {
     panel := prepared^.scroll.view_rect
-    visibility := Tree_Visibility_Policy{
+    visibility: Tree_Visibility_Policy = {
         search = &state^.ui_runtime.library.search,
         projection = &state^.ui_runtime.library.tree.projection,
     }
-    ctx := Encoded_Tree_Walk_Context{
-        state = state, ji = state^.julia_interface, encoder = encoder, panel = panel,
+    ctx: Encoded_Tree_Walk_Context = {
+        state = state,
+        ji = state^.julia_interface,
+        encoder = encoder,
+        panel = panel,
         row_height = theme.ui_tree_row_height(
             state^.ui_runtime.preferences.values.interface.text_size_percent),
         pressed_node = prepared^.pressed_node,
@@ -73,7 +76,8 @@ draw_encoded_prepared_tree :: proc(
         actions_down = prepared^.actions_down,
         actions_delete = prepared^.actions_delete,
         scroll_y = prepared^.scroll.scroll_y_out,
-        visibility = visibility}
+        visibility = visibility,
+    }
     foreground := tree_reorder_foreground(
         &state^.ui_runtime.library.actions.reorder, &prepared^.layout)
     occlusion: geometry.Rectangle
@@ -189,18 +193,24 @@ draw_encoded_prepared_tree_label :: proc(
 tree_update_scroll :: proc(
     params: Tree_List_Params,
     content_height: f32) -> uiwidgets.Scroll_Container_Update_Result {
-    return uiwidgets.scroll_container_update({id = UI_TREE_SCROLLBAR_ID,
-        rect = params.list_panel, scroll_y_in = params.scroll_y^,
-        content_height = content_height, mouse_input = params.mouse_input,
+    return uiwidgets.scroll_container_update({
+        id = UI_TREE_SCROLLBAR_ID,
+        rect = params.list_panel,
+        scroll_y_in = params.scroll_y^,
+        content_height = content_height,
+        mouse_input = params.mouse_input,
         interaction_space_rect = params.list_panel,
         wheel_step = theme.ui_tree_row_height(
             params.ui_runtime^.preferences.values.interface.text_size_percent) *
             theme.WHEEL_SCROLL_MULTIPLIER,
         press_owner = &params.ui_runtime^.input.press_owner,
-        state_in = {params.ui_runtime^.library.tree.scroll_dragging,
-            params.ui_runtime^.library.tree.scroll_drag_off},
+        state_in = {
+            params.ui_runtime^.library.tree.scroll_dragging,
+            params.ui_runtime^.library.tree.scroll_drag_off,
+        },
         semantic_focus = params.ui_runtime^.semantic_focus,
-        semantic_id = tree_semantic_id()})
+        semantic_id = tree_semantic_id(),
+    })
 }
 
 // tree_refresh_preparation keeps range, visual height, and scrollbar aligned after toggling.
@@ -223,7 +233,7 @@ tree_update_prepared_rows :: proc(
     params: Tree_List_Params, prepared: ^Tree_List_Preparation) -> Tree_Hit {
     hit: Tree_Hit
     tree_cancel_hidden_capture(params, prepared)
-    ctx := Tree_Walk_Context{
+    ctx: Tree_Walk_Context = {
         ji = params.ji,
         tree = &params.ui_runtime^.library.tree,
         interaction = &params.ui_runtime^.input,
@@ -232,10 +242,14 @@ tree_update_prepared_rows :: proc(
             params.ui_runtime^.preferences.values.interface.text_size_percent),
         scroll_y = prepared^.scroll.scroll_y_out,
         allow_clicks = !prepared^.scroll.pointer_reserved,
-        mouse_input = params.mouse_input, font = params.font,
+        mouse_input = params.mouse_input,
+        font = params.font,
         font_resolver = params.font_resolver,
-        visibility = {search = params.visibility.search,
-            projection = &params.ui_runtime^.library.tree.projection}}
+        visibility = {
+            search = params.visibility.search,
+            projection = &params.ui_runtime^.library.tree.projection,
+        },
+    }
     tree_actions_cancel_hidden_capture(params, prepared)
     foreground := tree_reorder_foreground(
         &params.ui_runtime^.library.actions.reorder, &prepared^.layout)
@@ -369,11 +383,14 @@ tree_entry_name_input_geometry :: proc(
     params: Tree_List_Params, ctx: Tree_Walk_Context,
     row: viewmodel.Ui_Tree_Prepared_Row) -> Tree_Entry_Name_Input_Geometry {
     row_geometry := tree_row_screen_geometry(row, ctx.panel, ctx.scroll_y)
-    rect := geometry.Rectangle{row_geometry.bounds.x + row.actions.label_clip.x,
+    rect: geometry.Rectangle = {row_geometry.bounds.x + row.actions.label_clip.x,
         row_geometry.bounds.y, row.actions.label_clip.width, row_geometry.bounds.height}
     clip := tree_actions_label_clip(
         row.actions, row_geometry.bounds, row_geometry.clip_bounds)
-    return {rect = rect, clip = clip}
+    return {
+        rect = rect,
+        clip = clip,
+    }
 }
 
 // tree_cancel_hidden_capture releases rows removed or clipped by an immediate topology change.

@@ -199,7 +199,7 @@ terminal_prepare_resize_placements :: proc(
             &prepared.placements, attachments) {
         return false
     }
-    ctx := Terminal_Placement_Reflow_Context{&prepared.primary}
+    ctx: Terminal_Placement_Reflow_Context = {&prepared.primary}
     return termattachment.placement_checkpoint_relocate(
         &prepared.placements, .Primary, &ctx, terminal_reflow_placement)
 }
@@ -226,7 +226,7 @@ terminal_prepare_resize_view_state :: proc(
     }
     pitch := terminal_font_size(term.text_size_percent) +
         terminal_line_spacing(term.text_size_percent)
-    anchor := viewterminalmodel.Terminal_View_Position{
+    anchor: viewterminalmodel.Terminal_View_Position = {
         line = int(term.scroll_offset_y / pitch),
     }
     relocated, retained := terminal_reflow_view_position(
@@ -376,7 +376,7 @@ terminal_publish_resize_resources :: proc(
     if alternate_active {
         primary_grid, alternate_grid = alternate_grid, primary_grid
     }
-    superseded := Terminal_Superseded_Display{primary_grid^, alternate_grid^}
+    superseded: Terminal_Superseded_Display = {primary_grid^, alternate_grid^}
     primary_grid^ = prepared.primary.grid
     prepared.primary.grid = {}
     alternate_grid^ = prepared.alternate.grid
@@ -484,7 +484,7 @@ terminal_resize_display_grids :: proc(
         return false
     }
     alternate_active := term.output_interpreter.alternate_screen_active
-    old_dimensions := protocol.Terminal_Dimensions{
+    old_dimensions: protocol.Terminal_Dimensions = {
         u16(term.output_grid.columns), u16(term.output_grid.row_count)}
     if !termattachment.placement_checkpoint_restore(
         &prepared.placements, term.synchronized_output.attachments) {

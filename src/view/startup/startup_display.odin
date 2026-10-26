@@ -26,7 +26,10 @@ Packaged_Assets_Worker_Result :: struct {
 loading_display_create :: proc(
     platform: ^native.Sdl_Platform,
     draw_runtime: ^native.Sdl_Draw_Runtime) -> Loading_Display {
-    display := Loading_Display{platform = platform, draw_runtime = draw_runtime}
+    display: Loading_Display = {
+        platform = platform,
+        draw_runtime = draw_runtime,
+    }
     display.outline = startup_outline_create({
         platform^.metrics.logical_width, platform^.metrics.logical_height})
     native.sdl_frame_clock_reset(&display.clock)

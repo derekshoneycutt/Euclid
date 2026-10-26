@@ -2,8 +2,13 @@ package fontmodel
 
 //   Canonical weight ordering ranks for heaviest-flag resolution.
 FONT_WEIGHT_RANKS :: [Font_Weight]int{
-    .Light = 1, .Regular = 2, .Medium = 3, .Semibold = 4,
-    .Bold = 5, .Extrabold = 6, .Black = 7,
+    .Light = 1,
+    .Regular = 2,
+    .Medium = 3,
+    .Semibold = 4,
+    .Bold = 5,
+    .Extrabold = 6,
+    .Black = 7,
 }
 
 //   Weight bits in canonical order; used to pick the heaviest requested weight.

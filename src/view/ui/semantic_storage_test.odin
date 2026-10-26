@@ -16,10 +16,13 @@ semantic_failed_growth_preserves_accepted_publication :: proc(t: ^testing.T) {
     staging := uisemantics.semantic_staging_snapshot(&state)
     testing.expect(t, viewmodel.ui_semantic_snapshot_init(staging))
     testing.expect(t, viewmodel.ui_semantic_snapshot_reserve_nodes(staging, 32))
-    failure := Tree_Projection_Test_Allocator_State{
-        backing_allocator = staging.allocator.backing_allocator}
+    failure: Tree_Projection_Test_Allocator_State = {
+        backing_allocator = staging.allocator.backing_allocator,
+    }
     staging.allocator.backing_allocator = {
-        procedure = tree_projection_test_failing_allocator, data = &failure}
+        procedure = tree_projection_test_failing_allocator,
+        data = &failure,
+    }
     defer {
         staging.allocator.backing_allocator = failure.backing_allocator
     }
@@ -29,9 +32,10 @@ semantic_failed_growth_preserves_accepted_publication :: proc(t: ^testing.T) {
     for &byte in label {
         byte = 'a'
     }
-    testing.expect_value(t, uisemantics.semantic_register_node(&state,
-        {node = semantic_test_node(semantic_test_id(.Application, 1)),
-         label = string(label)}), viewmodel.Ui_Semantic_Status.Allocation_Failed)
+    testing.expect_value(t, uisemantics.semantic_register_node(&state, {
+        node = semantic_test_node(semantic_test_id(.Application, 1)),
+        label = string(label),
+    }), viewmodel.Ui_Semantic_Status.Allocation_Failed)
     testing.expect_value(t, staging.node_count, 0)
     testing.expect_value(t, uisemantics.semantic_publish(&state),
         viewmodel.Ui_Semantic_Status.Allocation_Failed)

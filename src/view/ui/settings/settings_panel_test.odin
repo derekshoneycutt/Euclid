@@ -17,16 +17,28 @@ increased_contrast_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T)
     defer viewmodel.ui_semantic_focus_destroy(semantic)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     id := uisemantics.semantic_control_id(.Settings_Control, 4007)
-    semantic^.commands[0] = {target = id, kind = .Toggle}
+    semantic^.commands[0] = {
+        target = id,
+        kind = .Toggle,
+    }
     semantic^.command_count = 1
     owner: viewmodel.Ui_Press_Owner_State
-    ctx := Settings_View_Context{panel = {0, 0, 600, 700},
-        semantic_focus = semantic, press_owner = &owner,
+    ctx: Settings_View_Context = {
+        panel = {0, 0, 600, 700},
+        semantic_focus = semantic,
+        press_owner = &owner,
         preferences = setting_model.default_preferences(),
         platform_increased_contrast = true,
-        labels = {increased_contrast = "Increased contrast"}}
-    rows := Settings_View_Rows{simd_y = 20, gpu_dust_y = 50,
-        reduce_motion_y = 80, increased_contrast_y = 110}
+        labels = {
+            increased_contrast = "Increased contrast",
+        },
+    }
+    rows: Settings_View_Rows = {
+        simd_y = 20,
+        gpu_dust_y = 50,
+        reduce_motion_y = 80,
+        increased_contrast_y = 110,
+    }
     prepared: Settings_View_Preparation
     prepare_settings_optional_controls(ctx, rows, false, &prepared)
     testing.expect(t, !prepared.increased_contrast.checked_out)
@@ -104,7 +116,7 @@ increased_contrast_layout_and_platform_notices_are_independent :: proc(t: ^testi
 // Every discrete text-size stop keeps controls below labels and sections nonoverlapping.
 @(test)
 text_size_layout_scales_and_preserves_short_viewport_scrolling :: proc(t: ^testing.T) {
-    stops := [4]int{100, 125, 150, 175}
+    stops: [4]int = {100, 125, 150, 175}
     for percent in stops {
         rows := settings_view_layout_rows({0, 0, 600, 700}, percent, true, true)
         row_gap := settings_scaled_row_gap(percent)
@@ -138,9 +150,14 @@ text_size_slider_snaps_to_supported_stops :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     preferences := setting_model.default_preferences()
     preferences.interface.text_size_percent = 150
-    ctx := Settings_View_Context{panel = {0, 0, 400, 300},
-        press_owner = &owner, preferences = preferences,
-        labels = {text_size = "Text size"}}
+    ctx: Settings_View_Context = {
+        panel = {0, 0, 400, 300},
+        press_owner = &owner,
+        preferences = preferences,
+        labels = {
+            text_size = "Text size",
+        },
+    }
     params := settings_text_size_params(ctx, 40)
     result := uiwidgets.prepare_integer_slider(params, false)
     testing.expect_value(t, result.minimum, 100)

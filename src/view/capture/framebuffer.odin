@@ -78,8 +78,12 @@ framebuffer_crop_with_operations :: proc(
         copy(pixels[row * row_bytes:][:row_bytes], source)
     }
     operations.unload(operations.user_data, capture)
-    capture^ = {pixels = pixels, width = width, height = height,
-        pitch_bytes = row_bytes}
+    capture^ = {
+        pixels = pixels,
+        width = width,
+        height = height,
+        pitch_bytes = row_bytes,
+    }
     return true
 }
 
@@ -111,8 +115,12 @@ framebuffer_resize_with_operations :: proc(
         }
     }
     operations.unload(operations.user_data, capture)
-    capture^ = {pixels = pixels, width = width, height = height,
-        pitch_bytes = row_bytes}
+    capture^ = {
+        pixels = pixels,
+        width = width,
+        height = height,
+        pitch_bytes = row_bytes,
+    }
     return true
 }
 

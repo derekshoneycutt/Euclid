@@ -32,10 +32,12 @@ consume_scenario_dust_requests :: proc(data: ^core.Simulation_Task_Data) {
                 generation = request.generation,
                 tick = data^.state^.fixed_step + 1,
                 flags = {.Required},
-                payload = {counts = {
-                    first = request.count,
-                    second = u32(emitted),
-                }},
+                payload = {
+                    counts = {
+                        first = request.count,
+                        second = u32(emitted),
+                    },
+                },
             })
     }
     queue^.count = 0
@@ -114,9 +116,11 @@ update_particles_task :: proc(
             correlation_kind = .Fixed_Step,
             correlation = data^.state^.fixed_step + 1,
             tick = data^.state^.fixed_step + 1,
-            payload = {counts = {
-                first = u32(max(data^.state^.particle_system.next_index, 0)),
-            }},
+            payload = {
+                counts = {
+                    first = u32(max(data^.state^.particle_system.next_index, 0)),
+                },
+            },
         })
     return .Succeeded
 }
@@ -135,9 +139,11 @@ solve_constraints_task :: proc(
             correlation = data^.state^.fixed_step + 1,
             tick = data^.state^.fixed_step + 1,
             flags = {.Required},
-            payload = {counts = {
-                first = u32(data^.state^.shape_world.constraints.count),
-            }},
+            payload = {
+                counts = {
+                    first = u32(data^.state^.shape_world.constraints.count),
+                },
+            },
         })
     return .Succeeded
 }
@@ -155,10 +161,12 @@ build_shape_cache_task :: proc(
             correlation_kind = .Fixed_Step,
             correlation = data^.state^.fixed_step,
             tick = data^.state^.fixed_step,
-            payload = {counts = {
-                first = u32(max(
-                    data^.state^.shape_world.draw_cache.item_count, 0)),
-            }},
+            payload = {
+                counts = {
+                    first = u32(max(
+                        data^.state^.shape_world.draw_cache.item_count, 0)),
+                },
+            },
         })
     return .Succeeded
 }
@@ -221,7 +229,7 @@ prose_shaping_service :: proc(
     if workspace == nil {
         return {}
     }
-    result := dyncompile.Document_Prose_Shaping_Service{
+    result: dyncompile.Document_Prose_Shaping_Service = {
         user_data = &data^.state^.font_cache,
         base_pixel_size = f32(font.JULIA_MONO_FONT_SIZE),
         shape = prose_shape_run,
@@ -287,10 +295,13 @@ math_shape_run :: proc(
     glyph_count, ok := font.math_shaping_shape(
         cast(^fontmodel.Font_Math_Shaping_Capability)user_data,
         request.generation,
-        {text = request.text, role = role,
+        {
+            text = request.text,
+            role = role,
             standalone_accent = request.standalone_accent,
             flattened_accent = request.flattened_accent,
-            workspace = request.projection_workspace},
+            workspace = request.projection_workspace,
+        },
         request.glyph_output)
     return {glyph_count, ok}
 }

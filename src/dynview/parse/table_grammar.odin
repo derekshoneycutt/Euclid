@@ -45,7 +45,7 @@ tex_math_parse_table :: proc(
         environment == "subarray" {
         preamble, environment_ok = tex_math_take_raw_group(parser)
     }
-    state := Tex_Table_Parse_State{}
+    state: Tex_Table_Parse_State = {}
     state.descriptor.cell_style = .Text
     state.descriptor.row_spacing = .Matrix
     if !environment_ok || !tex_table_parse_rows(parser, environment, &state) {
@@ -313,7 +313,10 @@ tex_math_take_raw_group :: proc(
             return {}, false
         }
     }
-    return {offset = start, length = parser.output.text_count-start}, true
+    return {
+        offset = start,
+        length = parser.output.text_count-start,
+    }, true
 }
 
 //   Copy token bytes until one required punctuation token.
@@ -327,7 +330,10 @@ tex_math_take_raw_until :: proc(
             return {}, false
         }
         if token.kind == closing {
-            return {offset = start, length = parser.output.text_count-start}, true
+            return {
+                offset = start,
+                length = parser.output.text_count - start,
+            }, true
         }
         text := tex_token_text(parser.cursor.source, token)
         if _, ok := tex_semantic_append_text(parser.output, text); !ok {
@@ -348,7 +354,10 @@ tex_table_parse_length :: proc(text: string) -> (Tex_Table_Length, bool) {
         return {}, false
     }
     value, ok := tex_table_parse_decimal(text[:number_end])
-    return {value = value, unit = unit}, ok
+    return {
+        value = value,
+        unit = unit,
+    }, ok
 }
 
 //   Parse one bounded signed decimal used by table row gaps.
@@ -434,7 +443,9 @@ tex_table_apply_environment_preset :: proc(
         }
     } else if environment == "aligned" || environment == "alignedat" {
         if !tex_table_apply_aligned_environment(
-            descriptor, environment, argument_text) {return false}
+            descriptor, environment, argument_text) {
+            return false
+        }
     } else if environment == "gathered" {
         if columns != 1 {
             return false 
@@ -476,7 +487,9 @@ tex_table_apply_aligned_environment :: proc(
         return false
     }
     if environment == "alignedat" &&
-        !tex_table_alignedat_columns_match(argument, columns) {return false}
+        !tex_table_alignedat_columns_match(argument, columns) {
+        return false
+    }
     tex_table_apply_aligned_preset(descriptor, environment == "aligned")
     return true
 }
@@ -493,7 +506,10 @@ tex_table_apply_cases_preset :: proc(
     for boundary in 0..=descriptor.columns {
         descriptor.boundary_gaps[boundary].unit = .Zero
     }
-    descriptor.boundary_gaps[1] = {value = 1, unit = .Em}
+    descriptor.boundary_gaps[1] = {
+        value = 1,
+        unit = .Em,
+    }
 }
 
 //   Apply alternating right/left alignment and pair spacing.
@@ -508,7 +524,10 @@ tex_table_apply_aligned_preset :: proc(
         descriptor.boundary_gaps[boundary].unit = .Zero
         if spaced_pairs && boundary >= 2 && boundary%2 == 0 &&
             boundary < descriptor.columns {
-            descriptor.boundary_gaps[boundary] = {value = 1, unit = .Em}
+            descriptor.boundary_gaps[boundary] = {
+                value = 1,
+                unit = .Em,
+            }
         }
     }
 }
@@ -682,7 +701,10 @@ tex_table_canonical_text :: proc(
     _, _ = tex_semantic_append_text(output, "\\end{")
     _, _ = tex_semantic_append_text(output, canonical_environment)
     _, _ = tex_semantic_append_text(output, "}")
-    return {offset = start, length = output.text_count-start}
+    return {
+        offset = start,
+        length = output.text_count - start,
+    }
 }
 
 //   Wrap matrix variants in their frozen stretch-delimiter semantics.

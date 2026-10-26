@@ -124,7 +124,7 @@ launch_run_view :: proc(
     store_opened: ^bool) -> int {
     launch_apply_preferences(settings, preferences)
     print_startup_settings(settings)
-    startup := view.Session_Startup_Inputs{
+    startup: view.Session_Startup_Inputs = {
         preferences = preferences,
         collections = collection_state,
         user_store = store_opened^ ? store : nil,
@@ -872,7 +872,7 @@ print_startup_settings :: proc(settings: ^core.Euclid_Run_Settings) {
 //  Parse supplied arguments into settings and explicit launch intent.
 parse_command_line :: proc(args: []string) -> Launch_Configuration {
     defaults := setting_model.default_preferences()
-    settings := core.Euclid_Run_Settings{
+    settings: core.Euclid_Run_Settings = {
         do_run = true,
         do_antialiasing = defaults.rendering.antialiasing,
         do_vsync = defaults.rendering.vsync,
@@ -903,5 +903,8 @@ parse_command_line :: proc(args: []string) -> Launch_Configuration {
 
     state.invalid_launch_option = state.invalid_launch_option ||
         (state.no_user_db && (state.persist_requested || state.custom_user_db_requested))
-    return {run_settings = settings, parse_state = state}
+    return {
+        run_settings = settings,
+        parse_state = state,
+    }
 }

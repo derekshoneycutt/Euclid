@@ -34,7 +34,10 @@ scenario_membership_control :: proc(
     if operation == "membership_focus" {
         action = .Focus
     }
-    return true, scenario_library_queue_command(runtime, {target = id, kind = action})
+    return true, scenario_library_queue_command(runtime, {
+        target = id,
+        kind = action,
+    })
 }
 
 // Resolve current published UUID/opening identity; destination names are never scenario keys.

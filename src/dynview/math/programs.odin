@@ -15,10 +15,19 @@ Math_Program_Item_Handler :: #type proc(
 //   Non-math kinds map to nil and are rejected by the caller.
 MATH_PROGRAM_ITEM_HANDLERS ::
     [dynviewmodel.Dynview_Command_Kind]Math_Program_Item_Handler{
-        .Begin_Block = nil, .End_Block = nil, .Line_Break = nil,
-        .Divider = nil, .Math_Block = nil, .Inline_Line = nil, .Inline_Box = nil,
-        .Inline_Circle = nil, .Inline_Filled_Box = nil, .Inline_Filled_Circle = nil,
-        .Inline_Pie_Section = nil, .Inline_Perpendicular = nil, .Inline_Triangle = nil,
+        .Begin_Block = nil,
+        .End_Block = nil,
+        .Line_Break = nil,
+        .Divider = nil,
+        .Math_Block = nil,
+        .Inline_Line = nil,
+        .Inline_Box = nil,
+        .Inline_Circle = nil,
+        .Inline_Filled_Box = nil,
+        .Inline_Filled_Circle = nil,
+        .Inline_Pie_Section = nil,
+        .Inline_Perpendicular = nil,
+        .Inline_Triangle = nil,
         .Inline_Pentagon = nil,
         .Text_Run = math_program_text_item_entry,
         .Math_Glyph_Run = math_program_text_item_entry,
@@ -266,7 +275,7 @@ math_program_recursive_style_override_item :: proc(
     if !ok {
         return {}, false
     }
-    target := Math_Style{Math_Style_Level(target_level), false}
+    target: Math_Style = {Math_Style_Level(target_level), false}
     target_size := math_target_font_size(
         ctx.cache, ctx.font_size, ctx.math_style, target)
     if !measure_math_program(ctx.cache, ctx.buffer, child, target_size, target) {
@@ -325,7 +334,7 @@ matrix_cell_measure_context :: proc(
     ctx: Math_Program_Item_Context,
     descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor) -> Math_Measure_Context {
 
-    cell_style := Math_Style{Math_Style_Level(descriptor^.cell_style), false}
+    cell_style: Math_Style = {Math_Style_Level(descriptor^.cell_style), false}
     cell_font_size := math_target_font_size(
         ctx.cache, ctx.font_size, ctx.math_style, cell_style)
     return {ctx.cache, ctx.buffer, cell_font_size, cell_style}
@@ -340,7 +349,7 @@ script_metrics :: #force_inline proc(
     scaled_font_size := max(1.0, ctx.font_size * resolved_scale)
     ascent, descent := dyncore.style_ascent_descent(style, scaled_font_size)
     top_pad, bottom_pad := script_visual_padding(scaled_font_size)
-    metrics := Script_Metrics{
+    metrics: Script_Metrics = {
         cols = dyncore.text_codepoint_count_span(ctx.text, 0, len(ctx.text)),
         scale = resolved_scale,
         ascent = ascent,
@@ -489,7 +498,7 @@ math_explicit_glue_mu :: #force_inline proc(
 math_atom_spacing_mu :: proc(
     left, right: dynviewmodel.Dynview_Math_Atom_Class) -> f32 {
 
-    spacing := [9][9]f32{
+    spacing: [9][9]f32 = {
         {0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 3, 4, 5, 0, 0, 0, 3},
         {0, 3, 3, 0, 5, 0, 0, 0, 3},
@@ -567,10 +576,13 @@ math_program_text_item :: #force_inline proc(
     kind := dynviewmodel.Dynview_Layout_Item_Kind.Math_Glyph_Run if
         cmd.kind == .Math_Glyph_Run else .Text_Run
     if cmd.math_glue_kind != .None {
-        return {kind = kind, style_id = cmd.style_id}
+        return {
+            kind = kind,
+            style_id = cmd.style_id,
+        }
     }
 
-    item := dynviewmodel.Dynview_Layout_Item{
+    item: dynviewmodel.Dynview_Layout_Item = {
         kind = kind,
         style_id = cmd.style_id,
         text_offset = cmd.text_offset,
@@ -603,8 +615,10 @@ script_attach_item :: #force_inline proc(
         script_sup_text_len = cmd.script_sup_text_len,
         script_sub_text_offset = cmd.script_sub_text_offset,
         script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id, script_scale = metrics.scale,
-        script_sup_raise = cmd.script_sup_raise, script_sub_drop = cmd.script_sub_drop,
+        script_style_id = cmd.script_style_id,
+        script_scale = metrics.scale,
+        script_sup_raise = cmd.script_sup_raise,
+        script_sub_drop = cmd.script_sub_drop,
         script_gap = cmd.script_gap,
         script_sup_x = metrics.geometry.superscript_x,
         script_sup_baseline = metrics.geometry.superscript_baseline,
@@ -621,7 +635,8 @@ script_attach_item :: #force_inline proc(
         draw_width = metrics.draw_width,
         math_advance = metrics.draw_width,
         draw_height = metrics.ascent + metrics.descent,
-        ascent = metrics.ascent, descent = metrics.descent,
+        ascent = metrics.ascent,
+        descent = metrics.descent,
         visual_padding_top = metrics.top_pad,
         visual_padding_bottom = metrics.bottom_pad,
     }
@@ -793,7 +808,7 @@ script_attach_children :: proc(
     scale: f32) -> Script_Attach_Children {
 
     cmd := ctx.command
-    result := Script_Attach_Children{}
+    result: Script_Attach_Children = {}
     result.superscript = script_metrics({ctx.cache, cmd, .Superscript,
         dyncore.text_span_from_buffer(ctx.buffer, cmd.script_sup_text_offset,
             cmd.script_sup_text_len), cmd.script_style_id, scale, ctx.font_size})
@@ -822,7 +837,7 @@ script_attach_valid_metrics :: proc(
     geometry: Math_Script_Geometry,
     scale: f32) -> Script_Attach_Metrics {
 
-    result := Script_Attach_Metrics{
+    result: Script_Attach_Metrics = {
         scale = scale,
         draw_width = geometry.width,
         ascent = geometry.ascent,
@@ -853,7 +868,7 @@ script_attach_fallback_metrics :: proc(
         descent = max(descent, children.subscript.descent +
             offsets.sub_drop_px + children.subscript.bottom_pad)
     }
-    result := Script_Attach_Metrics{
+    result: Script_Attach_Metrics = {
         scale = scale,
         draw_width = script_attach_draw_width(ctx.child, ctx.command, ctx.font_size,
             children.superscript, children.subscript),
@@ -923,20 +938,28 @@ large_op_item :: #force_inline proc(
     metrics: Large_Op_Metrics) -> dynviewmodel.Dynview_Layout_Item {
 
     return dynviewmodel.Dynview_Layout_Item{
-        kind = .Large_Op, style_id = cmd.style_id, text_offset = cmd.text_offset,
-        text_len = cmd.text_len, script_sup_text_offset = cmd.script_sup_text_offset,
+        kind = .Large_Op,
+        style_id = cmd.style_id,
+        text_offset = cmd.text_offset,
+        text_len = cmd.text_len,
+        script_sup_text_offset = cmd.script_sup_text_offset,
         script_sup_text_len = cmd.script_sup_text_len,
         script_sub_text_offset = cmd.script_sub_text_offset,
         script_sub_text_len = cmd.script_sub_text_len,
-        script_style_id = cmd.script_style_id, script_scale = metrics.scale,
+        script_style_id = cmd.script_style_id,
+        script_scale = metrics.scale,
         secondary_math_program_id = cmd.secondary_math_program_id,
         tertiary_math_program_id = cmd.tertiary_math_program_id,
-        script_gap = cmd.script_gap, large_op_kind = cmd.large_op_kind,
+        script_gap = cmd.script_gap,
+        large_op_kind = cmd.large_op_kind,
         operator_growth = cmd.operator_growth,
         operator_limits = cmd.operator_limits,
-        draw_width = metrics.draw_width, draw_height = metrics.ascent + metrics.descent,
-        ascent = metrics.ascent, descent = metrics.descent,
-        visual_padding_top = metrics.top_pad, visual_padding_bottom = metrics.bottom_pad,
+        draw_width = metrics.draw_width,
+        draw_height = metrics.ascent + metrics.descent,
+        ascent = metrics.ascent,
+        descent = metrics.descent,
+        visual_padding_top = metrics.top_pad,
+        visual_padding_bottom = metrics.bottom_pad,
     }
 }
 
@@ -957,9 +980,17 @@ large_op_glyph_metrics :: proc(
     run, shaped := shaped_run_for_command(cache, cmd, .Primary)
     metrics, measured := shaped_run_layout_metrics(run, font_size * glyph_scale)
     if shaped && measured {
-        return {metrics.draw_width, metrics.ascent, metrics.descent}
+        return {
+            width = metrics.draw_width,
+            ascent = metrics.ascent,
+            descent = metrics.descent,
+        }
     }
-    return {width, ascent, descent}
+    return {
+        width,
+        ascent,
+        descent,
+    }
 }
 
 //   Replace one textual limit box with its measured recursive program.
@@ -1016,8 +1047,10 @@ large_op_metrics :: proc(
     return {
         scale = resolved_scale,
         draw_width = max(glyph.width, max(sup.draw_width, sub.draw_width)),
-        ascent = ascent, descent = descent,
-        top_pad = sup.top_pad, bottom_pad = sub.bottom_pad,
+        ascent = ascent,
+        descent = descent,
+        top_pad = sup.top_pad,
+        bottom_pad = sub.bottom_pad,
     }
 }
 
@@ -1049,8 +1082,10 @@ large_op_script_boxes :: proc(
         program, found := math_program_from_id(cache, cmd.secondary_math_program_id)
         if found {
             sup = {
-                cols = 1, draw_width = program^.draw_width,
-                ascent = program^.ascent, descent = program^.descent,
+                cols = 1,
+                draw_width = program^.draw_width,
+                ascent = program^.ascent,
+                descent = program^.descent,
             }
         }
     }
@@ -1058,8 +1093,10 @@ large_op_script_boxes :: proc(
         program, found := math_program_from_id(cache, cmd.tertiary_math_program_id)
         if found {
             sub = {
-                cols = 1, draw_width = program^.draw_width,
-                ascent = program^.ascent, descent = program^.descent,
+                cols = 1,
+                draw_width = program^.draw_width,
+                ascent = program^.ascent,
+                descent = program^.descent,
             }
         }
     }
@@ -1109,10 +1146,15 @@ math_program_apply_operator_variant :: proc(
     sup, sub := large_op_script_boxes(
         ctx.cache, ctx.buffer, ctx.cmd, ctx.font_size, ctx.math_style)
     geometry := math_operator_geometry({
-        constants = ctx.cache^.math_constants, generation = generation,
-        font_size = ctx.font_size, style = ctx.math_style, variant = selected,
-        superscript = sup, subscript = sub,
-        has_superscript = sup.width > 0, has_subscript = sub.width > 0,
+        constants = ctx.cache^.math_constants,
+        generation = generation,
+        font_size = ctx.font_size,
+        style = ctx.math_style,
+        variant = selected,
+        superscript = sup,
+        subscript = sub,
+        has_superscript = sup.width > 0,
+        has_subscript = sub.width > 0,
         limits_policy = ctx.cmd.operator_limits,
     })
     run, run_ok := shaped_run_for_command(ctx.cache, ctx.cmd, .Primary)
@@ -1247,7 +1289,8 @@ stack_layout_item :: #force_inline proc(
     geometry: Stack_Item_Geometry) -> dynviewmodel.Dynview_Layout_Item {
 
     return {
-        kind = .Stack, style_id = ctx.cmd.style_id,
+        kind = .Stack,
+        style_id = ctx.cmd.style_id,
         math_program_id = ctx.cmd.math_program_id,
         secondary_math_program_id = ctx.cmd.secondary_math_program_id,
         operator_limits = geometry.operator_limits,
@@ -1255,8 +1298,10 @@ stack_layout_item :: #force_inline proc(
         fraction_numerator_baseline = geometry.top_baseline,
         fraction_denominator_x = geometry.bottom_x,
         fraction_denominator_baseline = geometry.bottom_baseline,
-        draw_width = geometry.width, draw_height = geometry.ascent+geometry.descent,
-        ascent = geometry.ascent, descent = geometry.descent,
+        draw_width = geometry.width,
+        draw_height = geometry.ascent + geometry.descent,
+        ascent = geometry.ascent,
+        descent = geometry.descent,
     }
 }
 
@@ -1292,9 +1337,13 @@ math_program_recursive_stack_item :: proc(
         return {}, false
     }
     return stack_layout_item(ctx, {
-        top_x = geometry.top_x, top_baseline = geometry.top_baseline,
-        bottom_x = geometry.bottom_x, bottom_baseline = geometry.bottom_baseline,
-        width = geometry.width, ascent = geometry.ascent, descent = geometry.descent,
+        top_x = geometry.top_x,
+        top_baseline = geometry.top_baseline,
+        bottom_x = geometry.bottom_x,
+        bottom_baseline = geometry.bottom_baseline,
+        width = geometry.width,
+        ascent = geometry.ascent,
+        descent = geometry.descent,
     }), true
 }
 
@@ -1329,9 +1378,13 @@ math_program_recursive_over_under_item :: proc(
     }
     return stack_layout_item(ctx, {
         operator_limits = ctx.cmd.operator_limits,
-        top_x = geometry.top_x, top_baseline = geometry.top_baseline,
-        bottom_x = geometry.bottom_x, bottom_baseline = geometry.bottom_baseline,
-        width = geometry.width, ascent = geometry.ascent, descent = geometry.descent,
+        top_x = geometry.top_x,
+        top_baseline = geometry.top_baseline,
+        bottom_x = geometry.bottom_x,
+        bottom_baseline = geometry.bottom_baseline,
+        width = geometry.width,
+        ascent = geometry.ascent,
+        descent = geometry.descent,
     }), true
 }
 
@@ -1340,7 +1393,10 @@ stretch_delimiter_content :: proc(
     ctx: Math_Program_Item_Context) -> (Stretch_Delimiter_Content, bool) {
 
     ascent, descent := dyncore.style_ascent_descent(ctx.style, ctx.font_size)
-    content := Stretch_Delimiter_Content{ascent = ascent, descent = descent}
+    content: Stretch_Delimiter_Content = {
+        ascent = ascent,
+        descent = descent,
+    }
     if ctx.cmd.math_program_id <= 0 {
         return content, true
     }
@@ -1449,7 +1505,11 @@ math_stretch_ink_vertical_bounds :: proc(
             top, bottom = min(top, part_top), max(bottom, part_bottom)
         }
     }
-    return {top = top, bottom = bottom, valid = bottom > top}
+    return {
+        top = top,
+        bottom = bottom,
+        valid = bottom > top,
+    }
 }
 
 //   Select every visible side without publishing a partial two-sided result.
@@ -1460,8 +1520,10 @@ math_stretch_select_delimiters :: proc(
     scale: f32,
     target: i32) -> Stretch_Delimiter_Selection {
 
-    result := Stretch_Delimiter_Selection{ok = true}
-    kinds := [2]i32{cmd.accent_mode, cmd.radical_mode}
+    result: Stretch_Delimiter_Selection = {
+        ok = true,
+    }
+    kinds: [2]i32 = {cmd.accent_mode, cmd.radical_mode}
     for kind, side in kinds {
         if kind == DELIMITER_KIND_NONE {
             continue
@@ -1544,12 +1606,20 @@ stretch_delimiter_shared_content_width :: proc(
             continue
         }
         base_item, base_ok := math_program_item({
-            cache = cache, buffer = buffer, cmd = child_cmd,
-            font_size = font_size, command_index = child_index})
+            cache = cache,
+            buffer = buffer,
+            cmd = child_cmd,
+            font_size = font_size,
+            command_index = child_index,
+        })
         shared_item, shared_ok := math_program_item({
-            cache = cache, buffer = buffer, cmd = child_cmd,
-            font_size = font_size, command_index = child_index,
-            delimiter_target_height = target_height})
+            cache = cache,
+            buffer = buffer,
+            cmd = child_cmd,
+            font_size = font_size,
+            command_index = child_index,
+            delimiter_target_height = target_height,
+        })
         if base_ok && shared_ok {
             content_width += shared_item.draw_width-base_item.draw_width
         }
@@ -1618,7 +1688,7 @@ radical_math_metrics :: proc(
     if style.level == .Display {
         gap_constant = .Radical_Display_Style_Vertical_Gap
     }
-    result := Radical_Math_Metrics{}
+    result: Radical_Math_Metrics = {}
     gap_ok, rule_ok, extra_ok, before_ok, after_ok: bool
     result.gap, gap_ok = math_constant_position_px(
         constants, generation, gap_constant, font_size)
@@ -1649,7 +1719,10 @@ radical_degree_dimensions :: proc(
     if !found {
         return {}
     }
-    return {width = degree^.draw_width, descent = degree^.descent}
+    return {
+        width = degree^.draw_width,
+        descent = degree^.descent,
+    }
 }
 
 //   Assemble validated radical measurements into immutable construction geometry.
@@ -1663,14 +1736,22 @@ radical_construction_geometry :: proc(
     degree_bottom := surd_origin+input.bounds.bottom-
         (input.bounds.bottom-input.bounds.top)*input.metrics.degree_raise_percent/100.0
     return {
-        construction = input.selected, raster_ascent = input.source.raster_ascent,
-        scale = input.scale, surd_x = surd_x, surd_left = input.left,
-        surd_width = max(0, input.right-input.left), surd_bottom = surd_origin,
+        construction = input.selected,
+        raster_ascent = input.source.raster_ascent,
+        scale = input.scale,
+        surd_x = surd_x,
+        surd_left = input.left,
+        surd_width = max(0, input.right-input.left),
+        surd_bottom = surd_origin,
         content_width = input.child^.draw_width,
-        child_ascent = input.child^.ascent, child_descent = input.child^.descent,
-        degree_width = input.degree.width, degree_descent = input.degree.descent,
+        child_ascent = input.child^.ascent,
+        child_descent = input.child^.descent,
+        degree_width = input.degree.width,
+        degree_descent = input.degree.descent,
         degree_baseline = degree_bottom-input.degree.descent,
-        metrics = input.metrics, generation = input.generation, valid = true,
+        metrics = input.metrics,
+        generation = input.generation,
+        valid = true,
     }
 }
 
@@ -1707,8 +1788,15 @@ math_program_radical_construction :: proc(
     left, right := math_stretch_horizontal_bounds(selected, scale)
     degree := radical_degree_dimensions(cache, cmd.secondary_math_program_id)
     return radical_construction_geometry({
-        selected = selected, source = source, child = child, metrics = metrics,
-        bounds = bounds, degree = degree, scale = scale, left = left, right = right,
+        selected = selected,
+        source = source,
+        child = child,
+        metrics = metrics,
+        bounds = bounds,
+        degree = degree,
+        scale = scale,
+        left = left,
+        right = right,
         generation = generation,
     })
 }
@@ -1763,9 +1851,12 @@ measure_matrix_cells :: proc(
             cmd_index := cell_program^.command_start + cell_index
             cell_cmd := ctx.cache^.math_commands[cmd_index]
             cell_item, cell_ok := math_program_item({
-                cache = ctx.cache, buffer = ctx.buffer,
-                cmd = cell_cmd, font_size = ctx.font_size,
-                command_index = cmd_index, math_style = ctx.math_style,
+                cache = ctx.cache,
+                buffer = ctx.buffer,
+                cmd = cell_cmd,
+                font_size = ctx.font_size,
+                command_index = cmd_index,
+                math_style = ctx.math_style,
             })
             if !cell_ok {
                 return false
@@ -1815,12 +1906,18 @@ matrix_item :: #force_inline proc(
     axis_height := clamp(metrics.axis_height, -half_height, half_height)
     ascent := half_height + axis_height
     return dynviewmodel.Dynview_Layout_Item{
-        kind = .Matrix, style_id = cmd.style_id, math_program_id = cmd.math_program_id,
+        kind = .Matrix,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
         table_descriptor_index = cmd.table_descriptor_index,
-        accent_mode = i32(metrics.rows), radical_mode = i32(metrics.cols),
-        draw_width = metrics.draw_width, draw_height = metrics.total_height,
-        ascent = ascent, descent = metrics.total_height - ascent,
-        visual_padding_top = metrics.top_pad, visual_padding_bottom = metrics.bottom_pad,
+        accent_mode = i32(metrics.rows),
+        radical_mode = i32(metrics.cols),
+        draw_width = metrics.draw_width,
+        draw_height = metrics.total_height,
+        ascent = ascent,
+        descent = metrics.total_height - ascent,
+        visual_padding_top = metrics.top_pad,
+        visual_padding_bottom = metrics.bottom_pad,
     }
 }
 
@@ -1837,7 +1934,12 @@ matrix_program_from_command :: proc(
     if !ok || program^.command_count != descriptor^.rows * descriptor^.columns {
         return {}, false
     }
-    return {program, descriptor, descriptor^.rows, descriptor^.columns}, true
+    return Matrix_Program{
+        program = program,
+        descriptor = descriptor,
+        rows = descriptor^.rows,
+        cols = descriptor^.columns,
+    }, true
 }
 
 //   Build one layout-like item for a recursive matrix with row-major child cells.
@@ -1849,7 +1951,7 @@ math_program_recursive_matrix_item :: #force_inline proc(
         return dynviewmodel.Dynview_Layout_Item{}, false
     }
 
-    cell_dims := Matrix_Cell_Dims{}
+    cell_dims: Matrix_Cell_Dims = {}
     if !measure_matrix_cells(
         matrix_cell_measure_context(ctx, matrix_info.descriptor), matrix_info.program,
         matrix_info.descriptor, &cell_dims) {
@@ -1890,9 +1992,12 @@ accent_fallback_geometry :: #force_inline proc(
     thickness := max(1.0, cmd.accent_thickness * font_size)
     offset := max(0.0, cmd.accent_offset * font_size)
     half := thickness * 0.5
-    result := Math_Bar_Geometry{
-        rule_thickness = thickness, width = child^.draw_width,
-        ascent = child^.ascent, descent = child^.descent}
+    result: Math_Bar_Geometry = {
+        rule_thickness = thickness,
+        width = child^.draw_width,
+        ascent = child^.ascent,
+        descent = child^.descent,
+    }
     if cmd.accent_mode == 1 {
         result.rule_center = -child^.ascent - offset
         result.ascent = max(result.ascent, child^.ascent + offset + half)
@@ -1936,19 +2041,24 @@ accent_bar_item :: #force_inline proc(
     geometry: Math_Bar_Geometry) -> dynviewmodel.Dynview_Layout_Item {
 
     return {
-        kind = .Accent_Bar, style_id = cmd.style_id,
+        kind = .Accent_Bar,
+        style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         secondary_math_program_id = cmd.secondary_math_program_id,
-        accent_mode = cmd.accent_mode, accent_style_id = cmd.accent_style_id,
-        accent_thickness = cmd.accent_thickness, accent_offset = cmd.accent_offset,
+        accent_mode = cmd.accent_mode,
+        accent_style_id = cmd.accent_style_id,
+        accent_thickness = cmd.accent_thickness,
+        accent_offset = cmd.accent_offset,
         accent_child_baseline = geometry.child_baseline,
         accent_rule_right = geometry.width,
         accent_rule_center = geometry.rule_center,
         accent_rule_thickness = geometry.rule_thickness,
         accent_geometry_valid = geometry.valid,
-        draw_width = geometry.width, math_advance = geometry.width,
+        draw_width = geometry.width,
+        math_advance = geometry.width,
         draw_height = geometry.ascent + geometry.descent,
-        ascent = geometry.ascent, descent = geometry.descent,
+        ascent = geometry.ascent,
+        descent = geometry.descent,
         visual_padding_top = child^.visual_padding_top,
         visual_padding_bottom = child^.visual_padding_bottom,
         italic_correction = child^.italic_correction,
@@ -1962,12 +2072,16 @@ accent_glyph_item :: #force_inline proc(
     child: ^dynviewmodel.Dynview_Math_Program) -> dynviewmodel.Dynview_Layout_Item {
 
     return {
-        kind = .Accent_Bar, style_id = cmd.style_id,
-        math_program_id = cmd.math_program_id, accent_mode = cmd.accent_mode,
+        kind = .Accent_Bar,
+        style_id = cmd.style_id,
+        math_program_id = cmd.math_program_id,
+        accent_mode = cmd.accent_mode,
         accent_style_id = cmd.accent_style_id,
-        draw_width = child^.draw_width, math_advance = child^.advance,
+        draw_width = child^.draw_width,
+        math_advance = child^.advance,
         draw_height = child^.ascent+child^.descent,
-        ascent = child^.ascent, descent = child^.descent,
+        ascent = child^.ascent,
+        descent = child^.descent,
         visual_padding_top = child^.visual_padding_top,
         visual_padding_bottom = child^.visual_padding_bottom,
         italic_correction = child^.italic_correction,
@@ -2021,8 +2135,10 @@ math_program_apply_glyph_accent :: proc(
     }
     geometry := math_glyph_accent_geometry({
         constants = ctx.cache^.math_constants,
-        generation = ctx.cache^.shaped_font_generation, font_size = ctx.font_size,
-        child_width = child^.draw_width, child_ascent = child^.ascent,
+        generation = ctx.cache^.shaped_font_generation,
+        font_size = ctx.font_size,
+        child_width = child^.draw_width,
+        child_ascent = child^.ascent,
         child_descent = child^.descent,
         base_attachment = math_program_base_accent_attachment(child),
         sources = ctx.cache^.math_accent_sources[ctx.command_index],
@@ -2066,15 +2182,20 @@ radical_item :: #force_inline proc(
         style_id = cmd.style_id,
         math_program_id = cmd.math_program_id,
         secondary_math_program_id = cmd.secondary_math_program_id,
-        script_style_id = cmd.script_style_id, script_scale = script_scale,
-        script_sup_raise = cmd.script_sup_raise, script_sub_drop = cmd.script_sub_drop,
+        script_style_id = cmd.script_style_id,
+        script_scale = script_scale,
+        script_sup_raise = cmd.script_sup_raise,
+        script_sub_drop = cmd.script_sub_drop,
         radical_mode = cmd.radical_mode,
         radical_index_text_offset = cmd.radical_index_text_offset,
         radical_index_text_len = cmd.radical_index_text_len,
-        accent_style_id = cmd.accent_style_id, accent_thickness = cmd.accent_thickness,
-        accent_offset = cmd.accent_offset, draw_width = geometry.draw_width,
+        accent_style_id = cmd.accent_style_id,
+        accent_thickness = cmd.accent_thickness,
+        accent_offset = cmd.accent_offset,
+        draw_width = geometry.draw_width,
         draw_height = geometry.ascent + geometry.descent,
-        ascent = geometry.ascent, descent = geometry.descent,
+        ascent = geometry.ascent,
+        descent = geometry.descent,
         visual_padding_top = geometry.top_pad,
         visual_padding_bottom = geometry.bottom_pad,
     }
@@ -2130,7 +2251,8 @@ radical_geometry :: proc(
     accent_pad := accent_script_clearance(ctx.font_size, scale, false)
     return {
         draw_width = lead + ctx.child^.draw_width + front + back,
-        ascent = ascent, descent = descent,
+        ascent = ascent,
+        descent = descent,
         top_pad = max(ctx.child^.visual_padding_top, max(script_top, accent_pad)),
         bottom_pad = max(
             ctx.child^.visual_padding_bottom, max(script_bottom, accent_pad)),
@@ -2319,8 +2441,12 @@ measure_math_program :: proc(
     for command_index in program^.command_start..<command_end {
         cmd := cache^.math_commands[command_index]
         item, ok := math_program_item({
-            cache = cache, buffer = buffer, cmd = cmd, font_size = font_size,
-            command_index = command_index, math_style = math_style,
+            cache = cache,
+            buffer = buffer,
+            cmd = cmd,
+            font_size = font_size,
+            command_index = command_index,
+            math_style = math_style,
         })
         if !ok {
             return false

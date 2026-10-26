@@ -28,7 +28,9 @@ tooltip_test_frame :: proc(
     tooltip: ^viewmodel.Ui_Tooltip_State,
     offer: Maybe(uioverlay.Tooltip_Offer),
     now_seconds: f64,
-    facts: uioverlay.Tooltip_Frame_Facts = {window_focused = true}) {
+    facts: uioverlay.Tooltip_Frame_Facts = {
+        window_focused = true,
+    }) {
     uioverlay.tooltip_frame_begin(tooltip)
     if value, present := offer.?; present {
         uioverlay.tooltip_offer(tooltip, value)
@@ -42,7 +44,7 @@ tooltip_test_frame :: proc(
 // clamps horizontally.
 @(test)
 tooltip_place_prefers_below_and_flips_above :: proc(t: ^testing.T) {
-    size := geometry.Vector2{80, 22}
+    size: geometry.Vector2 = {80, 22}
     below := uioverlay.tooltip_place({100, 100, 24, 24}, size, TOOLTIP_TEST_WINDOW)
     testing.expect_value(t, below, geometry.Rectangle{72, 130, 80, 22})
 
@@ -58,7 +60,7 @@ tooltip_place_prefers_below_and_flips_above :: proc(t: ^testing.T) {
 // Verify above preference and the below fallback when the preferred side cannot fit.
 @(test)
 tooltip_place_prefers_above_with_fallback :: proc(t: ^testing.T) {
-    size := geometry.Vector2{80, 22}
+    size: geometry.Vector2 = {80, 22}
     above := uioverlay.tooltip_place(
         {100, 100, 24, 24}, size, TOOLTIP_TEST_WINDOW, true)
     testing.expect_value(t, above, geometry.Rectangle{72, 72, 80, 22})
@@ -71,7 +73,7 @@ tooltip_place_prefers_above_with_fallback :: proc(t: ^testing.T) {
 // Verify an anchor with no room on either side clamps into the window margins.
 @(test)
 tooltip_place_clamps_when_neither_side_fits :: proc(t: ^testing.T) {
-    window := geometry.Rectangle{0, 0, 200, 60}
+    window: geometry.Rectangle = {0, 0, 200, 60}
     box := uioverlay.tooltip_place({10, 10, 20, 40}, {40, 22}, window)
     testing.expect(t, box.y >= uioverlay.TOOLTIP_WINDOW_MARGIN)
     testing.expect(t, box.y + box.height <= 60 - uioverlay.TOOLTIP_WINDOW_MARGIN)
@@ -83,7 +85,7 @@ tooltip_place_clamps_when_neither_side_fits :: proc(t: ^testing.T) {
 // Verify preferred-side placement remains inside the window when neither side fits.
 @(test)
 tooltip_place_clamps_preferred_side_when_neither_fits :: proc(t: ^testing.T) {
-    window := geometry.Rectangle{0, 0, 200, 60}
+    window: geometry.Rectangle = {0, 0, 200, 60}
     box := uioverlay.tooltip_place({10, 10, 20, 40}, {40, 22}, window, true)
     testing.expect_value(t, box.y, f32(34))
 }
@@ -178,8 +180,10 @@ tooltip_keyboard_immediate_and_pointer_precedence :: proc(t: ^testing.T) {
 @(test)
 tooltip_dismissal_persists_until_owner_changes :: proc(t: ^testing.T) {
     tooltip: viewmodel.Ui_Tooltip_State
-    tooltip_test_frame(&tooltip, tooltip_test_offer(1, .Keyboard), 1.0,
-        {window_focused = true, dismiss = true})
+    tooltip_test_frame(&tooltip, tooltip_test_offer(1, .Keyboard), 1.0, {
+        window_focused = true,
+        dismiss = true,
+    })
     testing.expect(t, !tooltip.visible)
     tooltip_test_frame(&tooltip, tooltip_test_offer(1, .Keyboard), 1.1)
     testing.expect(t, !tooltip.visible)
@@ -189,7 +193,10 @@ tooltip_dismissal_persists_until_owner_changes :: proc(t: ^testing.T) {
     uioverlay.tooltip_frame_begin(&tooltip)
     uioverlay.tooltip_dismiss(&tooltip, semantic_test_id(.Animation_Control, 2))
     uioverlay.tooltip_offer(&tooltip, tooltip_test_offer(2, .Pointer))
-    uioverlay.tooltip_frame_resolve(&tooltip, {now_seconds = 1.3, window_focused = true})
+    uioverlay.tooltip_frame_resolve(&tooltip, {
+        now_seconds = 1.3,
+        window_focused = true,
+    })
     testing.expect(t, !tooltip.visible)
     tooltip_test_frame(&tooltip, nil, 1.4)
     tooltip_test_frame(&tooltip, tooltip_test_offer(2, .Keyboard), 1.5)
@@ -200,8 +207,10 @@ tooltip_dismissal_persists_until_owner_changes :: proc(t: ^testing.T) {
 @(test)
 tooltip_suppression_and_unfocused_window_hide :: proc(t: ^testing.T) {
     tooltip: viewmodel.Ui_Tooltip_State
-    tooltip_test_frame(&tooltip, tooltip_test_offer(1, .Keyboard), 1.0,
-        {window_focused = true, suppressed = true})
+    tooltip_test_frame(&tooltip, tooltip_test_offer(1, .Keyboard), 1.0, {
+        window_focused = true,
+        suppressed = true,
+    })
     testing.expect(t, !tooltip.visible)
     tooltip_test_frame(&tooltip, tooltip_test_offer(1, .Keyboard), 1.1, {})
     testing.expect(t, !tooltip.visible)
@@ -230,7 +239,10 @@ tooltip_control_source_follows_pointer_and_keyboard_focus :: proc(t: ^testing.T)
         &runtime.input, runtime.semantic_focus, owner, 7),
         viewmodel.Ui_Tooltip_Source.None)
 
-    runtime.input.interaction_frame.pointer_target = {kind = .Control, id = 7}
+    runtime.input.interaction_frame.pointer_target = {
+        kind = .Control,
+        id = 7,
+    }
     testing.expect_value(t, uioverlay.tooltip_control_source(
         &runtime.input, runtime.semantic_focus, owner, 7),
         viewmodel.Ui_Tooltip_Source.Pointer)
@@ -239,8 +251,15 @@ tooltip_control_source_follows_pointer_and_keyboard_focus :: proc(t: ^testing.T)
 // Verify only an Escape press requests tooltip dismissal.
 @(test)
 tooltip_escape_press_requests_dismissal :: proc(t: ^testing.T) {
-    events := [?]input.Input_Event{{kind = .Release, key = .Escape}}
-    testing.expect(t, !uioverlay.tooltip_escape_pressed({events = events[:]}))
+    events := [?]input.Input_Event{{
+        kind = .Release,
+        key = .Escape,
+    }}
+    testing.expect(t, !uioverlay.tooltip_escape_pressed({
+        events = events[:],
+    }))
     events[0].kind = .Press
-    testing.expect(t, uioverlay.tooltip_escape_pressed({events = events[:]}))
+    testing.expect(t, uioverlay.tooltip_escape_pressed({
+        events = events[:],
+    }))
 }

@@ -57,13 +57,19 @@ tree_collections_fixture :: proc(
     state^.ui_runtime.layout.active_accordion_section = .Library
     state^.ui_runtime.library.tree.selected_item_id = viewmodel.TREE_COLLECTIONS_ROOT_ID
     return {
-        general_state = state, ji = ji,
+        general_state = state,
+        ji = ji,
         collections = &state^.preferences_runtime.collections_state,
         ui_runtime = &state^.ui_runtime,
         list_panel = {10, 20, 240, 500},
         scroll_y = &state^.ui_runtime.library.tree.scroll_y,
-        mouse_input = {sample_time_seconds = 1, mouse_position = {-1, -1}},
-        visibility = {search = &state^.ui_runtime.library.search},
+        mouse_input = {
+            sample_time_seconds = 1,
+            mouse_position = {-1, -1},
+        },
+        visibility = {
+            search = &state^.ui_runtime.library.search,
+        },
         reduce_motion = true,
     }
 }
@@ -219,8 +225,10 @@ tree_collections_favorites_shell_preserves_custom_heads :: proc(t: ^testing.T) {
         projection, state^.ui_runtime.library.tree.selected_item_id)]
     entry: uuid.Identifier
     entry[0] = 91
-    add := collections.Mutation{
-        kind = .Add_Favorite, entry_id = entry, animation_id = nodes[0].stable_id,
+    add: collections.Mutation = {
+        kind = .Add_Favorite,
+        entry_id = entry,
+        animation_id = nodes[0].stable_id,
         placement = {
             collection_id = collections.FAVORITES_COLLECTION_ID,
             entry_id = entry,
@@ -290,11 +298,12 @@ tree_collections_projection_failure_preserves_accepted_state :: proc(t: ^testing
     params := tree_collections_fixture(t, state, &ji, &nodes)
     _ = tree_actions_test_semantic_frame(t, &params)
     projection := &state^.ui_runtime.library.tree.projection
-    failure_state := Tree_Projection_Test_Allocator_State{
+    failure_state: Tree_Projection_Test_Allocator_State = {
         backing_allocator = projection^.allocator.backing_allocator,
     }
     projection^.allocator.backing_allocator = {
-        procedure = tree_projection_test_failing_allocator, data = &failure_state,
+        procedure = tree_projection_test_failing_allocator,
+        data = &failure_state,
     }
     allocator := storage.tlsf_owner_allocator(&projection^.allocator)
     blocks: [1024][]u8
@@ -327,8 +336,9 @@ tree_collections_model_rejection_retires_provisional_node :: proc(t: ^testing.T)
     count := projection^.count
     id: uuid.Identifier
     id[0] = 71
-    mutation := collections.Mutation{
-        kind = .Create_Collection, collection_id = id,
+    mutation: collections.Mutation = {
+        kind = .Create_Collection,
+        collection_id = id,
         collection_name_length = 0,
     }
     testing.expect_value(t, viewpreferences.settings_save_collection_mutation(

@@ -15,7 +15,7 @@ container_geometry :: proc(
     drawn_rect.height = max(f32(0), drawn_rect.height)
     border := max(0.0, border_thickness)
 
-    inner_rect := geometry.Rectangle{
+    inner_rect: geometry.Rectangle = {
         drawn_rect.x + border,
         drawn_rect.y + border,
         drawn_rect.width - border * 2,

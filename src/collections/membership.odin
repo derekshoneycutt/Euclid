@@ -45,7 +45,10 @@ make_collection_animation_add_mutation :: proc(
     }
     return {
         kind = .Add_Collection_Animation,
-        placement = {collection_id = collection_id, entry_id = entry_id},
+        placement = {
+            collection_id = collection_id,
+            entry_id = entry_id,
+        },
         entry_id = entry_id,
         animation_id = animation_id,
     }, .None
@@ -66,8 +69,10 @@ make_collection_animation_remove_mutation :: proc(
         return {}, .Invalid_Identity
     }
     return {
-        kind = .Remove_Collection_Animation, placement = identity,
-        entry_id = identity.entry_id, animation_id = placement.animation_id,
+        kind = .Remove_Collection_Animation,
+        placement = identity,
+        entry_id = identity.entry_id,
+        animation_id = placement.animation_id,
     }, .None
 }
 
@@ -98,10 +103,12 @@ apply_collection_animation_add_mutation :: proc(
         return .Policy
     }
     appended := append_entry(set, {
-        id = mutation.entry_id, collection_id = mutation.placement.collection_id,
+        id = mutation.entry_id,
+        collection_id = mutation.placement.collection_id,
         sibling_order = maximum_collection_root_order(
             set, mutation.placement.collection_id) + 1,
-        kind = .Animation, animation_id = mutation.animation_id,
+        kind = .Animation,
+        animation_id = mutation.animation_id,
     })
     if appended == .Allocation_Failed || appended == .Capacity {
         return .Allocation_Failed

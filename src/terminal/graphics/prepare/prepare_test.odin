@@ -117,8 +117,11 @@ graphics_test_rejects_invalid_encoded_headers :: proc(t: ^testing.T) {
 graphics_test_prepare_jpeg :: proc(t: ^testing.T) {
     output: [4]u8
     jpeg_bytes := GRAPHICS_TEST_JPEG
-    request := Prepare_Request{
-        kind = .Encoded_Image, input = jpeg_bytes[:], width = 1, height = 1,
+    request: Prepare_Request = {
+        kind = .Encoded_Image,
+        input = jpeg_bytes[:],
+        width = 1,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, prepare(&request))
@@ -130,7 +133,7 @@ graphics_test_prepare_jpeg :: proc(t: ^testing.T) {
 graphics_test_prepare_png :: proc(t: ^testing.T) {
     output: [4]u8
     png_bytes := GRAPHICS_TEST_PNG
-    request := Prepare_Request{
+    request: Prepare_Request = {
         kind = .Encoded_Image,
         input = png_bytes[:],
         width = 1,
@@ -146,8 +149,11 @@ graphics_test_prepare_png :: proc(t: ^testing.T) {
 graphics_test_prepare_gif_first_frame :: proc(t: ^testing.T) {
     output: [4]u8
     gif_bytes := GRAPHICS_TEST_GIF
-    request := Prepare_Request{
-        kind = .Encoded_Image, input = gif_bytes[:], width = 1, height = 1,
+    request: Prepare_Request = {
+        kind = .Encoded_Image,
+        input = gif_bytes[:],
+        width = 1,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, prepare(&request))
@@ -162,8 +168,11 @@ graphics_test_prepare_gif_palette :: proc(t: ^testing.T) {
     gif_bytes[16] = 23
     gif_bytes[17] = 101
     gif_bytes[18] = 207
-    request := Prepare_Request{
-        kind = .Encoded_Image, input = gif_bytes[:], width = 1, height = 1,
+    request: Prepare_Request = {
+        kind = .Encoded_Image,
+        input = gif_bytes[:],
+        width = 1,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, prepare(&request))
@@ -173,15 +182,18 @@ graphics_test_prepare_gif_palette :: proc(t: ^testing.T) {
 // Verify transparent indexed pixels do not retain caller-buffer contents.
 @(test)
 graphics_test_prepare_gif_transparency :: proc(t: ^testing.T) {
-    output := [4]u8{23, 101, 207, 255}
+    output: [4]u8 = {23, 101, 207, 255}
     original := GRAPHICS_TEST_GIF
-    control := [8]u8{0x21, 0xf9, 4, 1, 0, 0, 1, 0}
+    control: [8]u8 = {0x21, 0xf9, 4, 1, 0, 0, 1, 0}
     gif_bytes: [42]u8
     copy(gif_bytes[:19], original[:19])
     copy(gif_bytes[19:27], control[:])
     copy(gif_bytes[27:], original[19:])
-    request := Prepare_Request{
-        kind = .Encoded_Image, input = gif_bytes[:], width = 1, height = 1,
+    request: Prepare_Request = {
+        kind = .Encoded_Image,
+        input = gif_bytes[:],
+        width = 1,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, prepare(&request))
@@ -191,14 +203,17 @@ graphics_test_prepare_gif_transparency :: proc(t: ^testing.T) {
 // Verify exact RGB and RGBA zlib streams expand without a second pixel buffer.
 @(test)
 graphics_test_prepare_zlib :: proc(t: ^testing.T) {
-    rgb := [14]u8{120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22}
-    rgba := [16]u8{
+    rgb: [14]u8 = {120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22}
+    rgba: [16]u8 = {
         120, 156, 99, 231, 224, 228, 226, 230,
         225, 229, 3, 0, 1, 88, 0, 85,
     }
     output: [8]u8
-    request := Prepare_Request{
-        kind = .Zlib_Rgb, input = rgb[:], width = 2, height = 1,
+    request: Prepare_Request = {
+        kind = .Zlib_Rgb,
+        input = rgb[:],
+        width = 2,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, prepare(&request))
@@ -212,12 +227,15 @@ graphics_test_prepare_zlib :: proc(t: ^testing.T) {
 // Verify a stream expanding beyond the declared raw extent fails without overwrite.
 @(test)
 graphics_test_rejects_zlib_expansion_beyond_extent :: proc(t: ^testing.T) {
-    compressed := [14]u8{
+    compressed: [14]u8 = {
         120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22,
     }
-    output := [5]u8{0, 0, 0, 0, 0xa5}
-    request := Prepare_Request{
-        kind = .Zlib_Rgb, input = compressed[:], width = 1, height = 1,
+    output: [5]u8 = {0, 0, 0, 0, 0xa5}
+    request: Prepare_Request = {
+        kind = .Zlib_Rgb,
+        input = compressed[:],
+        width = 1,
+        height = 1,
         output = output[:4],
     }
     testing.expect(t, !prepare(&request))
@@ -227,12 +245,15 @@ graphics_test_rejects_zlib_expansion_beyond_extent :: proc(t: ^testing.T) {
 // Verify malformed, truncated, and trailing zlib data never succeeds.
 @(test)
 graphics_test_rejects_invalid_zlib_streams :: proc(t: ^testing.T) {
-    compressed := [15]u8{
+    compressed: [15]u8 = {
         120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22, 0,
     }
     output: [8]u8
-    request := Prepare_Request{
-        kind = .Zlib_Rgb, width = 2, height = 1, output = output[:],
+    request: Prepare_Request = {
+        kind = .Zlib_Rgb,
+        width = 2,
+        height = 1,
+        output = output[:],
     }
     for length in 0..<14 {
         request.input = compressed[:length]
@@ -251,12 +272,15 @@ graphics_test_rejects_invalid_zlib_streams :: proc(t: ^testing.T) {
 // Verify valid streams must fill the exact declared raw pixel extent.
 @(test)
 graphics_test_rejects_short_zlib_output :: proc(t: ^testing.T) {
-    compressed := [14]u8{
+    compressed: [14]u8 = {
         120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22,
     }
     output: [8]u8
-    request := Prepare_Request{
-        kind = .Zlib_Rgba, input = compressed[:], width = 2, height = 1,
+    request: Prepare_Request = {
+        kind = .Zlib_Rgba,
+        input = compressed[:],
+        width = 2,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, !prepare(&request))
@@ -265,12 +289,15 @@ graphics_test_rejects_short_zlib_output :: proc(t: ^testing.T) {
 // Verify zlib stored DEFLATE blocks use the same exact RGB output contract.
 @(test)
 graphics_test_prepare_zlib_stored_block :: proc(t: ^testing.T) {
-    compressed := [17]u8{
+    compressed: [17]u8 = {
         120, 1, 1, 6, 0, 249, 255, 1, 2, 3, 4, 5, 6, 0, 62, 0, 22,
     }
     output: [8]u8
-    request := Prepare_Request{
-        kind = .Zlib_Rgb, input = compressed[:], width = 2, height = 1,
+    request: Prepare_Request = {
+        kind = .Zlib_Rgb,
+        input = compressed[:],
+        width = 2,
+        height = 1,
         output = output[:],
     }
     testing.expect(t, prepare(&request))
@@ -282,7 +309,7 @@ graphics_test_prepare_zlib_stored_block :: proc(t: ^testing.T) {
 graphics_test_prepare_sixel :: proc(t: ^testing.T) {
     output: [2 * 12 * 4]u8
     sixel := "#1;2;100;0;0#1!2~-$?"
-    request := Prepare_Request{
+    request: Prepare_Request = {
         kind = .Sixel,
         input = transmute([]u8)sixel,
         width = 2,
@@ -301,9 +328,12 @@ graphics_test_prepare_sixel :: proc(t: ^testing.T) {
 graphics_test_prepare_sixel_hls :: proc(t: ^testing.T) {
     output: [4]u8
     sixel := "#1;1;0;50;100#1@"
-    request := Prepare_Request{
-        kind = .Sixel, input = transmute([]u8)sixel,
-        width = 1, height = 1, output = output[:],
+    request: Prepare_Request = {
+        kind = .Sixel,
+        input = transmute([]u8)sixel,
+        width = 1,
+        height = 1,
+        output = output[:],
     }
     testing.expect(t, prepare(&request))
     testing.expect_value(t, output, [4]u8{0, 255, 0, 255})
@@ -314,7 +344,7 @@ graphics_test_prepare_sixel_hls :: proc(t: ^testing.T) {
 graphics_test_rejects_invalid_preparation :: proc(t: ^testing.T) {
     output: [4]u8
     png_bytes := GRAPHICS_TEST_PNG
-    request := Prepare_Request{
+    request: Prepare_Request = {
         kind = .Encoded_Image,
         input = png_bytes[:],
         width = 2,
@@ -323,24 +353,34 @@ graphics_test_rejects_invalid_preparation :: proc(t: ^testing.T) {
     }
     testing.expect(t, !prepare(&request))
     invalid_sixel := "!999~"
-    request = {kind = .Sixel, input = transmute([]u8)invalid_sixel,
-        width = 1, height = 1, output = output[:]}
+    request = {
+        kind = .Sixel,
+        input = transmute([]u8)invalid_sixel,
+        width = 1,
+        height = 1,
+        output = output[:],
+    }
     testing.expect(t, !prepare(&request))
 }
 
 // Verify a pre-cancelled preparation leaves its exact candidate storage untouched.
 @(test)
 graphics_test_pre_cancelled_preparation :: proc(t: ^testing.T) {
-    output := [4]u8{0xa5, 0xa5, 0xa5, 0xa5}
+    output: [4]u8 = {0xa5, 0xa5, 0xa5, 0xa5}
     sixel := "@"
-    request := Prepare_Request{
-        kind = .Sixel, input = transmute([]u8)sixel,
-        width = 1, height = 1, output = output[:],
+    request: Prepare_Request = {
+        kind = .Sixel,
+        input = transmute([]u8)sixel,
+        width = 1,
+        height = 1,
+        output = output[:],
     }
     requested := false
     sync.atomic_store_explicit(&requested, true, .Release)
 
-    testing.expect(t, !prepare(&request, {requested = &requested}))
+    testing.expect(t, !prepare(&request, {
+        requested = &requested,
+    }))
     testing.expect_value(t, output, [4]u8{0xa5, 0xa5, 0xa5, 0xa5})
     testing.expect(t, taskpool.task_cancellation_requested({
         requested = &requested,

@@ -162,8 +162,12 @@ view_snapshot_record_transfer_accepts_exact_limits :: proc(t: ^testing.T) {
     nodes[len(nodes) - 1].style_id = 42
 
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, {commands = commands, math_programs = programs,
-            math_commands = math_commands, math_nodes = nodes}))
+        slot, {
+            commands = commands,
+            math_programs = programs,
+            math_commands = math_commands,
+            math_nodes = nodes,
+        }))
     view_snapshot_expect_record_limits(t, slot, {
         commands, programs, math_commands, nodes})
 }
@@ -176,8 +180,12 @@ view_snapshot_record_overflow_rejected :: proc(
     slot^.state = .Free
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect(t, !build_view_snapshot_record_payloads(
-        slot, {commands = payloads.commands, math_programs = payloads.programs,
-            math_commands = payloads.math_commands, math_nodes = payloads.nodes}))
+        slot, {
+            commands = payloads.commands,
+            math_programs = payloads.programs,
+            math_commands = payloads.math_commands,
+            math_nodes = payloads.nodes,
+        }))
     testing.expect(t, !slot^.command_builder.sealed &&
         !slot^.math_program_builder.sealed && !slot^.math_command_builder.sealed &&
         !slot^.math_node_builder.sealed)
@@ -217,11 +225,18 @@ view_snapshot_record_transfer_rejects_each_overflow :: proc(t: ^testing.T) {
     defer delete(math_commands)
     defer delete(nodes)
 
-    view_snapshot_record_overflow_rejected(t, slot, {commands = commands})
-    view_snapshot_record_overflow_rejected(t, slot, {programs = programs})
-    view_snapshot_record_overflow_rejected(
-        t, slot, {math_commands = math_commands})
-    view_snapshot_record_overflow_rejected(t, slot, {nodes = nodes})
+    view_snapshot_record_overflow_rejected(t, slot, {
+        commands = commands,
+    })
+    view_snapshot_record_overflow_rejected(t, slot, {
+        programs = programs,
+    })
+    view_snapshot_record_overflow_rejected(t, slot, {
+        math_commands = math_commands,
+    })
+    view_snapshot_record_overflow_rejected(t, slot, {
+        nodes = nodes,
+    })
 }
 
 //   Verify semantic document bytes and records reject one element beyond each limit.
@@ -246,15 +261,21 @@ view_snapshot_document_transfer_rejects_overflow :: proc(t: ^testing.T) {
     defer delete(items)
     defer delete(rows)
 
-    view_snapshot_document_overflow_rejected(
-        t, slot, {document_text = document_text})
-    view_snapshot_document_overflow_rejected(t, slot, {documents = documents})
-    view_snapshot_document_overflow_rejected(
-        t, slot, {document_blocks = blocks})
-    view_snapshot_document_overflow_rejected(
-        t, slot, {document_inlines = items})
-    view_snapshot_document_overflow_rejected(
-        t, slot, {document_display_rows = rows})
+    view_snapshot_document_overflow_rejected(t, slot, {
+        document_text = document_text,
+    })
+    view_snapshot_document_overflow_rejected(t, slot, {
+        documents = documents,
+    })
+    view_snapshot_document_overflow_rejected(t, slot, {
+        document_blocks = blocks,
+    })
+    view_snapshot_document_overflow_rejected(t, slot, {
+        document_inlines = items,
+    })
+    view_snapshot_document_overflow_rejected(t, slot, {
+        document_display_rows = rows,
+    })
 }
 
 // Verify display row ownership and math references cannot escape sealed records.
@@ -267,19 +288,38 @@ view_snapshot_document_validation_rejects_malformed_display_rows :: proc(
     slot := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect(t, build_view_snapshot_text_payloads(slot, "fallback", nil))
-    programs := []dynviewmodel.Dynview_Math_Program{{
-        valid = true, root_node_index = 0, node_count = 1}}
-    nodes := []dynviewmodel.Dynview_Math_Node{{kind = .Glyph_Run}}
-    documents := []dynviewmodel.Dynview_Document{{source_count = 1, block_count = 1,
-        display_row_count = 1}}
-    blocks := []dynviewmodel.Dynview_Document_Block{{kind = .Display, source_count = 1,
-        display_kind = .Equation, display_row_count = 1}}
-    rows := []dynviewmodel.Dynview_Document_Display_Row{{source_count = 1,
-        primary_program_id = 0, secondary_program_id = -1,
-        alignment = .Center, number = 1}}
+    programs: []dynviewmodel.Dynview_Math_Program = {{
+        valid = true,
+        root_node_index = 0,
+        node_count = 1,
+    }}
+    nodes: []dynviewmodel.Dynview_Math_Node = {{
+        kind = .Glyph_Run,
+    }}
+    documents: []dynviewmodel.Dynview_Document = {{
+        source_count = 1,
+        block_count = 1,
+        display_row_count = 1,
+    }}
+    blocks: []dynviewmodel.Dynview_Document_Block = {{
+        kind = .Display,
+        source_count = 1,
+        display_kind = .Equation,
+        display_row_count = 1,
+    }}
+    rows: []dynviewmodel.Dynview_Document_Display_Row = {{
+        source_count = 1,
+        primary_program_id = 0,
+        secondary_program_id = -1,
+        alignment = .Center,
+        number = 1,
+    }}
     testing.expect(t, build_view_snapshot_record_payloads(slot, {
-        math_programs = programs, math_nodes = nodes, document_text = {'x'},
-        documents = documents, document_blocks = blocks,
+        math_programs = programs,
+        math_nodes = nodes,
+        document_text = {'x'},
+        documents = documents,
+        document_blocks = blocks,
         document_display_rows = rows,
     }))
     testing.expect(t, view_snapshot_is_valid(slot))
@@ -300,14 +340,25 @@ view_snapshot_document_validation_rejects_malformed_ranges :: proc(t: ^testing.T
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect(t, build_view_snapshot_text_payloads(slot, "fallback", nil))
     document_text: string = "sourceplain"
-    documents := []dynviewmodel.Dynview_Document{{
-        source_count = 6, text_offset = 6, text_count = 5,
-        block_count = 1, inline_count = 1}}
-    blocks := []dynviewmodel.Dynview_Document_Block{{
-        kind = .Paragraph, inline_count = 1, source_count = 6}}
-    items := []dynviewmodel.Dynview_Document_Inline{{
-        kind = .Text, source_count = 6, text_offset = 6, text_count = 5,
-        math_program_id = -1}}
+    documents: []dynviewmodel.Dynview_Document = {{
+        source_count = 6,
+        text_offset = 6,
+        text_count = 5,
+        block_count = 1,
+        inline_count = 1,
+    }}
+    blocks: []dynviewmodel.Dynview_Document_Block = {{
+        kind = .Paragraph,
+        inline_count = 1,
+        source_count = 6,
+    }}
+    items: []dynviewmodel.Dynview_Document_Inline = {{
+        kind = .Text,
+        source_count = 6,
+        text_offset = 6,
+        text_count = 5,
+        math_program_id = -1,
+    }}
     testing.expect(t, build_view_snapshot_record_payloads(slot, {
         document_text = transmute([]u8)document_text,
         documents = documents,
@@ -334,28 +385,60 @@ view_snapshot_document_validation_rejects_malformed_lists :: proc(t: ^testing.T)
     slot := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect(t, build_view_snapshot_text_payloads(slot, "fallback", nil))
-    documents := []dynviewmodel.Dynview_Document{{source_count = 2, text_count = 2,
-        block_count = 2, inline_count = 2}}
-    blocks := []dynviewmodel.Dynview_Document_Block{
-        {kind = .List_Item, inline_count = 1, source_count = 1,
-            container_kind = .Itemize, container_depth = 1,
-            left_margin_levels = 1, list_kind = .Itemize,
-            list_id = 1, item_ordinal = 1},
-        {kind = .Paragraph, inline_start = 1, inline_count = 1,
-            source_offset = 1, source_count = 1, container_kind = .Itemize,
-            container_depth = 1, left_margin_levels = 1,
-            list_kind = .Itemize, list_id = 1, item_ordinal = 1,
-            item_first_block = true},
+    documents: []dynviewmodel.Dynview_Document = {{
+        source_count = 2,
+        text_count = 2,
+        block_count = 2,
+        inline_count = 2,
+    }}
+    blocks: []dynviewmodel.Dynview_Document_Block = {
+        {
+            kind = .List_Item,
+            inline_count = 1,
+            source_count = 1,
+            container_kind = .Itemize,
+            container_depth = 1,
+            left_margin_levels = 1,
+            list_kind = .Itemize,
+            list_id = 1,
+            item_ordinal = 1,
+        },
+        {
+            kind = .Paragraph,
+            inline_start = 1,
+            inline_count = 1,
+            source_offset = 1,
+            source_count = 1,
+            container_kind = .Itemize,
+            container_depth = 1,
+            left_margin_levels = 1,
+            list_kind = .Itemize,
+            list_id = 1,
+            item_ordinal = 1,
+            item_first_block = true,
+        },
     }
-    items := []dynviewmodel.Dynview_Document_Inline{
-        {kind = .Text, source_count = 1, text_count = 1,
-            math_program_id = -1},
-        {kind = .Text, source_offset = 1, source_count = 1,
-            text_offset = 1, text_count = 1, math_program_id = -1},
+    items: []dynviewmodel.Dynview_Document_Inline = {
+        {
+            kind = .Text,
+            source_count = 1,
+            text_count = 1,
+            math_program_id = -1,
+        },
+        {
+            kind = .Text,
+            source_offset = 1,
+            source_count = 1,
+            text_offset = 1,
+            text_count = 1,
+            math_program_id = -1,
+        },
     }
     testing.expect(t, build_view_snapshot_record_payloads(slot, {
-        document_text = {'a', 'b'}, documents = documents,
-        document_blocks = blocks, document_inlines = items,
+        document_text = {'a', 'b'},
+        documents = documents,
+        document_blocks = blocks,
+        document_inlines = items,
     }))
     testing.expect(t, view_snapshot_is_valid(slot))
 
@@ -374,19 +457,30 @@ view_snapshot_record_validation_rejects_forged_aliases :: proc(t: ^testing.T) {
     slot := &service^.view_snapshots[0]
     testing.expect(t, prepare_view_snapshot_slot(slot))
     testing.expect(t, build_view_snapshot_text_payloads(slot, "fallback", nil))
-    commands := []dynviewmodel.Dynview_Command{{}}
-    programs := []dynviewmodel.Dynview_Math_Program{{
-        valid = true, root_node_index = 0, node_count = 1, command_count = 1}}
-    math_commands := []dynviewmodel.Dynview_Command{{math_atom_class = .Ord}}
-    nodes := []dynviewmodel.Dynview_Math_Node{{kind = .Glyph_Run}}
-    testing.expect(t, build_view_snapshot_record_payloads(
-        slot, {commands = commands, math_programs = programs,
-            math_commands = math_commands, math_nodes = nodes}))
+    commands: []dynviewmodel.Dynview_Command = {{}}
+    programs: []dynviewmodel.Dynview_Math_Program = {{
+        valid = true,
+        root_node_index = 0,
+        node_count = 1,
+        command_count = 1,
+    }}
+    math_commands: []dynviewmodel.Dynview_Command = {{
+        math_atom_class = .Ord,
+    }}
+    nodes: []dynviewmodel.Dynview_Math_Node = {{
+        kind = .Glyph_Run,
+    }}
+    testing.expect(t, build_view_snapshot_record_payloads(slot, {
+        commands = commands,
+        math_programs = programs,
+        math_commands = math_commands,
+        math_nodes = nodes,
+    }))
     testing.expect(t, view_snapshot_is_valid(slot))
-    forged_commands := [1]dynviewmodel.Dynview_Command{commands[0]}
-    forged_programs := [1]dynviewmodel.Dynview_Math_Program{programs[0]}
-    forged_math_commands := [1]dynviewmodel.Dynview_Command{math_commands[0]}
-    forged_nodes := [1]dynviewmodel.Dynview_Math_Node{nodes[0]}
+    forged_commands: [1]dynviewmodel.Dynview_Command = {commands[0]}
+    forged_programs: [1]dynviewmodel.Dynview_Math_Program = {programs[0]}
+    forged_math_commands: [1]dynviewmodel.Dynview_Command = {math_commands[0]}
+    forged_nodes: [1]dynviewmodel.Dynview_Math_Node = {nodes[0]}
 
     slot^.commands = forged_commands[:]
     testing.expect(t, !view_snapshot_is_valid(slot))
@@ -423,7 +517,10 @@ view_snapshot_expect_malformed_math_rejected :: proc(
     slot^.math_nodes[0].first_child = 2
     testing.expect(t, !view_snapshot_is_valid(slot))
     slot^.math_nodes[0] = {
-        kind = .Fraction, numerator_child = 0, denominator_child = 2}
+        kind = .Fraction,
+        numerator_child = 0,
+        denominator_child = 2,
+    }
     testing.expect(t, !view_snapshot_is_valid(slot))
 }
 
@@ -439,17 +536,32 @@ view_snapshot_math_record_validation_rejects_malformed_structure :: proc(
     text: string = "math"
     testing.expect(t, build_view_snapshot_text_payloads(
         slot, "", transmute([]u8)text))
-    programs := []dynviewmodel.Dynview_Math_Program{{
-        valid = true, root_node_index = 0, node_count = 2,
-        command_count = 1, copy_text_len = 4}}
-    nodes := []dynviewmodel.Dynview_Math_Node{
-        {kind = .Sequence, first_child = 1, child_count = 1},
-        {kind = .Glyph_Run, text_len = 4},
+    programs: []dynviewmodel.Dynview_Math_Program = {{
+        valid = true,
+        root_node_index = 0,
+        node_count = 2,
+        command_count = 1,
+        copy_text_len = 4,
+    }}
+    nodes: []dynviewmodel.Dynview_Math_Node = {
+        {
+            kind = .Sequence,
+            first_child = 1,
+            child_count = 1,
+        },
+        {
+            kind = .Glyph_Run,
+            text_len = 4,
+        },
     }
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, {math_programs = programs,
-            math_commands = []dynviewmodel.Dynview_Command{{math_atom_class = .Ord}},
-            math_nodes = nodes}))
+        slot, {
+            math_programs = programs,
+            math_commands = []dynviewmodel.Dynview_Command{{
+                math_atom_class = .Ord,
+            }},
+            math_nodes = nodes,
+        }))
     testing.expect(t, view_snapshot_is_valid(slot))
     view_snapshot_expect_malformed_math_rejected(t, slot)
 }
@@ -495,11 +607,15 @@ view_snapshot_reset_requires_free_state :: proc(t: ^testing.T) {
     testing.expect_value(t, storage.bounded_byte_builder_append(
         &slot^.presentation_builder, []u8{'x'}), storage.Bounded_Builder_Status.Ok)
     testing.expect(t, build_view_snapshot_record_payloads(
-        slot, {commands = []dynviewmodel.Dynview_Command{{block_id = 7}}}))
+        slot, {
+            commands = []dynviewmodel.Dynview_Command{{
+                block_id = 7,
+            }},
+        }))
     storage := raw_data(slot^.presentation_builder.storage)
     record_storage := raw_data(slot^.commands)
 
-    guarded_states := []View_Snapshot_Slot_State{.Pending, .Complete, .Published}
+    guarded_states: []View_Snapshot_Slot_State = {.Pending, .Complete, .Published}
     for state in guarded_states {
         slot^.state = state
         testing.expect(t, !prepare_view_snapshot_slot(slot))
@@ -600,7 +716,9 @@ view_snapshot_stale_publication_defers_arena_reset :: proc(t: ^testing.T) {
     published^.runtime_generation = 1
     service^.runtime_generation = 2
     service^.published_view_snapshot_index = 0
-    records := [1]dynviewmodel.Dynview_Command{{block_id = 9}}
+    records: [1]dynviewmodel.Dynview_Command = {{
+        block_id = 9,
+    }}
     state^.dynview.content.commands = records[:]
     state^.dynview.command_buffer.command_view = records[:]
 
@@ -627,7 +745,11 @@ view_snapshot_shutdown_release_clears_published_views :: proc(t: ^testing.T) {
     testing.expect(t, build_view_snapshot_text_payloads(
         published, "fallback", nil))
     testing.expect(t, build_view_snapshot_record_payloads(
-        published, {commands = []dynviewmodel.Dynview_Command{{block_id = 7}}}))
+        published, {
+            commands = []dynviewmodel.Dynview_Command{{
+                block_id = 7,
+            }},
+        }))
     install_view_snapshot_content(published, &state^.dynview)
     published^.state = .Published
     service^.published_view_snapshot_index = 0

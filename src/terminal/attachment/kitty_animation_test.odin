@@ -5,12 +5,15 @@ import "core:testing"
 
 // Admit one retained two-pixel Kitty root for mutation tests.
 kitty_animation_test_root :: proc(t: ^testing.T, store: ^Store) -> Attachment_Id {
-    pixels := [8]u8{255, 0, 0, 255, 0, 0, 255, 255}
+    pixels: [8]u8 = {255, 0, 0, 255, 0, 0, 255, 255}
     id, outcome := attachment_admit(store, {
         metadata = {
             kind = .Raster,
             origin = .Kitty,
-            metrics = {width = 2, height = 1},
+            metrics = {
+                width = 2,
+                height = 1,
+            },
         },
         payload = pixels[:],
         payload_format = .Rgba8,
@@ -29,12 +32,18 @@ kitty_animation_test_append_and_edit :: proc(t: ^testing.T) {
         &store, attachment_test_limits(cpu_byte_limit = 256), context.allocator))
     defer store_destroy(&store)
     id := kitty_animation_test_root(t, &store)
-    green := [4]u8{0, 255, 0, 255}
+    green: [4]u8 = {0, 255, 0, 255}
 
     outcome := kitty_animation_mutate_frame(&store, id, {
-        pixels = green[:], format = .Rgba8, width = 1, height = 1,
-        destination_x = 1, base_frame = 1, gap_ms = 25,
-        gap_specified = true, overwrite = true,
+        pixels = green[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
+        destination_x = 1,
+        base_frame = 1,
+        gap_ms = 25,
+        gap_specified = true,
+        overwrite = true,
     })
 
     testing.expect_value(t, outcome, Animation_Mutation_Outcome.Found)
@@ -47,9 +56,12 @@ kitty_animation_test_append_and_edit :: proc(t: ^testing.T) {
     testing.expect_value(t, animation.pixels[12], u8(0))
     testing.expect_value(t, animation.pixels[13], u8(255))
 
-    transparent_blue := [4]u8{0, 0, 255, 128}
+    transparent_blue: [4]u8 = {0, 0, 255, 128}
     testing.expect_value(t, kitty_animation_mutate_frame(&store, id, {
-        pixels = transparent_blue[:], format = .Rgba8, width = 1, height = 1,
+        pixels = transparent_blue[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
         edit_frame = 2,
     }), Animation_Mutation_Outcome.Found)
     edited, edited_found := animation_view(&store, id)
@@ -68,10 +80,13 @@ kitty_animation_test_quota_rollback :: proc(t: ^testing.T) {
     defer store_destroy(&store)
     id := kitty_animation_test_root(t, &store)
     original_bytes := store.cpu_byte_count
-    patch := [4]u8{1, 2, 3, 4}
+    patch: [4]u8 = {1, 2, 3, 4}
 
     outcome := kitty_animation_mutate_frame(&store, id, {
-        pixels = patch[:], format = .Rgba8, width = 1, height = 1,
+        pixels = patch[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
     })
 
     testing.expect_value(t, outcome, Animation_Mutation_Outcome.Capacity_Exceeded)
@@ -86,13 +101,21 @@ kitty_animation_test_quota_rollback :: proc(t: ^testing.T) {
 kitty_animation_test_expect_composition :: proc(
     t: ^testing.T, store: ^Store, id: Attachment_Id) {
     testing.expect_value(t, kitty_animation_compose(store, id, {
-        source_frame = 1, destination_frame = 2,
-        source_x = 0, destination_x = 1, width = 1, height = 1,
+        source_frame = 1,
+        destination_frame = 2,
+        source_x = 0,
+        destination_x = 1,
+        width = 1,
+        height = 1,
         overwrite = true,
     }), Animation_Mutation_Outcome.Found)
     testing.expect_value(t, kitty_animation_compose(store, id, {
-        source_frame = 1, destination_frame = 1,
-        source_x = 0, destination_x = 0, width = 1, height = 1,
+        source_frame = 1,
+        destination_frame = 1,
+        source_x = 0,
+        destination_x = 0,
+        width = 1,
+        height = 1,
         overwrite = true,
     }), Animation_Mutation_Outcome.Found)
     composed, found := animation_view(store, id)
@@ -105,8 +128,10 @@ kitty_animation_test_expect_composition :: proc(
 kitty_animation_test_expect_control :: proc(
     t: ^testing.T, store: ^Store, id: Attachment_Id) {
     testing.expect_value(t, kitty_animation_control(store, id, {
-        frame_number = 1, gap_ms = -1,
-        gap_specified = true, loop_count = 3,
+        frame_number = 1,
+        gap_ms = -1,
+        gap_specified = true,
+        loop_count = 3,
     }), Animation_Mutation_Outcome.Found)
     controlled, found := animation_view(store, id)
     testing.expect(t, found)
@@ -123,11 +148,17 @@ kitty_animation_test_compose_control_and_delete :: proc(t: ^testing.T) {
         &store, attachment_test_limits(cpu_byte_limit = 256), context.allocator))
     defer store_destroy(&store)
     id := kitty_animation_test_root(t, &store)
-    green := [4]u8{0, 255, 0, 255}
+    green: [4]u8 = {0, 255, 0, 255}
     testing.expect_value(t, kitty_animation_mutate_frame(&store, id, {
-        pixels = green[:], format = .Rgba8, width = 1, height = 1,
-        destination_x = 1, base_frame = 1, gap_ms = 30,
-        gap_specified = true, overwrite = true,
+        pixels = green[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
+        destination_x = 1,
+        base_frame = 1,
+        gap_ms = 30,
+        gap_specified = true,
+        overwrite = true,
     }), Animation_Mutation_Outcome.Found)
 
     kitty_animation_test_expect_composition(t, &store, id)
@@ -150,24 +181,34 @@ kitty_animation_test_duration_limit_rollback :: proc(t: ^testing.T) {
     testing.expect(t, store_init(&store, limits, context.allocator))
     defer store_destroy(&store)
     id := kitty_animation_test_root(t, &store)
-    patch := [4]u8{0, 255, 0, 255}
+    patch: [4]u8 = {0, 255, 0, 255}
 
     testing.expect_value(t, kitty_animation_mutate_frame(&store, id, {
-        pixels = patch[:], format = .Rgba8, width = 1, height = 1,
-        gap_ms = 30, gap_specified = true,
+        pixels = patch[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
+        gap_ms = 30,
+        gap_specified = true,
     }), Animation_Mutation_Outcome.Invalid)
     payload, static_found := attachment_payload(&store, id)
     testing.expect(t, static_found)
     testing.expect_value(t, payload.bytes[0], u8(255))
     testing.expect_value(t, kitty_animation_mutate_frame(&store, id, {
-        pixels = patch[:], format = .Rgba8, width = 1, height = 1,
-        gap_ms = 20, gap_specified = true,
+        pixels = patch[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
+        gap_ms = 20,
+        gap_specified = true,
     }), Animation_Mutation_Outcome.Found)
     before, found := animation_view(&store, id)
     testing.expect(t, found)
     testing.expect_value(t, kitty_animation_control(
         &store, id, {
-            frame_number = 2, gap_ms = 50, gap_specified = true,
+            frame_number = 2,
+            gap_ms = 50,
+            gap_specified = true,
         }), Animation_Mutation_Outcome.Invalid)
     after, after_found := animation_view(&store, id)
     testing.expect(t, after_found)
@@ -185,11 +226,15 @@ kitty_animation_test_frame_index_validation_is_cumulative :: proc(t: ^testing.T)
         &store, attachment_test_limits(cpu_byte_limit = 256), context.allocator))
     defer store_destroy(&store)
     id := kitty_animation_test_root(t, &store)
-    patch := [4]u8{0, 255, 0, 255}
+    patch: [4]u8 = {0, 255, 0, 255}
 
     outcome := kitty_animation_mutate_frame(&store, id, {
-        pixels = patch[:], format = .Rgba8, width = 1, height = 1,
-        edit_frame = 2, base_frame = 1,
+        pixels = patch[:],
+        format = .Rgba8,
+        width = 1,
+        height = 1,
+        edit_frame = 2,
+        base_frame = 1,
     })
 
     testing.expect_value(t, outcome, Animation_Mutation_Outcome.Invalid)

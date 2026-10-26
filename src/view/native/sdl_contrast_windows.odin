@@ -20,13 +20,21 @@ sdl_query_system_contrast :: proc(
     if !should_query {
         return {}
     }
-    setting := Sdl_Windows_High_Contrast{size = u32(size_of(Sdl_Windows_High_Contrast))}
+    setting: Sdl_Windows_High_Contrast = {
+        size = u32(size_of(Sdl_Windows_High_Contrast)),
+    }
     if !win.SystemParametersInfoW(
         SDL_SPI_GETHIGHCONTRAST, setting.size, &setting, 0) {
-        return {status = .Failed, complete = true}
+        return {
+            status = .Failed,
+            complete = true,
+        }
     }
-    return {requested = setting.flags & SDL_HCF_HIGHCONTRASTON != 0,
-        status = .Supported, complete = true}
+    return {
+        requested = setting.flags & SDL_HCF_HIGHCONTRASTON != 0,
+        status = .Supported,
+        complete = true,
+    }
 }
 
 // Windows contrast acquisition has no asynchronous resources to retire.

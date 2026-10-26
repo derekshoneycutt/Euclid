@@ -107,13 +107,18 @@ native_id_registry_init :: proc(
        memory == nil || !memory.initialized {
         return false
     }
-    registry^ = {memory = memory}
+    registry^ = {
+        memory = memory,
+    }
     if !native_id_registry_allocate(registry) {
         native_id_registry_destroy(registry)
         return false
     }
     append(&registry^.entries, Native_Id_Entry{
-        identity = {domain = .Synthetic, local_id = SYNTHETIC_ROOT_ID},
+        identity = {
+            domain = .Synthetic,
+            local_id = SYNTHETIC_ROOT_ID,
+        },
         native_id = SYNTHETIC_NATIVE_ID,
         active = true,
     })
@@ -186,7 +191,11 @@ native_id_resolve :: proc(
         return 0, false
     }
     registry^.next_id += 1
-    registry^.entries[index] = {identity = identity, native_id = native_id, active = true}
+    registry^.entries[index] = {
+        identity = identity,
+        native_id = native_id,
+        active = true,
+    }
     registry^.identities[identity] = index
     registry^.native_ids[native_id] = index
     registry^.count = len(registry^.entries)

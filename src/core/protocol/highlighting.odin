@@ -89,9 +89,12 @@ highlight_request_valid :: proc(request: Highlight_Requested) -> bool {
 // Validate one native color without admitting unknown kinds or oversized values.
 highlight_color_valid :: proc(kind: Highlight_Color_Kind, value: u32) -> bool {
     switch kind {
-    case .Default: return value == 0
-    case .Ansi: return value <= 15
-    case .Rgb: return value <= 0xffffff
+    case .Default:
+        return value == 0
+    case .Ansi:
+        return value <= 15
+    case .Rgb:
+        return value <= 0xffffff
     }
     return false
 }
@@ -108,8 +111,10 @@ highlight_run_style_valid :: proc(run: Highlight_Run) -> bool {
 
 // Reject partial coverage, split codepoints, malformed values, or oversized results.
 highlight_result_valid :: proc(result: Highlight_Result) -> bool {
-    if !highlight_request_valid({identity = result.identity, source = result.source}) ||
-        len(result.runs) > TERMINAL_HIGHLIGHT_RUN_CAPACITY {
+    if !highlight_request_valid({
+        identity = result.identity,
+        source = result.source,
+    }) || len(result.runs) > TERMINAL_HIGHLIGHT_RUN_CAPACITY {
         return false
     }
     offset := u32(0)

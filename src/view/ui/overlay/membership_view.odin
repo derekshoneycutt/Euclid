@@ -35,7 +35,7 @@ membership_publish_row :: proc(state: ^core.Euclid_General_State, index: int) {
     set := &state.preferences_runtime.collections_state
     head := &set.collections[menu.order[index]]
     params := membership_checkbox(state, index, {})
-    states := viewmodel.Ui_Node_State{.Visible, .Focusable}
+    states: viewmodel.Ui_Node_State = {.Visible, .Focusable}
     if params.enabled {
         states += {.Enabled}
     }
@@ -43,10 +43,14 @@ membership_publish_row :: proc(state: ^core.Euclid_General_State, index: int) {
         states += {.Checked}
     }
     _ = uisemantics.semantic_register_control(state.ui_runtime.semantic_focus, {
-        id = membership_id(menu, head.id), parent = membership_id(menu),
-        role = .Checkbox, states = states, actions = {.Focus, .Toggle},
+        id = membership_id(menu, head.id),
+        parent = membership_id(menu),
+        role = .Checkbox,
+        states = states,
+        actions = {.Focus, .Toggle},
         traversal_order = u32(index),
-        bounds = membership_row(menu, index), clip_bounds = menu.clip,
+        bounds = membership_row(menu, index),
+        clip_bounds = menu.clip,
         label = string(head.name[:head.name_length]),
     })
 }
@@ -68,8 +72,11 @@ membership_prepare :: proc(state: ^core.Euclid_General_State) {
         membership_focus(state, focused.stable_id)
     }
     _ = uisemantics.semantic_register_control(state.ui_runtime.semantic_focus, {
-        id = membership_id(menu), role = .Panel, states = {.Visible, .Enabled},
-        bounds = menu.bounds, clip_bounds = menu.bounds,
+        id = membership_id(menu),
+        role = .Panel,
+        states = {.Visible, .Enabled},
+        bounds = menu.bounds,
+        clip_bounds = menu.bounds,
         label = viewmessages.shell_message(state, .Animation_Add_Collections),
     })
     for index in 0..<menu.count {
