@@ -825,6 +825,27 @@ terminal_history_navigation_invalidate :: proc(
     term.history_navigation_admission_reported = false
     term.history_navigation_active = false
     term.history_navigation_anchor_id = 0
+    term.history_navigation_cursor = {}
+    term.history_navigation_cursor_valid = false
+}
+
+// Restore the unsent draft and editing selection before retiring cleared history.
+terminal_history_navigation_clear :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> bool {
+    if term == nil {
+        return false
+    }
+    restored := true
+    if term.history_navigation_active {
+        restored = termhist.termhist_restore_backup(term.history)
+        if restored {
+            term.input_mode = term.history_navigation_draft_mode
+        } else {
+            log.error("terminal_history_draft_restore_failed_after_clear")
+        }
+    }
+    terminal_history_navigation_invalidate(term)
+    return restored
 }
 
 // Queue one ordered boundary-navigation intent and preserve the full unsent draft once.

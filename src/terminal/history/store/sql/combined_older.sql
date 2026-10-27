@@ -1,0 +1,24 @@
+WITH history AS (
+    SELECT submission_id, source, COALESCE(persistent_entry_id, 0) AS persistent_entry_id,
+           mode, submitted_at_unix_ms, terminal_generation, source_revision,
+           0 AS scope_rank, submission_id AS source_id
+    FROM temp.terminal_history
+    UNION ALL
+    SELECT 0, source, entry_id, mode, submitted_at_unix_ms,
+           terminal_generation, source_revision, 1, entry_id
+    FROM main.user_terminal_history AS saved
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM temp.terminal_history AS session
+        WHERE session.persistent_entry_id = saved.entry_id
+    )
+)
+SELECT submission_id, source, persistent_entry_id, mode,
+       submitted_at_unix_ms, terminal_generation, source_revision,
+       scope_rank, source_id, length(CAST(source AS BLOB))
+FROM history
+WHERE submitted_at_unix_ms < ?1
+   OR (submitted_at_unix_ms = ?1 AND scope_rank > ?2)
+   OR (submitted_at_unix_ms = ?1 AND scope_rank = ?2 AND source_id < ?3)
+ORDER BY submitted_at_unix_ms DESC, scope_rank ASC, source_id DESC
+LIMIT 1;

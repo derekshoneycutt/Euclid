@@ -98,12 +98,16 @@ end
 """Run one scenario and return its validated manifest-derived result record."""
 function run_scenario_launch(binary::String, name::String, source::String,
     artifact_path::String, arguments::Vector{String};
-    environment::Vector{Pair{String,String}}=Pair{String,String}[])
+    environment::Vector{Pair{String,String}}=Pair{String,String}[],
+    diagnostics::Bool=false)
     artifact_argument = replace(relpath(artifact_path, REPOSITORY_ROOT), '\\' => '/')
-    command = addenv(Cmd([binary, arguments..., "--scenario=$source",
+    mkpath(artifact_path)
+    diagnostic_arguments = diagnostics ?
+        ["--diagnostics=$artifact_argument.diagnostics.log"] : String[]
+    command = addenv(Cmd([binary, arguments..., diagnostic_arguments...,
+        "--scenario=$source",
         "--scenario-artifacts=$artifact_argument"]), environment...)
     process = capture_process(command)
-    mkpath(artifact_path)
     write(joinpath(artifact_path, "process.stdout.log"), process.stdout)
     write(joinpath(artifact_path, "process.stderr.log"), process.stderr)
     bundle = inspect_scenario_bundle(artifact_path, process)
@@ -133,7 +137,7 @@ function settings_database_rows(path::String)
         "FROM user_setting ORDER BY namespace,key"
     process = capture_process(Cmd([sqlite, "-readonly", "-json", path, query]))
     process.exit_code == 0 || error("Settings inspection failed: $(process.stderr)")
-    return JSON.parse(process.stdout)
+    return isempty(strip(process.stdout)) ? Any[] : JSON.parse(process.stdout)
 end
 
 """Reject incomplete manifests, bad frees, unjoined saves and owner execution."""
@@ -307,11 +311,163 @@ function run_settings_storage_edges(launch, source, root, database, baseline)
     require_setting_row(settings_database_rows(database), "drawing", "dust_limit", 1500)
 end
 
+"""Read durable Terminal history independently through SQLite's read-only CLI."""
+function terminal_history_database_rows(path::String)
+    sqlite = Sys.which("sqlite3")
+    sqlite === nothing && error("Terminal history acceptance requires the sqlite3 CLI")
+    query = "SELECT entry_id,source,mode,submitted_at_unix_ms," *
+        "terminal_generation,source_revision FROM user_terminal_history ORDER BY entry_id"
+    process = capture_process(Cmd([sqlite, "-readonly", "-json", path, query]))
+    process.exit_code == 0 ||
+        error("Terminal history inspection failed: $(process.stderr)")
+    return isempty(strip(process.stdout)) ? Any[] : JSON.parse(process.stdout)
+end
+
+"""Require a successful debug scenario and its final allocator evidence."""
+function validate_history_launch(record)
+    scenario_passed(record) || error("Terminal history launch failed: $(record.name)")
+    bundle = EuclidEvidence.inspect_bundle(joinpath(REPOSITORY_ROOT, record.artifacts))
+    bundle.allocations.bad_frees == 0 ||
+        error("Terminal history launch reported bad frees")
+    path = joinpath(REPOSITORY_ROOT, record.artifacts)
+    validate_settings_process(read(joinpath(path, "process.stdout.log"), String))
+    return bundle
+end
+
+"""Run one history phase against the isolated database and fake home."""
+function launch_history_phase(binary::String, root::String, database::String,
+    fake_home::String, phase::String, source::String)
+    record = run_scenario_launch(binary, "terminal-history-$phase", source,
+        joinpath(root, phase), ["--user-db=$database"];
+        environment=["XDG_DATA_HOME" => fake_home,
+            "LOCALAPPDATA" => fake_home, "APPDATA" => fake_home],
+        diagnostics=true)
+    validate_history_launch(record)
+    return record
+end
+
+"""Create a genuine isolated SQLite failure for the next durable history insert."""
+function inject_terminal_history_insert_failure(database::String)
+    sqlite = Sys.which("sqlite3")
+    sqlite === nothing && error("Terminal history acceptance requires the sqlite3 CLI")
+    statement = "CREATE TRIGGER terminal_history_acceptance_reject_insert " *
+        "BEFORE INSERT ON user_terminal_history BEGIN " *
+        "SELECT RAISE(ABORT,'terminal history acceptance fault'); END"
+    process = capture_process(Cmd([sqlite, database, statement]))
+    process.exit_code == 0 ||
+        error("Cannot create isolated history failure fixture: $(process.stderr)")
+end
+
+"""Create a genuine isolated SQLite failure for a durable history delete."""
+function inject_terminal_history_clear_failure(database::String)
+    sqlite = Sys.which("sqlite3")
+    sqlite === nothing && error("Terminal history acceptance requires the sqlite3 CLI")
+    statement = "CREATE TRIGGER terminal_history_acceptance_reject_delete " *
+        "BEFORE DELETE ON user_terminal_history BEGIN " *
+        "SELECT RAISE(ABORT,'terminal history clear acceptance fault'); END"
+    process = capture_process(Cmd([sqlite, database, statement]))
+    process.exit_code == 0 ||
+        error("Cannot create isolated clear failure fixture: $(process.stderr)")
+end
+
+"""Prove session-only defaults, cross-launch retention, visibility, and failure reporting."""
+function run_terminal_history_acceptance(binary::String)
+    root = fresh_artifact_path("terminal-history-persistence")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    fake_home = joinpath(root, "data-home")
+    records = NamedTuple[]
+    first = launch_history_phase(binary, root, database, fake_home,
+        "session-only", joinpath("tools", "scenarios",
+            "terminal-history-persistence-acceptance.jsonl"))
+    push!(records, first)
+    isempty(terminal_history_database_rows(database)) ||
+        error("Default-off submission created durable history")
+    isempty(filter(row -> row["namespace"] == "terminal" &&
+        row["key"] == "persist_history", settings_database_rows(database))) ||
+        error("Default-off preference was unexpectedly stored")
+    run_terminal_history_durable_phases(binary, root, database, fake_home, records)
+    run_terminal_history_delete_phases(binary, root, database, fake_home, records)
+    inject_terminal_history_insert_failure(database)
+    failure_source = joinpath("tools", "scenarios", "terminal-history",
+        "write-failure.jsonl")
+    failed = launch_history_phase(binary, root, database, fake_home,
+        "write-failure", failure_source)
+    push!(records, failed)
+    length(terminal_history_database_rows(database)) == 1 ||
+        error("Failed durable write changed retained history")
+    ispath(fake_home) && error("Custom database acceptance touched the default data home")
+    return records
+end
+
+"""Prove all-scope clear succeeds off-preference and failed clear retains both scopes."""
+function run_terminal_history_delete_phases(binary, root, database, fake_home, records)
+    clear_source = joinpath("tools", "scenarios", "terminal-history",
+        "clear-success.jsonl")
+    cleared = launch_history_phase(binary, root, database, fake_home,
+        "clear-success", clear_source)
+    push!(records, cleared)
+    isempty(terminal_history_database_rows(database)) ||
+        error("Confirmed clear retained durable history while persistence was off")
+    require_setting_row(settings_database_rows(database), "terminal",
+        "persist_history", 0)
+    seeded = launch_history_phase(binary, root, database, fake_home,
+        "clear-failure-seed", joinpath("tools", "scenarios", "terminal-history",
+            "persist-and-submit.jsonl"))
+    push!(records, seeded)
+    validate_terminal_history_rows("clear-failure-seed",
+        terminal_history_database_rows(database))
+    inject_terminal_history_clear_failure(database)
+    failed_clear = launch_history_phase(binary, root, database, fake_home,
+        "clear-failure", joinpath("tools", "scenarios", "terminal-history",
+            "clear-failure.jsonl"))
+    push!(records, failed_clear)
+    validate_terminal_history_rows("failed clear", terminal_history_database_rows(database))
+    require_setting_row(settings_database_rows(database), "terminal",
+        "persist_history", 0)
+end
+
+"""Prove opt-in writes survive launches and disabling only hides saved rows."""
+function run_terminal_history_durable_phases(binary, root, database, fake_home, records)
+    source = name -> joinpath("tools", "scenarios", "terminal-history", "$name.jsonl")
+    for (phase, filename) in [
+        ("persist-and-submit", "persist-and-submit"),
+        ("persist-off-hides", "persist-off-hides"),
+        ("persist-on-recalls", "persist-on-recalls"),
+    ]
+        record = launch_history_phase(binary, root, database, fake_home, phase,
+            source(filename))
+        push!(records, record)
+        validate_terminal_history_rows(phase, terminal_history_database_rows(database))
+        expected_setting = phase == "persist-off-hides" ? 0 : 1
+        require_setting_row(settings_database_rows(database), "terminal",
+            "persist_history", expected_setting)
+    end
+end
+
+"""Check durable row retention at each lifecycle boundary."""
+function validate_terminal_history_rows(phase::String, rows)
+    expected_count = phase == "persist-on-recalls" ? 2 : 1
+    length(rows) == expected_count ||
+        error("Unexpected durable history row count after $phase")
+    all(row -> row["source"] == "2001 + 7", rows) ||
+        error("Durable Terminal history source changed after $phase")
+end
+
 """Return whether a scenario record represents an unqualified successful run."""
 scenario_passed(record) = record.result == "passed" && record.trace_complete &&
     record.exit_code == 0
 
 include(joinpath(@__DIR__, "favorites_scenarios.jl"))
+
+const SCENARIO_ACCEPTANCE_RUNNERS = Dict{String,Function}(
+    "terminal-history-persistence-acceptance" => run_terminal_history_acceptance,
+    "settings-persistence-acceptance" => run_settings_acceptance,
+    "collections-favorites-acceptance" => run_favorites_acceptance,
+    "empty-collections-acceptance" => run_empty_collections_acceptance,
+    "collection-heads-acceptance" => run_collection_heads_acceptance,
+    "collection-delete-acceptance" => run_collection_delete_acceptance,
+    "collection-membership-acceptance" => run_collection_membership_acceptance)
 
 """Write scenario records as stable machine-readable JSON."""
 function write_json_report(io::IO, records)
@@ -335,18 +491,8 @@ end
 function run_selected(binary::String, options::ScenarioOptions; io::IO=stdout)
     records = NamedTuple[]
     for name in options.names
-        if name == "settings-persistence-acceptance"
-            append!(records, run_settings_acceptance(binary))
-        elseif name == "collections-favorites-acceptance"
-            append!(records, run_favorites_acceptance(binary))
-        elseif name == "empty-collections-acceptance"
-            append!(records, run_empty_collections_acceptance(binary))
-        elseif name == "collection-heads-acceptance"
-            append!(records, run_collection_heads_acceptance(binary))
-        elseif name == "collection-delete-acceptance"
-            append!(records, run_collection_delete_acceptance(binary))
-        elseif name == "collection-membership-acceptance"
-            append!(records, run_collection_membership_acceptance(binary))
+        if haskey(SCENARIO_ACCEPTANCE_RUNNERS, name)
+            append!(records, SCENARIO_ACCEPTANCE_RUNNERS[name](binary))
         else
             push!(records, run_scenario(binary, name))
         end

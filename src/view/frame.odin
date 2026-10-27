@@ -45,6 +45,7 @@ import uitheme "ui/theme"
 import termhist "../terminal/history"
 import uiwidgets "ui/widgets"
 import uigif "ui/gif"
+import uisettings "ui/settings"
 
 when !core.SCENARIOS_ENABLED {
     _ :: storage
@@ -397,6 +398,11 @@ prepare_sdl_frame_owners :: proc(
 
 // Give both SQLite borrowers a fair admission turn before Terminal input is handled.
 service_frame_user_data :: proc(state: ^core.Euclid_General_State) {
+    persist_history := state^.ui_runtime.preferences.values.terminal.persist_history
+    if terminalview.history_runtime_set_persistence(
+        &state^.terminal_history_runtime, persist_history) {
+        terminalview.terminal_history_navigation_invalidate(&state^.terminal)
+    }
     pool := &state^.simulation_executor^.pool
     history_ready := terminalview.history_runtime_has_work(
         &state^.terminal_history_runtime)
@@ -404,6 +410,12 @@ service_frame_user_data :: proc(state: ^core.Euclid_General_State) {
     terminalview.history_runtime_service(
         &state^.terminal_history_runtime, &state^.user_data_admission,
         pool, settings_ready)
+    if uisettings.settings_history_delete_observe_completion(
+        &state^.ui_runtime.settings_panel,
+        state^.terminal_history_runtime.clear_completion_serial,
+        state^.terminal_history_runtime.last_clear_result.outcome == .Cleared) {
+        _ = terminalview.terminal_history_navigation_clear(&state^.terminal)
+    }
     viewpreferences.settings_save_service(state, pool, history_ready)
 }
 

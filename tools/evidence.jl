@@ -90,7 +90,8 @@ const SCENARIO_ACTIONS = [
     "set_library_search", "apply_library_search_suggestion",
     "clear_library_search", "favorite_control", "library_placement", "assert_favorites",
     "start_gif", "stop_gif", "set_arrival_style", "wait_event", "wait_state",
-    "assert_state",
+    "assert_state", "confirm_terminal_history_delete",
+    "wait_terminal_history_idle",
     "set_setting", "assert_setting", "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
@@ -110,7 +111,8 @@ const SCENARIO_ACTION_PAYLOADS = (
     set_view_scroll=(required=["y"],),
     set_splitters=(required=["vertical", "horizontal"],),
     set_setting=(required=["key", "value"],),
-    assert_setting=(required=["key", "value"],))
+    assert_setting=(required=["key", "value"],),
+    confirm_terminal_history_delete=(outcomes=["cleared", "failed"],))
 
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",

@@ -31,7 +31,7 @@ these as one generic “application database” would obscure those distinct res
 
 | | Packaged content database | User data database |
 | --- | --- | --- |
-| Purpose | Catalogue, localization and search data | Durable user preferences |
+| Purpose | Catalogue, localization and search data | Durable user preferences, collections, and opted-in Terminal history |
 | Produced or changed by | Julia content declarations and the asset builder | Application startup and settings-save path |
 | Runtime access | Read-only connection owned by the content worker | Read and write through the user-data store |
 | Lifetime | Packaged asset and staged/active content generations | User-data file, admitted for the application session |
@@ -46,8 +46,9 @@ application coordinator; settings writes run as worker-only tasks, are joined be
 their payload or store can be reused, and are drained during shutdown.
 
 The UI does not issue SQL. Content requests cross the worker boundary as bounded values.
-Settings and collection changes are collected into the shared user-data save queue;
-display drawing and controls operate on application-owned state.
+Settings and collection changes use the shared user-data save queue; Terminal history
+uses the same connection-admission protocol for its own worker tasks. Display drawing
+and controls operate on application-owned state.
 
 ## Packaged Content And Search
 
@@ -212,9 +213,10 @@ follow the source map below into the query compiler, worker, and coordinator.
 ## Persistent User Settings
 
 The user database is not the packaged catalogue with writes enabled. It is a separate
-durable file owned by the user-data subsystem. Today its schema is deliberately small:
-one `user_setting` row per known preference, keyed by namespace and key, plus ordered
-collection placements with an optional per-placement display name.
+durable file owned by the user-data subsystem. Its schema contains one `user_setting`
+row per known preference, keyed by namespace and key; ordered collection placements
+with an optional per-placement display name; and Terminal history rows when the user
+explicitly opts in.
 
 ```mermaid
 erDiagram
@@ -240,6 +242,14 @@ erDiagram
         text entry_kind
         blob animation_id
         text custom_name
+    }
+    USER_TERMINAL_HISTORY {
+        integer entry_id PK
+        text source
+        integer mode
+        integer submitted_at_unix_ms
+        integer terminal_generation
+        integer source_revision
     }
     USER_COLLECTION ||--o{ USER_COLLECTION_ENTRY : contains
     USER_COLLECTION_ENTRY ||--o{ USER_COLLECTION_ENTRY : nests
@@ -324,6 +334,31 @@ migration or reset fallback.
 
 Replay uses a separate Store-owned TLSF `Set`. Allocation failures preserve structured
 errors through rollback. Save work joins before replay sampling or store close.
+
+### Terminal History Persistence
+
+The durable `user_terminal_history` table is separate from the connection-local
+`TEMP.terminal_history` table. TEMP rows keep Up/Down history available for the current
+launch regardless of the preference and disappear when the SQLite connection closes.
+Durable rows are written only for submissions accepted while the typed
+`terminal.persist_history` setting is enabled. Disabling the preference hides existing
+durable rows from browsing and stops future durable writes; it does not delete saved
+rows or retroactively persist session-only submissions.
+
+The history runtime owns the SQL and uses the already-admitted user-data connection,
+serialized with settings and collection work through worker-only tasks. A paired
+submission is transactionally associated across the TEMP and durable tables so combined
+browsing returns it once. Confirmed deletion clears both tables in one serialized
+transaction even when persistence is disabled. SQLite success is published only after
+the worker result joins; a failed write or clear remains a visible failure, and a failed
+durable insert may still be retained in TEMP so evaluation can continue.
+
+This feature leaves `user_version` at schema version 2 and adds no migration or
+compatibility branch. Pre-feature local development databases are disposable and may be
+removed and recreated; wrong-application and unsupported/future-version admission
+checks remain unchanged. The checked-in schema is maintained under
+[`src/userdata/`](../../../src/userdata/) and
+[`src/terminal/history/store/`](../../../src/terminal/history/store/).
 
 ## Shared SQLite Mechanics
 

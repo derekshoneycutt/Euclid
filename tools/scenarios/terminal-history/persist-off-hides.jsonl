@@ -1,0 +1,16 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"terminal.persist_history","value":false}}
+{"wait_event":"settings_save_submitted","timeout_ms":10000}
+{"wait_event":"settings_save_committed","timeout_ms":10000}
+{"assert_setting":{"key":"terminal.persist_history","value":false}}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"key":"up"}
+{"type":"90000000 + 1"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"90000001","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

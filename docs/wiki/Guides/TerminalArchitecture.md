@@ -16,6 +16,7 @@
 1. [Session Generations](#session-generations)
 1. [Input And Evaluation](#input-and-evaluation)
 1. [Completion And Interactive Input](#completion-and-interactive-input)
+1. [Submitted History And Persistence](#submitted-history-and-persistence)
 1. [Output, Emulation, And Rendering](#output-emulation-and-rendering)
 1. [Shell And Native Processes](#shell-and-native-processes)
 1. [Graphics Protocol Realization](#graphics-protocol-realization)
@@ -462,18 +463,52 @@ text-input area follows the eligible editor's prepared caret in logical coordina
 Super-based aliases avoid consuming Option/AltGr text entry. Native composition takes
 precedence over these editor commands, except explicit Ctrl+Tab focus traversal.
 
-Submitted history is retained in the launch-owned SQLite TEMP store. Up/Down at a
-draft-row boundary queues an ordered asynchronous recall keyed by submission ID; the
-display applies a result only while its Terminal generation and editor-navigation epoch
-still match. The unsent draft keeps its source, cursor, selection anchor, preferred
-column, and prompt mode while recall is active. Recording or recall failure is reported
-without blocking prompt acceptance or evaluation. SQLite is the only retained command
-authority; the editor owns no submitted-command array. Highlight anchors carry submission
-IDs and source revisions. A bounded source cache is seeded from newly submitted source,
-and visible cache misses share one speculative keyed SQLite read per identity. The
-display copies completed source into its generation-owned cache before Julia
-classification; drawing never queries SQLite. Stale revisions, Terminal generations,
-and font generations cannot publish.
+### Submitted History And Persistence
+
+The display-owned Terminal editor submits source to the launch-owned history runtime;
+the Julia evaluator does not own or persist this history. The runtime borrows the
+application's admitted user-data SQLite connection and schedules initialization,
+mutations, and reads through the shared worker-only connection-admission path. Neither
+the display thread nor the Julia host executes history SQL.
+
+Every accepted submission enters the connection-local `TEMP` history table for the
+current application launch. The typed `Persist_Terminal_History` preference defaults
+off. When it is on, a submission is transactionally recorded in the durable
+`user_terminal_history` table as well as the session table, with a link that suppresses
+duplicate results during combined browsing. Turning persistence off hides durable rows
+from navigation and stops new durable writes, but retains saved rows for a later
+re-enable. Session-only submissions are never saved retroactively. Up/Down navigation
+continues to use the ordinary editor and asynchronous history-read path in either mode.
+
+**Delete Terminal History** uses a bounded two-activation confirmation in Settings.
+Its full-width, filled and bordered button matches the Save GIF pane, with a centered
+label. Arming changes the label to an explicit confirmation and briefly shakes the
+whole button; reduced motion suppresses the shake, not the confirmation.
+The confirmed clear is serialized with history writes and reads on the same connection
+and removes both durable and current-launch rows, even while persistence is off. A
+successful joined clear retires outstanding reads and cached navigation so deleted
+commands cannot reappear; the unsent editor draft remains display-owned and intact.
+Settings reports success only after the clear transaction commits. A failed transaction
+is logged and reported as failure without publishing an empty-history success state.
+
+Durable write or read failures are reported through the existing Terminal/store status.
+When a durable insert fails, the runtime attempts to retain the submission in the
+session table so command evaluation can proceed, and Terminal displays a persistence
+warning. A history-store failure does not turn a command evaluation into a success-shaped
+history result. SQLite is the sole durable command authority; no submitted-command copy
+is retained by the editor.
+
+Up/Down at a draft-row boundary queues an ordered asynchronous recall. A preference
+transition invalidates queued and in-flight results from the previous visibility policy.
+The display applies a result only while its Terminal generation and editor-navigation
+epoch still match. The unsent draft keeps its source, cursor, selection anchor, preferred
+column, and prompt mode while recall is active. Highlight anchors carry session
+submission IDs and source revisions. A bounded source cache is seeded from newly
+submitted source, and visible cache misses share one speculative keyed SQLite read per
+identity. The display copies
+completed source into its generation-owned cache before Julia classification; drawing
+never queries SQLite. Stale revisions, Terminal generations, and font generations cannot
+publish.
 
 Draft undo follows Julia REPL's whole-buffer, operation-level snapshots, not timed
 typing groups. Each character event or deletion is separate; a whole paste, native
@@ -852,6 +887,7 @@ Use the narrowest registered suite for the owner being changed:
 | --- | --- |
 | Julia actors, evaluation, completion, or lifecycle | Julia runtime tests |
 | Terminal editing, selection, rendering, and geometry | Terminal view and UI tests |
+| History persistence, clear, and cross-launch behavior | History store/runtime/UI tests; [isolated database acceptance](../../../tools/scenarios/terminal-history-persistence-acceptance.jsonl) |
 | Live and historical Julia highlighting | Adapter, cache, and renderer tests; [highlighting acceptance scenario](../../../tools/scenarios/terminal-highlighting-acceptance.jsonl) |
 | Evaluation error recovery and idle bridge reclamation | Full-return-queue bridge regression; [error acceptance scenario](../../../tools/scenarios/terminal-error-acceptance.jsonl) |
 | VT/DEC parsing, modes, OSC, DCS, APC, and queries | Emulator and input-encoding tests |
@@ -865,6 +901,12 @@ Scenarios are required when a claim depends on frame ordering, generation replac
 interactive evaluation, native process lifecycle, terminal graphics, container geometry,
 capture, or shutdown. The checked-in scenarios under `tools/scenarios/` exercise these
 flows through production ownership boundaries.
+
+Run `julia tools/make.jl scenario terminal-history-persistence-acceptance` to
+exercise the default-off, opt-in, visibility, re-enable, confirmed-clear, unsent-draft,
+and failed-write/clear paths across launches. The runner supplies an explicit isolated
+user database and fake data home; all generated databases and evidence remain under
+`.build/scenarios/`.
 
 Run the complete CMake `check` target before delivery for substantive cross-boundary
 changes. See [TestingStrategy.md](TestingStrategy.md) for the evidence model and scenario

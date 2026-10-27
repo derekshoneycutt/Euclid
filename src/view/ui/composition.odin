@@ -139,6 +139,11 @@ prepare_accordion_view :: proc(
     }, sections, &ui_runtime^.layout.active_accordion_section)
     if active_before != ui_runtime^.layout.active_accordion_section {
         ui_release_geometry_capture(ui_runtime)
+        if active_before == .Settings &&
+           ui_runtime^.layout.active_accordion_section != .Settings {
+            uisettings.settings_cancel_history_confirmation(
+                &ui_runtime^.settings_panel)
+        }
         ui_runtime^.tooltip = {}
         ui_runtime^.context_menu.active = false
         _ = ui_publish_presentation_visibility(

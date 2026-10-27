@@ -651,6 +651,38 @@ scenario_issue_settings_action :: proc(
     return false, false
 }
 
+// Exercise the real two-activation Settings policy and wait for its joined outcome.
+scenario_confirm_terminal_history_delete :: proc(
+    runtime: ^Scenario_Runtime, outcome: string) -> bool {
+    if runtime == nil || runtime.state == nil {
+        return false
+    }
+    panel := &runtime.state^.ui_runtime.settings_panel
+    if panel^.history_delete_status == .Idle ||
+       panel^.history_delete_status == .Armed {
+        uisettings.settings_history_delete_activate(runtime.state, 1)
+        uisettings.settings_history_delete_activate(runtime.state, 1.1)
+    }
+    expected: viewmodel.Ui_History_Delete_Status
+    if outcome == "cleared" {
+        expected = .Cleared
+    } else {
+        expected = .Failed
+    }
+    return panel^.history_delete_status == expected
+}
+
+// Wait until launch-owned history writes and reads have joined their worker task.
+scenario_terminal_history_idle :: proc(runtime: ^Scenario_Runtime) -> bool {
+    if runtime == nil || runtime.state == nil {
+        return false
+    }
+    history := &runtime.state^.terminal_history_runtime
+    return history^.status == .Ready && !history^.task_active &&
+        history^.mutation_count == 0 && history^.interactive_read_count == 0 &&
+        history^.speculative_read_count == 0 && !history^.read_result_ready
+}
+
 //   Consume one accepted viewport mutation before authoritative UI geometry is built.
 scenario_runtime_apply_pending_ui :: proc(runtime: ^Scenario_Runtime) -> bool {
     if runtime == nil || runtime.state == nil {
@@ -890,14 +922,16 @@ scenario_issue_generic_action :: proc(
         runtime, command, text); handled {
         return handled, accepted
     }
+    if handled, accepted := scenario_issue_terminal_action(
+        runtime, command.kind, text); handled {
+        return handled, accepted
+    }
     #partial switch command.kind {
     case .Assert_Focus:
         return true, scenario_focus_matches(runtime, text)
     case .Assert_Library_Search:
         search := &runtime.state^.ui_runtime.library.search
         return true, string(search^.query[:search^.query_length]) == text
-    case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
-        return true, scenario_terminal_contains(runtime.state, text)
     case:
     }
     if handled, accepted := scenario_issue_particle_action(
@@ -913,6 +947,22 @@ scenario_issue_generic_action :: proc(
         return handled, accepted
     }
     return scenario_issue_allocation_action(runtime, command)
+}
+
+// Route Terminal assertions and confirmed history deletion through their owners.
+scenario_issue_terminal_action :: proc(
+    runtime: ^Scenario_Runtime, kind: scenario.Command_Kind,
+    text: string) -> (bool, bool) {
+    #partial switch kind {
+    case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
+        return true, scenario_terminal_contains(runtime.state, text)
+    case .Wait_Terminal_History_Idle:
+        return true, scenario_terminal_history_idle(runtime)
+    case .Confirm_Terminal_History_Delete:
+        return true, scenario_confirm_terminal_history_delete(runtime, text)
+    case:
+    }
+    return false, false
 }
 
 //   Record one accepted scenario action under its final correlation identity.

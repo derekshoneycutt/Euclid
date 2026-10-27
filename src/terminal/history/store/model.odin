@@ -4,17 +4,33 @@ import protocol "../../../core/protocol"
 import sqlite "../../../sqlite"
 
 // History_Record is the stable metadata stored for one submitted source.
+History_Record_Scope :: enum u8 {
+    Session,
+    Persistent,
+}
+
 History_Record :: struct {
     submission_id: u64,
+    persistent_entry_id: u64,
+    scope: History_Record_Scope,
+    source_id: u64,
     mode: protocol.Evaluation_Mode,
     submitted_at_unix_ms: i64,
     terminal_generation: u64,
     source_revision: u64,
 }
 
+// History_Browse_Cursor is the deterministic cross-scope ordering position.
+History_Browse_Cursor :: struct {
+    submitted_at_unix_ms: i64,
+    scope: History_Record_Scope,
+    source_id: u64,
+}
+
 // History_Update_Request groups one expected-revision continuation mutation.
 History_Update_Request :: struct {
     submission_id: u64,
+    persistent_entry_id: u64,
     expected_revision: u64,
     new_revision: u64,
     mode: protocol.Evaluation_Mode,
@@ -51,6 +67,21 @@ History_Write_Outcome :: enum u8 {
 // History_Write_Result reports one insert or expected-revision update.
 History_Write_Result :: struct {
     outcome: History_Write_Outcome,
+    persistent_entry_id: u64,
+    failure: History_Store_Error,
+    persistence_failed: bool,
+    persistence_failure: History_Store_Error,
+}
+
+// History_Clear_Outcome distinguishes a committed deletion from failure.
+History_Clear_Outcome :: enum u8 {
+    Failed,
+    Cleared,
+}
+
+// History_Clear_Result reports whether both scopes were cleared transactionally.
+History_Clear_Result :: struct {
+    outcome: History_Clear_Outcome,
     failure: History_Store_Error,
 }
 
@@ -74,9 +105,19 @@ History_Read_Result :: struct {
 History_Store :: struct {
     connection: ^sqlite.Connection,
     insert: sqlite.Statement,
+    insert_persistent: sqlite.Statement,
+    insert_linked_session: sqlite.Statement,
     update: sqlite.Statement,
+    update_persistent: sqlite.Statement,
     get_by_id: sqlite.Statement,
+    get_persistent_by_id: sqlite.Statement,
     older: sqlite.Statement,
     newer: sqlite.Statement,
+    combined_older: sqlite.Statement,
+    combined_newer: sqlite.Statement,
+    combined_latest: sqlite.Statement,
+    delete_persistent: sqlite.Statement,
+    delete_session: sqlite.Statement,
+    durable_available: bool,
     initialized: bool,
 }

@@ -2003,6 +2003,36 @@ terminal_test_vertical_history_preserves_draft_editor_state :: proc(t: ^testing.
     testing.expect_value(t, term.history_navigation_intent_count, 2)
 }
 
+// A committed history clear restores the unsent draft and its exact selection.
+@(test)
+terminal_test_history_clear_restores_unsent_draft :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term, context.allocator)
+    testing.expect(t, termhist.termhist_insert_text(term.history, "draft"))
+    _ = termhist.termhist_move_left(term.history)
+    _ = termhist.termhist_move_left(term.history, true)
+    cursor := termhist.termhist_cursor(term.history)
+    anchor := termhist.termhist_anchor(term.history)
+    testing.expect(t, termhist.termhist_backup_current(term.history))
+    recalled := "recalled"
+    testing.expect(t, termhist.termhist_load_entry(
+        term.history, transmute([]u8)recalled))
+    term.history_navigation_active = true
+    term.history_navigation_draft_mode = .Help
+    term.history_navigation_intents[0] = -1
+    term.history_navigation_intent_count = 1
+    term.input_mode = .Normal
+
+    testing.expect(t, terminal_history_navigation_clear(&term))
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "draft")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), cursor)
+    testing.expect_value(t, termhist.termhist_anchor(term.history), anchor)
+    testing.expect_value(t, term.input_mode, protocol.Evaluation_Mode.Help)
+    testing.expect(t, !term.history_navigation_active)
+    testing.expect_value(t, term.history_navigation_intent_count, 0)
+}
+
 // Verify Ctrl+D deletes content, Ctrl+C cancels only the draft, and Ctrl+L clears output.
 @(test)
 terminal_test_editing_keymap_delete_cancel_and_clear :: proc(t: ^testing.T) {

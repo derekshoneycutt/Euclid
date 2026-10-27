@@ -576,10 +576,7 @@ gif_slider_row_segment_size :: #force_inline proc(text_size_percent: int) -> f32
 
 // Scale timing buttons while preserving room for the selected font's glyphs.
 gif_timing_button_height :: #force_inline proc(text_size_percent: int) -> f32 {
-    scale := theme.ui_text_scale_factor(text_size_percent)
-    return max(theme.ui_scaled_metric(
-        theme.SETTINGS_GIF_BUTTON_HEIGHT, text_size_percent),
-        theme.ui_font_size(text_size_percent) + 8 * scale)
+    return theme.ui_panel_button_height(text_size_percent)
 }
 
 // Keep the timing choices below their label with text-scale-aware separation.
@@ -618,10 +615,7 @@ gif_timing_segment_size :: #force_inline proc(
 
 // Size the Save button row and following status gap for the active text scale.
 gif_save_button_height :: #force_inline proc(text_size_percent: int) -> f32 {
-    scale := theme.ui_text_scale_factor(text_size_percent)
-    return max(theme.ui_scaled_metric(
-        theme.SETTINGS_GIF_BUTTON_HEIGHT, text_size_percent),
-        theme.ui_font_size(text_size_percent) + 8 * scale)
+    return theme.ui_panel_button_height(text_size_percent)
 }
 
 // Reserves scaled button height and the status row's top margin.

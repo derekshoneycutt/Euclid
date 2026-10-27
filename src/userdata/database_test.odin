@@ -149,9 +149,13 @@ userdata_expect_database_identity :: proc(
         connection, "PRAGMA application_id")
     schema_version, version_valid := userdata_test_integer_query(
         connection, "PRAGMA user_version")
-    testing.expect(t, app_valid && version_valid)
+    history_table_count, history_table_valid := userdata_test_integer_query(
+        connection,
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_terminal_history'")
+    testing.expect(t, app_valid && version_valid && history_table_valid)
     testing.expect_value(t, application_id, i64(DATABASE_APPLICATION_ID))
     testing.expect_value(t, schema_version, i64(DATABASE_SCHEMA_VERSION))
+    testing.expect_value(t, history_table_count, i64(1))
 }
 
 // Resolve stable default and explicit paths without creating database files.
@@ -1020,11 +1024,15 @@ userdata_v1_migration_preserves_settings_and_seeds_favorites :: proc(t: ^testing
             context.temp_allocator).result,
         raw.Result.Ok)
     version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
+    history_table_count, history_table_valid := userdata_test_integer_query(
+        &inspect,
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_terminal_history'")
     preserved, preserved_valid := userdata_test_integer_query(
         &inspect, "SELECT integer_value FROM user_setting WHERE namespace='migration'")
-    testing.expect(t, version_valid && preserved_valid)
+    testing.expect(t, version_valid && preserved_valid && history_table_valid)
     testing.expect_value(t, version, i64(2))
     testing.expect_value(t, preserved, i64(7))
+    testing.expect_value(t, history_table_count, i64(1))
     testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
 }
 

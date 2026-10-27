@@ -7,15 +7,15 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Terminal REPL history explorer and persistence
+- Terminal REPL history explorer
 - Custom notes on collection items
 - Optional checkboxes in tree
 - Animation slider
 - Search history / Autocomplete features
 - Use history / Most viewed / Most recent
 - Export / Import by file
-- Accessibility completion work
 - Ip-2-ip sharing protocol
+- Accessibility completion work
 
 -----------------
 
@@ -210,7 +210,7 @@ General features:
   - [X] Animation catalog manifest tables
   - [X] Localization tables
   - [X] Basic initial user settings structure
-  - [ ] Persistent REPL history
+  - [X] Persistent REPL history
   - [ ] Optional completed checkboxes in tree
   - [ ] Search and use history
   - [ ] Search auto-completion features

@@ -21,6 +21,26 @@ history_runtime_attach_generation :: proc(
     history^.retire_reads = false
 }
 
+// Change durable-history visibility and retire reads captured under the old policy.
+history_runtime_set_persistence :: proc(
+    history: ^historyruntime.History_Runtime, enabled: bool) -> bool {
+    if history == nil || history^.persist_enabled == enabled {
+        return false
+    }
+    history^.persist_enabled = enabled
+    history^.visibility_epoch += 1
+    if history^.visibility_epoch == 0 {
+        history^.visibility_epoch = 1
+    }
+    history^.interactive_read_count = 0
+    history^.speculative_read_count = 0
+    history^.read_result_ready = false
+    if enabled && history^.status == .Unavailable {
+        history^.persistence_status = .Unavailable
+    }
+    return true
+}
+
 // Bind the borrowed launch connection and explicitly publish unavailable state when absent.
 history_runtime_start :: proc(
     history: ^historyruntime.History_Runtime, connection: ^sqlite.Connection) {
@@ -87,6 +107,7 @@ history_runtime_enqueue_insert :: proc(
     mutation: historyruntime.History_Mutation = {
         kind = .Insert,
         record = record,
+        persist_insert = history^.persist_enabled,
     }
     return history_runtime_enqueue_mutation(history, mutation, source)
 }
@@ -102,6 +123,15 @@ history_runtime_enqueue_update :: proc(
     }
     mutation.update.source = ""
     return history_runtime_enqueue_mutation(history, mutation, request.source)
+}
+
+// Queue one all-scope deletion on the same serialized mutation lane as history writes.
+history_runtime_enqueue_clear :: proc(
+    history: ^historyruntime.History_Runtime) ->
+        historyruntime.History_Runtime_Enqueue_Result {
+    return history_runtime_enqueue_mutation(history, {
+        kind = .Clear,
+    }, "")
 }
 
 // Admit a source only when both independent queue limits have room.
@@ -153,17 +183,21 @@ history_runtime_request_read :: proc(
     request: historyruntime.History_Read_Request) -> bool {
     if history == nil || history^.status != .Ready ||
        history^.shutdown_requested || history^.retire_reads ||
-       request.submission_id == 0 ||
+       ((request.kind == .By_Id ||
+         ((request.kind == .Older || request.kind == .Newer) &&
+          !request.cursor_valid)) && request.submission_id == 0) ||
        request.request_id == 0 || request.terminal_generation == 0 ||
        request.terminal_generation != history^.terminal_generation {
         return false
     }
+    queued_request := request
+    queued_request.visibility_epoch = history^.visibility_epoch
     if request.priority == .Interactive {
         if history^.interactive_read_count >=
            historyruntime.HISTORY_RUNTIME_READ_CAPACITY {
             return false
         }
-        history^.interactive_reads[history^.interactive_read_count] = request
+        history^.interactive_reads[history^.interactive_read_count] = queued_request
         history^.interactive_read_count += 1
         return true
     }
@@ -171,7 +205,7 @@ history_runtime_request_read :: proc(
        history^.speculative_read_count >= historyruntime.HISTORY_RUNTIME_READ_CAPACITY {
         return false
     }
-    history^.speculative_reads[history^.speculative_read_count] = request
+    history^.speculative_reads[history^.speculative_read_count] = queued_request
     history^.speculative_read_count += 1
     return true
 }
@@ -423,15 +457,19 @@ history_runtime_worker :: proc(
 // Execute the immutable insert or continuation update from the active source array.
 history_runtime_worker_mutation :: proc(
     history: ^historyruntime.History_Runtime) -> taskpool.Task_Result {
+    if history^.active_mutation.kind == .Clear {
+        history^.active_clear_result =
+            termhiststore.history_store_clear(&history^.store)
+        return .Failed if
+            history^.active_clear_result.outcome != .Cleared else .Succeeded
+    }
     source := string(history^.active_source[:history^.active_mutation.source_length])
     if history^.active_mutation.kind == .Insert {
-        history^.active_write_result = termhiststore.history_store_insert(
-            &history^.store, history^.active_mutation.record, source)
+        history_runtime_worker_insert(history, source)
     } else if history^.active_mutation.kind == .Update {
         request := history^.active_mutation.update
         request.source = source
-        history^.active_write_result = termhiststore.history_store_update_expected(
-            &history^.store, request)
+        history_runtime_worker_update(history, request)
     } else {
         return .Failed
     }
@@ -439,23 +477,129 @@ history_runtime_worker_mutation :: proc(
         .Failed else .Succeeded
 }
 
+// Preserve session history if an optional durable insert cannot be committed.
+history_runtime_worker_insert :: proc(
+    history: ^historyruntime.History_Runtime, source: string) {
+    mutation := history^.active_mutation
+    if !mutation.persist_insert {
+        history^.active_write_result = termhiststore.history_store_insert(
+            &history^.store, mutation.record, source)
+        return
+    }
+    if !history^.store.durable_available {
+        history_runtime_persistence_unavailable(history, "insert")
+        history^.active_write_result = termhiststore.history_store_insert(
+            &history^.store, mutation.record, source)
+        history^.active_write_result.persistence_failed = true
+        history^.active_write_result.persistence_failure.kind =
+            termhiststore.History_Store_Error_Kind.Invalid_State
+        return
+    }
+    history^.active_write_result = termhiststore.history_store_insert_persistent(
+        &history^.store, mutation.record, source)
+    if history^.active_write_result.outcome != .Failed {
+        return
+    }
+    failure := history^.active_write_result.failure
+    history^.active_write_result = termhiststore.history_store_insert(
+        &history^.store, mutation.record, source)
+    history^.active_write_result.persistence_failed = true
+    history^.active_write_result.persistence_failure = failure
+}
+
+// Keep the TEMP revision current when a linked durable continuation update fails.
+history_runtime_worker_update :: proc(
+    history: ^historyruntime.History_Runtime,
+    request: termhiststore.History_Update_Request) {
+    session_request := request
+    if session_request.persistent_entry_id == 0 {
+        history^.active_write_result = termhiststore.history_store_update_expected(
+            &history^.store, session_request)
+        return
+    }
+    history^.active_write_result = termhiststore.history_store_update_expected(
+        &history^.store, session_request)
+    if history^.active_write_result.outcome == .Updated {
+        return
+    }
+    failure := history^.active_write_result.failure
+    if history^.active_write_result.outcome == .Conflict {
+        failure.kind = .Conflict
+    }
+    session_request.persistent_entry_id = 0
+    history^.active_write_result = termhiststore.history_store_update_expected(
+        &history^.store, session_request)
+    history^.active_write_result.persistence_failed = true
+    history^.active_write_result.persistence_failure = failure
+}
+
+// Record unavailable durable storage separately from the still-usable session store.
+history_runtime_persistence_unavailable :: proc(
+    history: ^historyruntime.History_Runtime, operation: string) {
+    history^.persistence_status = .Unavailable
+    log.warnf("terminal_history_persistence_failed operation=%s reason=unavailable",
+        operation)
+}
+
 // Execute one keyed read into the runtime's single reusable result-source array.
 history_runtime_worker_read :: proc(
     history: ^historyruntime.History_Runtime) -> taskpool.Task_Result {
     request := history^.active_read_request
-    switch request.kind {
-    case .By_Id:
-        history^.active_read_result = termhiststore.history_store_get_by_id(
-            &history^.store, request.submission_id, history^.read_result_source[:])
-    case .Older:
-        history^.active_read_result = termhiststore.history_store_older(
-            &history^.store, request.submission_id, history^.read_result_source[:])
-    case .Newer:
-        history^.active_read_result = termhiststore.history_store_newer(
-            &history^.store, request.submission_id, history^.read_result_source[:])
+    if history^.persist_enabled && history^.store.durable_available &&
+       request.kind != .By_Id {
+        history^.active_read_result = history_runtime_worker_read_combined(
+            history, request)
+    } else {
+        history^.active_read_result = history_runtime_worker_read_session(
+            history, request)
     }
     return .Failed if history^.active_read_result.outcome ==
         .Failed else .Succeeded
+}
+
+// Browse by tuple cursor when available and by session ID during first entry.
+history_runtime_worker_read_combined :: proc(
+    history: ^historyruntime.History_Runtime,
+    request: historyruntime.History_Read_Request) ->
+        termhiststore.History_Read_Result {
+    if request.kind == .Latest {
+        return termhiststore.history_store_combined_latest(
+            &history^.store, history^.read_result_source[:])
+    }
+    if request.cursor_valid {
+        if request.kind == .Older {
+            return termhiststore.history_store_combined_older(
+                &history^.store, request.cursor, history^.read_result_source[:])
+        }
+        return termhiststore.history_store_combined_newer(
+            &history^.store, request.cursor, history^.read_result_source[:])
+    }
+    return history_runtime_worker_read_session(history, request)
+}
+
+// Read the connection-local history store using its launch-unique submission IDs.
+history_runtime_worker_read_session :: proc(
+    history: ^historyruntime.History_Runtime,
+    request: historyruntime.History_Read_Request) ->
+        termhiststore.History_Read_Result {
+    switch request.kind {
+    case .By_Id:
+        return termhiststore.history_store_get_by_id(
+            &history^.store, request.submission_id, history^.read_result_source[:])
+    case .Older:
+        return termhiststore.history_store_older(
+            &history^.store, request.submission_id, history^.read_result_source[:])
+    case .Latest:
+        return termhiststore.history_store_older(
+            &history^.store, history^.next_submission_id + 1,
+            history^.read_result_source[:])
+    case .Newer:
+        return termhiststore.history_store_newer(
+            &history^.store, request.submission_id, history^.read_result_source[:])
+    }
+    return {
+        outcome = .Failed,
+    }
 }
 
 // Join one completed task before publishing results or releasing its payload storage.
@@ -517,26 +661,104 @@ history_runtime_complete_initialization :: proc(
     task_result: taskpool.Task_Result) {
     if task_result == .Succeeded && history^.initialization_failure.kind == .None {
         history^.status = .Ready
+        history^.persistence_status =
+            history_runtime_store_persistence_status(&history^.store)
         return
     }
     history^.status = .Unavailable
+    history^.persistence_status = .Unavailable
     log.warnf("terminal_history_init_failed error=%d sqlite_result=%d",
         int(history^.initialization_failure.kind),
         int(history^.initialization_failure.sqlite_error.result))
+}
+
+// Report whether the durable table is available after store initialization.
+history_runtime_store_persistence_status :: proc(
+    store: ^termhiststore.History_Store) -> historyruntime.History_Persistence_Status {
+    return .Ready if store^.durable_available else .Unavailable
 }
 
 // Retain and report one joined mutation outcome without retrying a failed source.
 history_runtime_complete_mutation :: proc(
     history: ^historyruntime.History_Runtime,
     task_result: taskpool.Task_Result) {
+    if history^.active_mutation.kind == .Clear {
+        history_runtime_complete_clear(history, task_result)
+        return
+    }
     history^.last_write_result = history^.active_write_result
     history^.last_completed_mutation = history^.active_mutation
     history^.write_completion_serial += 1
+    history_runtime_propagate_persistent_identity(history)
+    if history^.active_write_result.persistence_failed {
+        history^.persistence_status = .Failed
+        failure := history^.active_write_result.persistence_failure
+        log.warnf("terminal_history_persistence_failed error=%d sqlite_result=%d",
+            int(failure.kind), int(failure.sqlite_error.result))
+    } else if history^.active_mutation.persist_insert ||
+        history^.active_mutation.update.persistent_entry_id != 0 {
+        history^.persistence_status = .Ready
+    }
     if task_result != .Succeeded ||
        history^.active_write_result.outcome == .Failed {
         log.warnf("terminal_history_write_failed error=%d sqlite_result=%d",
             int(history^.active_write_result.failure.kind),
             int(history^.active_write_result.failure.sqlite_error.result))
+    }
+}
+
+// Publish deletion and retire stale navigation only after the joined transaction commits.
+history_runtime_complete_clear :: proc(
+    history: ^historyruntime.History_Runtime,
+    task_result: taskpool.Task_Result) {
+    history^.last_clear_result = history^.active_clear_result
+    history^.clear_completion_serial += 1
+    if history^.clear_completion_serial == 0 {
+        history^.clear_completion_serial = 1
+    }
+    if task_result == .Succeeded &&
+       history^.last_clear_result.outcome == .Cleared {
+        history_runtime_clear_pending_reads(history)
+        return
+    }
+    failure := history^.last_clear_result.failure
+    log.warnf("terminal_history_clear_failed error=%d sqlite_result=%d",
+        int(failure.kind), int(failure.sqlite_error.result))
+}
+
+// Drop read results and identities made obsolete by a committed all-history deletion.
+history_runtime_clear_pending_reads :: proc(
+    history: ^historyruntime.History_Runtime) {
+    history^.visibility_epoch += 1
+    if history^.visibility_epoch == 0 {
+        history^.visibility_epoch = 1
+    }
+    history^.interactive_read_count = 0
+    history^.speculative_read_count = 0
+    history^.read_result_ready = false
+    history^.read_result_request = {}
+    history^.read_result = {}
+    history^.last_read_result = {}
+    history_runtime_clear_bytes(history^.read_result_source[:])
+}
+
+// Attach the completed durable identity to any already-queued continuation revisions.
+history_runtime_propagate_persistent_identity :: proc(
+    history: ^historyruntime.History_Runtime) {
+    mutation := history^.active_mutation
+    persistent_id := history^.active_write_result.persistent_entry_id
+    if mutation.kind != .Insert || persistent_id == 0 ||
+       history^.active_write_result.outcome != .Stored {
+        return
+    }
+    for offset in 0..<history^.mutation_count {
+        slot := (history^.mutation_head + offset) %
+            historyruntime.HISTORY_RUNTIME_MUTATION_CAPACITY
+        queued := &history^.queued_mutations[slot]
+        if queued.kind == .Update &&
+           queued.update.submission_id == mutation.record.submission_id {
+            queued.update.persistent_entry_id = persistent_id
+        }
     }
 }
 
@@ -546,28 +768,52 @@ history_runtime_complete_read :: proc(
     task_result: taskpool.Task_Result) {
     if task_result != .Succeeded ||
        history^.active_read_result.outcome == .Failed {
-        log.warnf("terminal_history_read_failed error=%d sqlite_result=%d",
-            int(history^.active_read_result.failure.kind),
-            int(history^.active_read_result.failure.sqlite_error.result))
-        history^.last_read_result = history^.active_read_result
-        if !history^.shutdown_requested && !history^.retire_reads &&
-           history^.active_read_request.terminal_generation ==
-               history^.terminal_generation {
-            history^.read_result_request = history^.active_read_request
-            history^.read_result = history^.active_read_result
-            history^.read_result_ready = true
-        }
+        history_runtime_complete_read_failure(history)
         return
     }
-    if history^.shutdown_requested || history^.retire_reads ||
-       history^.active_read_request.terminal_generation !=
-           history^.terminal_generation {
+    if !history_runtime_read_request_current(history) {
         return
     }
+    history_runtime_publish_read_result(history)
+}
+
+// Keep failure detail and durable-read health visible without publishing stale data.
+history_runtime_complete_read_failure :: proc(
+    history: ^historyruntime.History_Runtime) {
+    result := history^.active_read_result
+    log.warnf("terminal_history_read_failed error=%d sqlite_result=%d",
+        int(result.failure.kind), int(result.failure.sqlite_error.result))
+    history^.last_read_result = result
+    if history^.persist_enabled && history^.store.durable_available &&
+       history^.active_read_request.kind != .By_Id {
+        history^.persistence_status = .Failed
+        log.warn("terminal_history_persistence_failed operation=read")
+    }
+    if history_runtime_read_request_current(history) {
+        history_runtime_publish_read_result(history)
+    }
+}
+
+// Check shutdown, generation, and preference visibility before publishing a read.
+history_runtime_read_request_current :: proc(
+    history: ^historyruntime.History_Runtime) -> bool {
+    request := history^.active_read_request
+    return !history^.shutdown_requested && !history^.retire_reads &&
+        request.terminal_generation == history^.terminal_generation &&
+        request.visibility_epoch == history^.visibility_epoch
+}
+
+// Retain the completed record and reusable source bytes until display consumption.
+history_runtime_publish_read_result :: proc(
+    history: ^historyruntime.History_Runtime) {
     history^.read_result_request = history^.active_read_request
     history^.read_result = history^.active_read_result
     history^.read_result_ready = true
     history^.last_read_result = history^.active_read_result
+    if history^.persist_enabled &&
+       history^.active_read_request.kind != .By_Id {
+        history^.persistence_status = .Ready
+    }
 }
 
 // Mark finalization complete after the worker has released every prepared statement.
@@ -606,6 +852,7 @@ history_runtime_clear_active_mutation :: proc(
         history^.active_source[:history^.active_mutation.source_length])
     history^.active_mutation = {}
     history^.active_write_result = {}
+    history^.active_clear_result = {}
 }
 
 // Release the queue head's source bytes and update bounded waiting accounting.

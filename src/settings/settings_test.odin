@@ -33,6 +33,24 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
     testing.expect_value(t,
         setting_value(preferences, .Interface_Text_Size).integer, 100)
+    testing.expect(t, !setting_value(preferences, .Persist_Terminal_History).boolean)
+}
+
+// Keep durable Terminal history opt-in and typed as a boolean setting.
+@(test)
+terminal_history_persistence_is_opt_in :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Persist_Terminal_History)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "terminal")
+    testing.expect_value(t, definition.key, "persist_history")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Boolean)
+    preferences := default_preferences()
+    testing.expect(t, apply_setting_value(
+        &preferences, .Persist_Terminal_History, boolean_value(true), .Saved))
+    testing.expect(t, preferences.terminal.persist_history)
+    testing.expect(t, .Persist_Terminal_History in preferences.present)
+    testing.expect(t, !apply_setting_value(
+        &preferences, .Persist_Terminal_History, integer_value(1), .Override))
 }
 
 // Keep contrast optional by default and retain its stable boolean persistence identity.

@@ -99,6 +99,8 @@ Command_Kind :: enum u8 {
     Wait_Event,
     Wait_State,
     Wait_Terminal_Contains,
+    Wait_Terminal_History_Idle,
+    Confirm_Terminal_History_Delete,
     Assert_State,
     Assert_Focus,
     Assert_Library_Search,
@@ -342,6 +344,8 @@ Raw_Command :: struct {
     wait_event: string,
     wait_state: string,
     wait_terminal_contains: string,
+    wait_terminal_history_idle: bool,
+    confirm_terminal_history_delete: string,
     assert_state: string,
     assert_focus: string,
     assert_library_search: string,
@@ -831,7 +835,8 @@ runner_update_command :: proc(
         return runner_update_event_wait(runner, command, frame)
     case .Wait_State:
         return runner_update_state_wait(runner, command, frame)
-    case .Wait_Terminal_Contains:
+    case .Wait_Terminal_Contains, .Wait_Terminal_History_Idle,
+         .Confirm_Terminal_History_Delete:
         return runner_update_action_wait(runner, command, frame)
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
@@ -904,9 +909,11 @@ runner_update :: proc(
 // Report whether a completed command must yield so its effect reaches the next frame.
 command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
     #partial switch kind {
-    case .Wait_Event, .Wait_State, .Wait_Terminal_Contains, .Type_Text,
-        .Type_Library_Name, .Key, .Set_View_Content, .Set_Library_Search,
-        .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
+    case .Wait_Event, .Wait_State, .Wait_Terminal_Contains,
+         .Wait_Terminal_History_Idle, .Confirm_Terminal_History_Delete,
+         .Type_Text, .Type_Library_Name,
+         .Key, .Set_View_Content, .Set_Library_Search,
+         .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
         .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
         .Favorite_Control, .Library_Placement, .Set_Arrival_Style:
         return true
@@ -1009,14 +1016,7 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_arrival_style_command_select(raw.set_arrival_style, command)
     selected += raw_library_search_command_select(raw, command)
     selected += raw_favorites_command_select(raw, command)
-    selected += raw_text_command_select(raw.wait_event, .Wait_Event, command)
-    selected += raw_text_command_select(raw.wait_state, .Wait_State, command)
-    selected += raw_text_command_select(raw.wait_terminal_contains,
-        .Wait_Terminal_Contains, command)
-    selected += raw_text_command_select(raw.assert_state, .Assert_State, command)
-    selected += raw_text_command_select(raw.assert_focus, .Assert_Focus, command)
-    selected += raw_text_command_select(raw.assert_terminal_contains,
-        .Assert_Terminal_Contains, command)
+    selected += raw_wait_command_select(raw, command)
     selected += raw_text_command_select(raw.checkpoint, .Checkpoint, command)
     selected += raw_text_command_select(raw.allocation_checkpoint,
         .Allocation_Checkpoint, command)
@@ -1030,6 +1030,25 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
         command.kind = .Shutdown
         selected += 1
     }
+    return selected
+}
+
+// Select event, predicate, and asynchronous history confirmation waits.
+raw_wait_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
+    selected := raw_text_command_select(raw.wait_event, .Wait_Event, command)
+    selected += raw_text_command_select(raw.wait_state, .Wait_State, command)
+    selected += raw_text_command_select(raw.wait_terminal_contains,
+        .Wait_Terminal_Contains, command)
+    if raw.wait_terminal_history_idle {
+        command.kind = .Wait_Terminal_History_Idle
+        selected += 1
+    }
+    selected += raw_text_command_select(raw.confirm_terminal_history_delete,
+        .Confirm_Terminal_History_Delete, command)
+    selected += raw_text_command_select(raw.assert_state, .Assert_State, command)
+    selected += raw_text_command_select(raw.assert_focus, .Assert_Focus, command)
+    selected += raw_text_command_select(raw.assert_terminal_contains,
+        .Assert_Terminal_Contains, command)
     return selected
 }
 
@@ -1110,7 +1129,9 @@ command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Erro
     command^.timeout_ms = raw.timeout_ms
     command^.frame_number = raw.frame_number
     if command^.kind == .Wait_Event || command^.kind == .Wait_State ||
-        command^.kind == .Wait_Terminal_Contains {
+        command^.kind == .Wait_Terminal_Contains ||
+        command^.kind == .Wait_Terminal_History_Idle ||
+        command^.kind == .Confirm_Terminal_History_Delete {
         if command^.timeout_ms == 0 {
             command^.timeout_ms = SCENARIO_DEFAULT_TIMEOUT_MS
         }
@@ -1190,6 +1211,11 @@ command_from_raw :: proc(
         !command_kind_allows_empty_text(command.kind) {
         return {}, .Text_Too_Long
     }
+    if command.kind == .Confirm_Terminal_History_Delete &&
+        text_string(&command.text) != "cleared" &&
+        text_string(&command.text) != "failed" {
+        return {}, .Invalid_Command
+    }
     if options_error := command_apply_options(raw, &command); options_error != .None {
         return {}, options_error
     }
@@ -1201,7 +1227,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     switch kind {
     case .Emit_Dust, .Contact_Dust, .Kick_Dust,
          .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
-            .Apply_Library_Search_Suggestion, .Clear_Library_Search,
+         .Apply_Library_Search_Suggestion, .Clear_Library_Search,
+         .Wait_Terminal_History_Idle,
          .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
@@ -1211,7 +1238,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Pause_Animation, .Resume_Animation,
          .Set_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
-         .Wait_State, .Wait_Terminal_Contains, .Assert_State, .Assert_Focus,
+         .Wait_State, .Wait_Terminal_Contains, .Confirm_Terminal_History_Delete,
+         .Assert_State, .Assert_Focus,
          .Assert_Terminal_Contains, .Assert_Library_Search,
          .Checkpoint, .Allocation_Checkpoint,
          .Assert_Allocation_Baseline, .Favorite_Control, .Library_Placement,

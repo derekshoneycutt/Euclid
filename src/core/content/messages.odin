@@ -69,6 +69,14 @@ Content_Message_Id :: enum u16 {
     Settings_Section_Accessibility = 1226,
     Settings_Section_Particles = 1227,
     Settings_Section_Other = 1228,
+    Settings_Section_History = 1229,
+    Settings_Persist_Terminal_History = 1230,
+    Settings_Delete_Terminal_History = 1231,
+    Settings_Confirm_Delete_Terminal_History = 1232,
+    Settings_History_Delete_Confirm_Value = 1233,
+    Settings_History_Delete_Pending = 1234,
+    Settings_History_Delete_Succeeded = 1235,
+    Settings_History_Delete_Failed = 1236,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -125,7 +133,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 107
+CONTENT_SHIPPED_MESSAGE_COUNT :: 115
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -186,6 +194,14 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1226, "ui.settings.section.accessibility"},
     {1227, "ui.settings.section.particles"},
     {1228, "ui.settings.section.other"},
+    {1229, "ui.settings.section.history"},
+    {1230, "ui.settings.persist_terminal_history"},
+    {1231, "ui.settings.delete_terminal_history"},
+    {1232, "ui.settings.confirm_delete_terminal_history"},
+    {1233, "ui.settings.history_delete.confirm_value"},
+    {1234, "ui.settings.history_delete.pending"},
+    {1235, "ui.settings.history_delete.succeeded"},
+    {1236, "ui.settings.history_delete.failed"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},

@@ -7,6 +7,7 @@ import termclipboard "../../../terminal/clipboard"
 import termemulator "../../../terminal/emulator"
 import termgrid "../../../terminal/grid"
 import termhist "../../../terminal/history"
+import termhiststore "../../../terminal/history/store"
 import termhyperlink "../../../terminal/hyperlink"
 import termmodel "../../../terminal/model"
 import termsession "../../../terminal/session"
@@ -42,12 +43,16 @@ Terminal_State :: struct {
     input_mode_backup: protocol.Evaluation_Mode,
     collecting_continuation: bool,
     provisional_submission_id: u64,
+    provisional_persistent_entry_id: u64,
     provisional_desired_revision: u64,
     provisional_committed_revision: u64,
     provisional_recording_valid: bool,
+    history_persistence_notified: bool,
     history_unavailable_notified: bool,
     history_navigation_epoch: u64,
     history_navigation_anchor_id: u64,
+    history_navigation_cursor: termhiststore.History_Browse_Cursor,
+    history_navigation_cursor_valid: bool,
     history_navigation_request_id: u64,
     history_source_request_id: u64,
     history_navigation_pending_id: u64,

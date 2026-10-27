@@ -1,5 +1,7 @@
 CREATE TEMP TABLE terminal_history (
     submission_id INTEGER PRIMARY KEY CHECK (submission_id > 0),
+    persistent_entry_id INTEGER
+        CHECK (persistent_entry_id IS NULL OR persistent_entry_id > 0),
     source TEXT NOT NULL,
     mode INTEGER NOT NULL,
     submitted_at_unix_ms INTEGER NOT NULL,

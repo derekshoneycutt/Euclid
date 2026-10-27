@@ -360,6 +360,7 @@ terminal_service_record_continuation :: proc(
     result := terminalview.history_runtime_enqueue_update(
         &state^.terminal_history_runtime, {
             submission_id = id,
+            persistent_entry_id = term^.provisional_persistent_entry_id,
             expected_revision = expected,
             new_revision = next,
             mode = submission.mode,
@@ -382,6 +383,7 @@ terminal_service_record_new_submission :: proc(
         return .Not_Ready
     }
     term^.provisional_submission_id = id
+    term^.provisional_persistent_entry_id = 0
     term^.provisional_desired_revision = 1
     term^.provisional_committed_revision = 0
     return terminalview.history_runtime_enqueue_insert(history, {
@@ -408,6 +410,9 @@ terminal_service_consume_history_write :: proc(state: ^core.Euclid_General_State
     } else if mutation.kind == .Update {
         terminal_service_apply_update_result(term, history, mutation)
     }
+    if history^.last_write_result.persistence_failed {
+        terminal_service_notify_persistence_failure(term)
+    }
 }
 
 // Apply a joined insert result and retire any source that was not retained.
@@ -420,6 +425,8 @@ terminal_service_apply_insert_result :: proc(
     if history^.last_write_result.outcome == .Stored {
         if id == term^.provisional_submission_id {
             term^.provisional_committed_revision = revision
+            term^.provisional_persistent_entry_id =
+                history^.last_write_result.persistent_entry_id
         }
         return
     }
@@ -464,6 +471,9 @@ terminal_service_consume_history_read :: proc(state: ^core.Euclid_General_State)
     if !completion.ready {
         return
     }
+    if history^.persistence_status == .Failed {
+        terminal_service_notify_persistence_failure(term)
+    }
     if completion.request.priority == .Speculative {
         terminal_service_consume_highlight_source(term, completion, consumed)
         return
@@ -506,10 +516,25 @@ terminal_service_apply_navigation_read :: proc(
     } else if completion.result.outcome ==
         termhiststore.History_Read_Outcome.Boundary {
         terminal_service_apply_history_boundary(term, completion.request.kind)
+    } else if completion.result.outcome ==
+        termhiststore.History_Read_Outcome.Not_Found &&
+        completion.request.kind == .Latest {
+        terminal_service_apply_history_boundary(term, completion.request.kind)
     } else {
         terminal_service_fail_history_navigation(term, "read_failed")
     }
     terminal_service_pop_history_intent(term)
+}
+
+// Make optional durable-storage failures visible without changing evaluation outcome.
+terminal_service_notify_persistence_failure :: proc(
+    term: ^viewterminalmodel.Terminal_State) {
+    if term == nil || term^.history_persistence_notified {
+        return
+    }
+    term^.history_persistence_notified = true
+    terminalview.terminal_append_output_line(
+        term, "Terminal history persistence failed; saved history may be unavailable.")
 }
 
 // Publish speculative source only when the fetched database revision matches its request.
@@ -548,13 +573,19 @@ terminal_service_apply_history_record :: proc(
     }
     term.input_mode = completion.result.record.mode
     term.history_navigation_anchor_id = completion.result.record.submission_id
+    term.history_navigation_cursor = {
+        submitted_at_unix_ms = completion.result.record.submitted_at_unix_ms,
+        scope = completion.result.record.scope,
+        source_id = completion.result.record.source_id,
+    }
+    term.history_navigation_cursor_valid = true
 }
 
 // Restore the saved draft only when Down reaches the history tail.
 terminal_service_apply_history_boundary :: proc(
     term: ^viewterminalmodel.Terminal_State,
     kind: historyruntime.History_Read_Kind) {
-    if kind != .Newer {
+    if kind != .Newer && kind != .Latest {
         return
     }
     if !termhist.termhist_restore_backup(term.history) {
@@ -563,6 +594,8 @@ terminal_service_apply_history_boundary :: proc(
     }
     term.input_mode = term.history_navigation_draft_mode
     term.history_navigation_anchor_id = 0
+    term.history_navigation_cursor = {}
+    term.history_navigation_cursor_valid = false
     term.history_navigation_active = false
 }
 
@@ -635,6 +668,15 @@ terminal_service_history_read_request :: proc(
     history: ^historyruntime.History_Runtime) ->
         historyruntime.History_Read_Request {
     direction := term^.history_navigation_intents[0]
+    if history^.persist_enabled && !term^.history_navigation_cursor_valid {
+        return {
+            kind = .Latest,
+            priority = .Interactive,
+            request_id = term^.history_navigation_request_id,
+            terminal_generation = term^.animation_generation,
+            navigation_epoch = term^.history_navigation_epoch,
+        }
+    }
     anchor := term^.history_navigation_anchor_id
     if direction < 0 && anchor == max(u64) {
         anchor = history^.next_submission_id + 1
@@ -650,6 +692,8 @@ terminal_service_history_read_request :: proc(
         request_id = term^.history_navigation_request_id,
         terminal_generation = term^.animation_generation,
         navigation_epoch = term^.history_navigation_epoch,
+        cursor = term^.history_navigation_cursor,
+        cursor_valid = term^.history_navigation_cursor_valid,
     }
 }
 

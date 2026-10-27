@@ -867,6 +867,18 @@ Ui_Settings_Panel_State :: struct {
     scroll_drag_off: f32,
     slider_dragging: bool,
     slider_drag_offset_x: f32,
+    history_delete_status: Ui_History_Delete_Status,
+    history_delete_armed_at_seconds: f64,
+    history_delete_completion_serial: u64,
+}
+
+// Ui_History_Delete_Status reports only database-confirmed deletion outcomes.
+Ui_History_Delete_Status :: enum u8 {
+    Idle,
+    Armed,
+    Pending,
+    Cleared,
+    Failed,
 }
 
 // Ui_Terminal_Interaction_State retains only UI-owned Terminal interaction.

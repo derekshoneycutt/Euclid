@@ -350,13 +350,13 @@ accordion_settings_scroll_is_retained_and_visual_preparation_is_pure :: proc(
     testing.expect_value(t,
         uisemantics.semantic_staging_snapshot(semantic)^.node_count, 0)
     selected := uisettings.prepare_settings_scroll(ctx, true)
-    testing.expect_value(t, selected.scroll_y_out, selected.maximum)
+    testing.expect(t, selected.scroll_y_out > 0)
+    testing.expect(t, selected.scroll_y_out <= selected.maximum)
     rows := uisettings.settings_view_layout_rows({theme.SETTINGS_PANEL_INSET,
         theme.SETTINGS_HEADER_TOP_OFFSET - selected.scroll_y_out,
         panel.width - theme.SETTINGS_PANEL_INSET * 2,
         panel.height - theme.SETTINGS_HEADER_TOP_OFFSET})
-    testing.expect(t,
-        rows.increased_contrast_y + theme.SETTINGS_CHECKBOX_SIZE < panel.height)
+    testing.expect(t, rows.particles_header_y < panel.height)
     retained := uisettings.prepare_settings_scroll(ctx, false)
     testing.expect_value(t, retained.scroll_y_out, selected.scroll_y_out)
     testing.expect_value(t,

@@ -30,8 +30,8 @@ end
 @testset "localized content declarations" begin
     @test validate_content_manifest(AuthoredManifest, AnimationDescriptors) ===
         AuthoredManifest
-    @test length(AuthoredManifest.ui_messages) == 107
-    @test length(AuthoredManifest.translations) == 107
+    @test length(AuthoredManifest.ui_messages) == 115
+    @test length(AuthoredManifest.translations) == 115
     contrast_message = only(filter(entry -> entry.key == "ui.settings.increased_contrast",
         AuthoredManifest.ui_messages))
     @test contrast_message.native_id == UInt16(1223)

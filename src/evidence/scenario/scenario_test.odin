@@ -129,12 +129,19 @@ scenario_test_settings_payload_validation :: proc(t: ^testing.T) {
     program: Program
     testing.expect_value(t, parse(
         "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1400}}\n" +
-        "{\"assert_setting\":{\"key\":\"window.mode\",\"value\":\"fixed\"}}\n",
+        "{\"assert_setting\":{\"key\":\"window.mode\",\"value\":\"fixed\"}}\n" +
+        "{\"confirm_terminal_history_delete\":\"cleared\"}\n" +
+        "{\"wait_terminal_history_idle\":true}\n",
         &program), Parse_Error.None)
     testing.expect_value(t, program.commands[0].kind, Command_Kind.Set_Setting)
     testing.expect_value(t, program.commands[0].setting_id,
         settings.Setting_Id.Drawing_Dust_Limit)
     testing.expect_value(t, program.commands[0].setting_value.integer, 1400)
+    testing.expect_value(t, program.commands[2].kind,
+        Command_Kind.Confirm_Terminal_History_Delete)
+    testing.expect_value(t, text_string(&program.commands[2].text), "cleared")
+    testing.expect_value(t, program.commands[3].kind,
+        Command_Kind.Wait_Terminal_History_Idle)
     invalid := [?]string{
         "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":-1}}",
         "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1.5}}",
@@ -145,6 +152,7 @@ scenario_test_settings_payload_validation :: proc(t: ^testing.T) {
         "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1},\"shutdown\":true}",
         "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1}," +
             "\"assert_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1}}",
+        "{\"confirm_terminal_history_delete\":\"success\"}",
     }
     for source in invalid {
         testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)

@@ -27,9 +27,10 @@ Setting_Id :: enum u8 {
     Interface_Reduce_Motion,
     Interface_Increased_Contrast,
     Interface_Text_Size,
+    Persist_Terminal_History,
 }
 
-SETTING_COUNT :: 15
+SETTING_COUNT :: 16
 Setting_Set :: bit_set[Setting_Id; u16]
 ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Window_Width,
@@ -47,6 +48,7 @@ ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Interface_Reduce_Motion,
     .Interface_Increased_Contrast,
     .Interface_Text_Size,
+    .Persist_Terminal_History,
 }
 
 Window_Mode :: enum u8 {
@@ -103,6 +105,7 @@ SETTING_DEFINITIONS :: [SETTING_COUNT]Setting_Definition{
     {.Interface_Reduce_Motion, "interface", "reduce_motion", .Boolean},
     {.Interface_Increased_Contrast, "interface", "increased_contrast", .Boolean},
     {.Interface_Text_Size, "interface", "text_size_percent", .Integer},
+    {.Persist_Terminal_History, "terminal", "persist_history", .Boolean},
 }
 
 Setting_Value :: struct {
@@ -138,11 +141,16 @@ Interface_Preferences :: struct {
     text_size_percent: int,
 }
 
+Terminal_Preferences :: struct {
+    persist_history: bool,
+}
+
 Preferences :: struct {
     window: Window_Startup_Policy,
     rendering: Rendering_Preferences,
     drawing: Drawing_Preferences,
     interface: Interface_Preferences,
+    terminal: Terminal_Preferences,
     present: Setting_Set,
     overrides: Setting_Set,
 }
@@ -235,7 +243,7 @@ valid_setting_id :: proc(id: Setting_Id) -> bool {
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Dust_Limit, .Drawing_Sound_Enabled, .Interface_Display_Fps,
          .Interface_Reduce_Motion, .Interface_Increased_Contrast,
-         .Interface_Text_Size:
+         .Interface_Text_Size, .Persist_Terminal_History:
         return true
     }
     return false
@@ -265,7 +273,7 @@ valid_setting_value :: proc(id: Setting_Id, value: Setting_Value) -> bool {
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
-         .Interface_Increased_Contrast:
+         .Interface_Increased_Contrast, .Persist_Terminal_History:
         return value.kind == .Boolean
     case .Drawing_Dust_Limit:
         return value.kind == .Integer && valid_dust_limit(i64(value.integer))
@@ -298,6 +306,8 @@ apply_boolean_preference :: proc(
         preferences^.interface.reduce_motion = value
     case .Interface_Increased_Contrast:
         preferences^.interface.increased_contrast = value
+    case .Persist_Terminal_History:
+        preferences^.terminal.persist_history = value
     }
 }
 
@@ -414,6 +424,8 @@ read_boolean_preference :: proc(
         return boolean_value(preferences.interface.reduce_motion)
     case .Interface_Increased_Contrast:
         return boolean_value(preferences.interface.increased_contrast)
+    case .Persist_Terminal_History:
+        return boolean_value(preferences.terminal.persist_history)
     }
     return {}
 }
@@ -426,7 +438,7 @@ setting_value :: proc(preferences: Preferences, id: Setting_Id) -> Setting_Value
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
-         .Interface_Increased_Contrast:
+         .Interface_Increased_Contrast, .Persist_Terminal_History:
         return read_boolean_preference(preferences, id)
     case .Window_Mode:
         return window_mode_value(preferences.window.mode)

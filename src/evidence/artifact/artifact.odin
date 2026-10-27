@@ -7,6 +7,7 @@ import trace "../trace"
 import "core:fmt"
 import "core:os"
 import json "core:encoding/json"
+import log "core:log"
 import allocation_evidence "../allocation"
 
 ARTIFACT_MAX_EVENTS :: trace.TRACE_RING_CAPACITY * 16
@@ -498,9 +499,16 @@ artifact_write_named_file :: proc(
 //     validate the header schema and event size before interpreting the payload.
 write_bundle :: proc(
     directory: string, bundle: Bundle) -> bool {
-    if !artifact_path_safe(directory) ||
-        len(bundle.events) > ARTIFACT_MAX_EVENTS ||
-        os.make_directory_all(directory) != nil {
+    if !artifact_path_safe(directory) {
+        return false
+    }
+    if len(bundle.events) > ARTIFACT_MAX_EVENTS {
+        log.errorf("scenario_artifact_write_failed stage=event_count count=%d",
+            len(bundle.events))
+        return false
+    }
+    if !os.is_directory(directory) && os.make_directory_all(directory) != nil {
+        log.error("scenario_artifact_write_failed stage=directory")
         return false
     }
     manifest_json := artifact_manifest_json(bundle.manifest)
@@ -508,23 +516,39 @@ write_bundle :: proc(
         bundle.state, bundle.julia_host, bundle.simulation)
     if !json.is_valid(transmute([]byte)manifest_json) ||
         !json.is_valid(transmute([]byte)state_json) {
+        log.error("scenario_artifact_write_failed stage=json")
         return false
     }
     allocations_json := artifact_allocations_json(bundle)
+    return artifact_write_bundle_files(
+        directory, manifest_json, state_json, allocations_json, bundle.events)
+}
+
+// Write each canonical artifact after bundle validation and serialization succeed.
+artifact_write_bundle_files :: proc(
+    directory, manifest_json, state_json, allocations_json: string,
+    events: []trace.Event) -> bool {
     if !artifact_write_named_file(directory, "manifest.json", manifest_json) {
+        log.error("scenario_artifact_write_failed stage=manifest")
         return false
     }
     trace_path := fmt.aprintf(
         "%s/evidence.bin", directory, allocator = context.temp_allocator)
     defer delete(trace_path, context.temp_allocator)
-    if len(trace_path) == 0 || !write_trace(trace_path, bundle.events) {
+    if len(trace_path) == 0 || !write_trace(trace_path, events) {
+        log.error("scenario_artifact_write_failed stage=trace")
         return false
     }
     if !artifact_write_named_file(directory, "state.json", state_json) {
+        log.error("scenario_artifact_write_failed stage=state")
         return false
     }
-    return artifact_write_named_file(
-        directory, "allocations.json", allocations_json)
+    if !artifact_write_named_file(
+        directory, "allocations.json", allocations_json) {
+        log.error("scenario_artifact_write_failed stage=allocations")
+        return false
+    }
+    return true
 }
 
 //   Return whether a bundle path is relative and contains no parent segment.

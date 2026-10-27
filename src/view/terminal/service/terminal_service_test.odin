@@ -185,6 +185,48 @@ terminal_service_test_history_recall_validates_and_restores_draft :: proc(
     terminal_service_test_history_apply_and_restore(t, state)
 }
 
+// Restore the mode and cursor when recalling a durable-only history record.
+@(test)
+terminal_service_test_persistent_history_recall_restores_mode :: proc(
+    t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 22)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    testing.expect(t, terminalview.terminal_init_for_animation(
+        &state^.terminal, &state^.animation_memory, 22))
+    defer terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
+    source := "saved source"
+    copy(state^.terminal.history_navigation_read_source[:], transmute([]u8)source)
+    terminal_service_apply_history_record(&state^.terminal, {
+        ready = true,
+        result = {
+            outcome = termhiststore.History_Read_Outcome.Found,
+            record = {
+                scope = termhiststore.History_Record_Scope.Persistent,
+                source_id = 17,
+                mode = protocol.Evaluation_Mode.Shell,
+                submitted_at_unix_ms = 42,
+                source_revision = 3,
+            },
+            source_length = len(source),
+        },
+    })
+    testing.expect_value(t,
+        termhist.termhist_current_text(state^.terminal.history), source)
+    testing.expect_value(t, state^.terminal.input_mode,
+        protocol.Evaluation_Mode.Shell)
+    testing.expect_value(t, state^.terminal.history_navigation_anchor_id, u64(0))
+    testing.expect(t, state^.terminal.history_navigation_cursor_valid)
+    testing.expect_value(t,
+        state^.terminal.history_navigation_cursor.scope,
+        termhiststore.History_Record_Scope.Persistent)
+    testing.expect_value(t,
+        state^.terminal.history_navigation_cursor.source_id, u64(17))
+}
+
 // Reject a delayed result after editing and retain the new source and prompt mode.
 terminal_service_test_history_reject_stale_edit :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) {

@@ -6,22 +6,29 @@ import core "../../../core"
 import contentdata "../../../core/content"
 import particlemodel "../../../particles/model"
 import geometry "../../../core/geometry"
+import historyruntime "../../../terminal/history/runtime"
 import view_font "../../font"
 import setting_model "../../../settings"
 import fmt "core:fmt"
 import log "core:log"
+import math "core:math"
 import viewmessages "../../messages"
 import viewtext "../text"
 import projection "../../world/projection"
 import input "../../input"
 import uiwidgets "../widgets"
 import theme "../theme"
+import terminalview "../../terminal"
 import worldmodel "../../world/model"
 import uisemantics "../semantics"
 import viewpreferences "../../preferences"
 import viewmodel "../model"
 
 SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
+SETTINGS_HISTORY_DELETE_BUTTON_ID :: 6104
+SETTINGS_HISTORY_DELETE_STATUS_ID :: 6105
+SETTINGS_HISTORY_DELETE_TIMEOUT_SECONDS :: f64(5)
+SETTINGS_HISTORY_DELETE_SHAKE_SECONDS :: f64(0.3)
 
 // Settings_View_Labels snapshots localized strings before leaf control preparation.
 Settings_View_Labels :: struct {
@@ -34,10 +41,18 @@ Settings_View_Labels :: struct {
     reduce_motion: string,
     increased_contrast: string,
     text_size: string,
+    persist_history: string,
+    delete_history: string,
+    confirm_delete_history: string,
+    confirm_delete_history_value: string,
+    history_delete_pending: string,
+    history_delete_succeeded: string,
+    history_delete_failed: string,
 }
 
 // Shared component and input dependencies for one settings panel preparation.
 Settings_View_Context :: struct {
+    state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     mouse_input: input.Input_Frame,
     settings_panel: ^viewmodel.Ui_Settings_Panel_State,
@@ -67,6 +82,10 @@ Settings_View_Rows :: struct {
     simd_y: f32,
     gpu_dust_y: f32,
     accessibility_header_y: f32,
+    history_header_y: f32,
+    persist_history_y: f32,
+    delete_history_y: f32,
+    history_delete_status_y: f32,
     reduce_motion_y: f32,
     increased_contrast_y: f32,
     system_motion_y: f32,
@@ -83,6 +102,8 @@ Settings_View_Layout_State :: struct {
     row_gap: f32,
     heading_height: f32,
     slider_height: f32,
+    action_height: f32,
+    action_status_gap: f32,
     system_motion_notice: bool,
     system_contrast_notice: bool,
 }
@@ -100,6 +121,10 @@ Settings_View_Preparation :: struct {
     gpu_dust: uiwidgets.Checkbox_Result,
     reduce_motion: uiwidgets.Checkbox_Result,
     increased_contrast: uiwidgets.Checkbox_Result,
+    persist_history: uiwidgets.Checkbox_Result,
+    delete_history: uiwidgets.Text_Button_Result,
+    history_delete_status: viewmodel.Ui_History_Delete_Status,
+    history_delete_armed: bool,
     simd_available: bool,
     gpu_available: bool,
 }
@@ -141,6 +166,16 @@ settings_cancel_geometry_capture :: proc(
     panel^.slider_drag_offset_x = 0
 }
 
+// Cancel destructive intent when the Settings surface stops being current.
+settings_cancel_history_confirmation :: proc(
+    panel: ^viewmodel.Ui_Settings_Panel_State) {
+    if panel == nil || panel^.history_delete_status != .Armed {
+        return
+    }
+    panel^.history_delete_status = .Idle
+    panel^.history_delete_armed_at_seconds = 0
+}
+
 // settings_view_context snapshots the application facts needed by leaf preparation.
 settings_view_context :: proc(
     state: ^core.Euclid_General_State,
@@ -149,19 +184,9 @@ settings_view_context :: proc(
     preferences := state^.ui_runtime.preferences.values
     simd_available := projection.simd_batch_projection_available()
     gpu_available := state^.ui_runtime.rendering.gpu_dust_instancing_available
-    labels: Settings_View_Labels = {
-        maximum_dust = viewmessages.shell_message(state, .Settings_Maximum_Dust),
-        display_fps = viewmessages.shell_message(state, .Settings_Display_Fps),
-        limit_fps = viewmessages.shell_message(state, .Settings_Limit_Fps),
-        drawing_sound = viewmessages.shell_message(state, .Settings_Drawing_Sound),
-        simd = settings_simd_label(state, simd_available),
-        gpu_dust = settings_gpu_dust_label(state, gpu_available),
-        reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion),
-        increased_contrast = viewmessages.shell_message(
-            state, .Settings_Increased_Contrast),
-        text_size = viewmessages.shell_message(state, .Settings_Text_Size),
-    }
+    labels := settings_view_labels(state, simd_available, gpu_available)
     return Settings_View_Context{
+        state = state,
         panel = panel,
         mouse_input = mouse_input,
         settings_panel = &state^.ui_runtime.settings_panel,
@@ -176,6 +201,84 @@ settings_view_context :: proc(
         labels = labels,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+    }
+}
+
+// Snapshot localized Settings labels before leaf-control preparation.
+settings_view_labels :: proc(
+    state: ^core.Euclid_General_State,
+    simd_available, gpu_available: bool) -> Settings_View_Labels {
+    return {
+        persist_history = viewmessages.shell_message(
+            state, .Settings_Persist_Terminal_History),
+        delete_history = viewmessages.shell_message(
+            state, .Settings_Delete_Terminal_History),
+        confirm_delete_history = viewmessages.shell_message(
+            state, .Settings_Confirm_Delete_Terminal_History),
+        confirm_delete_history_value = viewmessages.shell_message(
+            state, .Settings_History_Delete_Confirm_Value),
+        history_delete_pending = viewmessages.shell_message(
+            state, .Settings_History_Delete_Pending),
+        history_delete_succeeded = viewmessages.shell_message(
+            state, .Settings_History_Delete_Succeeded),
+        history_delete_failed = viewmessages.shell_message(
+            state, .Settings_History_Delete_Failed),
+        maximum_dust = viewmessages.shell_message(state, .Settings_Maximum_Dust),
+        display_fps = viewmessages.shell_message(state, .Settings_Display_Fps),
+        limit_fps = viewmessages.shell_message(state, .Settings_Limit_Fps),
+        drawing_sound = viewmessages.shell_message(state, .Settings_Drawing_Sound),
+        simd = settings_simd_label(state, simd_available),
+        gpu_dust = settings_gpu_dust_label(state, gpu_available),
+        reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion),
+        increased_contrast = viewmessages.shell_message(
+            state, .Settings_Increased_Contrast),
+        text_size = viewmessages.shell_message(state, .Settings_Text_Size),
+    }
+}
+
+// Center the destructive label inside the prepared panel button, including its shake.
+draw_encoded_settings_history_button_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Settings_View_Preparation) {
+    rectangle := prepared.delete_history.control_geometry.bounds
+    label := viewmessages.shell_message(state, .Settings_Delete_Terminal_History)
+    tint := theme.draw_color(encoder, .Text)
+    if prepared.history_delete_armed {
+        label = viewmessages.shell_message(
+            state, .Settings_Confirm_Delete_Terminal_History)
+        tint = theme.draw_color(encoder, .Error_Text)
+    }
+    if prepared.history_delete_status == .Pending {
+        tint = theme.draw_color(encoder, .Disabled_Text)
+    }
+    font_size := theme.ui_font_size(encoder^.ui_text_size_percent)
+    width, measured := viewtext.ui_text_measure_monospace(
+        label, view_font.cache_borrow(&state^.font_cache, .Regular), font_size, 0)
+    if !measured {
+        width = 0
+    }
+    viewtext.draw_encoded_colored_label(&state^.font_cache, encoder, label,
+        {rectangle.x + max(f32(0), (rectangle.width - width) * 0.5),
+         rectangle.y + (rectangle.height - font_size) * 0.5}, tint)
+}
+
+// Draw the confirmation label and truthful asynchronous status beneath its button.
+draw_encoded_settings_history_controls :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Settings_View_Preparation) {
+    rectangle := prepared.delete_history.control_geometry.bounds
+    draw_encoded_settings_history_button_text(state, encoder, prepared)
+    message := settings_history_delete_status_message(
+        prepared.history_delete_status)
+    if message != .Invalid {
+        color := theme.draw_color(encoder, .Text)
+        if prepared.history_delete_status == .Failed {
+            color = theme.draw_color(encoder, .Error_Text)
+        }
+        viewtext.draw_encoded_colored_label(&state^.font_cache, encoder,
+            viewmessages.shell_message(state, message),
+            {rectangle.x,
+             prepared.rows.history_delete_status_y}, color)
     }
 }
 
@@ -206,15 +309,28 @@ draw_encoded_slider_geometry :: proc(
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
-    checks: [7]uiwidgets.Checkbox_Result = {
+    checks: [8]uiwidgets.Checkbox_Result = {
         prepared.reduce_motion, prepared.increased_contrast,
         prepared.gpu_dust, prepared.fps, prepared.limit,
-        prepared.sound, prepared.simd,
+        prepared.sound, prepared.simd, prepared.persist_history,
     }
     for check in checks {
         draw_encoded_checkbox_geometry(
             encoder, check.box_rect, check.checked_out)
     }
+}
+
+// Keep the full destructive button visible before and during confirmation.
+draw_encoded_settings_history_button_geometry :: proc(
+    encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
+    button := prepared.delete_history.control_geometry.bounds
+    border := theme.draw_color(encoder, .Control_Border)
+    if prepared.history_delete_armed {
+        border = theme.draw_color(encoder, .Error_Text)
+    }
+    _ = native.draw_encoder_rectangle(
+        encoder, button, theme.UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(encoder, button, 1, border)
 }
 
 // draw_encoded_settings_geometry encodes settings controls without text.
@@ -223,6 +339,7 @@ draw_encoded_settings_geometry :: proc(
     draw_encoded_slider_geometry(encoder, prepared.max_particles)
     draw_encoded_slider_geometry(encoder, prepared.text_size)
     draw_encoded_settings_checkboxes(encoder, prepared)
+    draw_encoded_settings_history_button_geometry(encoder, prepared)
     uiwidgets.draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
 }
 
@@ -230,11 +347,13 @@ draw_encoded_settings_geometry :: proc(
 draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
-    labels: [7]struct{label: string, y: f32} = {
+    labels: [8]struct{label: string, y: f32} = {
         {viewmessages.shell_message(state, .Settings_Reduce_Motion),
             rows.reduce_motion_y},
         {viewmessages.shell_message(state, .Settings_Increased_Contrast),
             rows.increased_contrast_y},
+        {viewmessages.shell_message(state, .Settings_Persist_Terminal_History),
+            rows.persist_history_y},
         {settings_gpu_dust_label(state, prepared.gpu_available),
             rows.gpu_dust_y},
         {viewmessages.shell_message(state, .Settings_Display_Fps), rows.fps_y},
@@ -281,6 +400,8 @@ draw_encoded_settings_text :: proc(
     draw_encoded_settings_section_heading(state, encoder,
         .Settings_Section_Accessibility, x, rows.accessibility_header_y)
     draw_encoded_settings_section_heading(state, encoder,
+        .Settings_Section_History, x, rows.history_header_y)
+    draw_encoded_settings_section_heading(state, encoder,
         .Settings_Section_Particles, x, rows.particles_header_y)
     draw_encoded_settings_section_heading(state, encoder,
         .Settings_Section_Other, x, rows.other_header_y)
@@ -291,6 +412,7 @@ draw_encoded_settings_text :: proc(
     draw_settings_particle_stats(text_ctx)
     draw_settings_animation_count(text_ctx, rows.animation_entries_y)
     draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
+    draw_encoded_settings_history_controls(state, encoder, prepared)
     draw_encoded_settings_save_status(state, encoder, x, rows.save_status_y)
 }
 
@@ -439,6 +561,179 @@ settings_checkbox_params :: proc(
     }
 }
 
+// Build the focusable deletion action with explicit armed state and bounded motion.
+settings_history_delete_button_params :: proc(
+    ctx: Settings_View_Context, rows: Settings_View_Rows) ->
+        uiwidgets.Text_Button_Params {
+    panel_state := ctx.settings_panel
+    armed := panel_state^.history_delete_status == .Armed
+    pending := panel_state^.history_delete_status == .Pending
+    label := ctx.labels.delete_history
+    value := ""
+    states := uiwidgets.button_semantic_states(!pending)
+    if armed {
+        label = ctx.labels.confirm_delete_history
+        value = ctx.labels.confirm_delete_history_value
+        states += {.Selected}
+    }
+    if pending {
+        states += {.Busy}
+    }
+    rectangle: geometry.Rectangle = {
+        ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+        rows.delete_history_y,
+        max(f32(0), ctx.panel.width - 2*theme.SETTINGS_PANEL_INSET),
+        theme.ui_panel_button_height(ctx.preferences.interface.text_size_percent),
+    }
+    if armed {
+        rectangle.x += settings_history_delete_shake_offset(
+            panel_state, ctx.mouse_input.sample_time_seconds,
+            ctx.preferences.interface.reduce_motion ||
+                ctx.platform_reduce_motion)
+    }
+    semantic_id := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_HISTORY_DELETE_BUTTON_ID)
+    return {
+        id = SETTINGS_HISTORY_DELETE_BUTTON_ID,
+        rect = rectangle,
+        label = label,
+        enabled = !pending,
+        mouse = ctx.mouse_input,
+        interaction_space_rect = geometry.Rectangle(ctx.panel),
+        interaction_enabled = !panel_state^.scroll_dragging,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
+        semantics = {
+            publish = true,
+            focus = ctx.semantic_focus,
+            id = semantic_id,
+            role = .Button,
+            states = states,
+            region = .Accordion_Content,
+            traversal_order = 5,
+            clip_bounds = geometry.Rectangle(ctx.panel),
+            label = label,
+            value = value,
+        },
+    }
+}
+
+// Shake an armed delete action briefly unless the user requested reduced motion.
+settings_history_delete_shake_offset :: proc(
+    panel: ^viewmodel.Ui_Settings_Panel_State, now: f64,
+    reduce_motion: bool) -> f32 {
+    elapsed := now - panel^.history_delete_armed_at_seconds
+    if reduce_motion || elapsed < 0 ||
+       elapsed >= SETTINGS_HISTORY_DELETE_SHAKE_SECONDS {
+        return 0
+    }
+    progress := elapsed / SETTINGS_HISTORY_DELETE_SHAKE_SECONDS
+    return f32(math.sin(progress * 6 * math.PI) * 5 * (1 - progress))
+}
+
+// Publish deletion status as a non-focusable live semantic node.
+settings_publish_history_delete_status :: proc(
+    ctx: Settings_View_Context, rows: Settings_View_Rows) {
+    message := settings_history_delete_status_message(
+        ctx.settings_panel^.history_delete_status)
+    if message == .Invalid {
+        return
+    }
+    states: viewmodel.Ui_Node_State = {.Visible}
+    if ctx.settings_panel^.history_delete_status == .Pending {
+        states += {.Busy}
+    }
+    font_size := theme.ui_font_size(
+        ctx.preferences.interface.text_size_percent)
+    _ = uisemantics.semantic_register_control(ctx.semantic_focus, {
+        id = uisemantics.semantic_control_id(
+            .Settings_Control, SETTINGS_HISTORY_DELETE_STATUS_ID),
+        role = .Status,
+        states = states,
+        region = .Accordion_Content,
+        traversal_order = 6,
+        bounds = {
+            ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+            rows.history_delete_status_y,
+            max(f32(0), ctx.panel.width - 2*theme.SETTINGS_PANEL_INSET),
+            font_size,
+        },
+        clip_bounds = geometry.Rectangle(ctx.panel),
+        label = viewmessages.shell_message(ctx.state, message),
+    })
+}
+
+// Resolve one localized status for the deletion lifecycle.
+settings_history_delete_status_message :: proc(
+    status: viewmodel.Ui_History_Delete_Status) -> contentdata.Content_Message_Id {
+    switch status {
+    case .Pending:
+        return .Settings_History_Delete_Pending
+    case .Cleared:
+        return .Settings_History_Delete_Succeeded
+    case .Failed:
+        return .Settings_History_Delete_Failed
+    case .Idle, .Armed:
+        return .Invalid
+    }
+    return .Invalid
+}
+
+// Arm the first activation or enqueue the confirmed transaction on the history owner.
+settings_history_delete_activate :: proc(
+    state: ^core.Euclid_General_State, now: f64) {
+    if state == nil {
+        return
+    }
+    panel := &state^.ui_runtime.settings_panel
+    elapsed := now - panel^.history_delete_armed_at_seconds
+    if panel^.history_delete_status != .Armed || elapsed < 0 ||
+       elapsed >= SETTINGS_HISTORY_DELETE_TIMEOUT_SECONDS {
+        panel^.history_delete_status = .Armed
+        panel^.history_delete_armed_at_seconds = now
+        return
+    }
+    panel^.history_delete_status = .Idle
+    panel^.history_delete_armed_at_seconds = 0
+    enqueue_result: historyruntime.History_Runtime_Enqueue_Result =
+        terminalview.history_runtime_enqueue_clear(
+            &state^.terminal_history_runtime)
+    if enqueue_result == .Queued {
+        panel^.history_delete_status = .Pending
+        panel^.history_delete_completion_serial =
+            state^.terminal_history_runtime.clear_completion_serial
+        return
+    }
+    panel^.history_delete_status = .Failed
+    log.warnf("terminal_history_clear_rejected reason=%d", int(enqueue_result))
+}
+
+// Expire confirmation when its clock moves backward or its bounded window elapses.
+settings_history_delete_expire :: proc(
+    panel: ^viewmodel.Ui_Settings_Panel_State, now: f64) {
+    if panel == nil || panel^.history_delete_status != .Armed {
+        return
+    }
+    elapsed := now - panel^.history_delete_armed_at_seconds
+    if elapsed < 0 || elapsed >= SETTINGS_HISTORY_DELETE_TIMEOUT_SECONDS {
+        settings_cancel_history_confirmation(panel)
+    }
+}
+
+// Publish only a completed clear result newer than the pending request.
+settings_history_delete_observe_completion :: proc(
+    panel: ^viewmodel.Ui_Settings_Panel_State,
+    completion_serial: u64, cleared: bool) -> bool {
+    if panel == nil || panel^.history_delete_status != .Pending ||
+       completion_serial == panel^.history_delete_completion_serial {
+        return false
+    }
+    panel^.history_delete_completion_serial = completion_serial
+    panel^.history_delete_status =
+        viewmodel.Ui_History_Delete_Status.Cleared if cleared else .Failed
+    return cleared
+}
+
 //   Build the maximum-particle slider parameters shared by update and draw.
 settings_max_particles_params :: proc(
     ctx: Settings_View_Context,
@@ -458,7 +753,7 @@ settings_max_particles_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 4,
+        semantic_order = 6,
     }
 }
 
@@ -562,6 +857,9 @@ settings_view_layout_rows :: proc(
         cursor = uilayout.stack_panel_cursor_zero(),
         row_gap = settings_scaled_row_gap(text_size_percent),
         heading_height = font_size + 10,
+        action_height = theme.ui_panel_button_height(text_size_percent),
+        action_status_gap = theme.ui_scaled_metric(
+            theme.SETTINGS_PANEL_INSET * 0.75, text_size_percent),
         slider_height = max(font_size + 6,
             uiwidgets.slider_track_top_offset(text_size_percent) +
             theme.SETTINGS_TRACK_HEIGHT +
@@ -570,6 +868,7 @@ settings_view_layout_rows :: proc(
         system_contrast_notice = system_contrast_notice,
     }
     settings_layout_accessibility_section(&layout)
+    settings_layout_history_section(&layout)
     settings_layout_particles_section(&layout)
     settings_layout_other_section(&layout)
     return layout.rows
@@ -600,6 +899,22 @@ settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_Stat
     rows^.text_size_y = rect.y + layout^.cursor.offset
     placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
     layout^.cursor = placement.cursor_out
+}
+
+// Reserve the History heading, persistence checkbox, deletion action, and status.
+settings_layout_history_section :: proc(layout: ^Settings_View_Layout_State) {
+    rect := layout^.stack_rect
+    rows := &layout^.rows
+    placement := settings_stack_row(
+        rect, layout^.heading_height, layout^.cursor)
+    rows^.history_header_y = placement.segment_rect.y
+    layout^.cursor = placement.cursor_out
+    rows^.persist_history_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.delete_history_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.action_height + layout^.action_status_gap
+    rows^.history_delete_status_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
 }
 
 // Reserve the Particles heading, limit controls, GPU toggle, and particle counters.
@@ -655,17 +970,30 @@ update_settings_controls :: proc(
         settings_text_size_params(ctx, rows.text_size_y), interactive)
     result.fps = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, ctx.labels.display_fps,
-        ctx.preferences.interface.display_fps, true, 6}),
+        ctx.preferences.interface.display_fps, true, 8}),
         ctx.press_owner, interactive)
     result.limit = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, ctx.labels.limit_fps,
-        ctx.preferences.rendering.limit_fps, true, 7}),
+        ctx.preferences.rendering.limit_fps, true, 9}),
         ctx.press_owner, interactive)
     result.sound = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
         4004, ctx.labels.drawing_sound,
-        ctx.preferences.drawing.sound_enabled, true, 8}),
+        ctx.preferences.drawing.sound_enabled, true, 10}),
         ctx.press_owner, interactive)
     prepare_settings_optional_controls(ctx, rows, interactive, &result)
+    result.delete_history = uiwidgets.prepare_text_button(
+        settings_history_delete_button_params(ctx, rows),
+        ctx.press_owner, interactive)
+    if result.delete_history.action.activated {
+        settings_history_delete_activate(
+            ctx.state, ctx.mouse_input.sample_time_seconds)
+    }
+    result.history_delete_status = ctx.settings_panel^.history_delete_status
+    result.history_delete_armed =
+        result.history_delete_status == .Armed
+    if interactive {
+        settings_publish_history_delete_status(ctx, rows)
+    }
     return {result, result.simd_available, result.gpu_available}
 }
 
@@ -677,13 +1005,13 @@ prepare_settings_optional_controls :: proc(
     result.simd = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, ctx.labels.simd,
         ctx.preferences.rendering.simd,
-        simd_available, 9}), ctx.press_owner, interactive)
+        simd_available, 11}), ctx.press_owner, interactive)
     gpu_available := ctx.gpu_dust_available
     result.gpu_dust = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {rows.gpu_dust_y,
             4005, ctx.labels.gpu_dust,
             ctx.preferences.rendering.gpu_dust_instancing,
-            gpu_available, 5}),
+            gpu_available, 7}),
         ctx.press_owner, interactive)
     result.simd_available = simd_available
     result.gpu_available = gpu_available
@@ -697,6 +1025,12 @@ prepare_settings_optional_controls :: proc(
             rows.increased_contrast_y, 4007,
             ctx.labels.increased_contrast,
             ctx.preferences.interface.increased_contrast, true, 2,
+        }), ctx.press_owner, interactive)
+    result.persist_history = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.persist_history_y, 4008,
+            ctx.labels.persist_history,
+            ctx.preferences.terminal.persist_history, true, 4,
         }), ctx.press_owner, interactive)
 }
 
@@ -784,6 +1118,10 @@ prepare_settings_view :: proc(
         return {}
     }
     ctx := settings_view_context(state, panel, mouse_input)
+    if interactive {
+        settings_history_delete_expire(
+            ctx.settings_panel, mouse_input.sample_time_seconds)
+    }
     scroll := prepare_settings_scroll(ctx, interactive)
     content_panel := scroll.view_rect
     stack_rect: geometry.Rectangle = {content_panel.x + theme.SETTINGS_PANEL_INSET,
@@ -861,6 +1199,10 @@ apply_settings_accessibility_preparation :: proc(
     if prepared.increased_contrast.toggled {
         settings_record_preference_edit(state, .Interface_Increased_Contrast,
             setting_model.boolean_value(prepared.increased_contrast.checked_out))
+    }
+    if prepared.persist_history.toggled {
+        settings_record_preference_edit(state, .Persist_Terminal_History,
+            setting_model.boolean_value(prepared.persist_history.checked_out))
     }
 }
 
@@ -953,7 +1295,7 @@ settings_control_edit_preparation :: proc(
     case .Interface_Display_Fps, .Interface_Reduce_Motion,
         .Interface_Increased_Contrast, .Rendering_Limit_Fps,
         .Drawing_Sound_Enabled, .Rendering_Simd,
-        .Rendering_Gpu_Dust_Instancing:
+        .Rendering_Gpu_Dust_Instancing, .Persist_Terminal_History:
         return settings_boolean_control_edit_preparation(id, value)
     case:
         return {}, false
@@ -979,6 +1321,11 @@ settings_boolean_control_edit_preparation :: proc(
         }
     case .Interface_Increased_Contrast:
         prepared.increased_contrast = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
+    case .Persist_Terminal_History:
+        prepared.persist_history = {
             toggled = true,
             checked_out = value.boolean,
         }

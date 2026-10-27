@@ -21,10 +21,18 @@ History_Runtime_Status :: enum u8 {
     Closed,
 }
 
+History_Persistence_Status :: enum u8 {
+    Unknown,
+    Ready,
+    Unavailable,
+    Failed,
+}
+
 History_Mutation_Kind :: enum u8 {
     None,
     Insert,
     Update,
+    Clear,
 }
 
 History_Mutation :: struct {
@@ -32,10 +40,12 @@ History_Mutation :: struct {
     record: termhiststore.History_Record,
     update: termhiststore.History_Update_Request,
     source_length: int,
+    persist_insert: bool,
 }
 
 History_Read_Kind :: enum u8 {
     By_Id,
+    Latest,
     Older,
     Newer,
 }
@@ -54,6 +64,9 @@ History_Read_Request :: struct {
     navigation_epoch: u64,
     source_revision: u64,
     face_generation: u64,
+    cursor: termhiststore.History_Browse_Cursor,
+    cursor_valid: bool,
+    visibility_epoch: u64,
 }
 
 History_Runtime_Enqueue_Result :: enum u8 {
@@ -97,6 +110,9 @@ History_Runtime :: struct {
     shutdown_requested: bool,
     retire_reads: bool,
     shutdown_failed: bool,
+    persist_enabled: bool,
+    persistence_status: History_Persistence_Status,
+    visibility_epoch: u64,
 
     queued_mutations: [HISTORY_RUNTIME_MUTATION_CAPACITY]History_Mutation,
     queued_sources: [HISTORY_RUNTIME_MUTATION_CAPACITY]History_Source_Buffer,
@@ -108,6 +124,9 @@ History_Runtime :: struct {
     active_source: History_Source_Buffer,
     active_read_request: History_Read_Request,
     active_write_result: termhiststore.History_Write_Result,
+    active_clear_result: termhiststore.History_Clear_Result,
+    last_clear_result: termhiststore.History_Clear_Result,
+    clear_completion_serial: u64,
     active_read_result: termhiststore.History_Read_Result,
 
     interactive_reads: [HISTORY_RUNTIME_READ_CAPACITY]History_Read_Request,

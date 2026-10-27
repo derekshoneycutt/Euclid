@@ -11,6 +11,7 @@ import "core:strings"
 
 USER_SETTING_SCHEMA_SQL :: #load("sql/user_setting.sql", string)
 USER_COLLECTION_SCHEMA_SQL :: #load("sql/user_collection_schema.sql", string)
+USER_TERMINAL_HISTORY_SCHEMA_SQL :: #load("sql/user_terminal_history.sql", string)
 READ_SETTING_SQL :: #load("sql/read_setting.sql", string)
 UPSERT_SETTING_SQL :: #load("sql/upsert_setting.sql", string)
 DELETE_SETTING_SQL :: #load("sql/delete_setting.sql", string)
@@ -421,15 +422,7 @@ store_initialize_schema :: proc(
             sqlite_error = begin_error,
         }
     }
-    failure := sqlite.connection_exec(
-        &store^.connection,
-        strings.clone_to_cstring(USER_SETTING_SCHEMA_SQL, context.temp_allocator))
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.connection_exec(
-            &store^.connection,
-            strings.clone_to_cstring(
-                USER_COLLECTION_SCHEMA_SQL, context.temp_allocator))
-    }
+    failure := store_create_schema_tables(store)
     if store_sqlite_error_is_clear(failure) && fail_after_schema {
         failure = store_exec(store, "CREATE TABLE user_setting(value INTEGER)")
     }
@@ -448,6 +441,24 @@ store_initialize_schema :: proc(
     return store_rollback_failure(store, .Migration, failure)
 }
 
+// Create the settings, collection, and optional terminal-history tables in order.
+store_create_schema_tables :: proc(store: ^Store) -> sqlite.Error {
+    statements: [3]string = {
+        USER_SETTING_SCHEMA_SQL,
+        USER_COLLECTION_SCHEMA_SQL,
+        USER_TERMINAL_HISTORY_SCHEMA_SQL,
+    }
+    for sql in statements {
+        failure := sqlite.connection_exec(
+            &store^.connection,
+            strings.clone_to_cstring(sql, context.temp_allocator))
+        if !store_sqlite_error_is_clear(failure) {
+            return failure
+        }
+    }
+    return {}
+}
+
 // Upgrade settings-only schema v1 atomically without rewriting user preferences.
 store_migrate_v1_to_v2 :: proc(
     store: ^Store, fail_after_schema: bool) -> Store_Error {
@@ -462,6 +473,12 @@ store_migrate_v1_to_v2 :: proc(
         &store^.connection,
         strings.clone_to_cstring(
             USER_COLLECTION_SCHEMA_SQL, context.temp_allocator))
+    if store_sqlite_error_is_clear(failure) {
+        failure = sqlite.connection_exec(
+            &store^.connection,
+            strings.clone_to_cstring(
+                USER_TERMINAL_HISTORY_SCHEMA_SQL, context.temp_allocator))
+    }
     if store_sqlite_error_is_clear(failure) && fail_after_schema {
         failure = store_exec(store, "CREATE TABLE user_setting(value INTEGER)")
     }

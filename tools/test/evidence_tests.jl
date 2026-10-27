@@ -66,6 +66,8 @@ end
     @test EuclidEvidence.capabilities().trace_event_bytes == 64
     @test "set_setting" in EuclidEvidence.scenario_schema().actions
     @test "assert_setting" in EuclidEvidence.scenario_schema().actions
+    @test "confirm_terminal_history_delete" in EuclidEvidence.scenario_schema().actions
+    @test "wait_terminal_history_idle" in EuclidEvidence.scenario_schema().actions
     @test "set_arrival_style" in EuclidEvidence.scenario_schema().actions
     @test EuclidEvidence.scenario_schema().action_payloads.set_arrival_style.styles ==
         ["immediate", "fade", "falling_ink", "draw_in"]
@@ -75,6 +77,7 @@ end
     @test "settings_save_committed" in EuclidEvidence.scenario_schema().events
     @test "settings_worker_only" in EuclidEvidence.scenario_schema().states
     payloads = EuclidEvidence.scenario_schema().action_payloads
+    @test payloads.confirm_terminal_history_delete.outcomes == ["cleared", "failed"]
     @test all(operation -> operation in payloads.library_placement.operations,
         ["actions_focus", "actions_open", "move_up", "move_down"])
     @test "scroll_top" in payloads.library_placement.special

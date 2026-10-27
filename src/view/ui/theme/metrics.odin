@@ -130,6 +130,12 @@ SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET :: 18
 
 SETTINGS_GIF_STATUS_PATH_ROW_OFFSET :: 36
 
+// Keep panel action buttons padded consistently at every supported text size.
+ui_panel_button_height :: #force_inline proc(percent: int) -> f32 {
+    return max(ui_scaled_metric(SETTINGS_GIF_BUTTON_HEIGHT, percent),
+        ui_font_size(percent) + 8 * ui_text_scale_factor(percent))
+}
+
 // ui_text_scale_factor converts a validated text-size preference to a safe multiplier.
 ui_text_scale_factor :: #force_inline proc(percent: int) -> f32 {
     return f32(clamp(percent, TEXT_SIZE_MIN_PERCENT, TEXT_SIZE_MAX_PERCENT)) / 100
