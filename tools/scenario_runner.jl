@@ -460,14 +460,25 @@ scenario_passed(record) = record.result == "passed" && record.trace_complete &&
 
 include(joinpath(@__DIR__, "favorites_scenarios.jl"))
 
-const SCENARIO_ACCEPTANCE_RUNNERS = Dict{String,Function}(
-    "terminal-history-persistence-acceptance" => run_terminal_history_acceptance,
-    "settings-persistence-acceptance" => run_settings_acceptance,
-    "collections-favorites-acceptance" => run_favorites_acceptance,
-    "empty-collections-acceptance" => run_empty_collections_acceptance,
-    "collection-heads-acceptance" => run_collection_heads_acceptance,
-    "collection-delete-acceptance" => run_collection_delete_acceptance,
-    "collection-membership-acceptance" => run_collection_membership_acceptance)
+"""Dispatch acceptance workflows explicitly, otherwise launch one ordinary scenario."""
+function run_named_scenario(binary::String, name::String)
+    if name == "terminal-history-persistence-acceptance"
+        return run_terminal_history_acceptance(binary)
+    elseif name == "settings-persistence-acceptance"
+        return run_settings_acceptance(binary)
+    elseif name == "collections-favorites-acceptance"
+        return run_favorites_acceptance(binary)
+    elseif name == "empty-collections-acceptance"
+        return run_empty_collections_acceptance(binary)
+    elseif name == "collection-heads-acceptance"
+        return run_collection_heads_acceptance(binary)
+    elseif name == "collection-delete-acceptance"
+        return run_collection_delete_acceptance(binary)
+    elseif name == "collection-membership-acceptance"
+        return run_collection_membership_acceptance(binary)
+    end
+    return [run_scenario(binary, name)]
+end
 
 """Write scenario records as stable machine-readable JSON."""
 function write_json_report(io::IO, records)
@@ -491,11 +502,7 @@ end
 function run_selected(binary::String, options::ScenarioOptions; io::IO=stdout)
     records = NamedTuple[]
     for name in options.names
-        if haskey(SCENARIO_ACCEPTANCE_RUNNERS, name)
-            append!(records, SCENARIO_ACCEPTANCE_RUNNERS[name](binary))
-        else
-            push!(records, run_scenario(binary, name))
-        end
+        append!(records, run_named_scenario(binary, name))
     end
     options.format == :json ? write_json_report(io, records) :
         write_text_report(io, records)

@@ -174,7 +174,9 @@ history_delete_button_shakes_only_while_armed_without_reduced_motion :: proc(
     ctx: Settings_View_Context = {
         panel = {10, 20, 400, 900},
         settings_panel = &panel,
-        mouse_input = {sample_time_seconds = 1.025},
+        mouse_input = {
+            sample_time_seconds = 1.025,
+        },
         preferences = setting_model.default_preferences(),
     }
     base_x := ctx.panel.x + theme.SETTINGS_PANEL_INSET
@@ -203,7 +205,11 @@ history_delete_button_encodes_background_and_confirmation_border :: proc(t: ^tes
     commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
     prepared: Settings_View_Preparation = {
-        delete_history = {control_geometry = {bounds = {12, 24, 200, 30}}},
+        delete_history = {
+            control_geometry = {
+                bounds = {12, 24, 200, 30},
+            },
+        },
     }
     states := [?]bool{false, true}
     for armed in states {

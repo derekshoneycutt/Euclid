@@ -188,27 +188,28 @@ history_runtime_test_save_worker :: proc(
 @(test)
 history_runtime_admits_eight_max_sources_and_releases_waiting_bytes :: proc(
     t: ^testing.T) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     testing.expect(t, history_runtime_test_start(t, {
-        history = &history,
+        history = history,
         connection = &connection,
         admission = &admission,
         pool = &pool,
     }))
-    source_length := history_runtime_test_enqueue_full_queue(t, &history)
+    source_length := history_runtime_test_enqueue_full_queue(t, history)
 
-    history_runtime_service(&history, &admission, &pool, false)
+    history_runtime_service(history, &admission, &pool, false)
     testing.expect(t, history.task_active)
     testing.expect_value(t, history.mutation_count, 7)
     testing.expect_value(t, history.queued_source_bytes, 7 * source_length)
     testing.expect_value(t, history.active_mutation.source_length, source_length)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect_value(t, history.queued_source_bytes, 0)
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     testing.expect(t, viewuserdata.connection_admission_drain_complete(&admission))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
@@ -247,27 +248,28 @@ history_runtime_test_create_persistent_fixture :: proc(
 history_runtime_test_readonly_write_fallback :: proc(
     t: ^testing.T, path: History_Runtime_Test_Path) {
     connection: sqlite.Connection
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     readonly_failure := sqlite.connection_open(
         &connection, path.filename, .Readonly, context.temp_allocator)
     testing.expect_value(t, readonly_failure.validation, sqlite.Validation_Error.None)
     testing.expect(t, taskpool.task_pool_init(&pool, 1, 3))
-    history_runtime_start(&history, &connection)
-    _ = history_runtime_set_persistence(&history, true)
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    history_runtime_start(history, &connection)
+    _ = history_runtime_set_persistence(history, true)
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect_value(t, history.status, historyruntime.History_Runtime_Status.Ready)
     testing.expect(t, history.store.durable_available)
     testing.expect_value(t, history_runtime_enqueue_insert(
-        &history, history_runtime_test_record(1, 1), "temporary"),
+        history, history_runtime_test_record(1, 1), "temporary"),
         historyruntime.History_Runtime_Enqueue_Result.Queued)
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
-    history_runtime_test_expect_persistence_fallback(t, &history)
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
+    history_runtime_test_expect_persistence_fallback(t, history)
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
 }
@@ -345,12 +347,13 @@ history_runtime_test_read :: proc(
 // Write session-only and durable entries, then check their combined ordering.
 history_runtime_test_first_persistent_launch :: proc(
     t: ^testing.T, path: History_Runtime_Test_Path) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     fixture: History_Runtime_Test_Fixture = {
-        history = &history,
+        history = history,
         connection = &connection,
         admission = &admission,
         pool = &pool,
@@ -361,16 +364,16 @@ history_runtime_test_first_persistent_launch :: proc(
             create_schema = true,
         }))
     testing.expect_value(t, history_runtime_enqueue_insert(
-        &history, history_runtime_test_record(1, 1), "begin"),
+        history, history_runtime_test_record(1, 1), "begin"),
         historyruntime.History_Runtime_Enqueue_Result.Queued)
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect_value(t, history.last_write_result.persistent_entry_id, u64(0))
-    testing.expect(t, history_runtime_set_persistence(&history, true))
-    history_runtime_test_write_persistent_revision(t, &history, &admission, &pool)
-    history_runtime_test_browse_session_union(t, &history, &admission, &pool)
+    testing.expect(t, history_runtime_set_persistence(history, true))
+    history_runtime_test_write_persistent_revision(t, history, &admission, &pool)
+    history_runtime_test_browse_session_union(t, history, &admission, &pool)
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
 }
@@ -438,12 +441,13 @@ history_runtime_test_browse_session_union :: proc(
 // Reopen the database and verify stale-read retirement, visibility toggles, and mode.
 history_runtime_test_reopened_persistent_history :: proc(
     t: ^testing.T, path: History_Runtime_Test_Path) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     fixture: History_Runtime_Test_Fixture = {
-        history = &history,
+        history = history,
         connection = &connection,
         admission = &admission,
         pool = &pool,
@@ -460,17 +464,17 @@ history_runtime_test_reopened_persistent_history :: proc(
         request_id = 3,
         terminal_generation = 2,
     }
-    testing.expect(t, history_runtime_request_read(&history, latest))
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_set_persistence(&history, false))
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    testing.expect(t, history_runtime_request_read(history, latest))
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_set_persistence(history, false))
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect(t, !history.read_result_ready)
-    history_runtime_test_verify_persistence_toggle(t, &history, &admission, &pool, {
+    history_runtime_test_verify_persistence_toggle(t, history, &admission, &pool, {
         request = latest,
         destination = destination[:],
     })
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
 }
@@ -520,21 +524,23 @@ history_runtime_persists_updates_and_retires_stale_visibility_reads :: proc(
 // No database leaves history explicitly unavailable without blocking ordinary use.
 @(test)
 history_runtime_without_connection_is_unavailable :: proc(t: ^testing.T) {
-    history: historyruntime.History_Runtime
-    history_runtime_start(&history, nil)
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
+    history_runtime_start(history, nil)
     testing.expect_value(t,
         history.status, historyruntime.History_Runtime_Status.Unavailable)
     testing.expect_value(t, history.initialization_failure.kind,
         termhiststore.History_Store_Error_Kind.Invalid_State)
     testing.expect_value(t, history_runtime_enqueue_insert(
-        &history, history_runtime_test_record(1, 1), "source"),
+        history, history_runtime_test_record(1, 1), "source"),
         historyruntime.History_Runtime_Enqueue_Result.Not_Ready)
 }
 
 // A conflicting connection-local table reports initialization failure without affecting saves.
 @(test)
 history_runtime_reports_temp_initialization_failure :: proc(t: ^testing.T) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
@@ -545,9 +551,9 @@ history_runtime_reports_temp_initialization_failure :: proc(t: ^testing.T) {
     _ = sqlite.connection_exec(&connection,
         "CREATE TEMP TABLE terminal_history (conflict INTEGER);")
     testing.expect(t, taskpool.task_pool_init(&pool, 1, 2))
-    history_runtime_start(&history, &connection)
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    history_runtime_start(history, &connection)
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect_value(t, history.status,
         historyruntime.History_Runtime_Status.Unavailable)
     testing.expect_value(t, history.initialization_failure.kind,
@@ -560,28 +566,29 @@ history_runtime_reports_temp_initialization_failure :: proc(t: ^testing.T) {
 // A joined domain failure remains explicit and does not corrupt later history tasks.
 @(test)
 history_runtime_surfaces_worker_write_failure :: proc(t: ^testing.T) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     fixture := history_runtime_test_make_fixture(
-        &history, &connection, &admission, &pool)
+        history, &connection, &admission, &pool)
     if !history_runtime_test_start(t, fixture) {
         return
     }
     invalid := history_runtime_test_record(0, 1)
     testing.expect_value(t, history_runtime_enqueue_insert(
-        &history, invalid, "invalid"),
+        history, invalid, "invalid"),
         historyruntime.History_Runtime_Enqueue_Result.Queued)
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect_value(t, history.last_write_result.outcome,
         termhiststore.History_Write_Outcome.Failed)
     testing.expect_value(t, history.last_write_result.failure.kind,
         termhiststore.History_Store_Error_Kind.Invalid_Argument)
     testing.expect_value(t, history.status, historyruntime.History_Runtime_Status.Ready)
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
 }
@@ -688,43 +695,44 @@ history_runtime_test_expect_clear_result :: proc(
 @(test)
 history_runtime_generation_retires_reads_without_resetting_records :: proc(
     t: ^testing.T) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     fixture := history_runtime_test_make_fixture(
-        &history, &connection, &admission, &pool)
+        history, &connection, &admission, &pool)
     if !history_runtime_test_start(t, fixture) {
         return
     }
-    history_runtime_attach_generation(&history, 1)
+    history_runtime_attach_generation(history, 1)
     testing.expect_value(t, history_runtime_enqueue_insert(
-        &history, history_runtime_test_record(1, 1), "retained"),
+        history, history_runtime_test_record(1, 1), "retained"),
         historyruntime.History_Runtime_Enqueue_Result.Queued)
-    history_runtime_service(&history, &admission, &pool, false)
+    history_runtime_service(history, &admission, &pool, false)
     testing.expect(t, history.task_active)
-    history_runtime_attach_generation(&history, 2)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    history_runtime_attach_generation(history, 2)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     testing.expect(t, !history.read_result_ready)
-    testing.expect(t, history_runtime_request_read(&history, {
+    testing.expect(t, history_runtime_request_read(history, {
         kind = .By_Id,
         priority = .Interactive,
         submission_id = 1,
         request_id = 1,
         terminal_generation = 2,
     }))
-    history_runtime_service(&history, &admission, &pool, false)
-    testing.expect(t, history_runtime_test_wait_task(&history, &admission, &pool))
+    history_runtime_service(history, &admission, &pool, false)
+    testing.expect(t, history_runtime_test_wait_task(history, &admission, &pool))
     destination: [protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES]u8
     completion, consumed := history_runtime_consume_read_result(
-        &history, destination[:])
+        history, destination[:])
     testing.expect(t, consumed)
     testing.expect_value(t, completion.result.outcome,
         termhiststore.History_Read_Outcome.Found)
     testing.expect_value(t,
         string(destination[:completion.result.source_length]), "retained")
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
 }
@@ -733,18 +741,19 @@ history_runtime_generation_retires_reads_without_resetting_records :: proc(
 @(test)
 history_runtime_waits_for_settings_join_and_drains_before_shutdown :: proc(
     t: ^testing.T) {
-    history: historyruntime.History_Runtime
+    history := new(historyruntime.History_Runtime, context.allocator)
+    defer free(history, context.allocator)
     connection: sqlite.Connection
     admission: protocol.User_Data_Connection_Admission
     pool: taskpool.Task_Pool
     fixture := history_runtime_test_make_fixture(
-        &history, &connection, &admission, &pool)
+        history, &connection, &admission, &pool)
     if !history_runtime_test_start(t, fixture) {
         return
     }
-    history_runtime_attach_generation(&history, 1)
+    history_runtime_attach_generation(history, 1)
     testing.expect_value(t, history_runtime_enqueue_insert(
-        &history, history_runtime_test_record(1, 1), "save-overlap"),
+        history, history_runtime_test_record(1, 1), "save-overlap"),
         historyruntime.History_Runtime_Enqueue_Result.Queued)
     testing.expect(t, viewuserdata.connection_admission_claim(
         &admission, .Settings_Save, true, false))
@@ -753,7 +762,7 @@ history_runtime_waits_for_settings_join_and_drains_before_shutdown :: proc(
     testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
     testing.expect(t, viewuserdata.connection_admission_mark_submitted(
         &admission, .Settings_Save))
-    history_runtime_service(&history, &admission, &pool, true)
+    history_runtime_service(history, &admission, &pool, true)
     testing.expect(t, !history.task_active)
     testing.expect_value(t,
         admission.owner, protocol.User_Data_Connection_Client.Settings_Save)
@@ -762,7 +771,7 @@ history_runtime_waits_for_settings_join_and_drains_before_shutdown :: proc(
     testing.expect(t, viewuserdata.connection_admission_release_joined(
         &admission, .Settings_Save))
     testing.expect(t, history_runtime_test_shutdown(
-        t, &history, &admission, &pool))
+        t, history, &admission, &pool))
     testing.expect(t, viewuserdata.connection_admission_drain_complete(&admission))
     taskpool.task_pool_destroy(&pool)
     _ = sqlite.connection_close(&connection)
