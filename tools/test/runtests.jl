@@ -19,6 +19,9 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
 const JuliaTestReporter = Main.EuclidJuliaTestReporter
 const ScenarioRunner = Main.EuclidScenarioRunner
 
+include(joinpath(@__DIR__, "verification_statistics_tests.jl"))
+include(joinpath(@__DIR__, "sqlite_analysis_tests.jl"))
+
 @testset "Favorites durable reorder inspection" begin
     baseline = [Dict("animation" => animation, "placement" => placement,
         "sibling_order" => index - 1) for (index, (animation, placement)) in

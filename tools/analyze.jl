@@ -12,6 +12,7 @@ const DefaultSettings = joinpath(RepositoryRoot, "tools", "analysis_settings.jl"
 Pkg.activate(AnalysisProject; io=devnull)
 
 using OdinJuliaAnalysis
+include(joinpath(@__DIR__, "analysis_bootstrap.jl"))
 
 """Construct the arguments for the analysis engine."""
 function analysis_arguments(arguments::Vector{String})
@@ -23,4 +24,6 @@ function analysis_arguments(arguments::Vector{String})
     return resolved
 end
 
-exit(OdinJuliaAnalysis.main(analysis_arguments(ARGS)))
+const ResolvedArguments = analysis_arguments(ARGS)
+EuclidAnalysisBootstrap.prepare_analysis_runner(ResolvedArguments)
+exit(OdinJuliaAnalysis.main(ResolvedArguments))

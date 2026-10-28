@@ -31,6 +31,10 @@ Commands:
     accessibility-macos          Validate macOS Phase 3 AX controls.
     accessibility-windows        Validate Windows Phase 1 UIA root and button.
     analyzer-test                Run the analyzer's own test suite.
+    sqlite-runner                Build/reuse the strict exact-provider SQLite runner;
+                                 print its cached executable path.
+    sqlite-runner-test           Build and test the disposable SQLite protocol runner.
+    sqlite-adoption-test         Validate first-party SQL cases, coverage and policy.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
     clean                        Delete generated build artifacts.
@@ -62,7 +66,7 @@ const DRIVER_COMMANDS = Set([
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "accesskit-abi", "accessibility-tree", "accessibility-macos",
     "accessibility-windows",
-    "analyzer-test", "wiki",
+    "analyzer-test", "sqlite-runner", "sqlite-runner-test", "sqlite-adoption-test", "wiki",
     "check-wiki", "clean"])
 
 """Parse one required repository-driver command and its scoped arguments."""
@@ -88,6 +92,7 @@ using .EuclidBuildConfiguration: accesskit_artifact_path,
     sqlite3_tool_linker_flags
 include(joinpath(@__DIR__, "shaders.jl"))
 using .EuclidShaders: ShaderArtifacts, build_shaders
+include(joinpath(@__DIR__, "sqlite_validation.jl"))
 
 struct BuildCommand
     action::Symbol
@@ -1777,7 +1782,7 @@ function analysis_command_arguments(action::Symbol, arguments::Vector{String})
     return [string(action), path, options...]
 end
 
-"""Run repository analysis or targeted source statistics without a build."""
+"""Run analysis with its native validation prerequisite, or build-free source statistics."""
 function run_analysis_command(action::Symbol, arguments::Vector{String})
     analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
         joinpath(SCRIPT_DIR, "tools", "analysis"))
@@ -1979,8 +1984,44 @@ function require_no_arguments(invocation::DriverInvocation)
         "$(replace(string(invocation.action), '_' => '-')) does not accept arguments.")
 end
 
+"""Build the exact-provider runner and optionally verify its native and analyzer contracts."""
+function run_sqlite_runner_command(invocation::DriverInvocation)
+    require_no_arguments(invocation)
+    artifact = sqlite3_artifact()
+    flags = sqlite3_tool_linker_flags()
+    executable = EuclidSQLiteValidation.prepare_runner(artifact, flags)
+    if invocation.action == :sqlite_adoption_test
+        return run_sqlite_adoption_tests(executable)
+    end
+    if invocation.action == :sqlite_runner_test
+        EuclidSQLiteValidation.load_test_dependencies()
+        Base.invokelatest(EuclidSQLiteValidation.test_runner, executable)
+        Base.invokelatest(EuclidSQLiteValidation.test_cache, artifact, flags)
+        run(Cmd([Base.julia_cmd().exec...,
+            "--project=$(joinpath(SCRIPT_DIR, "tools", "analysis"))",
+            joinpath(SCRIPT_DIR, "tools", "sqlite_validation.jl"),
+            "analyzer-test", executable]))
+        return 0
+    end
+    println(executable)
+    return 0
+end
+
+"""Exercise production SQL coverage and its consumer adapter without unrelated tooling fixtures."""
+function run_sqlite_adoption_tests(executable::String)
+    project = joinpath(SCRIPT_DIR, "tools", "analysis")
+    for file in ("sqlite_cases_tests.jl", "sqlite_analysis_tests.jl")
+        command = Cmd([Base.julia_cmd().exec..., "--project=$project",
+            joinpath(SCRIPT_DIR, "tools", "test", file), executable])
+        run(Cmd(command; dir=SCRIPT_DIR))
+    end
+    return 0
+end
+
 """Execute analyzer, documentation, cleanup, and build-plan actions."""
 function execute_project_action(invocation::DriverInvocation)
+    invocation.action in (:sqlite_runner, :sqlite_runner_test, :sqlite_adoption_test) &&
+        return run_sqlite_runner_command(invocation)
     invocation.action == :accesskit_abi &&
         return run_accesskit_abi_command(invocation.arguments)
     invocation.action == :accessibility_tree &&

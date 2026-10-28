@@ -74,6 +74,10 @@ Exec_Callback :: proc "c" (
     user_data: rawptr, column_count: c.int,
     column_values, column_names: ^cstring) -> c.int
 
+// Authorizer_Callback decides whether a connection may perform one SQL action.
+Authorizer_Callback :: proc "c" (
+    user_data: rawptr, action: c.int, first, second, database, trigger: cstring) -> c.int
+
 // transient_destructor requests that SQLite copy bound bytes before bind returns.
 transient_destructor :: proc() -> rawptr {
     return transmute(rawptr)(~uintptr(0))
@@ -88,6 +92,21 @@ foreign sqlite3_library {
         filename: cstring, database: ^^Database, flags: c.int,
         vfs_name: cstring) -> Result ---
     sqlite3_close :: proc(database: ^Database) -> Result ---
+    sqlite3_get_autocommit :: proc(database: ^Database) -> c.int ---
+    sqlite3_error_offset :: proc(database: ^Database) -> c.int ---
+    sqlite3_bind_parameter_count :: proc(statement: ^Statement) -> c.int ---
+    sqlite3_bind_parameter_name :: proc(
+        statement: ^Statement, index: c.int) -> cstring ---
+    sqlite3_bind_parameter_index :: proc(
+        statement: ^Statement, name: cstring) -> c.int ---
+    sqlite3_set_authorizer :: proc(
+        database: ^Database, callback: Authorizer_Callback,
+        user_data: rawptr) -> Result ---
+    sqlite3_limit :: proc(database: ^Database, category, value: c.int) -> c.int ---
+    sqlite3_db_config :: proc(
+        database: ^Database, option: c.int, #c_vararg arguments: ..any) -> Result ---
+    sqlite3_compileoption_used :: proc(option: cstring) -> c.int ---
+    sqlite3_sourceid :: proc() -> cstring ---
 
     sqlite3_prepare_v3 :: proc(
         database: ^Database, sql: cstring, byte_count: c.int,

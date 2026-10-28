@@ -380,6 +380,25 @@ the bytes before caller storage can expire. These short-lived mechanics buffers 
 different from database-owned generations or durable rows; their exact APIs live in
 the substrate rather than in consumer schema policy.
 
+Dedicated SQL follows the [SQLite standard](CodingStandards.md#sqlite-rules-required).
+The six structural rules block production analysis. Typed cases in
+[`sqlite_cases.jl`](../../../tools/sqlite_cases.jl) declare actual schemas,
+ordered setup/operation steps, connection requirements and explicit bindings;
+every discovered first-party SQL file requires successful declared-mode coverage.
+The [Euclid-owned runner](../../../tools/sqlite_validator/) uses this same native
+provider in fresh disposable in-memory processes. No developer/user database is
+opened. Native execution evidence does not replace the owning behavior tests.
+
+```sh
+julia tools/make.jl sqlite-adoption-test
+```
+
+Normal production analysis prepares the native runner before sending the
+analyzer's immutable source snapshots. Structural capabilities, native
+preparation/execution, transaction/cleanup outcomes and source coverage remain
+separate report evidence; neither a successful first statement nor membership
+in a case is full-file validation.
+
 ## Where To Trace A Change
 
 | If the change is about… | Start here |

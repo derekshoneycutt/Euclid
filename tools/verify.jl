@@ -26,6 +26,7 @@ const ANALYSIS_PROJECT = get(
     ENV,
     "ODIN_JULIA_ANALYSIS_PROJECT",
     joinpath(@__DIR__, "analysis"))
+include(joinpath(ANALYSIS_PROJECT, "tools", "Verification.jl"))
 const ANALYZER_SCRIPT = joinpath(@__DIR__, "analyze.jl")
 const ANALYZER_SETTINGS = joinpath(@__DIR__, "analysis_settings.jl")
 const ANALYZER_SELF_SETTINGS = joinpath(ANALYSIS_PROJECT, "settings.jl")
@@ -173,15 +174,7 @@ end
 
 """Run a command while retaining machine output and optionally streaming diagnostics."""
 function capture_command_streams(command::Cmd; stream_errors::Bool=false)
-    output = IOBuffer()
-    errors = stream_errors ? stderr : IOBuffer()
-    started = time_ns()
-    process = run(pipeline(ignorestatus(command), stdout=output, stderr=errors))
-    return (
-        exit_code=process.exitcode,
-        elapsed_ns=UInt64(time_ns() - started),
-        output=String(take!(output)),
-        errors=stream_errors ? "" : String(take!(errors)))
+    return Verification.capture_command_streams(command; stream_errors)
 end
 
 """Discard successful analyzer-test chatter preceding the first test failure."""
@@ -390,63 +383,12 @@ end
 """Write compact repository statistics and estimate summaries."""
 function write_statistics(io::IO, analysis::PhaseResult, use_color::Bool)
     report = get(analysis.metadata, "report", nothing)
-    report === nothing && return
-    statistics = report.statistics
-    headers = [
-        "Language", "Files", "Functions", "Structs", "Lines", "Blank", "Comment",
-        "Code", "Complexity", "Complexity/Code"]
-    rows = [
-        code_statistics_row("Odin", statistics.code_by_language.odin),
-        code_statistics_row("Julia", statistics.code_by_language.julia),
-        code_statistics_row("Total", statistics.code),
-    ]
-    widths = [maximum(textwidth(string(row[index])) for row in vcat([headers], rows))
-        for index in eachindex(headers)]
-    separator = "+" * join((repeat("-", width + 2) for width in widths), "+") * "+"
-    println(io)
-    println(io, styled("CODE STATISTICS", ANSI_BOLD, use_color))
-    println(io)
-    println(io, separator)
-    println(io, table_line(headers, widths))
-    println(io, separator)
-    for row in rows
-        println(io, table_line(row, widths))
-    end
-    println(io, separator)
-    write_estimate_summaries(io, statistics)
-end
-
-"""Write compact COCOMO and LOCOMO estimate summaries."""
-function write_estimate_summaries(io, statistics)
-    cocomo = statistics.cocomo
-    locomo = statistics.locomo
-    println(io, "COCOMO ($(cocomo.model)): \$", round(Int, cocomo.estimated_cost),
-        ", ", round(cocomo.effort_person_months; digits=2), " person-months, ",
-        round(cocomo.schedule_months; digits=2), " months, ",
-        round(cocomo.people; digits=2), " people")
-    println(io, "LOCOMO ($(locomo.preset)): \$",
-        round(locomo.estimated_cost; digits=2), ", ",
-        round(Int, locomo.input_tokens), " input / ",
-        round(Int, locomo.output_tokens), " output tokens, ",
-        round(locomo.estimated_cycles; digits=2), " cycles, ",
-        round(locomo.generation_seconds / 3600; digits=2), " generation hours, ",
-        round(locomo.review_hours; digits=2), " review hours")
+    return Verification.write_code_statistics(io, report, use_color)
 end
 
 """Return one compact code-statistics table row."""
 function code_statistics_row(language, code)
-    return Any[
-        language,
-        Int(code.files),
-        Int(code.functions),
-        Int(code.structs),
-        Int(code.lines),
-        Int(code.blank_lines),
-        Int(code.comment_lines),
-        Int(code.code_lines),
-        Int(code.complexity),
-        round(code.complexity_per_code_line; digits=3),
-    ]
+    return Verification.code_statistics_row(language, code)
 end
 
 """Return the single phase with the requested name, or nothing when absent."""
@@ -476,19 +418,7 @@ end
 """Write diagnostics that must remain visible at every verbosity."""
 function write_diagnostics(io::IO, analysis::PhaseResult, use_color::Bool)
     report = get(analysis.metadata, "report", nothing)
-    report === nothing && return
-    visible = filter(item -> lowercase(String(item.response)) in ("warn", "fail"),
-        report.diagnostics)
-    isempty(visible) && return
-    println(io)
-    println(io, styled("ANALYSIS DIAGNOSTICS", ANSI_BOLD, use_color))
-    for item in visible
-        severity = uppercase(String(item.response))
-        style = severity == "FAIL" ? ANSI_RED : ANSI_YELLOW
-        location = "$(item.path):$(item.line):$(item.column)"
-        println(io, styled(severity, style, use_color), " ", location,
-            " [$(item.rule_id)] ", item.message)
-    end
+    return Verification.write_analysis_diagnostics(io, report, use_color)
 end
 
 """Replay complete captured phase output for trace verbosity."""
@@ -557,17 +487,7 @@ end
 
 """Run one phase while writing immediate start and completion progress."""
 function run_progress_phase(progress_io, index, total, name, operation)
-    progress_io === nothing || begin
-        println(progress_io, "  [$index/$total] $name")
-        flush(progress_io)
-    end
-    result = operation()
-    progress_io === nothing || begin
-        println(progress_io, "        $(result.status)  $(result.detail) " *
-            "($(format_duration(result.elapsed_ns)))")
-        flush(progress_io)
-    end
-    return result
+    return Verification.run_progress_phase(progress_io, index, total, name, operation)
 end
 
 """Return the labeled phase operations for one gate selection."""

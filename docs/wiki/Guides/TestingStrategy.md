@@ -33,6 +33,12 @@ The `check` target combines the validated build, Odin and Julia tests, and repos
 analysis. `vet` runs the validated build and analysis but does not run the application
 test suites, so it is not a replacement for `check`.
 
+Interactive verification displays a spinner and elapsed `MM:SS` for the active
+phase. Analyzer milestones and diagnostics print above the refreshed line; completion
+replaces it with the phase result and final duration. Redirected output and dumb
+terminals retain static progress without animation or cursor-control sequences.
+The final tables and estimates are unchanged.
+
 ## Runtime Scenarios
 
 Scenarios are bounded JSONL programs in [`tools/scenarios/`](../../../tools/scenarios/).

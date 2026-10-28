@@ -258,6 +258,18 @@ verification procedures in the [Coding Standards](CodingStandards.md) and
 [Testing Strategy](TestingStrategy.md) guides, rather than duplicating command matrices
 here.
 
+SQLite validation preserves the dependency direction: the standalone analyzer owns
+the versioned process protocol, snapshots and evidence reconciliation; Euclid owns
+the [native runner](../../../tools/sqlite_validator/) and its exact-provider build
+through [build configuration](../../../tools/build_config.jl). The analyzer neither
+builds the runner nor selects a SQLite provider. Each configured case runs in a
+fresh in-memory child process, separate from application database ownership.
+Euclid's [analysis adapter](../../../tools/analyze.jl) prepares and publishes that
+runner before checks using production settings. Those settings require successful
+coverage of every discovered first-party SQL file through the
+[typed case manifest](../../../tools/sqlite_cases.jl). Standalone analyzer consumers,
+custom settings, help and statistics commands do not inherit this provider policy.
+
 ## Practical Contributor Guide
 
 Choose the owner first, then follow its focused guide and tests:

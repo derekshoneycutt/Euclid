@@ -1,1 +1,1 @@
-INSERT INTO plain_search(content) VALUES (?1)
+INSERT INTO plain_search(content) VALUES (?1);

@@ -1,1 +1,1 @@
-SELECT key, value FROM content_metadata ORDER BY key
+SELECT key, value FROM content_metadata ORDER BY key;

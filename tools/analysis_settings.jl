@@ -2,6 +2,7 @@ using OdinJuliaAnalysis
 
 Base.include(@__MODULE__, joinpath(@__DIR__, "build_config.jl"))
 Base.include(@__MODULE__, joinpath(@__DIR__, "sdl_boundary_analysis.jl"))
+Base.include(@__MODULE__, joinpath(@__DIR__, "sqlite_cases.jl"))
 using .EuclidBuildConfiguration: native_linker_flags
 
 const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
@@ -30,6 +31,12 @@ const AllExcludes = [
 ]
 
 const RuleResponses = Dict(
+    "SQL-KEYWORD-CASING" => Fail,
+    "SQL-SEMICOLON" => Fail,
+    "SQL-NUMBERED-BINDS" => Fail,
+    "SQL-EXPLICIT-AS" => Fail,
+    "SQL-PROJECTION-WILDCARD" => Fail,
+    "SQL-COMMA-JOIN" => Fail,
     "DUPLICATE-CODE-POLICY-DRIFT" => Fail,
     "FUNCTION-METRIC-POLICY-DRIFT" => Fail,
     "NAMING-POLICY-DRIFT" => Fail,
@@ -144,6 +151,38 @@ function custom_test_allocation_reviews()
         maximum_matches=maximum)
         for (id, path, procedure, operation, target, minimum, maximum, reason) in
             CustomTestAllocationReviews]
+end
+
+"""Review exact native-validator allocations retained by the single-request arena."""
+function sqlite_validator_allocation_reviews()
+    sites = [
+        ("binds.odin", "decode_blob", "make", "[]u8", 1,
+            "Decoded bytes are bounded by the request and copied by SQLite's transient binding."),
+        ("binds.odin", "statement_slots", "make", "map[int]bool", 1,
+            "Native-slot reconciliation retains only request-bounded parameter identities."),
+        ("main.odin", "make_failure", "new", "Failure", 1,
+            "Copied native diagnostics must survive statement finalization and connection cleanup."),
+        ("main.odin", "run_step", "make", "map[int]bool", 1,
+            "Used-slot evidence spans all native statements in one bounded source step."),
+        ("main.odin", "initial_result", "make", "[]string", 1,
+            "The two-entry provider capability snapshot remains live through JSON serialization."),
+        ("main.odin", "initial_result", "make", "[]Step_Result", 1,
+            "Result slots are bounded by MAX_STEPS and retain every requested identity."),
+        ("main.odin", "read_request", "make", "[]u8", 1,
+            "The MAX_REQUEST_BYTES plus one-byte buffer detects oversized input before decoding."),
+        ("protocol.odin", "valid_request", "make", "map[string]bool", 1,
+            "Duplicate step IDs are checked within the bounded request."),
+        ("protocol.odin", "valid_request", "make", "map[int]bool", 1,
+            "Duplicate binding slots are checked within each bounded request step."),
+    ]
+    return [ReviewedAllocationPolicy(
+        "sqlite-validator-$procedure-$target", "tools/sqlite_validator/$file",
+        procedure, :custom,
+        reason * " The request arena is destroyed by main after response serialization, including protocol failures.";
+        operation=operation, target=target, allocator_source="allocator",
+        certainty=:definite, response=Ignore,
+        minimum_matches=count, maximum_matches=count)
+        for (file, procedure, operation, target, count, reason) in sites]
 end
 
 # Modules whose exported `loop` drives one animation as a flat step sequence.
@@ -695,6 +734,7 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             custom_test_allocation_reviews()...,
+            sqlite_validator_allocation_reviews()...,
             ReviewedAllocationPolicy(
                 "test-evidence-allocation-snapshot-pressure",
                 "src/evidence/allocation/allocation_test.odin",
@@ -2614,6 +2654,12 @@ AnalysisSettings(
         staging_maximum_response=Ignore,
         reviewed_diagnostics=ReviewedDiagnosticPolicy[
             ReviewedDiagnosticPolicy(
+                "sqlite-validator-authorizer-native-abi",
+                "ODIN-PARAMETERS-WARN",
+                "tools/sqlite_validator/guards.odin",
+                "authorize",
+                "SQLite requires the six-parameter authorizer callback ABI; the validator must preserve that native signature to deny external database access."),
+            ReviewedDiagnosticPolicy(
                 "display-root-matching-context-release",
                 "ODIN-ALLOCATION-CONTEXT",
                 "src/view/shutdown.odin",
@@ -2744,4 +2790,9 @@ AnalysisSettings(
             "extension_phases", "tools/sdl_boundary_analysis.jl",
             "The analyzer invokes this SDL boundary method through Base.invokelatest")],
         ReviewedImportPolicy[]),
-    BaseSettings.odin_spacing)
+    BaseSettings.odin_spacing,
+    SQLiteValidationSettings(
+        runner=SQLiteRunnerSettings([joinpath(".build", "sqlite-validator",
+            Sys.iswindows() ? "sqlite-validator.exe" : "sqlite-validator")]),
+        cases=euclid_sqlite_validation_cases(),
+        require_coverage=true))

@@ -22,6 +22,7 @@ there rather than maintaining a separate memory policy.
 1. [Odin-Julia Boundary Rules](#odin-julia-boundary-rules)
 1. [Odin Rules (Required)](#odin-rules-required)
 1. [Julia Rules (Required)](#julia-rules-required)
+1. [SQLite Rules (Required)](#sqlite-rules-required)
 1. [Documentation Rules](#documentation-rules)
 1. [Error Handling, Performance, Safety](#error-handling-performance-safety)
 1. [Standard Updates](#standard-updates)
@@ -283,6 +284,117 @@ report deferred timing claims explicitly.
 Run the narrowest relevant test while developing, then run the complete gate
 before delivery. A new warning is work to understand, even when the current
 report classifies it as nonblocking.
+
+The standalone SQLite validation tool has its own integration target:
+
+```sh
+julia tools/make.jl sqlite-runner-test
+```
+
+This builds the cached Odin runner against Euclid's SQLite artifact and exercises
+the versioned analyzer protocol, native prepare tails, typed bindings, execution,
+cleanup and disposable-database guards. `sqlite-runner` builds the tool without
+running its tests. The analyzer invokes only explicitly configured runner commands;
+production analysis enables the cases in `tools/sqlite_cases.jl` and requires
+successful coverage of every discovered first-party SQL file. Euclid's analysis
+adapter builds/publishes the runner before requesting that validation.
+See the [runner contract](../../../tools/sqlite_validator/README.md).
+
+## SQLite Rules (Required)
+
+Euclid SQL targets the SQLite provider built by `tools/build_config.jl`, including
+only the compiled-in extensions explicitly required by a validation case. It MUST
+NOT pretend to be portable SQL by avoiding useful SQLite semantics. Substantive
+authored queries and schemas SHOULD live in dedicated `.sql` files. SQL files are
+first-class analyzed source; embedded-SQL extraction is not implemented.
+
+### Automated SQL Conventions
+
+The following six rules are enabled with `Fail` responses in
+`tools/analysis_settings.jl`:
+
+| Rule | Required convention |
+| --- | --- |
+| `SQL-KEYWORD-CASING` | Uppercase grammar-selected keywords, not contextual identifiers |
+| `SQL-SEMICOLON` | Terminate each authored statement with a semicolon |
+| `SQL-NUMBERED-BINDS` | Use explicit positive numbered runtime slots (`?1`, `?5`) |
+| `SQL-EXPLICIT-AS` | Write `AS` wherever SQLite permits an alias in that position |
+| `SQL-PROJECTION-WILDCARD` | Name exposed result columns explicitly |
+| `SQL-COMMA-JOIN` | Write explicit joins instead of comma-separated FROM sources |
+
+Repeated and sparse slots are valid; `?5` does not use slots 1 through 4. Never
+renumber slots as formatting. Bind runtime values rather than interpolating SQL.
+`COUNT(*)`, multiplication and wildcard-only `EXISTS` projections are permitted.
+CTE names, declarations and `CAST(... AS ...)` are not omitted aliases. Expression,
+VALUES and virtual-module argument commas are not comma joins.
+
+Use four spaces, snake_case authored identifiers, left-aligned major clauses and
+readable continuation indentation. Layout and identifier spelling are **Review**;
+keyword casing, statement termination and the four other rules above are
+**Automated**. Do not silently change existing names or literal content to satisfy
+layout. SQL comments and literals obey token-aware line accounting.
+
+### SQL Interfaces, State And Ownership
+
+Projection order, bind positions, nullability and SQLite storage classes are native
+interfaces. Changes MUST preserve the owning decoder/binder contract or update and
+test both sides together. Specify units (for example Unix milliseconds), integer
+ranges, blob/text representation and NULL meaning deliberately. Byte length
+(`length(CAST(value AS BLOB))`) is not character length.
+
+Choose TEMP versus durable state and schema qualification deliberately. Prefer
+STRICT where appropriate for a new table; choose rowid versus WITHOUT ROWID from
+the storage contract, not as incidental standards cleanup. Existing adoption MUST
+NOT redesign schemas, add indexes or change PRAGMA behavior merely for conformance.
+Connection PRAGMAs, foreign-key settings, modules and functions are explicit
+connection requirements, not ambient assumptions.
+
+Keep connection, prepared-statement, transaction and borrowed-column lifetimes
+explicit. Copy borrowed values before reset/finalize when their owner must retain
+them. Mutations need explicit conflict and transaction semantics; failures MUST
+remain visible. Row identity/selection that depends on order needs deterministic
+ordering. There is no blanket ban on TEMP, PRAGMA, CTE, DELETE without WHERE or
+LIMIT without ORDER BY: review the actual operation's contract.
+
+Review collation, Unicode, byte/character distinctions and nullability with the
+owning tests. Reuse prepared operations and bound interactive reads where required;
+justify indexes and other performance choices from the real workload, not style.
+
+### Native Validation And Evidence
+
+`tools/sqlite_cases.jl` declares typed contexts, ordered real-file steps, fixture
+rows, explicit bind types and required modules. Every discovered first-party SQL
+file MUST have successful native coverage at its declared mode. The production
+policy requires coverage; simply naming a file is not coverage. New files need
+case membership and an appropriate setup context.
+
+Each case uses a fresh in-memory connection in an isolated native child process.
+Setup DDL executes before dependent operations; TEMP state survives between steps.
+Validation processes complete sources through SQLite prepare tails, binds every
+used slot, drains execute-mode statements to DONE, checks transaction completion,
+finalizes statements and closes explicitly. External databases/files and arbitrary
+extension loading are prohibited. The default case budget is 30 seconds.
+
+Execute operations where feasible. A prepare-only step MUST explain the limitation
+in its case definition; acceptance is not execution. Empty/comment-only sources
+may be completely processed with zero statements and prove no executed operation.
+Unavailable providers, timeouts, missing or contradictory protocol results are
+incomplete analysis, never successful opt-outs. A later statement failure invalidates
+full-file coverage; skipped dependents receive none. Independent cases continue.
+
+The standalone analyzer owns the protocol, snapshots, digests and evidence
+reconciliation. Euclid owns runner build/provider selection and application cases.
+Normal `check`, `vet`, `test` and CMake gates prepare the runner before analysis;
+direct use of the standalone analyzer with Euclid settings requires the caller to
+run `julia tools/make.jl sqlite-runner` first. Custom consumer settings do not
+silently inherit Euclid's runner prerequisite.
+
+Structural conformance, native acceptance/execution and intended-result tests are
+different claims. A runtime pass cannot repair an unsupported structural rule,
+and preparation/execution cannot prove intended results, all inputs or performance.
+Fixtures improve exercised paths but have no expected-result assertions; owning
+behavior tests remain authoritative. SQL contributes shared source totals, never
+procedural functions, structs, CC denominators or COCOMO/LOCOMO inputs.
 
 ## Global Rules
 
