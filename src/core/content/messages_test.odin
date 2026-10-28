@@ -11,6 +11,14 @@ import storage_pkg "../storage"
 CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Library", "Save GIF", "Settings", "Animation", "Presentation", "Animation library",
     "Context menu", "Copy", "Select All", "Paste", "Terminal",
+    "History search: ", "Enter: recall   Esc: cancel",
+    "Enlarge Terminal to explore history. Esc: cancel",
+    "Searching history...", "No matching history",
+    "Terminal history unavailable", "History search failed",
+    "History capacity exceeded", "Loaded history",
+    "History source preview", "Loading source...", "Source preview failed",
+    "Source exceeds preview capacity", "now", "{count}s", "{count}m",
+    "{count}h", "{count}d",
     "Search animations", "Clear search", "Library search status", "Did you mean...",
     "Use suggested search", "Use suggested search: {query}", "Search query is invalid",
     "Searching animations", "No matching animations", "Matching animations: {count}",
@@ -111,7 +119,9 @@ content_message_test_signature :: proc(
         return "count", .Uint32
     case .Settings_Stats_Dust, .Settings_Stats_Trail, .Settings_Stats_Flicker,
          .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,
-         .Gif_Status_Recording:
+         .Gif_Status_Recording, .Terminal_History_Age_Seconds,
+         .Terminal_History_Age_Minutes, .Terminal_History_Age_Hours,
+         .Terminal_History_Age_Days:
         return "count", .Int64
     case .Fps_Overlay:
         return "fps", .Float32_One_Decimal

@@ -72,11 +72,38 @@ function euclid_history_query_steps()
     ]
 end
 
+"""Execute bounded literal-search windows with the native sparse slot contract."""
+function euclid_history_search_steps()
+    steps = SQLiteValidationStep[]
+    for name in ("search_older", "search_newer",
+            "search_combined_older", "search_combined_newer")
+        combined = startswith(name, "search_combined")
+        for cursor_valid in (0, 1)
+            bindings = SQLiteBind[
+                SQLiteBind(1, SQLiteInteger(cursor_valid)),
+                SQLiteBind(4, SQLiteInteger(2)),
+                SQLiteBind(5, SQLiteInteger(2)),
+                SQLiteBind(6, SQLiteText("source")),
+                SQLiteBind(7, SQLiteInteger(260)),
+            ]
+            if combined
+                push!(bindings, SQLiteBind(2, SQLiteInteger(101)),
+                    SQLiteBind(3, SQLiteInteger(0)))
+            end
+            push!(steps, SQLiteFileStep(
+                "$name-$cursor_valid",
+                "src/terminal/history/store/sql/$name.sql"; bindings))
+        end
+    end
+    return steps
+end
+
 """Exercise history schemas and operations with the native caller's slot types."""
 function euclid_sqlite_history_case()
     steps = vcat(
         euclid_history_schema_steps(),
         euclid_history_mutation_steps(),
+        euclid_history_search_steps(),
         euclid_history_query_steps())
     return SQLiteValidationCase("terminal-history"; steps)
 end

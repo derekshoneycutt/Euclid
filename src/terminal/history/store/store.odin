@@ -118,7 +118,7 @@ history_store_prepare_session_statements :: proc(
     if failure.kind != .None {
         return failure
     }
-    return {}
+    return history_store_prepare_search_session(store)
 }
 
 // Prepare durable operations only when the admitted main database owns the table.
@@ -137,6 +137,10 @@ history_store_prepare_persistent_statements :: proc(
         return failure
     }
     failure = history_store_prepare_combined_browse_statements(store)
+    if failure.kind != .None {
+        return failure
+    }
+    failure = history_store_prepare_search_combined(store)
     if failure.kind != .None {
         return failure
     }
@@ -281,6 +285,10 @@ history_store_finalize_statements :: proc(store: ^History_Store) -> sqlite.Error
     history_store_finalize_one(&store^.combined_older, &first_failure)
     history_store_finalize_one(&store^.combined_newer, &first_failure)
     history_store_finalize_one(&store^.combined_latest, &first_failure)
+    history_store_finalize_one(&store^.search_older, &first_failure)
+    history_store_finalize_one(&store^.search_newer, &first_failure)
+    history_store_finalize_one(&store^.search_combined_older, &first_failure)
+    history_store_finalize_one(&store^.search_combined_newer, &first_failure)
     history_store_finalize_one(&store^.delete_persistent, &first_failure)
     history_store_finalize_one(&store^.delete_session, &first_failure)
     return first_failure
@@ -311,6 +319,10 @@ history_store_has_statements :: proc(store: ^History_Store) -> bool {
         store^.combined_older.handle != nil ||
         store^.combined_newer.handle != nil ||
         store^.combined_latest.handle != nil ||
+        store^.search_older.handle != nil ||
+        store^.search_newer.handle != nil ||
+        store^.search_combined_older.handle != nil ||
+        store^.search_combined_newer.handle != nil ||
         store^.delete_persistent.handle != nil ||
         store^.delete_session.handle != nil
 }

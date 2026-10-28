@@ -1,0 +1,98 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"assert_focus":"terminal"}
+{"key":{"name":"r","ctrl":true}}
+{"wait_terminal_explorer":"empty","timeout_ms":10000}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":0}}
+{"key":"escape"}
+{"type":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"type":"?sin"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"type":"draft [literal]"}
+{"key":"home"}
+{"key":{"name":"right","shift":true}}
+{"assert_terminal_editor":{"source":"draft [literal]","mode":"help","cursor":1,"anchor":0,"evaluation_requests":2}}
+{"key":{"name":"r","ctrl":true}}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"sin"}
+{"key":"up"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend"}
+{"key":"down"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"sin"}
+{"type":"phase5_runs"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend"}
+{"assert_terminal_editor":{"source":"draft [literal]","mode":"help","cursor":1,"anchor":0,"evaluation_requests":2}}
+{"set_splitters":{"vertical":900,"horizontal":420}}
+{"screenshot":".build/explorer-normal.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"escape"}
+{"wait_terminal_explorer":"closed","timeout_ms":10000}
+{"assert_focus":"terminal"}
+{"assert_terminal_editor":{"source":"draft [literal]","mode":"help","cursor":1,"anchor":0,"evaluation_requests":2}}
+{"key":{"name":"s","ctrl":true}}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"sin"}
+{"key":"enter"}
+{"wait_terminal_explorer":"closed","timeout_ms":10000}
+{"assert_terminal_editor":{"source":"sin","mode":"help","cursor":3,"anchor":3,"evaluation_requests":2}}
+{"key":{"name":"r","ctrl":true}}
+{"type":"phase5_runs"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_explorer":"closed","timeout_ms":10000}
+{"assert_terminal_editor":{"source":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend","mode":"julia","cursor":89,"anchor":89,"evaluation_requests":2}}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":3}}
+{"key":{"name":"r","ctrl":true}}
+{"type":"PHASE5_RUNS"}
+{"wait_terminal_explorer":"empty","timeout_ms":10000}
+{"screenshot":".build/explorer-empty.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":3}}
+{"key":"escape"}
+{"key":{"name":"s","ctrl":true}}
+{"type":"phase5_runs"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"type":"%_* ?"}
+{"wait_terminal_explorer":"empty","timeout_ms":10000}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":3}}
+{"key":"escape"}
+{"allocation_checkpoint":"animation"}
+{"key":{"name":"r","ctrl":true}}
+{"type":"phase5_runs"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"key":"escape"}
+{"key":{"name":"s","ctrl":true}}
+{"type":"phase5_runs"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"key":"escape"}
+{"assert_allocation_baseline":"animation"}
+{"key":{"name":"r","ctrl":true}}
+{"type":"phase5_runs"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"set_setting":{"key":"terminal.persist_history","value":true}}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend"}
+{"confirm_terminal_history_delete":"cleared","timeout_ms":10000}
+{"wait_terminal_explorer":"empty","timeout_ms":10000}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":3}}
+{"key":"escape"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

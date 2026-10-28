@@ -55,9 +55,16 @@ History_Read_Priority :: enum u8 {
     Speculative,
 }
 
+// Routing is independent of scheduling priority; explorer results use separate mailboxes.
+History_Read_Target :: enum u8 {
+    Navigation,
+    Highlighting,
+}
+
 History_Read_Request :: struct {
     kind: History_Read_Kind,
     priority: History_Read_Priority,
+    target: History_Read_Target,
     submission_id: u64,
     request_id: u64,
     terminal_generation: u64,
@@ -69,6 +76,52 @@ History_Read_Request :: struct {
     visibility_epoch: u64,
 }
 
+// The display captures this identity when starting a query. runtime_epoch also retires
+// work across close/reopen, committed mutations, and repeated caller generations.
+History_Explorer_Identity :: struct {
+    terminal_generation: u64,
+    opening_generation: u64,
+    query_generation: u64,
+    visibility_epoch: u64,
+    runtime_epoch: u64,
+}
+
+// scan.query is borrowed only during admission, then copied into runtime-owned bytes.
+History_Search_Request :: struct {
+    identity: History_Explorer_Identity,
+    request_id: u64,
+    scan: termhiststore.History_Search_Request,
+    query_length: int,
+}
+
+// Preview requires a scope-qualified identity and exact source revision.
+History_Preview_Request :: struct {
+    identity: History_Explorer_Identity,
+    request_id: u64,
+    scope: termhiststore.History_Record_Scope,
+    source_id: u64,
+    source_revision: u64,
+}
+
+History_Search_Completion :: struct {
+    ready: bool,
+    request: History_Search_Request,
+    result: termhiststore.History_Search_Result,
+}
+
+History_Preview_Completion :: struct {
+    ready: bool,
+    request: History_Preview_Request,
+    result: termhiststore.History_Read_Result,
+}
+
+// Launch-owned reusable transport storage, not a retained-command mirror.
+HISTORY_RUNTIME_SEARCH_ROW_CAPACITY :: 32
+HISTORY_RUNTIME_SEARCH_SUMMARY_BYTES ::
+    HISTORY_RUNTIME_SEARCH_ROW_CAPACITY * termhiststore.HISTORY_SEARCH_SUMMARY_MAX_BYTES
+History_Search_Row_Buffer ::
+    [HISTORY_RUNTIME_SEARCH_ROW_CAPACITY]termhiststore.History_Candidate_Summary
+
 History_Runtime_Enqueue_Result :: enum u8 {
     Queued,
     Not_Ready,
@@ -76,6 +129,7 @@ History_Runtime_Enqueue_Result :: enum u8 {
     Queue_Full,
     Source_Too_Large,
     Source_Budget_Exceeded,
+    Invalid_Request,
 }
 
 History_Runtime_Task_Kind :: enum u8 {
@@ -83,6 +137,8 @@ History_Runtime_Task_Kind :: enum u8 {
     Initialize,
     Mutation,
     Read,
+    Search,
+    Preview,
     Destroy,
 }
 
@@ -138,4 +194,26 @@ History_Runtime :: struct {
     read_result_source: History_Source_Buffer,
     read_result_ready: bool,
     terminal_generation: u64,
+
+    // Display-owned coalescing slots and published mailboxes. Active payloads and
+    // output bytes are worker-borrowed until join; invalidation never touches them.
+    explorer_identity: History_Explorer_Identity,
+    explorer_epoch: u64,
+    latest_search_request_id: u64,
+    latest_preview_request_id: u64,
+    queued_search: History_Search_Request,
+    queued_query: [termhiststore.HISTORY_SEARCH_QUERY_MAX_BYTES]u8,
+    search_pending: bool,
+    queued_preview: History_Preview_Request,
+    preview_pending: bool,
+    active_search: History_Search_Request,
+    active_query: [termhiststore.HISTORY_SEARCH_QUERY_MAX_BYTES]u8,
+    active_preview: History_Preview_Request,
+    active_search_result: termhiststore.History_Search_Result,
+    active_preview_result: termhiststore.History_Read_Result,
+    search_completion: History_Search_Completion,
+    preview_completion: History_Preview_Completion,
+    search_rows: History_Search_Row_Buffer,
+    search_summaries: [HISTORY_RUNTIME_SEARCH_SUMMARY_BYTES]u8,
+    preview_source: History_Source_Buffer,
 }

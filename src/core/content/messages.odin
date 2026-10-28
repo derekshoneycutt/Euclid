@@ -21,6 +21,24 @@ Content_Message_Id :: enum u16 {
     Context_Select_All = 1009,
     Context_Paste = 1010,
     Terminal_Accessible_Label = 1011,
+    Terminal_History_Query = 1020,
+    Terminal_History_Hints = 1021,
+    Terminal_History_Compact = 1022,
+    Terminal_History_Searching = 1023,
+    Terminal_History_Empty = 1024,
+    Terminal_History_Unavailable = 1025,
+    Terminal_History_Failed = 1026,
+    Terminal_History_Capacity = 1027,
+    Terminal_History_Ready = 1028,
+    Terminal_History_Preview = 1029,
+    Terminal_History_Preview_Loading = 1030,
+    Terminal_History_Preview_Failed = 1031,
+    Terminal_History_Preview_Capacity = 1032,
+    Terminal_History_Age_Now = 1033,
+    Terminal_History_Age_Seconds = 1034,
+    Terminal_History_Age_Minutes = 1035,
+    Terminal_History_Age_Hours = 1036,
+    Terminal_History_Age_Days = 1037,
     Library_Search_Input = 1101,
     Library_Clear_Search = 1102,
     Library_Search_Status_Label = 1103,
@@ -133,7 +151,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 115
+CONTENT_SHIPPED_MESSAGE_COUNT :: 133
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -146,6 +164,24 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1009, "ui.context_menu.select_all"},
     {1010, "ui.context_menu.paste"},
     {1011, "ui.terminal.accessible_label"},
+    {1020, "ui.terminal.history.query"},
+    {1021, "ui.terminal.history.hints"},
+    {1022, "ui.terminal.history.compact"},
+    {1023, "ui.terminal.history.searching"},
+    {1024, "ui.terminal.history.empty"},
+    {1025, "ui.terminal.history.unavailable"},
+    {1026, "ui.terminal.history.failed"},
+    {1027, "ui.terminal.history.capacity"},
+    {1028, "ui.terminal.history.ready"},
+    {1029, "ui.terminal.history.preview"},
+    {1030, "ui.terminal.history.preview_loading"},
+    {1031, "ui.terminal.history.preview_failed"},
+    {1032, "ui.terminal.history.preview_capacity"},
+    {1033, "ui.terminal.history.age_now"},
+    {1034, "ui.terminal.history.age_seconds"},
+    {1035, "ui.terminal.history.age_minutes"},
+    {1036, "ui.terminal.history.age_hours"},
+    {1037, "ui.terminal.history.age_days"},
     {1101, "ui.library.search_input"},
     {1102, "ui.library.clear_search"},
     {1103, "ui.library.search_status_label"},
@@ -315,7 +351,9 @@ content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Sig
         return {"count", .Uint32}
     case .Settings_Stats_Dust, .Settings_Stats_Trail, .Settings_Stats_Flicker,
          .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,
-         .Gif_Status_Recording:
+         .Gif_Status_Recording, .Terminal_History_Age_Seconds,
+         .Terminal_History_Age_Minutes, .Terminal_History_Age_Hours,
+         .Terminal_History_Age_Days:
         return {"count", .Int64}
     case .Fps_Overlay:
         return {"fps", .Float32_One_Decimal}

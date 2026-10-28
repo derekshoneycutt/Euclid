@@ -49,10 +49,17 @@ terminal_update_keyboard :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     focused: bool = true) -> Terminal_Keyboard_Update {
     if !focused {
-        termhist.termhist_clear_preedit(term.history)
+        if term.history_explorer.active {
+            termhist.termhist_clear_preedit(
+                &term.history_explorer.query_editor)
+            history_explorer_close(term)
+        } else {
+            termhist.termhist_clear_preedit(term.history)
+        }
         return {}
     }
     if term.awaiting_eval || !term.banner_ready {
+        history_explorer_close(term)
         termhist.termhist_clear_preedit(term.history)
         return {}
     }
@@ -83,6 +90,10 @@ terminal_update_keyboard :: proc(
 terminal_update_keyboard_event :: proc(
     term: ^viewterminalmodel.Terminal_State, event: input.Input_Event,
     clipboard_text: string) -> Terminal_Keyboard_Update {
+    if update, handled := terminal_update_history_explorer_key(
+        term, event, clipboard_text); handled {
+        return update
+    }
     defer terminal_report_edit_failure(term)
     if !terminal_history_navigation_event(event) {
         terminal_history_navigation_invalidate(term)
@@ -116,6 +127,21 @@ terminal_update_keyboard_event :: proc(
         }
     }
     return terminal_update_navigation_keys(term, event_frame)
+}
+
+// Route explorer-owned keys before ordinary prompt editing can consume them.
+terminal_update_history_explorer_key :: proc(
+    term: ^viewterminalmodel.Terminal_State, event: input.Input_Event,
+    clipboard_text: string) -> (Terminal_Keyboard_Update, bool) {
+    if term.history_explorer.active {
+        return history_explorer_update_event(term, event, clipboard_text), true
+    }
+    if event.kind == .Press && event.modifiers == {.Control} &&
+       (event.key == .R || event.key == .S) {
+        _ = history_explorer_open(term)
+        return {}, true
+    }
+    return {}, false
 }
 
 // Apply native text lifecycle facts without routing them as application commands.

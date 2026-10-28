@@ -465,72 +465,29 @@ precedence over these editor commands, except explicit Ctrl+Tab focus traversal.
 
 ### Submitted History And Persistence
 
-The display-owned Terminal editor submits source to the launch-owned history runtime;
-the Julia evaluator does not own or persist this history. The runtime borrows the
-application's admitted user-data SQLite connection and schedules initialization,
-mutations, and reads through the shared worker-only connection-admission path. Neither
-the display thread nor the Julia host executes history SQL.
+Implementation and tests define the behavior; this section is only a map.
 
-Every accepted submission enters the connection-local `TEMP` history table for the
-current application launch. The typed `Persist_Terminal_History` preference defaults
-off. When it is on, a submission is transactionally recorded in the durable
-`user_terminal_history` table as well as the session table, with a link that suppresses
-duplicate results during combined browsing. Turning persistence off hides durable rows
-from navigation and stops new durable writes, but retains saved rows for a later
-re-enable. Session-only submissions are never saved retroactively. Up/Down navigation
-continues to use the ordinary editor and asynchronous history-read path in either mode.
+The display owns the draft and history explorer. A launch-owned history runtime uses
+the shared user-data SQLite connection exclusively through workers; Julia evaluates
+commands but does not manage submitted history. Session history is temporary.
+Persistence is opt-in, and disabling it retains saved rows without exposing them.
 
-**Delete Terminal History** uses a bounded two-activation confirmation in Settings.
-Its full-width, filled and bordered button matches the Save GIF pane, with a centered
-label. Arming changes the label to an explicit confirmation and briefly shakes the
-whole button; reduced motion suppresses the shake, not the confirmation.
-The confirmed clear is serialized with history writes and reads on the same connection
-and removes both durable and current-launch rows, even while persistence is off. A
-successful joined clear retires outstanding reads and cached navigation so deleted
-commands cannot reappear; the unsent editor draft remains display-owned and intact.
-Settings reports success only after the clear transaction commits. A failed transaction
-is logged and reported as failure without publishing an empty-history success state.
+Start here:
 
-Durable write or read failures are reported through the existing Terminal/store status.
-When a durable insert fails, the runtime attempts to retain the submission in the
-session table so command evaluation can proceed, and Terminal displays a persistence
-warning. A history-store failure does not turn a command evaluation into a success-shaped
-history result. SQLite is the sole durable command authority; no submitted-command copy
-is retained by the editor.
-
-Up/Down at a draft-row boundary queues an ordered asynchronous recall. A preference
-transition invalidates queued and in-flight results from the previous visibility policy.
-The display applies a result only while its Terminal generation and editor-navigation
-epoch still match. The unsent draft keeps its source, cursor, selection anchor, preferred
-column, and prompt mode while recall is active. Highlight anchors carry session
-submission IDs and source revisions. A bounded source cache is seeded from newly
-submitted source, and visible cache misses share one speculative keyed SQLite read per
-identity. The display copies
-completed source into its generation-owned cache before Julia classification; drawing
-never queries SQLite. Stale revisions, Terminal generations, and font generations cannot
-publish.
-
-Draft undo follows Julia REPL's whole-buffer, operation-level snapshots, not timed
-typing groups. Each character event or deletion is separate; a whole paste, native
-IME commit, selection replacement, or existing completion acceptance is one edit.
-Preedit and asynchronous completion previews do not create snapshots. Restoring an
-edit restores text, cursor, selection anchor, and preferred vertical column, while
-content/reset revisions advance monotonically and old completion state is retired.
-
-`termhist` owns the editable draft, its backup for asynchronous recall, and a reusable
-descriptor array with packed undo bytes through the borrowed animation-generation
-allocator. Editor storage grows geometrically; branch truncation and prompt resets reuse
-retained capacity rather than allocating individual snapshot strings. Old backing
-blocks may remain in the arena until generation teardown. Whole-buffer snapshots trade
-memory for simple semantics. Storage admission failure rejects the edit/undo without
-changing draft or timeline, logs the failure, and prints an explicit Terminal error.
-
-Redo ends after a successful intervening editor command, including cursor/selection
-movement. Failed edits and unavailable undo/redo do not change the timeline. Successful
-database-history recall (including returning to the saved draft), cancellation,
-completed evaluation, and generation replacement clear edit history. Incomplete
-evaluation preserves prior edits and adds the continuation newline/indentation as one
-undoable operation. Prompt-mode changes and executed Julia effects are not undoable.
+- [History runtime](../../../src/view/terminal/history_runtime.odin):
+  scheduling, persistence visibility, recall, and shutdown.
+- [History store](../../../src/terminal/history/store/):
+  SQLite records, bounded literal search, and store tests.
+- [History explorer](../../../src/view/terminal/history_explorer.odin) and
+  [async transport](../../../src/view/terminal/history_explorer_runtime.odin):
+  isolated query editing, preview, cancellation, and recall without evaluation.
+- [Explorer UI](../../../src/view/ui/terminal/history_explorer.odin):
+  layout, rendering, pointer input, and accessibility.
+- [Draft editor](../../../src/terminal/history/termhist.odin) and
+  [undo](../../../src/terminal/history/undo.odin): unsent source and edit history.
+- [Interaction acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
+  and [layout coverage](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl):
+  executable end-to-end examples.
 
 Some Julia operations request terminal input while evaluation is active. The evaluator
 publishes an explicit lease:
@@ -554,48 +511,17 @@ evaluator.
 
 ### Julia Syntax Highlighting
 
-Highlighting decorates Normal-mode Julia source, both in the editable prompt and in
-submitted history. It is separate from evaluation and from the VT rendition of ordinary
-output. Julia 1.13 owns syntax classification and standard `faces.toml` resolution;
-the display owns source text, retained styles, and native drawing.
+Julia classifies Normal-mode prompt and history source and resolves `faces.toml`.
+The display owns source, retained styles, and drawing; highlighting does not change
+evaluation or the underlying VT grid.
 
-The display debounces live edits and requests visible history through an independent
-Julia session actor. Uncached history source is fetched asynchronously by stable
-submission ID from the launch-owned SQLite TEMP store, then copied into the existing
-bounded source cache before classification. Results carry bounded UTF-8 style runs
-and are accepted only when the request, session, source revision, face generation, and
-exact source still match. Stale replies cannot overwrite newer input or reused history
-entries. Failure or capacity exhaustion never blocks editing or evaluation.
-
-Live prompt presentation is separate from the exact-source request slot. An ordinary
-edit keeps the last displayed styles on a UTF-8-aligned common prefix and suffix,
-translates suffix offsets, and gives the changed middle default prompt appearance.
-Multiple edits observed together conservatively replace their combined middle.
-The display updates this bounded snapshot before drawing; no old byte offsets are
-applied to new text. Only a complete, current Julia result atomically replaces it
-with authoritative styles. The 120 ms debounce controls classification requests,
-not the lifetime of visible decoration.
-
-Provisional styles can temporarily have outdated syntax meaning after a quote or
-comment edit. They do not imply acceptance of stale results, and newly inserted text
-stays plain until Julia classifies it. Request failures preserve safe provisional
-decoration, report the failure, and do not retry unchanged failed source each frame.
-Before the first result, input remains plain.
-
-Clear, whole-buffer load, and history recall/draft restoration advance an editor reset
-identity so unrelated input cannot inherit matching-edge styles. Empty input,
-non-Normal modes, evaluation/prompt hiding, session resets, and face invalidation also
-discard live decoration. Invalid UTF-8 or input beyond the existing 64 KiB source
-limit remains plain. Run-capacity exhaustion preserves representable styles and
-defaults the remaining tail, with a content-free warning once per Terminal generation.
-Presentation adds 288 KiB of fixed source/run/scratch arrays plus identity metadata to
-the generation-owned highlighting allocation; mapping never allocates per edit.
-
-Historical source retains its identity, not submission-time colors. The renderer
-validates source against visible cells and applies accepted styles to frame-local
-copies, preserving the underlying VT grid. Prompt prefixes, completion, selection,
-and cursor remain separate layers. Faces load lazily; changing the face generation
-invalidates cached styles, but does not provide filesystem watching.
+- [Julia classification and faces](../../../src/julia/eval/highlighting.jl).
+- [Native scheduling and result validation](../../../src/view/terminal/highlighting.odin).
+- [Live-edit style retention](../../../src/view/terminal/highlighting_presentation.odin)
+  and [tests](../../../src/view/terminal/highlighting_presentation_test.odin).
+- [History source retrieval](../../../src/view/terminal/highlighting_history.odin).
+- [Rendering](../../../src/view/terminal/highlighting_render.odin) and
+  [tests](../../../src/view/terminal/highlighting_render_test.odin).
 
 ## Output, Emulation, And Rendering
 

@@ -450,6 +450,7 @@ sdl_frame_retire_preedit :: proc(
     ui := &state^.ui_runtime
     if target.kind != .Terminal {
         termhist.termhist_clear_preedit(state^.terminal.history)
+        termhist.termhist_clear_preedit(&state^.terminal.history_explorer.query_editor)
     }
     if target.kind != .Input_Box || target.id != uilibrary.LIBRARY_SEARCH_INPUT_ID {
         uiwidgets.input_box_clear_preedit(&ui.library.search.input)

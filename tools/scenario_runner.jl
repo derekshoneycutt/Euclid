@@ -460,9 +460,37 @@ scenario_passed(record) = record.result == "passed" && record.trace_complete &&
 
 include(joinpath(@__DIR__, "favorites_scenarios.jl"))
 
+"""Exercise explorer recall and scaled layouts with isolated data and ordinary input."""
+function run_terminal_history_explorer_acceptance(binary::String)
+    root = fresh_artifact_path("terminal-history-explorer")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    fake_home = joinpath(root, "data-home")
+    records = NamedTuple[]
+    for (phase, source) in [
+        ("interaction", joinpath("tools", "scenarios",
+            "terminal-history-explorer-acceptance.jsonl")),
+        ("layouts", joinpath("tools", "scenarios", "terminal-history",
+            "explorer-layouts.jsonl")),
+    ]
+        record = run_scenario_launch(binary, "terminal-history-explorer-$phase",
+            source, joinpath(root, phase),
+            ["--user-db=$database", "--window-size=1280x1000", "--layout=landscape"];
+            environment=["XDG_DATA_HOME" => fake_home,
+                "LOCALAPPDATA" => fake_home, "APPDATA" => fake_home],
+            diagnostics=true)
+        validate_history_launch(record)
+        push!(records, record)
+    end
+    ispath(fake_home) && error("Explorer acceptance touched the default data home")
+    return records
+end
+
 """Dispatch acceptance workflows explicitly, otherwise launch one ordinary scenario."""
 function run_named_scenario(binary::String, name::String)
-    if name == "terminal-history-persistence-acceptance"
+    if name == "terminal-history-explorer-acceptance"
+        return run_terminal_history_explorer_acceptance(binary)
+    elseif name == "terminal-history-persistence-acceptance"
         return run_terminal_history_acceptance(binary)
     elseif name == "settings-persistence-acceptance"
         return run_settings_acceptance(binary)

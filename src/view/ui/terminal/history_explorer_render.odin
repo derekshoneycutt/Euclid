@@ -1,0 +1,332 @@
+package uiterminal
+
+import core "../../../core"
+import content "../../../core/content"
+import color "../../../core/color"
+import geometry "../../../core/geometry"
+import coretext "../../../core/text"
+import protocol "../../../core/protocol"
+import termhist "../../../terminal/history"
+import terminalview "../../terminal"
+import font "../../font"
+import native "../../native"
+import viewmessages "../../messages"
+import viewtext "../text"
+import theme "../theme"
+import "core:time"
+
+// Immutable drawing inputs for the existing Terminal encoder and font resolver.
+Terminal_Explorer_Draw :: struct {
+    state: ^core.Euclid_General_State,
+    encoder: ^native.Draw_Encoder,
+    prepared: Terminal_Prepared_Frame,
+    resolver: font.Font_Resolver,
+    now_ms: i64,
+}
+
+// Draw a sanitized, grapheme-clipped monospace span in its own scissor region.
+terminal_explorer_draw_text :: proc(
+    draw: Terminal_Explorer_Draw, text: string, rect: geometry.Rectangle,
+    paint: color.Color_RGBA8, right: bool = false) {
+    buffer: [4096]u8
+    columns := max(0, int(rect.width / draw.prepared.layout.column_width))
+    row := terminal_explorer_text_row(text, 0, columns, buffer[:], true)
+    position: geometry.Vector2 = {rect.x, rect.y}
+    if right {
+        position.x += rect.width -
+            f32(row.columns)*draw.prepared.layout.column_width
+    }
+    _ = native.draw_encoder_push_scissor(draw.encoder, rect)
+    if !terminalview.terminal_draw_shaped_prompt_span({
+        encoder = draw.encoder,
+        resolver = draw.resolver,
+        key = .Regular,
+        text = row.text,
+        position = position,
+        color = paint,
+    }) {
+        _ = viewtext.ui_text_unshaped_paged({
+            encoder = draw.encoder,
+            resolver = draw.resolver,
+            key = .Regular,
+            text = row.text,
+            position = position,
+            color = paint,
+            font = {draw.prepared.layout.regular, draw.prepared.layout.font_size},
+        })
+    }
+    _ = native.draw_encoder_pop_scissor(draw.encoder)
+}
+
+// Render the compact stacked explorer without changing the existing outer panel.
+terminal_draw_explorer :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Terminal_Prepared_Frame) {
+    draw: Terminal_Explorer_Draw = {
+        state = state,
+        encoder = encoder,
+        prepared = prepared,
+        resolver = font.cache_terminal_resolver(&state^.font_cache),
+        now_ms = time.time_to_unix_nano(time.now()) / 1_000_000,
+    }
+    _ = native.draw_encoder_push_scissor(encoder, prepared.explorer.bounds)
+    if prepared.explorer.compact {
+        terminal_explorer_draw_compact(draw)
+    } else {
+        terminal_explorer_draw_query(draw)
+        terminal_explorer_draw_rows(draw)
+        terminal_explorer_draw_preview(draw)
+        terminal_explorer_draw_text(draw, viewmessages.shell_message(state,
+            terminal_explorer_status_id(state^.terminal.history_explorer.status)),
+            prepared.explorer.status, theme.draw_color(encoder, .Disabled_Text))
+        terminal_explorer_draw_text(draw,
+            viewmessages.shell_message(state, .Terminal_History_Hints),
+            prepared.explorer.hints, theme.draw_color(encoder, .Disabled_Text), true)
+    }
+    _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+// Wrap the minimum-size instruction so narrow panes still expose cancellation.
+terminal_explorer_draw_compact :: proc(draw: Terminal_Explorer_Draw) {
+    source := viewmessages.shell_message(draw.state, .Terminal_History_Compact)
+    rect := draw.prepared.explorer.bounds
+    rect.height = draw.prepared.layout.line_height
+    columns := max(1, int(rect.width / draw.prepared.layout.column_width))
+    buffer: [4096]u8
+    offset := 0
+    for offset < len(source) &&
+        rect.y + rect.height <= draw.prepared.explorer.bounds.y +
+            draw.prepared.explorer.bounds.height {
+        row := terminal_explorer_text_row(source, offset, columns, buffer[:])
+        terminal_explorer_draw_text(draw, row.text, rect,
+            theme.draw_color(draw.encoder, .Text))
+        if row.next <= offset {
+            break
+        }
+        offset = row.next
+        rect.y += rect.height
+    }
+}
+// Render committed query text, selection, and a distinct underlined IME preedit.
+terminal_explorer_draw_query :: proc(draw: Terminal_Explorer_Draw) {
+    prepared := draw.prepared
+    query := &draw.state^.terminal.history_explorer.query_editor
+    layout := prepared.explorer
+    label_rect := layout.query
+    label_rect.width = layout.query_text.x - label_rect.x
+    terminal_explorer_draw_text(draw,
+        viewmessages.shell_message(draw.state, .Terminal_History_Query),
+        label_rect, theme.draw_color(draw.encoder, .Text))
+    _ = native.draw_encoder_push_scissor(draw.encoder, layout.query_text)
+    _ = native.draw_encoder_rectangle(draw.encoder,
+        prepared.editable_geometry.selection,
+        theme.draw_color(draw.encoder, .Text_Selection_Background))
+    text := termhist.termhist_current_text(query)
+    terminal_explorer_draw_text(draw, text[layout.query_start:],
+        layout.query_text, theme.draw_color(draw.encoder, .Text))
+    if query^.preedit_active {
+        terminal_explorer_draw_preedit(draw)
+    }
+    if prepared.layout.terminal_focused {
+        _ = native.draw_encoder_rectangle(draw.encoder,
+            prepared.editable_geometry.caret, theme.draw_color(draw.encoder, .Text))
+    }
+    _ = native.draw_encoder_pop_scissor(draw.encoder)
+}
+
+// Overlay composition at the committed query cursor without modifying query source.
+terminal_explorer_draw_preedit :: proc(draw: Terminal_Explorer_Draw) {
+    query := &draw.state^.terminal.history_explorer.query_editor
+    rect := draw.prepared.explorer.query_text
+    text := termhist.termhist_current_text(query)
+    start := draw.prepared.explorer.query_start
+    column := coretext.text_grapheme_column(text[start:], max(0, query^.cursor - start))
+    rect.x += f32(column)*draw.prepared.layout.column_width
+    rect.width = max(0, draw.prepared.explorer.query_text.x +
+        draw.prepared.explorer.query_text.width - rect.x)
+    _ = native.draw_encoder_rectangle(draw.encoder, rect,
+        theme.UI_COMPONENT_BACKGROUND_COLOR)
+    terminal_explorer_draw_text(draw, string(query^.preedit[:query^.preedit_length]),
+        rect, theme.draw_color(draw.encoder, .Text))
+    underline := rect
+    underline.y += rect.height - 2
+    underline.height = 1
+    underline.width = min(rect.width, f32(coretext.text_grapheme_column(
+        string(query^.preedit[:query^.preedit_length]), query^.preedit_length)) *
+            draw.prepared.layout.column_width)
+    _ = native.draw_encoder_rectangle(draw.encoder, underline,
+        theme.draw_color(draw.encoder, .Text))
+}
+
+// Return compact ordinary-row mode codes and readable selected-row language names.
+terminal_explorer_mode :: proc(
+    mode: protocol.Evaluation_Mode, selected: bool) -> string {
+    switch mode {
+    case .Normal:
+        return "julia" if selected else "jl"
+    case .Help:
+        return "help" if selected else "?"
+    case .Pkg:
+        return "pkg" if selected else "]"
+    case .Shell:
+        return "shell" if selected else ";"
+    }
+    return ""
+}
+
+// Select localized age units with future-safe subtraction and bounded day counts.
+terminal_explorer_age_value :: proc(
+    now_ms, submitted_ms: i64) -> (content.Content_Message_Id, i64) {
+    if submitted_ms >= now_ms {
+        return .Terminal_History_Age_Now, 0
+    }
+    seconds := (now_ms - max(i64(0), submitted_ms)) / 1000
+    if seconds < 1 {
+        return .Terminal_History_Age_Now, 0
+    }
+    if seconds < 60 {
+        return .Terminal_History_Age_Seconds, seconds
+    }
+    if seconds < 3600 {
+        return .Terminal_History_Age_Minutes, seconds / 60
+    }
+    if seconds < 86400 {
+        return .Terminal_History_Age_Hours, seconds / 3600
+    }
+    return .Terminal_History_Age_Days, min(i64(99999), seconds / 86400)
+}
+
+// Format compact age into caller-owned scratch; no per-row allocation is retained.
+terminal_explorer_age :: proc(
+    draw: Terminal_Explorer_Draw, submitted_ms: i64, storage: []u8) -> string {
+    id, value := terminal_explorer_age_value(draw.now_ms, submitted_ms)
+    if id == .Terminal_History_Age_Now {
+        return viewmessages.shell_message(draw.state, id)
+    }
+    return viewmessages.shell_format(draw.state, id, {{
+        name = "count",
+        value = value,
+    }}, storage)
+}
+
+// Draw only the bounded visible candidate rows, using fixed source/mode/age columns.
+terminal_explorer_draw_rows :: proc(draw: Terminal_Explorer_Draw) {
+    explorer := &draw.state^.terminal.history_explorer
+    layout := draw.prepared.explorer
+    end := min(explorer^.row_count, explorer^.list_scroll_rows + layout.row_capacity)
+    for index in explorer^.list_scroll_rows..<end {
+        terminal_explorer_draw_row(draw, index)
+    }
+}
+
+// Paint one row with a restrained current marker and isolated metadata clipping.
+terminal_explorer_draw_row :: proc(draw: Terminal_Explorer_Draw, index: int) {
+    explorer := &draw.state^.terminal.history_explorer
+    layout := draw.prepared.explorer
+    row := explorer^.rows[index]
+    rect := terminal_explorer_row_rect(layout, index - explorer^.list_scroll_rows,
+        draw.prepared.layout.line_height)
+    selected := index == explorer^.selected_index
+    if selected {
+        _ = native.draw_encoder_rectangle(draw.encoder, rect,
+            theme.draw_color(draw.encoder, .Text_Selection_Background))
+        terminal_explorer_draw_text(draw, ">", rect,
+            theme.draw_color(draw.encoder, .Text))
+    }
+    rect.x += 2*draw.prepared.layout.column_width
+    rect.width = layout.source_width
+    summary := string(explorer^.summaries[
+        row.summary_offset:row.summary_offset + row.summary_length])
+    terminal_explorer_draw_text(
+        draw, summary, rect, theme.draw_color(draw.encoder, .Text))
+    rect.x, rect.width = layout.mode_x, layout.age_x - layout.mode_x -
+        draw.prepared.layout.column_width
+    terminal_explorer_draw_text(draw, terminal_explorer_mode(row.record.mode, selected),
+        rect, theme.draw_color(draw.encoder, .Disabled_Text))
+    rect.x, rect.width =
+        layout.age_x, layout.bounds.x + layout.bounds.width - layout.age_x
+    buffer: [128]u8
+    terminal_explorer_draw_text(draw,
+        terminal_explorer_age(draw, row.record.submitted_at_unix_ms, buffer[:]),
+        rect, theme.draw_color(draw.encoder, .Disabled_Text), true)
+}
+
+// Preserve a stable outlined preview, including explicit loading/failure states.
+terminal_explorer_draw_preview :: proc(draw: Terminal_Explorer_Draw) {
+    explorer := &draw.state^.terminal.history_explorer
+    layout := draw.prepared.explorer
+    _ = native.draw_encoder_rectangle_outline(draw.encoder, layout.preview, 1,
+        theme.draw_color(draw.encoder, .Control_Border))
+    if explorer^.preview_status == .Ready {
+        terminal_explorer_draw_preview_source(draw)
+        return
+    }
+    id: content.Content_Message_Id = .Terminal_History_Preview
+    #partial switch explorer^.preview_status {
+    case .Loading:
+        id = .Terminal_History_Preview_Loading
+    case .Failed:
+        id = .Terminal_History_Preview_Failed
+    case .Capacity:
+        id = .Terminal_History_Preview_Capacity
+    }
+    terminal_explorer_draw_text(draw, viewmessages.shell_message(draw.state, id),
+        layout.preview_text, theme.draw_color(draw.encoder, .Disabled_Text))
+}
+
+// Render unchanged hard breaks and indentation through the shared safe wrap iterator.
+terminal_explorer_draw_preview_source :: proc(draw: Terminal_Explorer_Draw) {
+    explorer := &draw.state^.terminal.history_explorer
+    layout := draw.prepared.explorer
+    source := string(explorer^.preview_source[:explorer^.preview_length])
+    offset := 0
+    buffer: [4096]u8
+    for line := 0;
+        line < explorer^.preview_scroll_lines + layout.preview_rows; line += 1 {
+        row := terminal_explorer_text_row(
+            source, offset, layout.preview_columns, buffer[:])
+        if line >= explorer^.preview_scroll_lines {
+            terminal_explorer_draw_preview_row(draw, row.text,
+                line - explorer^.preview_scroll_lines, line == 0)
+        }
+        if row.next <= offset || row.next >= len(source) {
+            break
+        }
+        offset = row.next
+    }
+}
+
+// Reserve an identical prompt gutter on every preview row, including wrapped lines.
+terminal_explorer_draw_preview_row :: proc(
+    draw: Terminal_Explorer_Draw, text: string, row: int, first: bool) {
+    rect := draw.prepared.explorer.preview_text
+    rect.y += f32(row)*draw.prepared.layout.line_height
+    rect.height = draw.prepared.layout.line_height
+    prompt, paint := terminal_explorer_prompt(draw)
+    if first {
+        terminal_explorer_draw_text(draw, prompt, rect, paint)
+    }
+    rect.x += 7*draw.prepared.layout.column_width
+    rect.width -= 7*draw.prepared.layout.column_width
+    terminal_explorer_draw_text(draw, text, rect, theme.draw_color(draw.encoder, .Text))
+}
+
+// Reuse the ordinary Terminal's mode prompts and contrast-aware semantic colors.
+terminal_explorer_prompt :: proc(
+    draw: Terminal_Explorer_Draw) -> (string, color.Color_RGBA8) {
+    switch draw.state^.terminal.history_explorer.preview_record.mode {
+    case .Normal:
+        return terminalview.TERMINAL_PROMPT,
+            theme.draw_color(draw.encoder, .Terminal_Prompt)
+    case .Help:
+        return terminalview.TERMINAL_HELP_PROMPT,
+            theme.draw_color(draw.encoder, .Terminal_Help)
+    case .Pkg:
+        return terminalview.TERMINAL_PKG_PROMPT,
+            theme.draw_color(draw.encoder, .Terminal_Package)
+    case .Shell:
+        return terminalview.TERMINAL_SHELL_PROMPT,
+            theme.draw_color(draw.encoder, .Terminal_Shell)
+    }
+    return "", {}
+}

@@ -38,6 +38,8 @@ Terminal_Prepared_Frame :: struct {
     geometry_change: terminalview.Terminal_Geometry_Change,
     editable_descriptor: viewmodel.Ui_Editable_Text_Descriptor,
     editable_geometry: viewmodel.Ui_Editable_Text_Geometry,
+    explorer_active: bool,
+    explorer: Terminal_Explorer_Layout,
 }
 
 // Scroll result and routed Terminal content input prepared together.
@@ -388,6 +390,10 @@ terminal_prepare_frame :: proc(
             state^.ui_runtime.preferences.values.interface.increased_contrast,
             state^.ui_runtime.platform_increased_contrast)))
     layout.terminal_focused = state^.ui_runtime.input.interaction_frame.terminal_focused
+    if term^.history_explorer.active {
+        return terminal_prepare_explorer_frame(
+            state, frame, layout, bounds, geometry_change)
+    }
     resolved := terminalview.terminal_resolve_mouse_frame(
         term, frame, bounds)
     prepared_scroll := terminal_prepare_scroll(
@@ -396,9 +402,17 @@ terminal_prepare_frame :: proc(
         term, prepared_scroll.content_frame, geometry.Rectangle(bounds))
     descriptor, text_geometry := terminal_editable_text_adapter(
         state, layout, prepared_scroll.scroll)
-    return {true, bounds, layout, prepared_scroll.scroll,
-        prepared_scroll.content_frame, hover, geometry_change,
-        descriptor, text_geometry}
+    return {
+        available = true,
+        bounds = bounds,
+        layout = layout,
+        scroll = prepared_scroll.scroll,
+        content_frame = prepared_scroll.content_frame,
+        hyperlink_hover = hover,
+        geometry_change = geometry_change,
+        editable_descriptor = descriptor,
+        editable_geometry = text_geometry,
+    }
 }
 
 // terminal_draw_encoded emits one prepared Terminal surface into the SDL encoder.
@@ -407,6 +421,10 @@ terminal_draw_encoded :: proc(
     prepared: Terminal_Prepared_Frame) {
     term := &state^.terminal
     if encoder == nil || !term.initialized || !prepared.available {
+        return
+    }
+    if prepared.explorer_active {
+        terminal_draw_explorer(state, encoder, prepared)
         return
     }
 
@@ -450,6 +468,16 @@ terminal_prepare_visual :: proc(
             state^.ui_runtime.preferences.values.interface.increased_contrast,
             state^.ui_runtime.platform_increased_contrast)))
     layout.terminal_focused = false
+    if term^.history_explorer.active {
+        return {
+            available = true,
+            bounds = bounds,
+            layout = layout,
+            explorer_active = true,
+            explorer = terminal_explorer_layout(
+                layout, viewmessages.shell_message(state, .Terminal_History_Query)),
+        }
+    }
     initial_scroll := terminalview.terminal_initial_scroll_offset(
         term, layout.padded_bounds, layout.content_height)
     scroll := uiwidgets.scroll_container_visual(

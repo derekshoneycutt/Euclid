@@ -234,7 +234,7 @@ General features:
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
   - [X] Julia syntax highlighting
-  - [ ] History explorer Julia-REPL style
+  - [ ] History explorer, Julia-familiar (In progress)
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support
@@ -371,6 +371,7 @@ Core Features:
   - Definitions
   - Propositions (16)
 - Intro rings
+- Hilbert chap 3,4
 - Scaled polynomial section drawing
 - Maybe a server with downloadable content?
 
@@ -379,8 +380,8 @@ Core Features:
 - Euclid Elements, Book 5 "proportion and magnitude"
   - Definitions
   - Propositions (25)
-- Hilbert chap 3 (Theory of Proportion, Pascal's theorem)
 - Fields
+- Hilbert chap 5,6,7
 
 ## References
 

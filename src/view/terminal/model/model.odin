@@ -8,6 +8,7 @@ import termemulator "../../../terminal/emulator"
 import termgrid "../../../terminal/grid"
 import termhist "../../../terminal/history"
 import termhiststore "../../../terminal/history/store"
+import historyruntime "../../../terminal/history/runtime"
 import termhyperlink "../../../terminal/hyperlink"
 import termmodel "../../../terminal/model"
 import termsession "../../../terminal/session"
@@ -64,6 +65,8 @@ Terminal_State :: struct {
     history_navigation_active: bool,
     history_navigation_draft_mode: protocol.Evaluation_Mode,
     history_navigation_read_source: [protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES]u8,
+    history_explorer: History_Explorer_State,
+    history_explorer_open_allowed: bool,
 
     // Output grids and interpretation. Interpreter bindings borrow these embedded grids;
     // checkpoints and service pointers below refer to generation-allocated storage.
@@ -131,6 +134,77 @@ Terminal_State :: struct {
 
     // Highlighting. Generation allocation released with the explicit lifecycle allocator.
     highlighting: ^Terminal_Highlighting,
+}
+
+// History_Explorer_Status describes the current bounded query/page result state.
+History_Explorer_Status :: enum u8 {
+    Closed,
+    Searching,
+    Ready,
+    Empty,
+    Unavailable,
+    Failed,
+    Capacity,
+}
+
+// History_Explorer_Preview_Status distinguishes current candidate source readiness.
+History_Explorer_Preview_Status :: enum u8 {
+    Idle,
+    Loading,
+    Ready,
+    Failed,
+    Capacity,
+}
+
+// History_Explorer_Page_Direction records which chronological boundary is being scanned.
+History_Explorer_Page_Direction :: enum u8 {
+    None,
+    Older,
+    Newer,
+}
+
+// History_Explorer_State owns one bounded transient query and one candidate page.
+// Its variable-sized buffers are allocated and released with the Terminal generation.
+History_Explorer_State :: struct {
+    query_editor: termhist.Termhist_State,
+    rows: []termhiststore.History_Candidate_Summary,
+    summaries: []u8,
+    preview_source: []u8,
+    initialized: bool,
+    active: bool,
+    close_requested: bool,
+    accept_requested: bool,
+    query_dirty: bool,
+    search_pending: bool,
+    preview_pending: bool,
+    opening_generation: u64,
+    query_generation: u64,
+    identity: historyruntime.History_Explorer_Identity,
+    next_search_request_id: u64,
+    next_preview_request_id: u64,
+    search_request_id: u64,
+    preview_request_id: u64,
+    status: History_Explorer_Status,
+    preview_status: History_Explorer_Preview_Status,
+    row_count: int,
+    selected_index: int,
+    preview_record: termhiststore.History_Record,
+    preview_length: int,
+    scan_direction: History_Explorer_Page_Direction,
+    scan_cursor: termhiststore.History_Browse_Cursor,
+    scan_cursor_valid: bool,
+    page_older_cursor: termhiststore.History_Browse_Cursor,
+    page_older_cursor_valid: bool,
+    page_newer_cursor: termhiststore.History_Browse_Cursor,
+    page_newer_cursor_valid: bool,
+    older_available: bool,
+    newer_available: bool,
+    page_request: History_Explorer_Page_Direction,
+    list_scroll_rows: int,
+    list_visible_selection: int,
+    query_pointer_selecting: bool,
+    preview_scroll_lines: int,
+    status_failure: termhiststore.History_Store_Error,
 }
 
 // Terminal_Tick_Publisher owns one generation-scoped bounded tick stream.

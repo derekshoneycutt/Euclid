@@ -81,7 +81,7 @@ content_fixture_materializes_native_message_signatures :: proc(t: ^testing.T) {
     testing.expect(t, content_admission_read_messages(&database, generation))
     testing.expect(t, content_admission_read_arguments(&database, generation))
     testing.expect(t, content_admission_read_translations(&database, generation))
-    testing.expect_value(t, generation.data.argument_count, u16(13))
+    testing.expect_value(t, generation.data.argument_count, u16(17))
     testing.expect(t, content_admission_validate_messages(generation))
     testing.expect(t, content_admission_validate_translations(generation))
 }
@@ -210,7 +210,7 @@ content_worker_admits_and_rejects_typed_signatures :: proc(t: ^testing.T) {
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
-    testing.expect_value(t, generation^.data.argument_count, u16(13))
+    testing.expect_value(t, generation^.data.argument_count, u16(17))
     content_test_reject_candidate(t, &service, "content-native-signature",
         "INSERT INTO ui_argument VALUES ('ui.navigation.library',0,'count','uint32');"+
         "UPDATE ui_translation SET template='{count}' WHERE message_key='ui.navigation.library';")

@@ -100,6 +100,9 @@ Command_Kind :: enum u8 {
     Wait_State,
     Wait_Terminal_Contains,
     Wait_Terminal_History_Idle,
+    Wait_Terminal_Explorer,
+    Assert_Terminal_Editor,
+    Assert_Terminal_Preview,
     Confirm_Terminal_History_Delete,
     Assert_State,
     Assert_Focus,
@@ -215,6 +218,7 @@ Command :: struct {
     setting_id: settings.Setting_Id,
     setting_value: settings.Setting_Value,
     arrival_style: uidust.Ui_Dust_Arrival_Style,
+    terminal_editor: Terminal_Editor_Expectation,
 }
 
 // Stable scenario spelling for one retained presentation arrival policy.
@@ -345,6 +349,8 @@ Raw_Command :: struct {
     wait_state: string,
     wait_terminal_contains: string,
     wait_terminal_history_idle: bool,
+    wait_terminal_explorer: string,
+    assert_terminal_preview: string,
     confirm_terminal_history_delete: string,
     assert_state: string,
     assert_focus: string,
@@ -835,12 +841,13 @@ runner_update_command :: proc(
         return runner_update_event_wait(runner, command, frame)
     case .Wait_State:
         return runner_update_state_wait(runner, command, frame)
-    case .Wait_Terminal_Contains, .Wait_Terminal_History_Idle,
+    case .Wait_Terminal_Contains, .Wait_Terminal_History_Idle, .Wait_Terminal_Explorer,
          .Confirm_Terminal_History_Delete:
         return runner_update_action_wait(runner, command, frame)
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
     case .Assert_Focus, .Assert_Library_Search, .Assert_Terminal_Contains,
+         .Assert_Terminal_Editor, .Assert_Terminal_Preview,
          .Assert_Allocation_Baseline, .Assert_Setting, .Assert_Favorites,
          .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
@@ -910,12 +917,13 @@ runner_update :: proc(
 command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
     #partial switch kind {
     case .Wait_Event, .Wait_State, .Wait_Terminal_Contains,
-         .Wait_Terminal_History_Idle, .Confirm_Terminal_History_Delete,
+         .Wait_Terminal_History_Idle, .Wait_Terminal_Explorer,
+         .Confirm_Terminal_History_Delete,
          .Type_Text, .Type_Library_Name,
          .Key, .Set_View_Content, .Set_Library_Search,
          .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
         .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
-        .Favorite_Control, .Library_Placement, .Set_Arrival_Style:
+        .Favorite_Control, .Library_Placement, .Set_Arrival_Style, .Set_Setting:
         return true
     case:
         return false
@@ -1049,6 +1057,10 @@ raw_wait_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_text_command_select(raw.assert_focus, .Assert_Focus, command)
     selected += raw_text_command_select(raw.assert_terminal_contains,
         .Assert_Terminal_Contains, command)
+    selected += raw_text_command_select(
+        raw.wait_terminal_explorer, .Wait_Terminal_Explorer, command)
+    selected += raw_text_command_select(
+        raw.assert_terminal_preview, .Assert_Terminal_Preview, command)
     return selected
 }
 
@@ -1131,6 +1143,7 @@ command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Erro
     if command^.kind == .Wait_Event || command^.kind == .Wait_State ||
         command^.kind == .Wait_Terminal_Contains ||
         command^.kind == .Wait_Terminal_History_Idle ||
+        command^.kind == .Wait_Terminal_Explorer ||
         command^.kind == .Confirm_Terminal_History_Delete {
         if command^.timeout_ms == 0 {
             command^.timeout_ms = SCENARIO_DEFAULT_TIMEOUT_MS
@@ -1204,6 +1217,11 @@ command_from_raw :: proc(
         return {}, .Invalid_Command
     }
     selected += structured_selected
+    count, valid := scenario_terminal_editor_select(root, &command)
+    if !valid {
+        return {}, .Invalid_Command
+    }
+    selected += count
     if selected != 1 {
         return {}, .Invalid_Command
     }
@@ -1229,7 +1247,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
          .Apply_Library_Search_Suggestion, .Clear_Library_Search,
          .Wait_Terminal_History_Idle,
-         .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting:
+         .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting,
+         .Assert_Terminal_Editor:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
@@ -1238,7 +1257,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Pause_Animation, .Resume_Animation,
          .Set_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
-         .Wait_State, .Wait_Terminal_Contains, .Confirm_Terminal_History_Delete,
+         .Wait_State, .Wait_Terminal_Contains, .Wait_Terminal_Explorer,
+         .Assert_Terminal_Preview, .Confirm_Terminal_History_Delete,
          .Assert_State, .Assert_Focus,
          .Assert_Terminal_Contains, .Assert_Library_Search,
          .Checkpoint, .Allocation_Checkpoint,

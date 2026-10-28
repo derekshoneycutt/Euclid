@@ -183,6 +183,7 @@ terminal_service_test_set_highlight_read_result :: proc(
     history^.read_result_request = {
         kind = .By_Id,
         priority = .Speculative,
+        target = .Highlighting,
         submission_id = id,
         request_id = 100,
         terminal_generation = state^.terminal.animation_generation,

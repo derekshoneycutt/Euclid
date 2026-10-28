@@ -34,8 +34,9 @@ shutdown_window_runtime :: proc(
                 _ = uilibrary.library_entry_name_flush(session.state)
             }
         }
+        // Optional-font shutdown may stop the pool; finalize SQLite borrowers first.
         shutdown_shared_user_data(
-            session.state, &session.state^.simulation_executor^.pool, false)
+            session.state, &session.state^.simulation_executor^.pool, true)
         font.cache_shutdown_service(
             &session.state^.font_cache,
             &session.state^.simulation_executor^.pool)

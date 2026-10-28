@@ -392,7 +392,11 @@ prepare_terminal_layout_semantics :: proc(
         state^.ui_runtime.context_menu.keyboard_anchor =
             terminal.editable_geometry.caret
     }
-    uiterminal.register_terminal_semantics(state, bounds, terminal.scroll)
+    if terminal.explorer_active {
+        uiterminal.register_terminal_explorer_semantics(state, terminal)
+    } else {
+        uiterminal.register_terminal_semantics(state, bounds, terminal.scroll)
+    }
 }
 
 // Resolve layout-dependent presentation interaction before drawing begins.

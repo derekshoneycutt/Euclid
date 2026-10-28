@@ -142,7 +142,9 @@ terminal_init_geometry :: proc(term: ^viewterminalmodel.Terminal_State) {
 
 // Release terminal semantic owners after initialization fails.
 terminal_rollback_init :: proc(
-    term: ^viewterminalmodel.Terminal_State, history: ^termhist.Termhist_State) {
+    term: ^viewterminalmodel.Terminal_State, history: ^termhist.Termhist_State,
+    allocator: mem.Allocator) {
+    history_explorer_destroy(&term.history_explorer, allocator)
     termhist.termhist_destroy(history)
 }
 
@@ -154,22 +156,26 @@ terminal_construct_candidate :: proc(
     history := &term.history_storage
     if !termhist.termhist_init_with_allocator(
         history, TERMINAL_INITIAL_TEXT_CAPACITY, allocator) {
-        terminal_rollback_init(term, history)
+        terminal_rollback_init(term, history, allocator)
+        return false
+    }
+    if !history_explorer_init(&term.history_explorer, allocator) {
+        terminal_rollback_init(term, history, allocator)
         return false
     }
     if !terminal_init_retained_storage(term, allocator) {
-        terminal_rollback_init(term, history)
+        terminal_rollback_init(term, history, allocator)
         return false
     }
 
     if !terminal_output_init(
         term, allocator, allocator, ambiguous_width) {
-        terminal_rollback_init(term, history)
+        terminal_rollback_init(term, history, allocator)
         return false
     }
     if !terminal_highlight_init(term, allocator) {
         terminal_output_destroy(term)
-        terminal_rollback_init(term, history)
+        terminal_rollback_init(term, history, allocator)
         return false
     }
     return true
@@ -512,6 +518,7 @@ terminal_destroy_semantics :: proc(
     terminal_log_clipboard_teardown(term)
     terminal_highlight_destroy(term, allocator)
 
+    history_explorer_destroy(&term.history_explorer, allocator)
     if term.history != nil {
         termhist.termhist_destroy(term.history)
         term.history = nil
@@ -909,14 +916,20 @@ terminal_update :: proc(
             term, request.font, request.bounds)
     }
     focused := input.input_frame_terminal_focused(request.frame)
+    explorer_was_active := term.history_explorer.active
     keyboard := terminal_update_keyboard(term, request.frame, focused)
-    hyperlink_activation := terminal_update_hyperlink_click(
-        term, request.frame, request.bounds)
-    terminal_update_mouse_selection(
-        term, request.frame, request.font, request.bounds)
-    terminal_update_clipboard_copy(term, request.frame, focused)
-    completion := terminal_apply_keyboard_update(term, keyboard, request.now)
-    terminal_highlight_observe_live(term, request.now)
+    hyperlink_activation: Terminal_Hyperlink_Activation
+    completion: Terminal_Completion_Request
+    explorer_owned_input := explorer_was_active || term.history_explorer.active
+    if !explorer_owned_input {
+        hyperlink_activation = terminal_update_hyperlink_click(
+            term, request.frame, request.bounds)
+        terminal_update_mouse_selection(
+            term, request.frame, request.font, request.bounds)
+        terminal_update_clipboard_copy(term, request.frame, focused)
+        completion = terminal_apply_keyboard_update(term, keyboard, request.now)
+        terminal_highlight_observe_live(term, request.now)
+    }
     return {
         submission = keyboard.submission,
         completion = completion,

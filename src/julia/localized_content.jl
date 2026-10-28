@@ -21,7 +21,7 @@ end
 
 const RECORD_CAPACITIES = (
     :locales => 4,
-    :ui_messages => 115,
+    :ui_messages => 133,
     :ui_arguments => 32,
     :translations => 384,
     :subjects => 139,
@@ -192,8 +192,10 @@ function _validate_messages(messages::Vector{UiMessageDeclaration})
     by_key = Dict{String,UiMessageDeclaration}()
     native_ids = Set{UInt16}()
     for message in messages
-        message.native_id != 0 || throw(ArgumentError("native message ID must be nonzero"))
-        message.native_id in native_ids && throw(ArgumentError("duplicate native message ID"))
+        message.native_id != 0 || throw(
+            ArgumentError("native message ID must be nonzero"))
+        message.native_id in native_ids && throw(
+            ArgumentError("duplicate native message ID"))
         push!(native_ids, message.native_id)
         _validate_text(message.key, "message key", 64)
         occursin(r"^[a-z][a-z0-9._-]*$", message.key) ||
@@ -232,7 +234,8 @@ function _validate_translations(
         translation.locale_tag in locales ||
             throw(ArgumentError("translation references an unknown locale"))
         message = get(messages, translation.message_key, nothing)
-        message === nothing && throw(ArgumentError("translation references an unknown message"))
+        message === nothing && throw(
+            ArgumentError("translation references an unknown message"))
         key = (translation.locale_tag, translation.message_key)
         key in translated && throw(ArgumentError("duplicate message translation"))
         push!(translated, key)
@@ -265,11 +268,13 @@ function _template_argument_names(template::String)
             throw(ArgumentError("message template has an unmatched closing brace"))
         elseif character == '{'
             closing = findnext(isequal('}'), template, nextind(template, index))
-            closing === nothing && throw(ArgumentError("message template has an open brace"))
+            closing === nothing && throw(
+                ArgumentError("message template has an open brace"))
             body_start = nextind(template, index)
             body = body_start == closing ? "" :
                 template[body_start:prevind(template, closing)]
-            occursin('{', body) && throw(ArgumentError("nested message placeholders are invalid"))
+            occursin('{', body) && throw(
+                ArgumentError("nested message placeholders are invalid"))
             occursin(r"^[a-z][a-z0-9_]{0,31}$", body) ||
                 throw(ArgumentError("message placeholder name is malformed"))
             push!(names, body)
@@ -329,7 +334,8 @@ function _validate_editions(editions::Vector{EditionDeclaration})
         _validate_text(edition.text_language_tag, "edition language tag", 35)
         _validate_text(edition.description, "edition description", 1024)
         haskey(by_id, edition.edition_id) && throw(ArgumentError("duplicate edition ID"))
-        edition.unique_name in unique_names && throw(ArgumentError("duplicate edition name"))
+        edition.unique_name in unique_names && throw(
+            ArgumentError("duplicate edition name"))
         push!(unique_names, edition.unique_name)
         by_id[edition.edition_id] = edition
     end

@@ -57,6 +57,100 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "Terminal"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1020), "ui.terminal.history.query",
+            "Unboxed Terminal history query label.",
+            LocalizedContent.MessageArgument[]),
+        "History search: "),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1021), "ui.terminal.history.hints",
+            "Terminal history recall and cancellation hints.",
+            LocalizedContent.MessageArgument[]),
+        "Enter: recall   Esc: cancel"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1022), "ui.terminal.history.compact",
+            "Terminal history minimum-size instruction.",
+            LocalizedContent.MessageArgument[]),
+        "Enlarge Terminal to explore history. Esc: cancel"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1023), "ui.terminal.history.searching",
+            "History scan is still in progress, not an empty result.",
+            LocalizedContent.MessageArgument[]),
+        "Searching history..."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1024), "ui.terminal.history.empty",
+            "Exhausted history scan with no matches.",
+            LocalizedContent.MessageArgument[]),
+        "No matching history"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1025), "ui.terminal.history.unavailable",
+            "History store unavailable.",
+            LocalizedContent.MessageArgument[]),
+        "Terminal history unavailable"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1026), "ui.terminal.history.failed",
+            "History scan failed.",
+            LocalizedContent.MessageArgument[]),
+        "History search failed"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1027), "ui.terminal.history.capacity",
+            "History query or result exceeded bounded capacity.",
+            LocalizedContent.MessageArgument[]),
+        "History capacity exceeded"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1028), "ui.terminal.history.ready",
+            "A working history page is loaded; not a whole-history count.",
+            LocalizedContent.MessageArgument[]),
+        "Loaded history"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1029), "ui.terminal.history.preview",
+            "Accessible name for the scrollable exact-source preview.",
+            LocalizedContent.MessageArgument[]),
+        "History source preview"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1030), "ui.terminal.history.preview_loading",
+            "Selected history source is loading.",
+            LocalizedContent.MessageArgument[]),
+        "Loading source..."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1031), "ui.terminal.history.preview_failed",
+            "Selected history source could not be loaded.",
+            LocalizedContent.MessageArgument[]),
+        "Source preview failed"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1032), "ui.terminal.history.preview_capacity",
+            "Selected history source exceeded preview capacity.",
+            LocalizedContent.MessageArgument[]),
+        "Source exceeds preview capacity"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1033), "ui.terminal.history.age_now",
+            "Recent or future-dated history submission.",
+            LocalizedContent.MessageArgument[]),
+        "now"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1034), "ui.terminal.history.age_seconds",
+            "Compact history age in seconds.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count", LocalizedContent.Int64Argument)]),
+        "{count}s"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1035), "ui.terminal.history.age_minutes",
+            "Compact history age in minutes.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count", LocalizedContent.Int64Argument)]),
+        "{count}m"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1036), "ui.terminal.history.age_hours",
+            "Compact history age in hours.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count", LocalizedContent.Int64Argument)]),
+        "{count}h"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1037), "ui.terminal.history.age_days",
+            "Compact history age in days.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count", LocalizedContent.Int64Argument)]),
+        "{count}d"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1101), "ui.library.search_input",
             "Search input label and placeholder.",
             LocalizedContent.MessageArgument[]),

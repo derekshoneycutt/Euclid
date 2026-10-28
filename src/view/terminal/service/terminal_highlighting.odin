@@ -89,6 +89,7 @@ terminal_highlight_schedule_source_read :: proc(state: ^core.Euclid_General_Stat
     request: historyruntime.History_Read_Request = {
         kind = .By_Id,
         priority = .Speculative,
+        target = .Highlighting,
         submission_id = id,
         request_id = term^.history_source_request_id,
         terminal_generation = term^.animation_generation,

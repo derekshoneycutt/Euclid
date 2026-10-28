@@ -117,6 +117,7 @@ context_menu_target_valid :: proc(state: ^core.Euclid_General_State) -> bool {
     }
     if menu^.target.domain == .Terminal {
         return uiterminal.is_terminal_selected(state) &&
+            !state^.terminal.history_explorer.active &&
             menu^.target == uiterminal.terminal_semantic_id(state) &&
             menu^.process_id == u64(state^.shell.operation_id.slot) &&
             menu^.process_generation == state^.shell.operation_id.generation
@@ -303,7 +304,8 @@ context_menu_pointer_target :: proc(
         if terminalview.terminal_mouse_reporting_owns_pointer(&state^.terminal, frame) {
             return {}
         }
-        if !state^.terminal.initialized || !state^.terminal.julia_session_ready {
+        if !state^.terminal.initialized || !state^.terminal.julia_session_ready ||
+            state^.terminal.history_explorer.active {
             return {}
         }
         return uiterminal.terminal_semantic_id(state)

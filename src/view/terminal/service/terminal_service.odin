@@ -474,18 +474,22 @@ terminal_service_consume_history_read :: proc(state: ^core.Euclid_General_State)
     if history^.persistence_status == .Failed {
         terminal_service_notify_persistence_failure(term)
     }
-    if completion.request.priority == .Speculative {
+    if completion.request.target == .Highlighting {
         terminal_service_consume_highlight_source(term, completion, consumed)
         return
     }
-    terminal_service_apply_navigation_read(term, completion, consumed)
+    if completion.request.target == .Navigation {
+        terminal_service_apply_navigation_read(term, completion, consumed)
+    } else {
+        log.error("terminal_history_read_target_invalid")
+    }
 }
 
 // Select the owner-bounded destination for one interactive or speculative read.
 terminal_service_history_read_destination :: proc(
     term: ^viewterminalmodel.Terminal_State,
     request: historyruntime.History_Read_Request) -> []u8 {
-    if request.priority == .Speculative {
+    if request.target == .Highlighting {
         slot := terminalview.terminal_highlight_source_fetch_slot(
             term, request.request_id)
         if slot != nil {
@@ -737,6 +741,7 @@ terminal_service_routed_frame :: proc(
 // Continue non-visual Terminal owners while its selected View is hidden.
 terminal_service_update_hidden :: proc(
     state: ^core.Euclid_General_State) {
+    terminal_service_retire_history_explorer(state)
     shell_service_update(state)
     terminal_graphics_update(state)
 }
@@ -755,9 +760,12 @@ terminal_service_update_visible :: proc(
         input_runtime != nil && card(input_runtime^.mouse_captured) > 0)
     shell_service_update(
         state, input_runtime, prepared.content_frame, prepared.geometry_change)
+    state^.terminal.history_explorer_open_allowed =
+        state^.shell.phase == .Inactive
     update := uiterminal.terminal_update(
         &state^.terminal, prepared.content_frame, terminal_font, bounds)
     terminal_service_consume_history_read(state)
+    terminal_service_update_history_explorer(state)
     update.geometry_change = prepared.geometry_change
     terminal_service_apply_submission(state, update.submission)
     terminal_service_schedule_history_read(state)
@@ -772,6 +780,7 @@ terminal_service_update_visible :: proc(
         &state^.terminal, update.hyperlink_activation, {
             activate = terminal_service_open_uri,
         })
+    uiterminal.terminal_refresh_explorer_frame(state, &prepared)
     return prepared
 }
 
@@ -781,6 +790,7 @@ terminal_service_update :: proc(
     frame: input.Input_Frame) -> uiterminal.Terminal_Prepared_Frame {
     shell_service_maintenance(state)
     if !terminal_animation_selected(state) {
+        terminal_service_retire_history_explorer(state)
         return {}
     }
     if !state^.terminal.initialized && !terminal_service_enter(state) {
@@ -793,6 +803,7 @@ terminal_service_update :: proc(
         return {}
     }
     if !state^.terminal.julia_session_ready {
+        terminal_service_retire_history_explorer(state)
         return {}
     }
     return terminal_service_update_visible(state, input_runtime, frame)

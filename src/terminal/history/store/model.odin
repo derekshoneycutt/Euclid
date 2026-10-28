@@ -101,6 +101,57 @@ History_Read_Result :: struct {
     failure: History_Store_Error,
 }
 
+// Search bounds are bytes and logical candidates, not SQLite execution-time limits.
+HISTORY_SEARCH_QUERY_MAX_BYTES :: 1024
+HISTORY_SEARCH_CANDIDATE_MAX :: 64
+HISTORY_SEARCH_SUMMARY_MAX_BYTES :: 256
+
+// An invalid cursor starts Older at the newest end, or Newer at the oldest end.
+History_Search_Direction :: enum u8 {
+    Older,
+    Newer,
+}
+
+// Search reuses the browse tuple; session-only order uses only its session source_id.
+History_Search_Request :: struct {
+    query: string,
+    direction: History_Search_Direction,
+    cursor: History_Browse_Cursor,
+    cursor_valid: bool,
+    include_persistent: bool,
+    candidate_budget: int,
+}
+
+// Summary offsets borrow the caller's byte destination, never SQLite column storage.
+// Source is an unflattened, uninterpreted grapheme-safe prefix, not recall text.
+History_Candidate_Summary :: struct {
+    record: History_Record,
+    source_length: int,
+    summary_offset: int,
+    summary_length: int,
+    summary_clipped: bool,
+}
+
+History_Search_Outcome :: enum u8 {
+    Failed,
+    Scanned,
+}
+
+// Only row_count and summary_bytes are published on success. A zero-match batch
+// can advance cursor without exhausting search. On output pressure the cursor
+// excludes the unconsumed matching row, which the next request must examine again.
+History_Search_Result :: struct {
+    outcome: History_Search_Outcome,
+    row_count: int,
+    summary_bytes: int,
+    examined_count: int,
+    cursor: History_Browse_Cursor,
+    cursor_valid: bool,
+    exhausted: bool,
+    output_full: bool,
+    failure: History_Store_Error,
+}
+
 // History_Store owns prepared statements while borrowing the caller's connection.
 History_Store :: struct {
     connection: ^sqlite.Connection,
@@ -116,6 +167,10 @@ History_Store :: struct {
     combined_older: sqlite.Statement,
     combined_newer: sqlite.Statement,
     combined_latest: sqlite.Statement,
+    search_older: sqlite.Statement,
+    search_newer: sqlite.Statement,
+    search_combined_older: sqlite.Statement,
+    search_combined_newer: sqlite.Statement,
     delete_persistent: sqlite.Statement,
     delete_session: sqlite.Statement,
     durable_available: bool,

@@ -823,7 +823,10 @@ shutdown_shared_user_data :: proc(
         if settings_done && history_done {
             return
         }
-        taskpool.task_pool_wait_for_progress(pool)
+        // A joined borrower can release the peer's turn without leaving active work.
+        if state^.preferences_runtime.settings_save_active || history^.task_active {
+            taskpool.task_pool_wait_for_progress(pool)
+        }
     }
 }
 

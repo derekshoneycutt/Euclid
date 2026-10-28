@@ -15,6 +15,7 @@ history_runtime_attach_generation :: proc(
         return
     }
     history^.terminal_generation = generation
+    history_runtime_retire_explorer(history)
     history^.interactive_read_count = 0
     history^.speculative_read_count = 0
     history^.read_result_ready = false
@@ -28,6 +29,7 @@ history_runtime_set_persistence :: proc(
         return false
     }
     history^.persist_enabled = enabled
+    history_runtime_retire_explorer(history)
     history^.visibility_epoch += 1
     if history^.visibility_epoch == 0 {
         history^.visibility_epoch = 1
@@ -66,6 +68,7 @@ history_runtime_has_work :: proc(
     return history^.task_active || history^.mutation_count > 0 ||
         history^.interactive_read_count > 0 ||
         history^.speculative_read_count > 0 ||
+        history_runtime_has_explorer_work(history) ||
         (history^.status == .Uninitialized && history^.connection != nil)
 }
 
@@ -74,7 +77,8 @@ history_runtime_has_pending_tasks :: proc(
     history: ^historyruntime.History_Runtime) -> bool {
     return history != nil && (history^.task_active ||
         history^.mutation_count > 0 || history^.interactive_read_count > 0 ||
-        history^.speculative_read_count > 0)
+        history^.speculative_read_count > 0 ||
+        history_runtime_has_explorer_work(history))
 }
 
 // Retire pending UI reads while preserving queued mutations and retained TEMP rows.
@@ -84,6 +88,7 @@ history_runtime_retire_reads :: proc(
         return
     }
     history^.retire_reads = true
+    history_runtime_retire_explorer(history)
     history^.interactive_read_count = 0
     history^.speculative_read_count = 0
     history^.read_result_ready = false
@@ -187,7 +192,8 @@ history_runtime_request_read :: proc(
          ((request.kind == .Older || request.kind == .Newer) &&
           !request.cursor_valid)) && request.submission_id == 0) ||
        request.request_id == 0 || request.terminal_generation == 0 ||
-       request.terminal_generation != history^.terminal_generation {
+       request.terminal_generation != history^.terminal_generation ||
+       (request.target != .Navigation && request.target != .Highlighting) {
         return false
     }
     queued_request := request
@@ -273,10 +279,10 @@ history_runtime_service :: proc(
             history, admission, pool, settings_ready, drain_work)
         return
     }
-    if history^.read_result_ready || history^.retire_reads {
+    if history^.retire_reads {
         return
     }
-    _ = history_runtime_submit_read(
+    _ = history_runtime_submit_next_read(
         history, admission, pool, settings_ready, drain_work)
 }
 
@@ -445,6 +451,10 @@ history_runtime_worker :: proc(
         return history_runtime_worker_mutation(history)
     case .Read:
         return history_runtime_worker_read(history)
+    case .Search:
+        return history_runtime_worker_search(history)
+    case .Preview:
+        return history_runtime_worker_preview(history)
     case .Destroy:
         history^.destroy_failure = termhiststore.history_store_destroy(&history^.store)
         return .Failed if history^.destroy_failure.kind != .None else .Succeeded
@@ -647,6 +657,10 @@ history_runtime_complete_task :: proc(
         history_runtime_complete_mutation(history, task_result)
     case .Read:
         history_runtime_complete_read(history, task_result)
+    case .Search:
+        history_runtime_complete_search(history, task_result)
+    case .Preview:
+        history_runtime_complete_preview(history, task_result)
     case .Destroy:
         history_runtime_complete_destroy(history, task_result)
     case .None:
@@ -689,6 +703,10 @@ history_runtime_complete_mutation :: proc(
     history^.last_write_result = history^.active_write_result
     history^.last_completed_mutation = history^.active_mutation
     history^.write_completion_serial += 1
+    if history^.active_write_result.outcome == .Stored ||
+       history^.active_write_result.outcome == .Updated {
+        history_runtime_retire_explorer(history)
+    }
     history_runtime_propagate_persistent_identity(history)
     if history^.active_write_result.persistence_failed {
         history^.persistence_status = .Failed
@@ -739,6 +757,7 @@ history_runtime_clear_pending_reads :: proc(
     history^.read_result_request = {}
     history^.read_result = {}
     history^.last_read_result = {}
+    history_runtime_retire_explorer(history)
     history_runtime_clear_bytes(history^.read_result_source[:])
 }
 
@@ -842,6 +861,7 @@ history_runtime_clear_task_payload :: proc(
         history^.active_read_request = {}
         history^.active_read_result = {}
     }
+    history_runtime_clear_explorer_payload(history, history^.task_kind)
     history^.task_kind = .None
 }
 

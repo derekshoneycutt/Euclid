@@ -1494,6 +1494,39 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
+            # Explorer allocator provenance (all calls forward the same allocator):
+            # src/view/terminal/service/terminal_service.odin: terminal_service_enter
+            # -> src/view/terminal/lifecycle.odin: terminal_init_for_animation
+            #    obtains animation_memory_allocator(&state.animation_memory)
+            # -> terminal_init_with_allocator -> terminal_construct_candidate
+            # -> src/view/terminal/history_explorer.odin: history_explorer_init
+            # -> history_explorer_allocate_buffers.
+            ReviewedAllocationPolicy(
+                "view-terminal-history-explorer-rows",
+                "src/view/terminal/history_explorer.odin",
+                "history_explorer_allocate_buffers",
+                :custom,
+                "One fixed-capacity candidate row buffer uses the animation-generation allocator forwarded through the Terminal initialization graph above. Allocation failure rolls back unpublished buffers; history_explorer_destroy releases published storage during Terminal teardown before animation-memory retirement.";
+                operation="make",
+                target="[]termhiststore.History_Candidate_Summary",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-history-explorer-text",
+                "src/view/terminal/history_explorer.odin",
+                "history_explorer_allocate_buffers",
+                :custom,
+                "Two fixed-capacity buffers for candidate summaries and exact-source preview use the animation-generation allocator forwarded through the Terminal initialization graph above. Allocation failure rolls back unpublished buffers; history_explorer_destroy releases published storage during Terminal teardown before animation-memory retirement.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
             ReviewedAllocationPolicy(
                 "view-terminal-retained-text",
                 "src/view/terminal/lifecycle.odin",

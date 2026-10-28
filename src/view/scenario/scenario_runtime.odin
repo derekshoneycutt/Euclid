@@ -92,7 +92,7 @@ Scenario_Key_Name :: struct {name: string, key: input.Input_Key}
 
 // Supported deterministic portable keys.
 SCENARIO_KEY_NAMES :: [?]Scenario_Key_Name{
-    {"a", .A}, {"z", .Z},
+    {"a", .A}, {"r", .R}, {"s", .S}, {"z", .Z},
     {"escape", .Escape}, {"enter", .Enter}, {"space", .Space}, {"tab", .Tab},
     {"backspace", .Backspace}, {"delete", .Delete},
     {"left", .Left}, {"right", .Right}, {"up", .Up}, {"down", .Down},
@@ -932,6 +932,8 @@ scenario_issue_generic_action :: proc(
     case .Assert_Library_Search:
         search := &runtime.state^.ui_runtime.library.search
         return true, string(search^.query[:search^.query_length]) == text
+    case .Assert_Terminal_Editor:
+        return true, scenario_terminal_editor_matches(runtime, command)
     case:
     }
     if handled, accepted := scenario_issue_particle_action(
@@ -958,6 +960,10 @@ scenario_issue_terminal_action :: proc(
         return true, scenario_terminal_contains(runtime.state, text)
     case .Wait_Terminal_History_Idle:
         return true, scenario_terminal_history_idle(runtime)
+    case .Wait_Terminal_Explorer:
+        return true, scenario_terminal_explorer_matches(runtime, text)
+    case .Assert_Terminal_Preview:
+        return true, scenario_terminal_preview_matches(runtime, text)
     case .Confirm_Terminal_History_Delete:
         return true, scenario_confirm_terminal_history_delete(runtime, text)
     case:
