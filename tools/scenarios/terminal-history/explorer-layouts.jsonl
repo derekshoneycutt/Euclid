@@ -18,6 +18,9 @@
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"key":"up"}
 {"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"type":"text"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    text = \"A deliberately long literal source line to inspect soft wrapping while preserving    indentation.\"\n    length(text)\nend"}
 {"screenshot":".build/explorer-scale-100.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"set_setting":{"key":"interface.text_size_percent","value":125}}
@@ -36,6 +39,14 @@
 {"set_splitters":{"vertical":900,"horizontal":780}}
 {"screenshot":".build/explorer-compact.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"type":"?"}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"","mode":"help","cursor":0,"anchor":0,"evaluation_requests":2}}
+{"screenshot":".build/explorer-compact-help.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"escape"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
 {"key":"escape"}
 {"wait_terminal_explorer":"closed","timeout_ms":10000}
 {"assert_terminal_editor":{"source":"","mode":"help","cursor":0,"anchor":0,"evaluation_requests":2}}

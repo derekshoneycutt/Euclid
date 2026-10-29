@@ -38,6 +38,10 @@ terminal_service_update_history_explorer :: proc(
         return
     }
     history := &state^.terminal_history_runtime
+    if explorer.help != .None {
+        terminal_service_consume_explorer_completions(state)
+        return
+    }
     if explorer^.identity.runtime_epoch != 0 &&
        !terminalview.history_runtime_explorer_current(history, explorer^.identity) {
         terminalview.history_explorer_query_changed(explorer)
@@ -144,15 +148,15 @@ terminal_service_start_explorer_query :: proc(
     explorer^.query_dirty = false
     explorer^.search_pending = false
     explorer^.preview_pending = false
-    explorer^.scan_direction = .Older
-    explorer^.scan_cursor = {}
-    explorer^.scan_cursor_valid = false
+    explorer^.search_direction = .Older
+    explorer^.search_cursor = {}
+    explorer^.search_cursor_valid = false
     explorer^.page_request = .None
     explorer^.status = .Searching
     return true
 }
 
-// Submit one bounded literal-search window and retain visible admission failures.
+// Submit one chronological matching page and retain visible admission failures.
 terminal_service_request_explorer_search :: proc(
     state: ^core.Euclid_General_State) {
     explorer := &state^.terminal.history_explorer
@@ -168,12 +172,12 @@ terminal_service_request_explorer_search :: proc(
     request: historyruntime.History_Search_Request = {
         identity = explorer^.identity,
         request_id = explorer^.next_search_request_id,
-        scan = {
+        page = {
             query = query,
-            direction = .Older if explorer^.scan_direction == .Older else .Newer,
-            cursor = explorer^.scan_cursor,
-            cursor_valid = explorer^.scan_cursor_valid,
-            candidate_budget = len(explorer^.rows),
+            direction = .Older if explorer^.search_direction == .Older else .Newer,
+            cursor = explorer^.search_cursor,
+            cursor_valid = explorer^.search_cursor_valid,
+            result_limit = len(explorer^.rows),
         },
     }
     outcome := terminal_service_request_history_search(state, request)

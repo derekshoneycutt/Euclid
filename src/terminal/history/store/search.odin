@@ -38,7 +38,7 @@ history_store_prepare_search_combined :: proc(
         store, &store^.search_combined_newer, TERMINAL_HISTORY_SEARCH_COMBINED_NEWER_SQL)
 }
 
-// Scan one bounded logical window on the exclusively borrowed SQLite connection.
+// Execute one SQL-filtered page on the exclusively borrowed SQLite connection.
 // SQLite may allocate; native output is written only into caller-owned slices.
 // Reset releases the statement before return. Failed output must not be published.
 history_store_search :: proc(
@@ -51,15 +51,45 @@ history_store_search :: proc(
             failure = failure,
         }
     }
-    statement := history_store_search_statement(store, request)
-    failure = history_store_begin_statement(statement)
+    failure = history_store_admit_search(store, request)
     if failure.kind == .None {
-        failure = history_store_bind_search(statement, request)
+        failure = history_store_begin_search_execution(store)
+    }
+    if failure.kind != .None {
+        return {
+            failure = failure,
+        }
+    }
+    result := history_store_execute_search_page(store, request, rows, summaries)
+    result.skipped_regex_count = store.search.plan.skipped_regex_count
+    detach_failure := history_store_end_search_execution(store)
+    if detach_failure.kind != .None {
+        if result.failure.kind == .None {
+            return {
+                failure = detach_failure,
+            }
+        }
+        result.failure.cleanup_error = detach_failure.sqlite_error
+    }
+    return result
+}
+
+// Keep the statement reset inside the active callback/progress scope on every path.
+history_store_execute_search_page :: proc(
+    store: ^History_Store, request: History_Search_Request,
+    rows: []History_Candidate_Summary, summaries: []u8) -> History_Search_Result {
+    statement := history_store_search_statement(store, request)
+    failure := history_store_begin_statement(statement)
+    if failure.kind == .None {
+        failure = history_store_bind_search(store, statement, request, len(rows))
     }
     result: History_Search_Result
     if failure.kind == .None {
-        result = history_store_search_window(statement, request, rows, summaries)
+        result = history_store_search_page(statement, request, rows, summaries)
         failure = result.failure
+    }
+    if store.search_adapter.failure.kind != .None {
+        failure = store.search_adapter.failure
     }
     failure = history_store_reset_after(statement, failure)
     if failure.kind != .None {
@@ -85,8 +115,8 @@ history_store_validate_search :: proc(
             kind = .Capacity,
         }
     }
-    if request.candidate_budget <= 0 ||
-       request.candidate_budget > HISTORY_SEARCH_CANDIDATE_MAX ||
+    if request.search_identity > u64(max(i64)) || request.result_limit <= 0 ||
+       request.result_limit > HISTORY_SEARCH_RESULT_MAX ||
        (request.direction != .Older && request.direction != .Newer) {
         return {
             kind = .Invalid_Argument,
@@ -127,14 +157,14 @@ history_store_search_statement :: proc(
 
 // Bind sparse session slots and the complete combined cursor using the same ABI.
 history_store_bind_search :: proc(
-    statement: ^sqlite.Statement,
-    request: History_Search_Request) -> History_Store_Error {
+    store: ^History_Store, statement: ^sqlite.Statement,
+    request: History_Search_Request, row_capacity: int) -> History_Store_Error {
     values: [5]i64 = {
         i64(request.cursor_valid),
         request.cursor.submitted_at_unix_ms,
         history_store_scope_to_i64(request.cursor.scope),
         i64(request.cursor.source_id),
-        i64(request.candidate_budget),
+        i64(min(request.result_limit, row_capacity) + 1),
     }
     for index in 0..<len(values) {
         if !request.include_persistent && (index == 1 || index == 2) {
@@ -145,28 +175,29 @@ history_store_bind_search :: proc(
             return failure
         }
     }
-    failure := sqlite_bind_text(statement, 6, request.query)
+    failure := sqlite_bind_i64(statement, 6, i64(store.search.identity))
     if failure.kind != .None {
         return failure
     }
-    return sqlite_bind_i64(statement, 7, HISTORY_SEARCH_PREFIX_BYTES)
+    failure = sqlite_bind_i64(statement, 7, HISTORY_SEARCH_PREFIX_BYTES)
+    if failure.kind != .None {
+        return failure
+    }
+    return sqlite_bind_i64(
+        statement, 8, i64(store.search.plan.effective_condition_count > 0))
 }
 
-// Advance past nonmatches too; never consume a match that could not be copied.
-history_store_search_window :: proc(
+// Read one extra matching row for truthful exhaustion, without consuming that row.
+history_store_search_page :: proc(
     statement: ^sqlite.Statement, request: History_Search_Request,
     rows: []History_Candidate_Summary,
     summaries: []u8) -> History_Search_Result {
     result: History_Search_Result = {
-        outcome = .Scanned,
+        outcome = .Complete,
         cursor = request.cursor,
         cursor_valid = request.cursor_valid,
     }
-    for result.examined_count < request.candidate_budget {
-        if result.row_count == len(rows) {
-            result.output_full = true
-            break
-        }
+    for {
         status, failure := history_store_step(statement)
         if failure.kind != .None {
             result.failure = failure
@@ -176,7 +207,10 @@ history_store_search_window :: proc(
             result.exhausted = true
             break
         }
-        result.examined_count += 1
+        if result.row_count == min(len(rows), request.result_limit) {
+            result.output_full = true
+            break
+        }
         if !history_store_search_consume(statement, rows, summaries, &result) {
             break
         }
@@ -184,7 +218,7 @@ history_store_search_window :: proc(
     return result
 }
 
-// Validate row metadata even for a nonmatch, then publish its consumed position.
+// Validate matching row metadata and advance only after its summary has been copied.
 history_store_search_consume :: proc(
     statement: ^sqlite.Statement, rows: []History_Candidate_Summary,
     summaries: []u8, result: ^History_Search_Result) -> bool {
@@ -197,17 +231,7 @@ history_store_search_consume :: proc(
         result^.failure.kind = .Capacity
         return false
     }
-    matches, column_failure := sqlite.column_i64(statement, 10)
-    result^.failure = history_store_column_error(column_failure)
-    if result^.failure.kind != .None {
-        return false
-    }
-    if matches != 0 && matches != 1 {
-        result^.failure.kind = .Invalid_Data
-        return false
-    }
-    if matches == 1 &&
-       !history_store_search_copy_summary(statement, row, rows, summaries, result) {
+    if !history_store_search_copy_summary(statement, row, rows, summaries, result) {
         return false
     }
     result^.cursor = {

@@ -21,6 +21,9 @@ Operation :: enum {
     Finalize,
     Bind,
     Column,
+    Function,
+    Value,
+    Progress,
 }
 
 Step_Status :: enum {
@@ -58,6 +61,7 @@ Error :: struct {
 // One explicitly opened SQLite connection with exclusive sequential thread ownership.
 Connection :: struct {
     handle: ^raw.Database,
+    progress: Progress_Handler,
 }
 
 // One persistent statement tied to its connection's lifetime.

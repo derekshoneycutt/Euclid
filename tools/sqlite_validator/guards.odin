@@ -97,10 +97,42 @@ register_requirements :: proc(
                 }
                 guard.spellfix1 = true
             }
+        case "history_matches":
+            failure := sqlite.connection_register_scalar(connection, {
+                name = "history_matches",
+                argument_count = 3,
+                callback = history_match_fixture,
+            })
+            if failure.result != .Ok || failure.validation != .None {
+                return make_failure(
+                    execution, "capability", .Error,
+                    "history fixture registration failed")
+            }
         case:
             return make_failure(
                 execution, "capability", .Error, "unsupported provider capability")
         }
     }
     return nil
+}
+
+// Validate the SQL ABI with identity 1 and literal "source"; native grammar lives in store tests.
+history_match_fixture :: proc "c" (
+    call: ^sqlite.Function_Context, count: c.int, values: [^]^sqlite.Value) {
+    context = runtime.default_context()
+    if count != 3 {
+        sqlite.function_result_error(
+            call, .Error, "history fixture requires three arguments")
+        return
+    }
+    identity, identity_error := sqlite.value_i64(values[2])
+    mode, mode_error := sqlite.value_i64(values[1])
+    source, source_error := sqlite.value_text(call, values[0])
+    if identity_error.validation != .None || identity != 1 ||
+       mode_error.validation != .None || mode < 0 || mode > 3 ||
+       source_error.validation != .None || source_error.result != .Ok {
+        sqlite.function_result_error(call, .Error, "invalid history fixture arguments")
+        return
+    }
+    sqlite.function_result_bool(call, strings.contains(source, "source"))
 }

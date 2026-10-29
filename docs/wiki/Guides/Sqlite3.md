@@ -367,6 +367,26 @@ lifetimes, typed bind and column operations, and structured errors. It deliberat
 not own schemas, application records, migrations, worker scheduling, or transaction
 policy. The content builder, content runtime, and user-data store each own those choices.
 
+The [scalar-function boundary](../../../src/sqlite/function.odin) adds strict INTEGER
+and callback-lifetime TEXT reads, boolean/error/OOM results, and application-only
+`DIRECTONLY` registration without a deterministic flag. Validation failure retains
+caller ownership; a native `_v2` registration attempt transfers destructor
+notification even on failure. Replacement, unregister, and close each notify the
+registered owner exactly once. Inline application adapters must outlive that
+notification; SQLite does not free their surrounding owner.
+
+The [progress boundary](../../../src/sqlite/progress.odin) tracks the connection's
+installed handler. An exclusive temporary user must chain the prior handler and
+restore its registration before releasing admission. History search uses this
+scope together with PCRE2 cancellation, without a connection-wide interrupt or
+auxdata-owned compilation. Its SQL filters full source before matching-row limits;
+neither an FTS index nor a history schema change is involved.
+
+The SQL validation runner requires an explicit `history_matches` fixture capability
+for the history case. It checks the scalar's three-argument ABI using identity `1`
+and the fixed literal query `source`; it does not claim to validate native grammar.
+Store tests execute the real registered predicate, compiled plans, and query plans.
+
 The vendored SQLite build includes FTS5 and the spellfix extension needed by the content
 index. Runtime extension loading is not used. Connections must have exclusive,
 sequential ownership; the content worker owns its connection, while the user-data store

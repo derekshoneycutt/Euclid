@@ -112,36 +112,18 @@ history_explorer_open :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
 // Reset bounded transient data and activate a fresh empty query session.
 history_explorer_reset_for_open :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State) {
-    explorer^.identity = {}
+    history_explorer_clear_page(explorer)
     explorer^.active = true
+    explorer.help = .None
+    explorer.help_scroll_lines = 0
+    explorer.saved_query = {}
+    explorer.saved_query_length = 0
+    explorer.saved_query_cursor, explorer.saved_query_anchor = 0, 0
     explorer^.close_requested = false
-    explorer^.accept_requested = false
-    explorer^.query_dirty = true
-    explorer^.search_pending = false
-    explorer^.preview_pending = false
-    explorer^.search_request_id = 0
-    explorer^.preview_request_id = 0
-    explorer^.row_count = 0
-    explorer^.selected_index = -1
-    explorer^.preview_length = 0
-    explorer^.preview_record = {}
-    explorer^.scan_direction = .Older
-    explorer^.scan_cursor = {}
-    explorer^.scan_cursor_valid = false
-    explorer^.page_older_cursor = {}
-    explorer^.page_older_cursor_valid = false
-    explorer^.page_newer_cursor = {}
-    explorer^.page_newer_cursor_valid = false
-    explorer^.older_available = true
-    explorer^.newer_available = false
-    explorer^.page_request = .None
     explorer^.list_scroll_rows = 0
     explorer^.list_visible_selection = -1
     explorer^.query_pointer_selecting = false
     explorer^.preview_scroll_lines = 0
-    explorer^.status_failure = {}
-    explorer^.status = .Searching
-    explorer^.preview_status = .Idle
     termhist.termhist_reset_undo(&explorer^.query_editor)
 }
 
@@ -175,17 +157,32 @@ history_explorer_retire_navigation_requests :: proc(
     term^.history_navigation_admission_reported = false
 }
 
-// Start a new query identity and discard candidates from the prior literal query.
+// Suspend a page for exact help sentinels, or invalidate it for a new query.
 history_explorer_query_changed :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State) {
     if explorer == nil || !explorer^.active {
         return
     }
+    help := history_explorer_help_kind(
+        termhist.termhist_current_text(&explorer.query_editor))
+    if help != .None {
+        explorer.help = help
+        explorer.help_scroll_lines = 0
+        explorer.accept_requested = false
+        return
+    }
+    explorer.help = .None
     termhist.termhist_reset_undo(&explorer^.query_editor)
     explorer^.query_generation += 1
     if explorer^.query_generation == 0 {
         explorer^.query_generation = 1
     }
+    history_explorer_clear_page(explorer)
+}
+
+// Invalidate page, source, ranges, and request identities together before new admission.
+history_explorer_clear_page :: proc(
+    explorer: ^viewterminalmodel.History_Explorer_State) {
     explorer^.identity = {}
     explorer^.query_dirty = true
     explorer^.accept_requested = false
@@ -197,9 +194,11 @@ history_explorer_query_changed :: proc(
     explorer^.selected_index = -1
     explorer^.preview_length = 0
     explorer^.preview_record = {}
-    explorer^.scan_direction = .Older
-    explorer^.scan_cursor = {}
-    explorer^.scan_cursor_valid = false
+    explorer.preview_matches = {}
+    explorer.skipped_regex_count = 0
+    explorer^.search_direction = .Older
+    explorer^.search_cursor = {}
+    explorer^.search_cursor_valid = false
     explorer^.page_older_cursor = {}
     explorer^.page_older_cursor_valid = false
     explorer^.page_newer_cursor = {}
@@ -216,7 +215,8 @@ history_explorer_query_changed :: proc(
 history_explorer_select_candidate :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State, index: int) -> bool {
     if explorer == nil || !explorer^.active || index < 0 ||
-       index >= explorer^.row_count || explorer^.selected_index == index {
+       index >= explorer^.row_count || explorer^.selected_index == index ||
+       explorer.help != .None {
         return false
     }
     explorer^.selected_index = index
@@ -235,7 +235,8 @@ history_explorer_request_page :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     direction: viewterminalmodel.History_Explorer_Page_Direction) -> bool {
     if explorer == nil || !explorer^.active || explorer^.row_count == 0 ||
-       explorer^.search_pending || explorer^.page_request != .None {
+       explorer^.search_pending || explorer^.page_request != .None ||
+       explorer.help != .None {
         return false
     }
     if direction == .Older && !explorer^.older_available ||
@@ -250,9 +251,9 @@ history_explorer_request_page :: proc(
     explorer^.page_request = direction
     explorer^.accept_requested = false
     explorer^.search_request_id = 0
-    explorer^.scan_direction = direction
-    explorer^.scan_cursor_valid = true
-    explorer^.scan_cursor = explorer^.page_older_cursor if direction == .Older else
+    explorer^.search_direction = direction
+    explorer^.search_cursor_valid = true
+    explorer^.search_cursor = explorer^.page_older_cursor if direction == .Older else
         explorer^.page_newer_cursor
     explorer^.search_pending = false
     explorer^.status = .Searching
@@ -269,7 +270,7 @@ history_explorer_record_cursor :: proc(
     }
 }
 
-// Publish one joined search result, preserving progress across empty scan windows.
+// Publish one joined SQL-filtered page or its truthful directional boundary.
 history_explorer_publish_search :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     completion: historyruntime.History_Search_Completion) {
@@ -281,7 +282,9 @@ history_explorer_publish_search :: proc(
     explorer^.search_pending = false
     explorer^.search_request_id = 0
     result := completion.result
-    if result.outcome != .Scanned {
+    explorer.row_ranges = completion.ranges
+    explorer.skipped_regex_count = result.skipped_regex_count
+    if result.outcome != .Complete {
         explorer^.status_failure = result.failure
         explorer^.status = .Capacity if result.failure.kind == .Capacity else .Failed
         explorer^.page_request = .None
@@ -291,7 +294,7 @@ history_explorer_publish_search :: proc(
         history_explorer_publish_search_rows(explorer, result)
         return
     }
-    history_explorer_publish_empty_window(explorer, result)
+    history_explorer_publish_boundary(explorer, result)
 }
 
 // Publish one complete page and select its nearest candidate to the prior page.
@@ -303,7 +306,7 @@ history_explorer_publish_search_rows :: proc(
     explorer^.row_count = result.row_count
     explorer^.list_visible_selection = -1
     explorer^.preview_scroll_lines = 0
-    if explorer^.scan_direction == .Older {
+    if explorer^.search_direction == .Older {
         history_explorer_reverse_rows(explorer)
         explorer^.selected_index = explorer^.row_count - 1
     } else {
@@ -315,8 +318,8 @@ history_explorer_publish_search_rows :: proc(
     explorer^.preview_length = 0
     explorer^.preview_record = {}
     explorer^.status = .Ready
-    explorer^.scan_cursor = result.cursor
-    explorer^.scan_cursor_valid = result.cursor_valid
+    explorer^.search_cursor = result.cursor
+    explorer^.search_cursor_valid = result.cursor_valid
     history_explorer_update_page_cursors(explorer, result, initial_page)
     explorer^.page_request = .None
 }
@@ -325,7 +328,7 @@ history_explorer_publish_search_rows :: proc(
 history_explorer_update_page_cursors :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     result: termhiststore.History_Search_Result, initial_page: bool) {
-    if explorer^.scan_direction == .Older {
+    if explorer^.search_direction == .Older {
         explorer^.page_older_cursor = result.cursor
         explorer^.page_older_cursor_valid = result.cursor_valid
         explorer^.page_newer_cursor =
@@ -344,17 +347,13 @@ history_explorer_update_page_cursors :: proc(
     }
 }
 
-// Preserve cursor progress through empty windows until the directional scan ends.
-history_explorer_publish_empty_window :: proc(
+// An empty completed page is a boundary, not a request for another page window.
+history_explorer_publish_boundary :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     result: termhiststore.History_Search_Result) {
-    explorer^.scan_cursor = result.cursor
-    explorer^.scan_cursor_valid = result.cursor_valid
-    if !result.exhausted {
-        explorer^.status = .Searching
-        return
-    }
-    if explorer^.scan_direction == .Older {
+    explorer^.search_cursor = result.cursor
+    explorer^.search_cursor_valid = result.cursor_valid
+    if explorer^.search_direction == .Older {
         explorer^.older_available = false
     } else {
         explorer^.newer_available = false
@@ -399,6 +398,7 @@ history_explorer_publish_preview :: proc(
         return
     }
     explorer^.preview_record = record
+    explorer.preview_matches = completion.matches
     explorer^.preview_length = completion.result.source_length
     explorer^.preview_status = .Ready
 }
@@ -436,6 +436,7 @@ history_explorer_accept_is_ready :: proc(
     term: ^viewterminalmodel.Terminal_State,
     identity: historyruntime.History_Explorer_Identity) -> bool {
     return term != nil && term^.history_explorer.active &&
+        term.history_explorer.help == .None &&
         term^.history_explorer.accept_requested &&
         term^.history_explorer.identity == identity && !term^.awaiting_eval &&
         term^.banner_ready && !term^.collecting_continuation &&
@@ -463,6 +464,7 @@ history_explorer_insert_query :: proc(
     if explorer == nil || !explorer^.active || !utf8.valid_string(text) {
         return false
     }
+    history_explorer_save_query(explorer)
     start, end := termhist.termhist_selection_range(&explorer^.query_editor)
     next_length := explorer^.query_editor.text_len - (end - start) + len(text)
     if next_length > termhiststore.HISTORY_SEARCH_QUERY_MAX_BYTES {
@@ -483,6 +485,7 @@ history_explorer_commit_query :: proc(
     if explorer == nil || !explorer^.active || !utf8.valid_string(text) {
         return false
     }
+    history_explorer_save_query(explorer)
     start := explorer^.query_editor.cursor
     end := explorer^.query_editor.anchor
     if explorer^.query_editor.preedit_active {
@@ -533,6 +536,7 @@ history_explorer_update_event :: proc(
     term: ^viewterminalmodel.Terminal_State,
     event: input.Input_Event, clipboard_text: string) -> Terminal_Keyboard_Update {
     explorer := &term^.history_explorer
+    history_explorer_save_query(explorer)
     if event.text_target.kind != .None &&
        event.text_target.kind != .Terminal {
         return {}
@@ -627,6 +631,9 @@ history_explorer_update_key :: proc(
     term: ^viewterminalmodel.Terminal_State,
     event: input.Input_Event, clipboard_text: string) -> Terminal_Keyboard_Update {
     explorer := &term^.history_explorer
+    if history_explorer_help_key(explorer, event) {
+        return history_explorer_keyboard_effect(true)
+    }
     if update, handled := history_explorer_handle_close_key(term, event); handled {
         return update
     }
@@ -767,7 +774,7 @@ history_explorer_move_selection :: proc(
     return history_explorer_select_candidate(explorer, next)
 }
 
-// Restart a query scan from the oldest or newest eligible end.
+// Restart a query page from the oldest or newest eligible end.
 history_explorer_request_edge :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     direction: viewterminalmodel.History_Explorer_Page_Direction) {
@@ -782,9 +789,9 @@ history_explorer_request_edge :: proc(
     explorer^.accept_requested = false
     explorer^.preview_request_id = 0
     explorer^.preview_status = .Idle
-    explorer^.scan_direction = direction
-    explorer^.scan_cursor = {}
-    explorer^.scan_cursor_valid = false
+    explorer^.search_direction = direction
+    explorer^.search_cursor = {}
+    explorer^.search_cursor_valid = false
     explorer^.page_older_cursor = {}
     explorer^.page_older_cursor_valid = false
     explorer^.page_newer_cursor = {}
@@ -802,6 +809,7 @@ history_explorer_request_edge :: proc(
 history_explorer_edit_query :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     event: input.Input_Event) -> Terminal_Keyboard_Update {
+    history_explorer_save_query(explorer)
     effect := history_explorer_apply_query_key(&explorer^.query_editor, event)
     if effect.edited {
         history_explorer_query_changed(explorer)

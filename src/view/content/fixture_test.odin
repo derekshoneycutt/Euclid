@@ -17,8 +17,7 @@ INSERT INTO content_metadata SELECT CASE key
     ELSE key END, value FROM search_metadata;
 INSERT INTO content_metadata VALUES ('schema_version','3'),
     ('default_locale','en-US'), ('tool_compatibility','euclid-content-builder-v1'),
-    ('record_count','985'),
-    ('table_counts','1=6;2=1;3=133;4=17;5=133;6=139;7=138;8=138;9=3;10=139;11=138');
+    ('record_count','0'), ('table_counts','');
 CREATE TABLE locale(tag TEXT PRIMARY KEY, is_default INTEGER NOT NULL);
 INSERT INTO locale VALUES ('en-US',1);
 CREATE TABLE ui_message(message_key TEXT PRIMARY KEY, native_message_id INTEGER,
@@ -92,7 +91,7 @@ search_test_populate_content :: proc(database: ^sqlite3.Database) -> bool {
             return false
         }
     }
-    return true
+    return content_test_refresh_counts(database)
 }
 
 // Insert the current named wire signature so synthetic candidates obey native consumers.

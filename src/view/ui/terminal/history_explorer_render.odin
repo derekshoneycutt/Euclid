@@ -8,6 +8,7 @@ import coretext "../../../core/text"
 import protocol "../../../core/protocol"
 import termhist "../../../terminal/history"
 import termhiststore "../../../terminal/history/store"
+import termhistsearch "../../../terminal/history/search"
 import terminalview "../../terminal"
 import font "../../font"
 import native "../../native"
@@ -32,6 +33,7 @@ Terminal_Explorer_Source_Draw :: struct {
     source_end: int,
     rect: geometry.Rectangle,
     highlights: []protocol.Highlight_Run,
+    matches: []termhistsearch.Search_Range,
     flatten: bool,
 }
 
@@ -81,14 +83,16 @@ terminal_draw_explorer :: proc(
         now_ms = time.time_to_unix_nano(time.now()) / 1_000_000,
     }
     _ = native.draw_encoder_push_scissor(encoder, prepared.explorer.bounds)
-    if prepared.explorer.compact {
+    if state.terminal.history_explorer.help != .None {
+        terminal_explorer_draw_help(draw)
+    } else if prepared.explorer.compact {
         terminal_explorer_draw_compact(draw)
     } else {
         terminal_explorer_draw_query(draw)
         terminal_explorer_draw_rows(draw)
         terminal_explorer_draw_preview(draw)
         terminal_explorer_draw_text(draw, viewmessages.shell_message(state,
-            terminal_explorer_status_id(state^.terminal.history_explorer.status)),
+            terminal_explorer_status_message(&state.terminal.history_explorer)),
             prepared.explorer.status, theme.draw_color(encoder, .Text))
         terminal_explorer_draw_hints(draw)
     }
@@ -112,7 +116,13 @@ terminal_explorer_draw_hints :: proc(draw: Terminal_Explorer_Draw) {
 
 // Wrap the minimum-size instruction so narrow panes still expose cancellation.
 terminal_explorer_draw_compact :: proc(draw: Terminal_Explorer_Draw) {
-    source := viewmessages.shell_message(draw.state, .Terminal_History_Compact)
+    terminal_explorer_draw_compact_message(draw, .Terminal_History_Compact)
+}
+
+// Wrap localized compact instructions without clipping away cancellation/restoration.
+terminal_explorer_draw_compact_message :: proc(
+    draw: Terminal_Explorer_Draw, message: content.Content_Message_Id) {
+    source := viewmessages.shell_message(draw.state, message)
     rect := draw.prepared.explorer.bounds
     rect.height = draw.prepared.layout.line_height
     columns := max(1, int(rect.width / draw.prepared.layout.column_width))
@@ -301,10 +311,13 @@ terminal_explorer_draw_row :: proc(draw: Terminal_Explorer_Draw, index: int) {
         theme.draw_color(draw.encoder, .Terminal_Package if selected else .Text))
     rect.x += 2*draw.prepared.layout.column_width
     rect.width = layout.source_width
+    matches_max := row.matches.offset + row.matches.count
     summary := string(explorer^.summaries[
         row.summary_offset:row.summary_offset + row.summary_length])
-    terminal_explorer_draw_summary(draw, summary, rect,
-        terminal_explorer_highlights(draw.state, row.record))
+    terminal_explorer_draw_summary(draw, summary, rect, {
+        highlights = terminal_explorer_highlights(draw.state, row.record),
+        matches = explorer.row_ranges[row.matches.offset:matches_max],
+    })
     rect.x, rect.width = layout.mode_x, layout.age_x - layout.mode_x -
         draw.prepared.layout.column_width
     terminal_explorer_draw_mode(draw, row.record.mode, selected, rect)
@@ -334,23 +347,20 @@ terminal_explorer_highlights :: proc(
 // Draw a sanitized summary while retaining the source offsets for cached styles.
 terminal_explorer_draw_summary :: proc(
     draw: Terminal_Explorer_Draw, source: string, rect: geometry.Rectangle,
-    highlights: []protocol.Highlight_Run) {
+    source_draw: Terminal_Explorer_Source_Draw) {
     columns := max(0, int(rect.width / draw.prepared.layout.column_width))
     buffer: [4096]u8
     row := terminal_explorer_text_row(source, 0, columns, buffer[:], true)
-    if len(highlights) == 0 {
+    if len(source_draw.highlights) == 0 && len(source_draw.matches) == 0 {
         terminal_explorer_draw_text(
             draw, row.text, rect, theme.draw_color(draw.encoder, .Text))
         return
     }
-    terminal_explorer_draw_source_range(draw, {
-        source = source,
-        source_start = row.source_start,
-        source_end = row.source_end,
-        rect = rect,
-        highlights = highlights,
-        flatten = true,
-    })
+    mapped := source_draw
+    mapped.source = source
+    mapped.source_start, mapped.source_end = row.source_start, row.source_end
+    mapped.rect, mapped.flatten = rect, true
+    terminal_explorer_draw_source_range(draw, mapped)
 }
 
 // Draw mapped grapheme fragments without exposing source controls or changing advances.
@@ -380,6 +390,7 @@ terminal_explorer_draw_source_range :: proc(
         }
         terminal_explorer_draw_source_fragment(
             draw, source_draw, fragment, position)
+        terminal_explorer_draw_match(draw, source_draw, fragment, position)
         columns += fragment.columns
         offset = fragment.next
     }
@@ -447,6 +458,7 @@ terminal_explorer_draw_preview_source :: proc(draw: Terminal_Explorer_Draw) {
         source = source,
         highlights = terminal_explorer_highlights(
             draw.state, explorer^.preview_record),
+        matches = explorer.preview_matches.ranges[:explorer.preview_matches.count],
     }
     offset := 0
     buffer: [4096]u8
@@ -481,7 +493,7 @@ terminal_explorer_draw_preview_row :: proc(
     }
     rect.x += 7*draw.prepared.layout.column_width
     rect.width -= 7*draw.prepared.layout.column_width
-    if len(source_draw.highlights) == 0 {
+    if len(source_draw.highlights) == 0 && len(source_draw.matches) == 0 {
         terminal_explorer_draw_text(
             draw, row_source.text, rect, theme.draw_color(draw.encoder, .Text))
         return

@@ -79,6 +79,9 @@ terminal_explorer_layout :: proc(
 terminal_explorer_reveal_selection :: proc(
     explorer: ^viewterminalmodel.History_Explorer_State,
     layout: Terminal_Explorer_Layout) {
+    if explorer.help != .None {
+        return
+    }
     maximum := max(0, explorer^.row_count - layout.row_capacity)
     if explorer^.selected_index != explorer^.list_visible_selection {
         if explorer^.selected_index < explorer^.list_scroll_rows {

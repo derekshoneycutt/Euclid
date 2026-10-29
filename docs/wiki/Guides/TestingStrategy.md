@@ -19,6 +19,13 @@ Tests live beside the behavior they exercise: Odin package tests are `*_test.odi
 files under `src/`, and Julia tests live under `src/julia/test/`. Add focused coverage
 for changed behavior, then use the complete gate before delivery.
 
+VS Code's Odin Test Explorer uses the workspace
+[argument provider](../../../tools/odin-test-arguments.jl) for native linkage and
+runtime environment. The provider also generates the selected Julia runtime's
+history-search oracle under `.build/test/` and exports its path through
+`EUCLID_HISTORY_SEARCH_ORACLE`. The command-line test runner generates a temporary
+corpus for the same test; neither launch path requires a manually configured oracle.
+
 Worker-ownership tests use explicit condition-variable gates to establish ordering.
 Elapsed wall-clock time must not release a blocked worker or substitute for the
 owner's release signal. Font gate regression coverage deliberately holds a worker

@@ -41,6 +41,10 @@ history_explorer_test_destroy :: proc(
         testing.expect(t, history_runtime_test_shutdown(
             t, &fixture.history, &fixture.admission, &fixture.pool))
     }
+    testing.expect(t, !fixture.history.store.search.plan.initialized)
+    testing.expect(t, !fixture.history.store.search_adapter.registered)
+    testing.expect(t, fixture.history.store.search_adapter.active == nil)
+    testing.expect(t, fixture.connection.progress.callback == nil)
     taskpool.task_pool_destroy(&fixture.pool)
     if fixture.connection.handle != nil {
         failure := sqlite.connection_close(&fixture.connection)
@@ -84,11 +88,11 @@ history_explorer_test_query :: proc(
 history_explorer_test_search :: proc(
     t: ^testing.T, fixture: ^History_Explorer_Test_Fixture,
     identity: historyruntime.History_Explorer_Identity, request_id: u64,
-    scan: termhiststore.History_Search_Request) {
+    page: termhiststore.History_Search_Request) {
     testing.expect_value(t, history_runtime_request_search(&fixture.history, {
         identity = identity,
         request_id = request_id,
-        scan = scan,
+        page = page,
     }), historyruntime.History_Runtime_Enqueue_Result.Queued)
 }
 
@@ -106,7 +110,7 @@ history_explorer_coalesces_queries_and_copies_input :: proc(t: ^testing.T) {
     query := [?]u8{'n', 'e', 'e', 'd', 'l', 'e'}
     history_explorer_test_search(t, fixture, identity, 1, {
         query = string(query[:]),
-        candidate_budget = 2,
+        result_limit = 2,
     })
     query[0] = 'x'
     history_runtime_service(
@@ -116,11 +120,11 @@ history_explorer_coalesces_queries_and_copies_input :: proc(t: ^testing.T) {
     identity = history_explorer_test_query(t, fixture, 1, 2)
     history_explorer_test_search(t, fixture, identity, 1, {
         query = "discarded",
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_explorer_test_search(t, fixture, identity, 2, {
         query = "needle",
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_explorer_test_join(t, fixture)
     history_explorer_test_expect_search(t, fixture, identity, 2, 1)
@@ -137,15 +141,15 @@ history_explorer_test_expect_search :: proc(
     testing.expect(t, consumed && completion.ready)
     testing.expect_value(t, completion.request.identity, identity)
     testing.expect_value(t, completion.request.request_id, request_id)
-    testing.expect_value(t, completion.request.scan.query, "")
+    testing.expect_value(t, completion.request.page.query, "")
     testing.expect_value(t, completion.result.outcome,
-        termhiststore.History_Search_Outcome.Scanned)
+        termhiststore.History_Search_Outcome.Complete)
     testing.expect_value(t, completion.result.row_count, count)
 }
 
-// Each empty window releases admission and allows Settings its next fair turn.
+// A sparse SQL search finishes in one admitted task, then gives Settings its turn.
 @(test)
-history_explorer_zero_matches_continue_between_settings_turns :: proc(t: ^testing.T) {
+history_explorer_sparse_query_releases_connection_to_settings :: proc(t: ^testing.T) {
     fixture := history_explorer_test_start(t)
     if fixture == nil {
         return
@@ -155,28 +159,23 @@ history_explorer_zero_matches_continue_between_settings_turns :: proc(t: ^testin
         history_explorer_test_insert(t, fixture, id, "needle" if id == 1 else "miss")
     }
     identity := history_explorer_test_query(t, fixture, 1, 1)
-    scan: termhiststore.History_Search_Request = {
+    page: termhiststore.History_Search_Request = {
         query = "needle",
-        candidate_budget = 2,
+        result_limit = 2,
     }
     rows: [2]termhiststore.History_Candidate_Summary
     summaries: [16]u8
-    for window in 0..<3 {
-        history_explorer_test_search(t, fixture, identity, u64(window + 1), scan)
-        history_runtime_service(
-            &fixture.history, &fixture.admission, &fixture.pool, false)
-        history_explorer_test_join(t, fixture)
-        completion, consumed := history_runtime_consume_search_result(
-            &fixture.history, rows[:], summaries[:])
-        testing.expect(t, consumed)
-        testing.expect_value(t, completion.result.examined_count,
-            1 if window == 2 else 2)
-        testing.expect_value(t, completion.result.row_count, 1 if window == 2 else 0)
-        testing.expect_value(t, completion.result.exhausted, window == 2)
-        scan.cursor, scan.cursor_valid =
-            completion.result.cursor, completion.result.cursor_valid
-        history_explorer_test_settings_turn(t, fixture)
-    }
+    history_explorer_test_search(t, fixture, identity, 1, page)
+    history_runtime_service(
+        &fixture.history, &fixture.admission, &fixture.pool, false)
+    history_explorer_test_join(t, fixture)
+    completion, consumed := history_runtime_consume_search_result(
+        &fixture.history, rows[:], summaries[:])
+    testing.expect(t, consumed)
+    testing.expect_value(t, completion.result.row_count, 1)
+    testing.expect(t, completion.result.exhausted)
+    testing.expect_value(t, rows[0].record.source_id, u64(1))
+    history_explorer_test_settings_turn(t, fixture)
 }
 
 // Exercise real worker admission and join for the other connection borrower.
@@ -324,7 +323,7 @@ history_explorer_pool_pressure_preserves_pending_work :: proc(t: ^testing.T) {
     identity := history_explorer_test_query(t, fixture, 1, 1)
     for id in u64(1)..=10 {
         history_explorer_test_search(t, fixture, identity, id, {
-            candidate_budget = 2,
+            result_limit = 2,
         })
     }
     handles: [3]taskpool.Task_Handle
@@ -381,7 +380,7 @@ history_explorer_mutations_retire_search_and_preview :: proc(t: ^testing.T) {
     history_explorer_test_insert(t, fixture, 1, "before")
     identity := history_explorer_test_query(t, fixture, 1, 1)
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     testing.expect_value(t, history_runtime_request_preview(&fixture.history, {
         identity = identity,
@@ -417,8 +416,8 @@ history_explorer_test_expect_retired :: proc(
     testing.expect_value(t, history_runtime_request_search(&fixture.history, {
         identity = identity,
         request_id = 99,
-        scan = {
-            candidate_budget = 2,
+        page = {
+            result_limit = 2,
         },
     }), historyruntime.History_Runtime_Enqueue_Result.Invalid_Request)
 }
@@ -434,7 +433,7 @@ history_explorer_clear_invalidation_requires_commit :: proc(t: ^testing.T) {
     history_explorer_test_insert(t, fixture, 1, "kept")
     identity := history_explorer_test_query(t, fixture, 1, 1)
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     testing.expect_value(t, history_runtime_request_preview(&fixture.history, {
         identity = identity,
@@ -490,7 +489,7 @@ history_explorer_visibility_and_generation_retire_active_work :: proc(t: ^testin
     history_explorer_test_insert(t, fixture, 1, "session")
     identity := history_explorer_test_query(t, fixture, 1, 1)
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
@@ -499,9 +498,9 @@ history_explorer_visibility_and_generation_retire_active_work :: proc(t: ^testin
     history_explorer_test_expect_retired(t, fixture, identity)
     identity = history_explorer_test_query(t, fixture, 1, 1)
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
-    testing.expect(t, fixture.history.queued_search.scan.include_persistent)
+    testing.expect(t, fixture.history.queued_search.page.include_persistent)
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
     history_runtime_attach_generation(&fixture.history, 2)
@@ -554,7 +553,7 @@ history_explorer_reports_worker_failures :: proc(t: ^testing.T) {
         &fixture.connection, "DROP TABLE temp.terminal_history;")
     testing.expect_value(t, failure.validation, sqlite.Validation_Error.None)
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
@@ -587,7 +586,7 @@ history_explorer_uses_independent_completion_mailboxes :: proc(t: ^testing.T) {
         terminal_generation = 1,
     }))
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     testing.expect_value(t, history_runtime_request_preview(&fixture.history, {
         identity = identity,
@@ -648,7 +647,7 @@ history_explorer_does_not_queue_behind_highlighting :: proc(t: ^testing.T) {
     }
     identity := history_explorer_test_query(t, fixture, 1, 1)
     history_explorer_test_search(t, fixture, identity, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
@@ -672,7 +671,7 @@ history_explorer_close_reopen_does_not_alias_old_work :: proc(t: ^testing.T) {
     history_explorer_test_insert(t, fixture, 1, "source")
     old := history_explorer_test_query(t, fixture, 1, 1)
     history_explorer_test_search(t, fixture, old, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
@@ -681,8 +680,10 @@ history_explorer_close_reopen_does_not_alias_old_work :: proc(t: ^testing.T) {
     testing.expect(t, current.runtime_epoch != old.runtime_epoch)
     history_explorer_test_join(t, fixture)
     testing.expect(t, !fixture.history.search_completion.ready)
+    testing.expect(t, !fixture.history.store.search.plan.initialized)
+    testing.expect(t, fixture.history.store.search_adapter.active == nil)
     history_explorer_test_search(t, fixture, current, 1, {
-        candidate_budget = 2,
+        result_limit = 2,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
@@ -703,9 +704,9 @@ history_explorer_validates_request_admission :: proc(t: ^testing.T) {
     testing.expect_value(t, history_runtime_request_search(&fixture.history, {
         identity = identity,
         request_id = 1,
-        scan = {
+        page = {
             query = string(query[:]),
-            candidate_budget = 2,
+            result_limit = 2,
         },
     }), historyruntime.History_Runtime_Enqueue_Result.Source_Too_Large)
     testing.expect_value(t, history_runtime_request_preview(&fixture.history, {
@@ -749,13 +750,15 @@ history_explorer_bounds_output_without_capping_search_scope :: proc(t: ^testing.
         query = "tail",
         cursor = cursor,
         cursor_valid = true,
-        candidate_budget = termhiststore.HISTORY_SEARCH_CANDIDATE_MAX,
+        result_limit = termhiststore.HISTORY_SEARCH_RESULT_MAX,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
     history_explorer_test_join(t, fixture)
     history_explorer_test_expect_search(t, fixture, identity, 2, 1)
+    testing.expect_value(t, fixture.history.store.search.compile_count, u64(1))
     history_explorer_test_full_preview(t, fixture, identity, source[:])
+    testing.expect_value(t, fixture.history.store.search.compile_count, u64(1))
 }
 
 // A batch fills both the row and packed-byte limits without consuming the next match.
@@ -765,7 +768,7 @@ history_explorer_test_full_batch :: proc(
         termhiststore.History_Browse_Cursor {
     history_explorer_test_search(t, fixture, identity, 1, {
         query = "tail",
-        candidate_budget = termhiststore.HISTORY_SEARCH_CANDIDATE_MAX,
+        result_limit = termhiststore.HISTORY_SEARCH_RESULT_MAX,
     })
     history_runtime_service(
         &fixture.history, &fixture.admission, &fixture.pool, false)
@@ -777,11 +780,14 @@ history_explorer_test_full_batch :: proc(
         &fixture.history, rows[:], summaries[:])
     testing.expect(t, copied)
     testing.expect_value(t, completion.result.row_count, len(rows))
-    testing.expect_value(t, completion.result.examined_count, len(rows))
     testing.expect_value(t, completion.result.summary_bytes, len(summaries))
     testing.expect(t, completion.result.output_full && !completion.result.exhausted)
     testing.expect(t, rows[0].summary_clipped)
+    testing.expect_value(t, rows[0].matches.count, 1)
+    testing.expect_value(t, completion.ranges[rows[0].matches.offset].start_byte,
+        termhiststore.HISTORY_SEARCH_SUMMARY_MAX_BYTES + 4)
     testing.expect_value(t, completion.result.cursor.source_id, u64(2))
+    testing.expect_value(t, fixture.history.store.search.compile_count, u64(1))
     return completion.result.cursor
 }
 
@@ -804,4 +810,6 @@ history_explorer_test_full_preview :: proc(
     testing.expect(t, copied)
     testing.expect_value(t, completion.result.source_length, len(source))
     testing.expect_value(t, string(destination[:]), string(source))
+    testing.expect_value(t, completion.matches.count, 1)
+    testing.expect_value(t, completion.matches.ranges[0].end_byte, len(source))
 }

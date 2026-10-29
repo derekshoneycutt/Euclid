@@ -4,11 +4,12 @@ const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 
 pushfirst!(LOAD_PATH, joinpath(@__DIR__, "analysis"))
 include("build_config.jl")
+include("test/history_search_oracle.jl")
 
 using .EuclidBuildConfiguration: native_runtime_environment, native_test_linker_flags
 using JSON
 
-"""Build the shared compiler arguments and runtime environment for this workspace."""
+"""Build workspace test arguments/environment and persist the selected Julia oracle."""
 function provider_result()
     isempty(ARGS) || error("This workspace-scoped provider accepts no arguments.")
     arguments = [
@@ -19,6 +20,9 @@ function provider_result()
     runtime_environment = native_runtime_environment()
     environment = runtime_environment === nothing ? Dict{String,String}() :
         Dict(String(runtime_environment.first) => runtime_environment.second)
+    oracle_path = joinpath(REPOSITORY_ROOT, ".build", "test",
+        "history-search-oracle.tsv")
+    environment["EUCLID_HISTORY_SEARCH_ORACLE"] = write_history_search_oracle(oracle_path)
     return (; arguments, environment)
 end
 

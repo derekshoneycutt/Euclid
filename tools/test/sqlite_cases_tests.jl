@@ -78,10 +78,14 @@ end
         if step isa SQLiteFileStep]
     manifest_paths = [replace(normpath(step.path), '\\' => '/') for step in file_steps]
 
-    @test length(paths) == 57
-    @test length(manifest_paths) == length(unique(manifest_paths))
+    search_paths = Set(step.path for step in euclid_history_search_steps())
+    @test length(paths) == 61
+    @test length(search_paths) == 4
+    @test all(path -> count(==(path), manifest_paths) ==
+        (path in search_paths ? 2 : 1), paths)
     @test Set(manifest_paths) == Set(paths)
-    @test all(case -> all(requirement -> requirement in ("fts5", "spellfix1"),
+    @test all(case -> all(requirement -> requirement in
+        ("fts5", "spellfix1", "history_matches"),
         case.requirements), cases)
 
     @testset "All six source conventions are clean" begin

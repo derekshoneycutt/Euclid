@@ -16,6 +16,8 @@ const JULIA_TEST_RUNNER = joinpath(
     REPOSITORY_ROOT, "src", "julia", "test", "runtests.jl")
 const JULIA_TEST_REPORTER = joinpath(REPOSITORY_ROOT, "tools", "julia_test_reporter.jl")
 const JULIA_TEST_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
+const HISTORY_SEARCH_ORACLE_SCRIPT = joinpath(
+    REPOSITORY_ROOT, "tools", "test", "history_search_oracle.jl")
 const ODIN_SOURCE_ROOT = joinpath(REPOSITORY_ROOT, "src")
 const ODIN_TEST_BINARY = joinpath(
     REPOSITORY_ROOT, "bin", Sys.iswindows() ? "euclid_tests.exe" : "euclid_tests")
@@ -275,6 +277,14 @@ function odin_test_records(report, locations, output::String)
     return records
 end
 
+"""Generate the test-only history corpus using the selected Julia runtime."""
+function generate_history_search_oracle(path::String)
+    command = Cmd(Cmd([
+        JULIA_EXE, "--project=" * JULIA_TEST_PROJECT,
+        HISTORY_SEARCH_ORACLE_SCRIPT, path]); dir=REPOSITORY_ROOT)
+    return capture_command(command)
+end
+
 """Run the Odin suite with optional package and exact-name selection."""
 function run_odin_suite(suite::SuiteDefinition; selected_package=nothing,
     selected_test=nothing)
@@ -289,9 +299,16 @@ function run_odin_suite(suite::SuiteDefinition; selected_package=nothing,
     mkpath(dirname(ODIN_TEST_BINARY))
     return mktempdir() do directory
         report_path = joinpath(directory, "odin-tests.json")
+        oracle_path = joinpath(directory, "history-search-oracle.tsv")
+        oracle_result = generate_history_search_oracle(oracle_path)
+        if oracle_result.exit_code != 0 || !isfile(oracle_path)
+            return SuiteResult(suite.name, suite.language, 0,
+                oracle_result.elapsed_ns, "FAIL", oracle_result.output, TestResult[])
+        end
         arguments = odin_test_command(native_linker_flags(); source_path,
             report_path, selected_test=selection)
         command = Cmd(Cmd(arguments); dir=REPOSITORY_ROOT)
+        command = addenv(command, "EUCLID_HISTORY_SEARCH_ORACLE" => oracle_path)
         runtime_environment = native_runtime_environment()
         runtime_environment !== nothing &&
             (command = addenv(command, runtime_environment))

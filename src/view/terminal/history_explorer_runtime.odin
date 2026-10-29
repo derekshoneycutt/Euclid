@@ -33,6 +33,10 @@ history_runtime_retire_explorer :: proc(
     if history == nil {
         return
     }
+    termhiststore.history_store_cancel_search(&history.store)
+    if !history.task_active {
+        termhiststore.history_store_retire_search(&history.store)
+    }
     history^.explorer_epoch += 1
     if history^.explorer_epoch == 0 {
         history^.explorer_epoch = 1
@@ -90,16 +94,16 @@ history_runtime_request_search :: proc(
        request.request_id <= history^.latest_search_request_id {
         return .Invalid_Request
     }
-    if len(request.scan.query) > termhiststore.HISTORY_SEARCH_QUERY_MAX_BYTES {
+    if len(request.page.query) > termhiststore.HISTORY_SEARCH_QUERY_MAX_BYTES {
         return .Source_Too_Large
     }
     queued := request
-    queued.query_length = len(request.scan.query)
-    queued.scan.query = ""
-    queued.scan.include_persistent = history^.persist_enabled &&
+    queued.query_length = len(request.page.query)
+    queued.page.query = ""
+    queued.page.include_persistent = history^.persist_enabled &&
         history^.store.durable_available
     history_runtime_clear_bytes(history^.queued_query[:])
-    copy(history^.queued_query[:queued.query_length], request.scan.query)
+    copy(history^.queued_query[:queued.query_length], request.page.query)
     history^.queued_search = queued
     history^.latest_search_request_id = request.request_id
     history^.search_pending = true
@@ -174,6 +178,7 @@ history_runtime_submit_explorer :: proc(
         kind = .Preview
     }
     if kind == .Search {
+        termhiststore.history_store_reset_search_cancel(&history.store)
         history^.active_search = history^.queued_search
         length := history^.active_search.query_length
         copy(history^.active_query[:length], history^.queued_query[:length])
@@ -195,14 +200,18 @@ history_runtime_submit_explorer :: proc(
     return true
 }
 
-// Execute exactly one candidate window with captured bytes, policy, and bounded output.
+// Execute one SQL-filtered page using the query-generation's retained native plan.
 history_runtime_worker_search :: proc(
     history: ^historyruntime.History_Runtime) -> taskpool.Task_Result {
-    scan := history^.active_search.scan
-    scan.query = string(history^.active_query[:history^.active_search.query_length])
+    page := history^.active_search.page
+    page.search_identity = history.active_search.identity.runtime_epoch
+    page.query = string(history^.active_query[:history^.active_search.query_length])
     history^.active_search_result = termhiststore.history_store_search(
-        &history^.store, scan, history^.search_rows[:], history^.search_summaries[:])
-    return .Succeeded if history^.active_search_result.outcome == .Scanned else .Failed
+        &history^.store, page, history^.search_rows[:], history^.search_summaries[:])
+    if history.active_search_result.outcome == .Complete {
+        history_runtime_collect_row_matches(history)
+    }
+    return .Succeeded if history^.active_search_result.outcome == .Complete else .Failed
 }
 
 // Read full original source by scope without relying on scrollback or session anchors.
@@ -229,6 +238,12 @@ history_runtime_worker_preview :: proc(
         }
     }
     history^.active_preview_result = result
+    history.active_preview_matches = {}
+    if result.outcome == .Found {
+        history.active_preview_matches = history_runtime_source_matches(
+            history, request.identity,
+            string(history.preview_source[:result.source_length]))
+    }
     return .Failed if result.outcome == .Failed else .Succeeded
 }
 
@@ -244,15 +259,21 @@ history_runtime_complete_search :: proc(
                 },
             }
         }
-        history_runtime_report_explorer_failure("search", result.failure)
+        if result.failure.kind != .Cancelled {
+            history_runtime_report_explorer_failure("search", result.failure)
+        }
     }
     request := history^.active_search
+    if !history_runtime_explorer_current(history, request.identity) {
+        termhiststore.history_store_retire_search(&history.store)
+    }
     if history_runtime_explorer_current(history, request.identity) &&
        request.request_id == history^.latest_search_request_id {
         history^.search_completion = {
             ready = true,
             request = request,
             result = result,
+            ranges = history.search_ranges,
         }
     }
 }
@@ -279,6 +300,7 @@ history_runtime_complete_preview :: proc(
             ready = true,
             request = request,
             result = result,
+            matches = history.active_preview_matches,
         }
     }
 }
@@ -286,8 +308,10 @@ history_runtime_complete_preview :: proc(
 // Report typed failures without including potentially sensitive source or query text.
 history_runtime_report_explorer_failure :: proc(
     operation: string, failure: termhiststore.History_Store_Error) {
-    log.warnf("terminal_history_explorer_failed operation=%s error=%d sqlite_result=%d",
-        operation, int(failure.kind), int(failure.sqlite_error.result))
+    log.warnf("terminal_history_explorer_failed operation=%s error=%d "+
+        "sqlite_result=%d search_error=%d engine_error=%d",
+        operation, int(failure.kind), int(failure.sqlite_error.result),
+        int(failure.search_error), failure.engine_error)
 }
 
 // Copy joined rows and packed summaries; insufficient destination space is retryable.
@@ -303,7 +327,7 @@ history_runtime_consume_search_result :: proc(
         history^.search_completion = {}
         return {}, false
     }
-    if completion.result.outcome == .Scanned {
+    if completion.result.outcome == .Complete {
         result := completion.result
         if result.row_count > len(rows) || result.summary_bytes > len(summaries) {
             completion.result = {
@@ -357,12 +381,13 @@ history_runtime_clear_explorer_payload :: proc(
         history^.active_search_result = {}
         history_runtime_clear_bytes(history^.active_query[:])
         if !history^.search_completion.ready ||
-           history^.search_completion.result.outcome != .Scanned {
+           history^.search_completion.result.outcome != .Complete {
             history_runtime_clear_bytes(history^.search_summaries[:])
         }
     } else if kind == .Preview {
         history^.active_preview = {}
         history^.active_preview_result = {}
+        history.active_preview_matches = {}
         if !history^.preview_completion.ready ||
            history^.preview_completion.result.outcome != .Found {
             history_runtime_clear_bytes(history^.preview_source[:])

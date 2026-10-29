@@ -12,23 +12,16 @@ WITH history AS (
         FROM temp.terminal_history AS session
         WHERE session.persistent_entry_id = saved.entry_id
     )
-),
-candidate_window AS MATERIALIZED (
-    SELECT submission_id, source, persistent_entry_id, mode,
-           submitted_at_unix_ms, terminal_generation, source_revision,
-           scope_rank, source_id
-    FROM history
-    WHERE ?1 = 0
-       OR submitted_at_unix_ms < ?2
-       OR (submitted_at_unix_ms = ?2 AND scope_rank > ?3)
-       OR (submitted_at_unix_ms = ?2 AND scope_rank = ?3 AND source_id < ?4)
-    ORDER BY submitted_at_unix_ms DESC, scope_rank ASC, source_id DESC
-    LIMIT ?5
 )
 SELECT submission_id, COALESCE(substr(CAST(source AS BLOB), 1, ?7), X'') AS source_prefix,
        persistent_entry_id, mode, submitted_at_unix_ms,
        terminal_generation, source_revision, scope_rank, source_id,
-       length(CAST(source AS BLOB)) AS source_bytes,
-       (?6 = '' OR instr(source, ?6) > 0) AS matches
-FROM candidate_window
-ORDER BY submitted_at_unix_ms DESC, scope_rank ASC, source_id DESC;
+       length(CAST(source AS BLOB)) AS source_bytes
+FROM history
+WHERE (?1 = 0
+       OR submitted_at_unix_ms < ?2
+       OR (submitted_at_unix_ms = ?2 AND scope_rank > ?3)
+       OR (submitted_at_unix_ms = ?2 AND scope_rank = ?3 AND source_id < ?4))
+  AND (?8 = 0 OR history_matches(source, mode, ?6))
+ORDER BY submitted_at_unix_ms DESC, scope_rank ASC, source_id DESC
+LIMIT ?5;

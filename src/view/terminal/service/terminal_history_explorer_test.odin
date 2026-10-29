@@ -77,8 +77,8 @@ terminal_service_test_explorer_mailboxes :: proc(
     search: historyruntime.History_Search_Request = {
         identity = identity,
         request_id = 1,
-        scan = {
-            candidate_budget = 2,
+        page = {
+            result_limit = 2,
         },
     }
     preview: historyruntime.History_Preview_Request = {
@@ -94,7 +94,7 @@ terminal_service_test_explorer_mailboxes :: proc(
         ready = true,
         request = search,
         result = {
-            outcome = .Scanned,
+            outcome = .Complete,
             row_count = 1,
             summary_bytes = 7,
         },
@@ -145,8 +145,8 @@ terminal_service_replacement_retires_explorer_transport :: proc(t: ^testing.T) {
     testing.expect(t, terminal_service_request_history_search(state, {
         identity = identity,
         request_id = 1,
-        scan = {
-            candidate_budget = 2,
+        page = {
+            result_limit = 2,
         },
     }) == .Queued)
     _ = terminal_service_update(state, nil, {})

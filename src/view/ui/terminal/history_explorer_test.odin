@@ -135,7 +135,8 @@ terminal_explorer_text_fragments_keep_source_offsets :: proc(t: ^testing.T) {
 
 // Summary-only whitespace collapse retains exact full-source token offsets.
 @(test)
-terminal_explorer_summary_collapses_indent_without_shifting_source :: proc(t: ^testing.T) {
+terminal_explorer_summary_collapses_indent_without_shifting_source :: proc(
+    t: ^testing.T) {
     source := "begin\r\n    \n\t  α = 1\nend"
     fragment := terminal_explorer_text_fragment(source, len("begin"), true)
     testing.expect_value(t, fragment.text, " ↵ ")

@@ -647,6 +647,9 @@ history_runtime_poll_active :: proc(
     history^.task_active = false
     history^.last_task_result = result
     history_runtime_complete_task(history, result)
+    if history.explorer_identity.runtime_epoch == 0 {
+        termhiststore.history_store_retire_search(&history.store)
+    }
     if !viewuserdata.connection_admission_release_joined(
         admission, .Terminal_History) {
         history^.status = .Failed

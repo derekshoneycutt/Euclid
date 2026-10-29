@@ -26,7 +26,7 @@ register_terminal_explorer_semantics :: proc(
     query := &explorer^.query_editor
     id := terminal_semantic_id(state)
     selected: viewmodel.Ui_Node_Id
-    if !prepared.explorer.compact &&
+    if explorer.help == .None && !prepared.explorer.compact &&
         explorer^.selected_index >= explorer^.list_scroll_rows &&
         explorer^.selected_index <
             explorer^.list_scroll_rows + prepared.explorer.row_capacity {
@@ -48,6 +48,10 @@ register_terminal_explorer_semantics :: proc(
         text_anchor_byte = query^.anchor,
         text_present = true,
     })
+    if explorer.help != .None {
+        terminal_explorer_register_help(state, prepared)
+        return
+    }
     terminal_explorer_register_rows(state, prepared)
     terminal_explorer_register_status(state, prepared)
     terminal_explorer_register_preview(state, prepared)
@@ -92,7 +96,7 @@ terminal_explorer_register_status :: proc(
     state: ^core.Euclid_General_State, prepared: Terminal_Prepared_Frame) {
     id := terminal_semantic_id(state)
     id.local_id = 2
-    message := terminal_explorer_status_id(state^.terminal.history_explorer.status)
+    message := terminal_explorer_status_message(&state.terminal.history_explorer)
     rect := prepared.explorer.status
     if prepared.explorer.compact {
         message = .Terminal_History_Compact
@@ -153,24 +157,37 @@ terminal_explorer_semantic_commands :: proc(
     for command in semantic^.commands[:semantic^.command_count] {
         if command.target == terminal_semantic_id(state) {
             terminal_explorer_query_command(explorer, command)
-        } else if command.target.domain == .Terminal && command.target.local_id == 1 &&
+        } else if explorer.help != .None && !prepared.explorer.compact &&
+            command.target == terminal_explorer_help_id(state) {
+            terminal_explorer_apply_scroll(&explorer.help_scroll_lines, command,
+                terminal_explorer_help_scroll_max(state, prepared),
+                max(1, int(terminal_explorer_help_rect(prepared).height /
+                    prepared.layout.line_height)))
+        } else if explorer.help == .None &&
+            command.target.domain == .Terminal && command.target.local_id == 1 &&
             command.target.generation == state^.terminal.animation_generation {
-            if command.kind == .Set_Scroll_Value &&
-               !math.is_nan(command.numeric_value) &&
-               !math.is_inf(command.numeric_value) {
-                explorer^.preview_scroll_lines = int(clamp(
-                    command.numeric_value, 0, f64(explorer^.preview_length)))
-            } else if command.kind == .Scroll_Page {
-                explorer^.preview_scroll_lines = max(0, explorer^.preview_scroll_lines +
-                    int(command.amount)*prepared.explorer.preview_rows)
-            }
-        } else if command.kind == .Select && command.target.local_id >= 100 &&
+            terminal_explorer_apply_scroll(&explorer.preview_scroll_lines, command,
+                explorer.preview_length, prepared.explorer.preview_rows)
+        } else if explorer.help == .None &&
+            command.kind == .Select && command.target.local_id >= 100 &&
             command.target.local_id < u64(100 + explorer^.row_count) {
             index := int(command.target.local_id - 100)
             if command.target == terminal_explorer_candidate_id(state, index) {
                 _ = terminalview.history_explorer_select_candidate(explorer, index)
             }
         }
+    }
+}
+
+// Clamp finite accessible scroll requests before integer conversion or owner mutation.
+terminal_explorer_apply_scroll :: proc(
+    value: ^int, command: viewmodel.Ui_Focus_Command, maximum, page_rows: int) {
+    if command.kind == .Set_Scroll_Value &&
+       !math.is_nan(command.numeric_value) && !math.is_inf(command.numeric_value) {
+        value^ = int(clamp(command.numeric_value, 0, f64(maximum)))
+    } else if command.kind == .Scroll_Page {
+        value^ = int(
+            clamp(f64(value^) + f64(command.amount)*f64(page_rows), 0, f64(maximum)))
     }
 }
 

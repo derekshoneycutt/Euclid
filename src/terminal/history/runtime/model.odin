@@ -4,6 +4,7 @@ import protocol "../../../core/protocol"
 import sqlite "../../../sqlite"
 import taskpool "../../../taskpool"
 import termhiststore "../store"
+import termhistsearch "../search"
 
 HISTORY_RUNTIME_MUTATION_CAPACITY :: 8
 HISTORY_RUNTIME_MUTATION_SOURCE_BUDGET :: 1024 * 1024
@@ -87,11 +88,11 @@ History_Explorer_Identity :: struct {
     runtime_epoch: u64,
 }
 
-// scan.query is borrowed only during admission, then copied into runtime-owned bytes.
+// page.query is borrowed only during admission, then copied into runtime-owned bytes.
 History_Search_Request :: struct {
     identity: History_Explorer_Identity,
     request_id: u64,
-    scan: termhiststore.History_Search_Request,
+    page: termhiststore.History_Search_Request,
     query_length: int,
 }
 
@@ -108,12 +109,14 @@ History_Search_Completion :: struct {
     ready: bool,
     request: History_Search_Request,
     result: termhiststore.History_Search_Result,
+    ranges: [termhistsearch.HISTORY_SEARCH_RANGE_MAX]termhistsearch.Search_Range,
 }
 
 History_Preview_Completion :: struct {
     ready: bool,
     request: History_Preview_Request,
     result: termhiststore.History_Read_Result,
+    matches: termhiststore.History_Match_Ranges,
 }
 
 // Launch-owned reusable transport storage, not a retained-command mirror.
@@ -212,9 +215,12 @@ History_Runtime :: struct {
     active_preview: History_Preview_Request,
     active_search_result: termhiststore.History_Search_Result,
     active_preview_result: termhiststore.History_Read_Result,
+    active_preview_matches: termhiststore.History_Match_Ranges,
     search_completion: History_Search_Completion,
     preview_completion: History_Preview_Completion,
     search_rows: History_Search_Row_Buffer,
+    search_ranges: [termhistsearch.HISTORY_SEARCH_RANGE_MAX]termhistsearch.Search_Range,
+    search_range_count: int,
     search_summaries: [HISTORY_RUNTIME_SEARCH_SUMMARY_BYTES]u8,
     preview_source: History_Source_Buffer,
 }

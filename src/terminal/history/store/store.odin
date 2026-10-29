@@ -57,6 +57,9 @@ history_store_init :: proc(
        history_store_sqlite_error_is_clear(prepare_result.cleanup_error) {
         prepare_result.cleanup_error = drop_failure.sqlite_error
     }
+    if store.search_adapter.registered {
+        return prepare_result
+    }
     store^.connection = nil
     store^.durable_available = false
     return prepare_result
@@ -87,7 +90,11 @@ history_store_execute_sql :: proc(
 
 // Prepare each fixed query, stopping at the first failure for ordered cleanup.
 history_store_prepare_all :: proc(store: ^History_Store) -> History_Store_Error {
-    failure := history_store_prepare_session_statements(store)
+    failure := history_store_register_search(store)
+    if failure.kind != .None {
+        return failure
+    }
+    failure = history_store_prepare_session_statements(store)
     if failure.kind != .None {
         return failure
     }
@@ -247,7 +254,7 @@ history_store_prepare :: proc(
 
 // Finalize every prepared statement without closing or clearing the borrowed connection.
 history_store_destroy :: proc(store: ^History_Store) -> History_Store_Error {
-    if store == nil {
+    if store == nil || store.search_adapter.active != nil {
         return {
             kind = .Invalid_State,
         }
@@ -261,6 +268,9 @@ history_store_destroy :: proc(store: ^History_Store) -> History_Store_Error {
         }
     }
     failure := history_store_finalize_statements(store)
+    if store.search_adapter.registered {
+        return history_store_error_from_sqlite(failure)
+    }
     store^.connection = nil
     store^.durable_available = false
     store^.initialized = false
@@ -291,6 +301,10 @@ history_store_finalize_statements :: proc(store: ^History_Store) -> sqlite.Error
     history_store_finalize_one(&store^.search_combined_newer, &first_failure)
     history_store_finalize_one(&store^.delete_persistent, &first_failure)
     history_store_finalize_one(&store^.delete_session, &first_failure)
+    unregister_error := history_store_unregister_search(store)
+    if history_store_sqlite_error_is_clear(first_failure) {
+        first_failure = unregister_error
+    }
     return first_failure
 }
 

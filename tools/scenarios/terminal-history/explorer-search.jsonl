@@ -1,0 +1,91 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"type":"?sin"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"key":{"name":"r","ctrl":true}}
+{"type":"foo phase5"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"=foo_bar"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"!sin"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"/(?i)FOO_BAR"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"~fb"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"`fb"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"help>"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"sin"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"julia>;help>;=sin"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"sin"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"/["}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"sin"}
+{"screenshot":".build/explorer-skipped-pattern.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"type":"phase5_probe;/["}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"?"}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"","mode":"help","cursor":0,"anchor":0,"evaluation_requests":2}}
+{"screenshot":".build/explorer-short-help.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"?"}
+{"key":"page_down"}
+{"screenshot":".build/explorer-extended-help.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_setting":{"key":"terminal.persist_history","value":true}}
+{"key":"escape"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":"enter"}
+{"wait_terminal_explorer":"closed","timeout_ms":10000}
+{"assert_terminal_editor":{"source":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend","mode":"julia","cursor":60,"anchor":60,"evaluation_requests":2}}
+{"key":{"name":"r","ctrl":true}}
+{"type":"phase5_probe"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"definitely_missing"}
+{"wait_terminal_explorer":"empty","timeout_ms":10000}
+{"key":{"name":"a","ctrl":true}}
+{"type":"phase5_probe"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend"}
+{"key":{"name":"a","ctrl":true}}
+{"type":"??"}
+{"confirm_terminal_history_delete":"cleared","timeout_ms":10000}
+{"key":"escape"}
+{"wait_terminal_explorer":"empty","timeout_ms":10000}
+{"key":"enter"}
+{"assert_terminal_editor":{"source":"begin\n    phase5_probe = \"foo_bar αβ\"\n    phase5_probe\nend","mode":"julia","cursor":60,"anchor":60,"evaluation_requests":2}}
+{"key":"escape"}
+{"wait_terminal_explorer":"closed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -8,6 +8,7 @@ import termemulator "../../../terminal/emulator"
 import termgrid "../../../terminal/grid"
 import termhist "../../../terminal/history"
 import termhiststore "../../../terminal/history/store"
+import termhistsearch "../../../terminal/history/search"
 import historyruntime "../../../terminal/history/runtime"
 import termhyperlink "../../../terminal/hyperlink"
 import termmodel "../../../terminal/model"
@@ -163,11 +164,19 @@ History_Explorer_Page_Direction :: enum u8 {
     Newer,
 }
 
+// Help overlays the existing page; no second source or candidate owner is created.
+History_Explorer_Help :: enum u8 {
+    None,
+    Short,
+    Extended,
+}
+
 // History_Explorer_State owns one bounded transient query and one candidate page.
 // Its variable-sized buffers are allocated and released with the Terminal generation.
 History_Explorer_State :: struct {
     query_editor: termhist.Termhist_State,
     rows: []termhiststore.History_Candidate_Summary,
+    row_ranges: [termhistsearch.HISTORY_SEARCH_RANGE_MAX]termhistsearch.Search_Range,
     summaries: []u8,
     preview_source: []u8,
     initialized: bool,
@@ -189,10 +198,11 @@ History_Explorer_State :: struct {
     row_count: int,
     selected_index: int,
     preview_record: termhiststore.History_Record,
+    preview_matches: termhiststore.History_Match_Ranges,
     preview_length: int,
-    scan_direction: History_Explorer_Page_Direction,
-    scan_cursor: termhiststore.History_Browse_Cursor,
-    scan_cursor_valid: bool,
+    search_direction: History_Explorer_Page_Direction,
+    search_cursor: termhiststore.History_Browse_Cursor,
+    search_cursor_valid: bool,
     page_older_cursor: termhiststore.History_Browse_Cursor,
     page_older_cursor_valid: bool,
     page_newer_cursor: termhiststore.History_Browse_Cursor,
@@ -205,6 +215,13 @@ History_Explorer_State :: struct {
     query_pointer_selecting: bool,
     preview_scroll_lines: int,
     status_failure: termhiststore.History_Store_Error,
+    skipped_regex_count: int,
+    help: History_Explorer_Help,
+    help_scroll_lines: int,
+    saved_query: [termhiststore.HISTORY_SEARCH_QUERY_MAX_BYTES]u8,
+    saved_query_length: int,
+    saved_query_cursor: int,
+    saved_query_anchor: int,
 }
 
 // Terminal_Tick_Publisher owns one generation-scoped bounded tick stream.

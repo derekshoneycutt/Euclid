@@ -167,7 +167,8 @@ function checked_case(executable::String, payload; passed=true)
     @test result["status"] == (passed ? "passed" : "failed")
     @test !isempty(result["provider"]["identity"])
     @test occursin(r"^\d+\.\d+\.\d+", result["provider"]["version"])
-    @test Set(result["provider"]["capabilities"]) == Set(["fts5", "spellfix1"])
+    @test Set(result["provider"]["capabilities"]) ==
+        Set(["fts5", "spellfix1", "history_matches"])
     for (step, declared) in zip(result["steps"], payload["steps"])
         @test all(step[key] == declared[key] for key in ("id", "source_id", "digest", "mode"))
         if step["status"] == "passed"
@@ -252,6 +253,9 @@ function test_scripts(executable::String)
         for (requirement, sql) in [
             ("fts5", "CREATE VIRTUAL TABLE t USING fts5(x); INSERT INTO t VALUES('hello'); SELECT * FROM t;"),
             ("spellfix1", "CREATE VIRTUAL TABLE t USING spellfix1; INSERT INTO t(word) VALUES('hello'); SELECT * FROM t;"),
+            ("history_matches", "CREATE TABLE t(x CHECK(x = 1)); " *
+                "INSERT INTO t SELECT history_matches('source', 0, 1); " *
+                "INSERT INTO t SELECT 1 - history_matches('other', 3, 1);"),
         ]
             checked_case(executable, request([fixture(sql)]; requirements=[requirement]))
         end

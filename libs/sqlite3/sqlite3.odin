@@ -14,6 +14,16 @@ Database :: struct {}
 // Opaque compiled SQLite statement storage owned by its connection.
 Statement :: struct {}
 
+Function_Context :: struct {}
+Value :: struct {}
+Scalar_Callback :: proc "c" (
+    call: ^Function_Context, count: c.int, values: [^]^Value)
+Destroy_Callback :: proc "c" (user_data: rawptr)
+Progress_Callback :: proc "c" (user_data: rawptr) -> c.int
+
+FUNCTION_UTF8 :: c.int(1)
+FUNCTION_DIRECTONLY :: c.int(0x00080000)
+
 Result :: enum c.int {
     Ok = 0,
     Error = 1,
@@ -84,6 +94,24 @@ transient_destructor :: proc() -> rawptr {
 }
 
 foreign sqlite3_library {
+    sqlite3_create_function_v2 :: proc(
+        database: ^Database, name: cstring, count, flags: c.int,
+        user_data: rawptr, scalar: Scalar_Callback, step, final: rawptr,
+        destroy: Destroy_Callback) -> Result ---
+    sqlite3_user_data :: proc(call: ^Function_Context) -> rawptr ---
+    sqlite3_context_db_handle :: proc(call: ^Function_Context) -> ^Database ---
+    sqlite3_value_type :: proc(value: ^Value) -> Column_Type ---
+    sqlite3_value_int64 :: proc(value: ^Value) -> c.longlong ---
+    sqlite3_value_text :: proc(value: ^Value) -> cstring ---
+    sqlite3_value_bytes :: proc(value: ^Value) -> c.int ---
+    sqlite3_result_int :: proc(call: ^Function_Context, value: c.int) ---
+    sqlite3_result_error :: proc(
+        call: ^Function_Context, message: cstring, length: c.int) ---
+    sqlite3_result_error_code :: proc(call: ^Function_Context, code: c.int) ---
+    sqlite3_result_error_nomem :: proc(call: ^Function_Context) ---
+    sqlite3_progress_handler :: proc(
+        database: ^Database, instructions: c.int,
+        callback: Progress_Callback, user_data: rawptr) ---
     sqlite3_threadsafe :: proc() -> c.int ---
     sqlite3_libversion :: proc() -> cstring ---
     sqlite3_libversion_number :: proc() -> c.int ---

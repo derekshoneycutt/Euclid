@@ -11,6 +11,7 @@ include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
 include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
 include(joinpath(@__DIR__, "shader_tests.jl"))
 include(joinpath(@__DIR__, "harfbuzz_linker_tests.jl"))
+include(joinpath(@__DIR__, "pcre2_linker_tests.jl"))
 include(joinpath(@__DIR__, "content_builder_tests.jl"))
 
 const Verification = Main.EuclidVerification
@@ -598,11 +599,15 @@ reflection_sha256 = "reflection"
             freetype_runtime = Sys.islinux() ? "libfreetype.so.6" :
                 Sys.isapple() ? "@rpath/libfreetype.6.dylib" :
                 "libfreetype-6.dll"
+            pcre2_runtime = Sys.islinux() ? "libpcre2-8.so.0" :
+                Sys.isapple() ? "@rpath/libpcre2-8.0.dylib" :
+                "libpcre2-8-0.dll"
+            packages = [JuliaPackageDep("PCRE2_jll", "test-version")]
             bom = runtime_sbom_document(
                 "00000000-0000-0000-0000-000000000000",
                 Sys.islinux() || Sys.isapple() || Sys.iswindows() ?
-                    [freetype_runtime] : String[],
-                JuliaPackageDep[], binary, assets, manifest)
+                    [freetype_runtime, pcre2_runtime] : String[],
+                packages, binary, assets, manifest)
             components = Dict(component["bom-ref"] => component
                 for component in bom["components"])
             binary_ref = Sys.iswindows() ? "file:bin/euclid.exe" :
@@ -622,6 +627,13 @@ reflection_sha256 = "reflection"
             @test components["native:sqlite3"]["version"] == "3.53.4"
             @test components["native:sqlite3"]["scope"] == "required"
             @test "native:sqlite3" in dependencies
+            pcre2 = components["runtime:$pcre2_runtime"]
+            @test pcre2["version"] == "test-version"
+            @test pcre2["properties"][1]["value"] == "PCRE2_jll"
+            @test pcre2["licenses"][1]["expression"] ==
+                "BSD-3-Clause WITH PCRE2-exception"
+            @test components["pkg:julia/PCRE2_jll"]["licenses"][1][
+                "expression"] == "BSD-3-Clause WITH PCRE2-exception"
             if Sys.islinux() || Sys.isapple() || Sys.iswindows()
                 freetype = components["runtime:$freetype_runtime"]
                 @test freetype["version"] == "2.14.3+1"

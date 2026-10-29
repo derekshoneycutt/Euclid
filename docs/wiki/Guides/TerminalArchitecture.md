@@ -477,7 +477,7 @@ Start here:
 - [History runtime](../../../src/view/terminal/history_runtime.odin):
   scheduling, persistence visibility, recall, and shutdown.
 - [History store](../../../src/terminal/history/store/):
-  SQLite records, bounded literal search, and store tests.
+  SQLite records, native condition search, keyset pages, and store tests.
 - [History explorer](../../../src/view/terminal/history_explorer.odin) and
   [async transport](../../../src/view/terminal/history_explorer_runtime.odin):
   isolated query editing, preview, cancellation, and recall without evaluation.
@@ -488,6 +488,112 @@ Start here:
 - [Interaction acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
   and [layout coverage](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl):
   executable end-to-end examples.
+
+The native [PCRE2 owner](../../../src/pcre2/) and
+[8-bit binding](../../../libs/pcre2/) provide Julia-compatible history matching.
+The [history query compiler](../../../src/terminal/history/search/) keeps its bounded
+query bytes inline in the search plan, without borrowing an Odin allocator. Its
+workspace owns the PCRE2 resources; range collection borrows caller-provided
+destination storage only for the duration of the request.
+
+Search admission compiles once on the history worker for the explorer's runtime
+identity. Pages reuse that plan and workspace; a changed query needs a new identity.
+Pending edits coalesce before admission. Empty and invalid-regex-only queries use
+ordinary browse predicates without per-row regex matching.
+
+#### History query language
+
+The native compiler follows the selected Julia runtime's `REPL.History` grammar;
+the test oracle records that runtime's version and history-source digest.
+Semicolon-separated conditions combine with AND, except mode selectors, which
+form a union before combining with source conditions. Escape a separator with
+`\;`; other backslashes are preserved.
+
+| Condition | Meaning |
+| --- | --- |
+| `foo bar` | Require both words anywhere in source. Uppercase anywhere in the segment makes every word case-sensitive; otherwise use Unicode caseless matching. |
+| `=exact text` | Require the exact case-sensitive substring, including spaces. |
+| `!text` | Exclude the exact case-sensitive substring. |
+| `/pattern` | PCRE2 regex; no closing slash. Inline flags such as `/(?i)foo` control case. Malformed explicit patterns are skipped, not errors or literal fallbacks. |
+| `` `fb `` | Initialism matching at word, underscore, or camel-case boundaries. |
+| `~fb` | Fuzzy matching with gaps and segment-wide smart case. |
+| `julia>`, `help>`, `pkg>`, `shell>` | Restrict entry modes, independently of source text. |
+| `?`, `??` | Exact whitespace-trimmed in-place short/extended help, not source conditions. |
+
+No effective conditions means ordinary browsing. Negative and mode-only
+conditions produce no source emphasis. Positive ranges come from the same
+compiled conditions, not another matcher. Queries are bounded to 1,024 UTF-8 bytes
+and 64 conditions; generated patterns and range output have separate fixed limits.
+Exceeding a compiler/native resource bound is an explicit failure, never a skipped
+term or successful no-match.
+
+Fixed store SQL calls `history_matches(source, mode, search_identity)` before its
+matching-row limit. Session pages retain submission-ID order; combined pages retain
+timestamp/scope/ID order and suppress linked saved rows independently of whether
+the session row matches. One matching-row lookahead establishes exhaustion. Summary
+byte pressure leaves an unconsumed match beyond the returned cursor, with no
+application-side scan-window continuation or examined-candidate counter.
+
+The store's stable inline callback adapter is registered `DIRECTONLY`, never
+`DETERMINISTIC`. Its SQLite destructor notification ends registration ownership;
+unregister occurs after statement finalization and before the store can die.
+Each exclusive execution attaches a checked identity and native workspace,
+establishes the saved Odin callback context, and borrows SQLite source bytes only
+until callback return. Statement reset precedes progress-handler restoration and
+binding detachment, all before shared-connection admission is released.
+
+Retiring a query atomically cancels both SQLite progress and PCRE2 callouts, but
+native resources remain alive until the worker joins. The scoped progress callback
+chains any prior tracked handler and restores its exact registration. Cancellation,
+native limits/OOM, callback validation, and SQL failures remain explicit; failed
+pages publish no partial rows.
+
+Positive-match presentation borrows the same retained plan and workspace under the
+history worker's exclusive lease; it never recompiles or filters clipped summaries.
+Accepted rows are reread with exact metadata checks before ranges are collected
+from their complete source. A page packs at most 256 ranges into one inline buffer;
+the exact-source preview has a separate 256-range buffer. Query/request identities
+and record revisions guard publication. A range failure leaves source and recall
+available, reports a nonblocking localized status, and never changes SQL acceptance.
+The [safe display mapping](../../../src/view/ui/terminal/history_explorer_text.odin)
+expands intersecting byte ranges to whole displayed fragments. The match overline
+uses the existing Text role without replacing syntax faces, backgrounds, or underlines.
+
+An exact whitespace-trimmed `?` or `??` query opens short or extended localized
+help in place. Help saves only the prior query and editor selection; the existing
+page, selected candidate, preview, and independent scroll positions stay suspended.
+Help scrolling and accessibility actions address the help document, never hidden
+candidates. Enter cannot recall or evaluate; Escape restores the prior editor and
+the service revalidates its identity before reuse. Editing away from help starts
+ordinary new-query admission. Skipped malformed patterns remain informational;
+native resource, SQL, cancellation, and invalid-query failures have distinct copy.
+
+The build resolves `PCRE2_jll` from the selected Julia runtime for application and
+unit-test linkage, independently of the HarfBuzz provider. Windows import libraries
+are generated from that runtime's DLL; no independent system-regex provider is used.
+
+PCRE2 retains its default memory management. The native owner pairs compiled code,
+match data, and match contexts with their PCRE2 release functions and clears released
+handles. Callers must serialize matches and join all borrowers before replacement or
+release. Subject and atomic cancellation-token borrows end when matching returns.
+Matching is native, without Julia entry or JIT, and uses Julia's UTF, UCP,
+invalid-UTF, and backslash defaults plus automatic cancellation callouts. Default
+limits are 1,000,000 match operations, depth 1,000, and 8,192 KiB of PCRE2 match heap;
+exhaustion and cancellation are explicit outcomes rather than successful no-matches.
+The [root substrate test](../../../src/pcre2_substrate_test.odin) imports the owner
+so the standard Odin suite includes its tests.
+Test-only resource hooks inject acquisition failures and count native handle releases;
+each owner explicitly borrows a caller-owned tracker without mutable global state.
+The hooks neither replace PCRE2's allocator nor exist in production builds. Joined-worker
+tests keep a real interpreter borrow live through cancellation before replacement
+and shutdown release the handles.
+
+The isolated [explorer acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
+preserves draft/mode/recall, duplicates, persistence, clear, and allocation checks.
+Its [search phase](../../../tools/scenarios/terminal-history/explorer-search.jsonl)
+exercises every query form, skipped patterns, help and stale-search revalidation;
+its [layout phase](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl)
+captures wrapped match emphasis and compact help at multiple text sizes.
 
 Some Julia operations request terminal input while evaluation is active. The evaluator
 publishes an explicit lease:

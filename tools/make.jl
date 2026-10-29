@@ -620,10 +620,6 @@ end
 
 """Collect direct Julia package dependencies from a Julia project environment."""
 function collect_julia_packages(julia_project_dir::String)
-    if Sys.which("julia") === nothing
-        return JuliaPackageDep[]
-    end
-
     snippet = "using Pkg; deps = collect(values(Pkg.dependencies())); " *
         "direct = filter(d -> d.is_direct_dep, deps); " *
         "sort!(direct, by = d -> lowercase(d.name)); " *
@@ -632,9 +628,8 @@ function collect_julia_packages(julia_project_dir::String)
     result = run_command(
         Cmd([JULIA_EXE, "--project=" * julia_project_dir, "-e", snippet]),
         capture_output=true)
-    if result.exit_code != 0
-        return JuliaPackageDep[]
-    end
+    result.exit_code == 0 || error(
+        "Failed to collect Julia dependencies: $(strip(result.stderr))")
 
     packages = JuliaPackageDep[]
     seen = Set{String}()
@@ -953,8 +948,8 @@ function runtime_file_components(
     ]
 end
 
-"""Describe one measured runtime library, enriching the known FreeType provider."""
-function runtime_library_component(lib)
+"""Describe one measured runtime library with known JLL provider metadata."""
+function runtime_library_component(lib, julia_packages::Vector{JuliaPackageDep})
     component = Dict{String,Any}(
         "type" => "library",
         "bom-ref" => "runtime:$lib",
@@ -974,6 +969,19 @@ function runtime_library_component(lib)
             Dict("name" => "euclid:header-directory", "value" =>
                 artifact.include_dir),
         ]
+    elseif occursin("pcre2-8", lowercase(basename(String(lib))))
+        pcre2_packages = filter(
+            package -> package.name == "PCRE2_jll", julia_packages)
+        length(pcre2_packages) == 1 || error(
+            "Runtime PCRE2 library has no unique PCRE2_jll dependency.")
+        library_path, _ = EuclidBuildConfiguration.pcre2_jll_paths()
+        component["version"] = only(pcre2_packages).version
+        component["hashes"] = [component_hash(library_path)]
+        component["licenses"] = [Dict(
+            "expression" => "BSD-3-Clause WITH PCRE2-exception")]
+        component["properties"] = [
+            Dict("name" => "euclid:provider", "value" => "PCRE2_jll"),
+        ]
     end
     return component
 end
@@ -986,16 +994,21 @@ function runtime_sbom_components(
     components = runtime_file_components(binary_name, binary_path, assets_path)
 
     for lib in runtime_libs
-        push!(components, runtime_library_component(lib))
+        push!(components, runtime_library_component(lib, julia_packages))
     end
 
     for package in julia_packages
-        push!(components, Dict{String,Any}(
+        component = Dict{String,Any}(
             "type" => "library",
             "bom-ref" => "pkg:julia/$(package.name)",
             "name" => package.name,
             "version" => package.version,
-            "scope" => "required"))
+            "scope" => "required")
+        if package.name == "PCRE2_jll"
+            component["licenses"] = [Dict(
+                "expression" => "BSD-3-Clause WITH PCRE2-exception")]
+        end
+        push!(components, component)
     end
     append!(components, native_graphics_runtime_components(),
         [accesskit_runtime_component(), sqlite3_runtime_component()],

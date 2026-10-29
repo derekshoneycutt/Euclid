@@ -121,7 +121,7 @@ terminal_history_explorer_test_page_order :: proc(
             request_id = 1,
         },
         result = {
-            outcome = .Scanned,
+            outcome = .Complete,
             row_count = 2,
             cursor = {
                 submitted_at_unix_ms = 5,
@@ -151,7 +151,7 @@ terminal_history_explorer_test_reject_stale_search :: proc(
             request_id = 2,
         },
         result = {
-            outcome = .Scanned,
+            outcome = .Complete,
             row_count = 1,
         },
     })
@@ -170,7 +170,7 @@ terminal_history_explorer_test_reject_stale_search :: proc(
             request_id = 3,
         },
         result = {
-            outcome = .Scanned,
+            outcome = .Complete,
             row_count = 1,
         },
     })

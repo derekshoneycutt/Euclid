@@ -90,7 +90,7 @@ increased_contrast_presentation_pairs :: proc(t: ^testing.T) {
         theme.appearance_color(true, .Text_Selection_Background))
 }
 
-// Explorer-owned text stays readable on panel and navigation-selected surfaces.
+// Help, statuses, and the Text-role match overline use these actual panel/selected pairs.
 @(test)
 history_explorer_contrast_covers_selected_and_informational_text :: proc(t: ^testing.T) {
     modes := [?]bool{false, true}
@@ -102,6 +102,8 @@ history_explorer_contrast_covers_selected_and_informational_text :: proc(t: ^tes
         foreground := theme.appearance_color(increased, .Text)
         testing.expect(t, contrast_ratio(foreground, panel) >= target)
         testing.expect(t, contrast_ratio(foreground, selected) >= target)
+        testing.expect(t, contrast_ratio(foreground, panel) >= 3)
+        testing.expect(t, contrast_ratio(foreground, selected) >= 3)
         testing.expect(t,
             contrast_ratio(theme.appearance_color(increased, .Control_Border),
                 panel) >= 3)

@@ -460,7 +460,7 @@ scenario_passed(record) = record.result == "passed" && record.trace_complete &&
 
 include(joinpath(@__DIR__, "favorites_scenarios.jl"))
 
-"""Exercise explorer recall and scaled layouts with isolated data and ordinary input."""
+"""Exercise explorer grammar, help, recall, and scaled layouts with isolated data."""
 function run_terminal_history_explorer_acceptance(binary::String)
     root = fresh_artifact_path("terminal-history-explorer")
     mkpath(root)
@@ -472,10 +472,13 @@ function run_terminal_history_explorer_acceptance(binary::String)
             "terminal-history-explorer-acceptance.jsonl")),
         ("layouts", joinpath("tools", "scenarios", "terminal-history",
             "explorer-layouts.jsonl")),
+        ("search", joinpath("tools", "scenarios", "terminal-history",
+            "explorer-search.jsonl")),
     ]
+        phase_database = phase == "search" ? joinpath(root, "search.sqlite3") : database
         record = run_scenario_launch(binary, "terminal-history-explorer-$phase",
             source, joinpath(root, phase),
-            ["--user-db=$database", "--window-size=1280x1000", "--layout=landscape"];
+            ["--user-db=$phase_database", "--window-size=1280x1000", "--layout=landscape"];
             environment=["XDG_DATA_HOME" => fake_home,
                 "LOCALAPPDATA" => fake_home, "APPDATA" => fake_home],
             diagnostics=true)

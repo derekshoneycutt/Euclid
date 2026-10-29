@@ -688,6 +688,25 @@ The [SQLite boundary](../../../src/sqlite/model.odin) owns connection and
 statement handles, not display collection data. SQLite column bytes are copied
 into snapshot storage rather than retained past statement validity.
 
+Terminal history's [search owner](../../../src/terminal/history/store/model.odin)
+retains its query and condition storage inline and owns PCRE2 handles across pages.
+SQLite registers a stable adapter borrowed from that store; its destructor ends the
+registration borrow without freeing the inline child. Each execution temporarily
+borrows the admitted plan, exclusive mutable workspace, atomic cancellation token,
+and callback source bytes. Reset and progress-handler restoration end those borrows
+before connection admission is released. Query retirement requests cancellation;
+native handle release follows the worker join, and unregister precedes store teardown.
+Neither SQLite's nor PCRE2's internal allocations acquire an Odin allocator domain.
+
+Explorer presentation ranges use fixed inline storage: one packed 256-range page
+buffer and one independent 256-range preview buffer per transport/display owner.
+Rows retain offsets/counts, not a full range array per row. Full-source range
+collection reuses idle mutation scratch while the worker holds exclusive admission,
+clears borrowed source bytes after use, and joins before display publication.
+Range overflow is a nonblocking presentation error, not a history/filter limit.
+Help retains only bounded prior-query bytes and cursor/selection positions; it
+reuses the suspended page and preview rather than allocating another full page.
+
 Collection snapshots, display projection, semantic publication, and native
 callback storage have distinct validity contracts. A logical identity does not
 extend a borrowed pointer's lifetime. Callback-safe publication and retirement

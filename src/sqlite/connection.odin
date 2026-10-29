@@ -30,6 +30,7 @@ connection_open :: proc(
     failure := sqlite_make_error(.Open, connection.handle, result)
     if connection.handle != nil && raw.sqlite3_close(connection.handle) == .Ok {
         connection.handle = nil
+        connection.progress = {}
     }
     return failure
 }

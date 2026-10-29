@@ -7,7 +7,6 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Terminal REPL history explorer
 - Custom notes on collection items
 - Optional checkboxes in tree
 - Animation slider
@@ -234,13 +233,14 @@ General features:
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
   - [X] Julia syntax highlighting
-  - [ ] History explorer, Julia-familiar (In progress)
+  - [X] History explorer, Julia-familiar
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support
   - [X] Reduced motion support
   - [X] High contrast mode
   - [X] Large text support
+  - [ ] Animation monochrome and scaling support
   - [ ] Improved accessibility system
   - [ ] Additional accessibility support : Dynview
   - [ ] Additional accessibility support : Terminal

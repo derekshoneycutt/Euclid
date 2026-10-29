@@ -7,6 +7,7 @@ export accesskit_artifact_path, accesskit_linker_flags, accesskit_manifest,
     accesskit_provider_identity,
     native_linker_flags, native_runtime_dirs, native_runtime_environment,
     native_test_linker_flags, msvc_build_environment, resolve_msvc_tool_path,
+    pcre2_jll_paths, pcre2_jll_linker_flags,
     sdl3_library_path,
     sdl3_linker_flags, sdl3_provider_identity, sdl3_image_library_path,
     sdl3_image_linker_flags, sdl3_image_provider_identity,
@@ -472,13 +473,10 @@ function harfbuzz_pkg_config_arguments(kernel::Symbol=Sys.KERNEL)
     error("System HarfBuzz linkage is unsupported on $kernel.")
 end
 
-"""Apply the Linux PCRE2 runtime workaround to static HarfBuzz flags."""
+"""Keep system HarfBuzz dependencies on the selected Julia PCRE2 runtime."""
 function linux_harfbuzz_linker_flags(flags::Vector{String})
-    pcre2_libdir = readchomp(`pkg-config --variable=libdir libpcre2-8`)
-    pcre2_library = joinpath(pcre2_libdir, "libpcre2-8.so")
-    isfile(pcre2_library) || error("Missing system PCRE2 library at $pcre2_library")
+    pcre2_library, _ = pcre2_jll_paths()
     replace!(flags, "-lpcre2-8" => pcre2_library)
-    pushfirst!(flags, "-Wl,-rpath,$pcre2_libdir")
     return join(flags, " ")
 end
 
@@ -872,6 +870,41 @@ function unix_harfbuzz_jll_linker_flags()
     return join([harfbuzz_library; "-L$(dirname(harfbuzz_library))"; rpaths], " ")
 end
 
+"""Resolve the selected Julia runtime's PCRE2 8-bit library and runtime paths."""
+function pcre2_jll_paths()
+    snippet = "using PCRE2_jll; " *
+        "println(PCRE2_jll.libpcre2_8_path); " *
+        "println.(PCRE2_jll.LIBPATH_list)"
+    command = Cmd([
+        Base.julia_cmd().exec...,
+        "--project=$JULIA_PROJECT",
+        "-e",
+        snippet,
+    ])
+    result = capture_command(command)
+    result.exit_code == 0 || error(
+        "Failed to resolve PCRE2_jll paths: $(strip(result.error_output))")
+    paths = filter(!isempty, String.(strip.(split(result.output, '\n'))))
+    !isempty(paths) || error("PCRE2_jll returned no artifact paths.")
+    isfile(first(paths)) || error("Missing PCRE2 library at $(first(paths)).")
+    return first(paths), unique(paths[2:end])
+end
+
+"""Resolve platform-specific linker flags for the selected PCRE2_jll product."""
+function pcre2_jll_linker_flags()
+    library_path, runtime_dirs = pcre2_jll_paths()
+    Sys.iswindows() && return "/LIBPATH:$IMPORT_LIB_DIR " *
+        "/DEFAULTLIB:pcre2-8.lib"
+    (Sys.islinux() || Sys.isapple()) || error(
+        "PCRE2_jll linkage is unsupported on $(Sys.KERNEL).")
+    if Sys.islinux()
+        return "$library_path -L$(dirname(library_path)) " *
+            "-Wl,-rpath-link,$(join(runtime_dirs, ':'))"
+    end
+    rpaths = ["-Wl,-rpath,$directory" for directory in runtime_dirs]
+    return join([library_path; "-L$(dirname(library_path))"; rpaths], " ")
+end
+
 """Generate the Windows import libraries required by the Odin application."""
 function windows_linker_flags()
     julia_bindir = Sys.BINDIR
@@ -880,6 +913,7 @@ function windows_linker_flags()
     isfile(libjulia_dll) || error("Missing Julia runtime DLL at $libjulia_dll")
     isfile(libopenlibm_dll) || error("Missing Julia runtime DLL at $libopenlibm_dll")
     harfbuzz_dll, _ = harfbuzz_jll_paths()
+    pcre2_dll, _ = pcre2_jll_paths()
 
     lib_exe_path = resolve_msvc_tool_path(
         "VC/Tools/MSVC/**/bin/Hostx64/x64/lib.exe",
@@ -899,8 +933,14 @@ function windows_linker_flags()
         joinpath(IMPORT_LIB_DIR, "libharfbuzz-0.def"),
         joinpath(IMPORT_LIB_DIR, "harfbuzz.lib"),
         lib_exe_path)
+    new_import_library(
+        pcre2_dll,
+        joinpath(IMPORT_LIB_DIR, "libpcre2-8-0.def"),
+        joinpath(IMPORT_LIB_DIR, "pcre2-8.lib"),
+        lib_exe_path)
     return "/LIBPATH:$IMPORT_LIB_DIR " *
-        "/DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib /DEFAULTLIB:harfbuzz.lib"
+        "/DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib /DEFAULTLIB:harfbuzz.lib " *
+        "/DEFAULTLIB:pcre2-8.lib"
 end
 
 """Merge native library parent directories without changing first-seen order."""
@@ -918,6 +958,8 @@ function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
         _, jll_paths = harfbuzz_jll_paths()
         Sys.iswindows() ? [Sys.BINDIR; jll_paths] : jll_paths
     end
+    pcre2_library, pcre2_paths = pcre2_jll_paths()
+    append!(paths, [dirname(pcre2_library); pcre2_paths])
     native_libraries = [
         accesskit_provider_identity().library_path,
         sdl3_provider_identity().library_path,
@@ -956,8 +998,10 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
         "SDL3 application linkage is unsupported on $(Sys.KERNEL).")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
+    pcre2_flags = pcre2_jll_linker_flags()
     freetype_flags = freetype_linker_flags()
-    return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags()) " *
+    return "$harfbuzz_flags $pcre2_flags $(julia_linker_flags()) " *
+        "$(sdl3_linker_flags()) " *
         "$(sdl3_image_linker_flags()) $(accesskit_linker_flags()) " *
         "$(sqlite3_linker_flags()) $freetype_flags"
 end

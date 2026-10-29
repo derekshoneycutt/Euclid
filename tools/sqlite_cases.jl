@@ -72,7 +72,7 @@ function euclid_history_query_steps()
     ]
 end
 
-"""Execute bounded literal-search windows with the native sparse slot contract."""
+"""Validate matching-page SQL using the runner's declared source-query fixture."""
 function euclid_history_search_steps()
     steps = SQLiteValidationStep[]
     for name in ("search_older", "search_newer",
@@ -83,8 +83,9 @@ function euclid_history_search_steps()
                 SQLiteBind(1, SQLiteInteger(cursor_valid)),
                 SQLiteBind(4, SQLiteInteger(2)),
                 SQLiteBind(5, SQLiteInteger(2)),
-                SQLiteBind(6, SQLiteText("source")),
+                SQLiteBind(6, SQLiteInteger(1)),
                 SQLiteBind(7, SQLiteInteger(260)),
+                SQLiteBind(8, SQLiteInteger(1)),
             ]
             if combined
                 push!(bindings, SQLiteBind(2, SQLiteInteger(101)),
@@ -105,7 +106,8 @@ function euclid_sqlite_history_case()
         euclid_history_mutation_steps(),
         euclid_history_search_steps(),
         euclid_history_query_steps())
-    return SQLiteValidationCase("terminal-history"; steps)
+    return SQLiteValidationCase("terminal-history";
+        requirements=["history_matches"], steps)
 end
 
 """Exercise preference and collection persistence with storage-class-accurate bindings."""

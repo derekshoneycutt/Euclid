@@ -74,6 +74,11 @@ terminal_refresh_explorer_frame :: proc(
     if prepared^.explorer_active {
         terminal_explorer_reveal_selection(
             &state^.terminal.history_explorer, prepared^.explorer)
+        explorer := &state^.terminal.history_explorer
+        if explorer.help != .None {
+            explorer.help_scroll_lines = clamp(explorer.help_scroll_lines, 0,
+                terminal_explorer_help_scroll_max(state, prepared^))
+        }
         terminal_explorer_clamp_preview(state, prepared^.explorer)
         terminal_explorer_prepare_caret(state, prepared)
     }
@@ -83,6 +88,9 @@ terminal_refresh_explorer_frame :: proc(
 terminal_explorer_clamp_preview :: proc(
     state: ^core.Euclid_General_State, layout: Terminal_Explorer_Layout) {
     explorer := &state^.terminal.history_explorer
+    if explorer.help != .None {
+        return
+    }
     if layout.compact || explorer^.preview_status != .Ready {
         explorer^.preview_scroll_lines = 0
         return
@@ -102,6 +110,12 @@ terminal_explorer_update_pointer :: proc(
     point := uiwidgets.input_frame_mouse_position(frame)
     if layout.compact {
         explorer^.query_pointer_selecting = false
+        return
+    }
+    if explorer.help != .None {
+        terminal_explorer_query_pointer(explorer, prepared^)
+        explorer.help_scroll_lines = max(0, explorer.help_scroll_lines +
+            int(math.round(-frame.mouse_wheel_delta * theme.WHEEL_SCROLL_MULTIPLIER)))
         return
     }
     if .Left in frame.mouse_pressed {

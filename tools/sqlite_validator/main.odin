@@ -193,13 +193,15 @@ finish_case :: proc(
 // Snapshot actual provider capabilities and initialize exact identity echoes for every declared step.
 initial_result :: proc(execution: ^Case_Execution, request: Request) -> Result {
     allocator := execution.allocator
-    capabilities := make([]string, 2, allocator)
+    capabilities := make([]string, 3, allocator)
     count := 0
     if raw.sqlite3_compileoption_used("ENABLE_FTS5") != 0 {
         capabilities[count] = "fts5"
         count += 1
     }
     capabilities[count] = "spellfix1"
+    count += 1
+    capabilities[count] = "history_matches"
     count += 1
     output: Result = {
         protocol_version = 1,

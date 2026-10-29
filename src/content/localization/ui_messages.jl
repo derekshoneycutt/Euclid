@@ -65,7 +65,7 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
         LocalizedContent.UiMessageDeclaration(UInt16(1021), "ui.terminal.history.hints",
             "Terminal history recall and cancellation hints.",
             LocalizedContent.MessageArgument[]),
-        "Enter: recall   Esc: cancel"),
+        "?: help   Enter: recall   Esc: cancel"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1022), "ui.terminal.history.compact",
             "Terminal history minimum-size instruction.",
@@ -150,6 +150,126 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[
                 LocalizedContent.MessageArgument("count", LocalizedContent.Int64Argument)]),
         "{count}d"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1038), "ui.terminal.history.help_short",
+            "Short history syntax help; prefixes and key names are literal.",
+            LocalizedContent.MessageArgument[]),
+        "History search: words match source; spaces require all words. Semicolons separate conditions."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1039), "ui.terminal.history.help_grammar",
+            "Extended history grammar and limitations, using native query semantics.",
+            LocalizedContent.MessageArgument[]),
+        "Regexes use PCRE2, e.g. /(?i)Foo; no closing slash is needed. Inline flags can override regex case behavior."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1040), "ui.terminal.history.help_keys",
+            "Extended help for actual Euclid bindings, bounds, and duplicate policy.",
+            LocalizedContent.MessageArgument[]),
+        "Up/Down or Ctrl+P/N: select. Enter recalls exact source into the draft; it never runs the entry."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1041), "ui.terminal.history.help_hints",
+            "Help footer; help never accepts a candidate.",
+            LocalizedContent.MessageArgument[]),
+        "??: details   Up/Down: scroll   Esc: restore search"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1042), "ui.terminal.history.help_compact",
+            "Readable minimum-size help instructions.",
+            LocalizedContent.MessageArgument[]),
+        "History help: enlarge Terminal to read syntax. Esc: restore search. Enter does nothing."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1043), "ui.terminal.history.skipped",
+            "Nonblocking malformed-regex notice, including invalid-only browse behavior.",
+            LocalizedContent.MessageArgument[]),
+        "Malformed regex skipped; ?? explains syntax. No remaining conditions browses all history."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1044), "ui.terminal.history.ranges_failed",
+            "Nonblocking emphasis failure; exact source and recall remain usable.",
+            LocalizedContent.MessageArgument[]),
+        "Match emphasis unavailable (range/resource limit or stale source); recall is unchanged."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1045), "ui.terminal.history.resource_failed",
+            "Native memory or regex execution failure, not a malformed-pattern skip.",
+            LocalizedContent.MessageArgument[]),
+        "Search resource or regex execution limit reached; simplify the query."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1046), "ui.terminal.history.sql_failed",
+            "SQLite execution failure, not an empty result.",
+            LocalizedContent.MessageArgument[]),
+        "History database search failed."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1047), "ui.terminal.history.cancelled",
+            "Intentional search interruption.",
+            LocalizedContent.MessageArgument[]),
+        "History search cancelled."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1048), "ui.terminal.history.invalid_query",
+            "Invalid query bytes or query bounds, distinct from skipped explicit regex.",
+            LocalizedContent.MessageArgument[]),
+        "Invalid history query or query limit exceeded."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1049), "ui.terminal.history.help_label",
+            "Accessible label for the in-place history help document.",
+            LocalizedContent.MessageArgument[]),
+        "History search help"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1050), "ui.terminal.history.help_prefixes",
+            "Short help for text operators; preserve literal query prefixes.",
+            LocalizedContent.MessageArgument[]),
+        "=text: exact substring   !text: exclude   /pattern: regex   `abbr: initialism   ~text: fuzzy"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1051), "ui.terminal.history.help_modes",
+            "Native mode names and union semantics.",
+            LocalizedContent.MessageArgument[]),
+        "julia>, help>, pkg>, shell>: modes. Multiple modes form a union, then combine with text conditions."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1052), "ui.terminal.history.help_matches",
+            "Explain the non-destructive positive-match cue.",
+            LocalizedContent.MessageArgument[]),
+        "Overlines mark positive matches without changing syntax faces. Exclusions and modes have no source emphasis."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1053), "ui.terminal.history.help_usage",
+            "Short help interaction and restoration.",
+            LocalizedContent.MessageArgument[]),
+        "?: help   ??: details   Esc: restore search   Enter: no action in help. Edit the query to search again."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1054), "ui.terminal.history.help_case",
+            "Segment-wide smart case for ordinary terms.",
+            LocalizedContent.MessageArgument[]),
+        "Smart case: uppercase in an ordinary semicolon segment makes all its words case-sensitive; otherwise they ignore case."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1055), "ui.terminal.history.help_escapes",
+            "Query escape syntax examples.",
+            LocalizedContent.MessageArgument[]),
+        "Escape semicolons with \\; e.g. =a\\;b. Other backslashes are preserved, including regex escapes such as /\\d+."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1056), "ui.terminal.history.help_skips",
+            "Malformed-pattern compatibility, distinct from real errors.",
+            LocalizedContent.MessageArgument[]),
+        "Malformed regex conditions are skipped. No effective conditions browses all history. Memory/execution failures are errors."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1057), "ui.terminal.history.help_fuzzy",
+            "Generated abbreviation matching examples.",
+            LocalizedContent.MessageArgument[]),
+        "~fb matches with gaps (fuzzy); `fb follows word/camel boundaries (initialism), e.g. fooBar."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1058), "ui.terminal.history.help_pages",
+            "Actual chronological paging and edge bindings.",
+            LocalizedContent.MessageArgument[]),
+        "PageUp/PageDown or Alt+V/Ctrl+V: adjacent page. Alt+Shift+< / >: oldest/newest."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1059), "ui.terminal.history.help_scroll",
+            "Actual independent source and help scrolling bindings.",
+            LocalizedContent.MessageArgument[]),
+        "Alt+PageUp/PageDown or preview wheel: scroll source. In help, Up/Down, PageUp/PageDown and wheel scroll help."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1060), "ui.terminal.history.help_limits",
+            "Bounded query and presentation storage.",
+            LocalizedContent.MessageArgument[]),
+        "Limits: 1024 query UTF-8 bytes, 64 conditions, 256 ranges per page or preview. Source stays readable if emphasis cannot fit."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1061), "ui.terminal.history.help_duplicates",
+            "Euclid chronology and duplicate policy.",
+            LocalizedContent.MessageArgument[]),
+        "Equal distinct submissions stay separate. Linked saved/session copies appear once. Recall preserves original source and mode."),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1101), "ui.library.search_input",
             "Search input label and placeholder.",
