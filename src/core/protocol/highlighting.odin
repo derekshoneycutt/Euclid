@@ -7,7 +7,11 @@ TERMINAL_HIGHLIGHT_RUN_CAPACITY :: 4096
 TERMINAL_HIGHLIGHT_MAILBOX_CAPACITY :: 8
 
 // Stable source surface identity, independent of completion and evaluation.
-Highlight_Target :: enum i32 {Live_Input, History_Entry}
+Highlight_Target :: enum i32 {
+    Live_Input,
+    History_Entry,
+    Persistent_History_Entry,
+}
 
 // Pointer-free identity mirrored by Julia's HighlightIdentity, including rejected modes.
 Highlight_Identity :: struct {
@@ -78,7 +82,8 @@ Highlight_Failed :: struct {
 highlight_request_valid :: proc(request: Highlight_Requested) -> bool {
     id := request.identity
     target_valid := id.target_kind == .Live_Input && id.target_id == 0 ||
-        id.target_kind == .History_Entry && id.target_id > 0
+        (id.target_kind == .History_Entry ||
+         id.target_kind == .Persistent_History_Entry) && id.target_id > 0
     return id.request_id != 0 && id.animation_generation > 0 &&
         id.source_revision > 0 && id.face_generation > 0 &&
         id.mode == i32(Evaluation_Mode.Normal) && target_valid &&

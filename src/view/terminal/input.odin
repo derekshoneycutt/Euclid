@@ -635,7 +635,7 @@ terminal_update_deletion_keys :: proc(
         if terminal_input_chord(frame, .Backspace, {.Super}) {
             termhist.termhist_delete_word(term.history, true)
         } else if !terminal_try_exit_mode_on_empty_backspace(term) {
-            termhist.termhist_backspace(term.history)
+            termhist.termhist_backspace(term.history, true)
         }
         handled = true
     }

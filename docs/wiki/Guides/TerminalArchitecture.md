@@ -515,6 +515,21 @@ Julia classifies Normal-mode prompt and history source and resolves `faces.toml`
 The display owns source, retained styles, and drawing; highlighting does not change
 evaluation or the underlying VT grid.
 
+- History source identities distinguish session entries from persistent entries even
+  when their numeric IDs match. Explorer classifications are valid only while the
+  corresponding opening/query admits the candidate; the exact selected preview is
+  reused, and other Normal-mode candidates use bounded keyed reads.
+- Explorer summaries and preview rows project full-source byte offsets through the
+  grapheme-safe display iterator. Tabs, sanitized controls, hard breaks, and synthetic
+  summary markers never alter the source used for classification, recall, or drawing
+  geometry.
+- Flattened summaries mark newlines with `↵` and collapse following whitespace,
+  including blank-line runs; preview line breaks and indentation
+  remain unchanged. List navigation uses circle markers. Normal Julia entries have
+  no mode badge; other modes use a colored `▦` icon or an expanded selected name.
+- Main-editor Backspace aligns leading spaces to four-column stops and adjusts
+  remaining indentation in one undoable edit. Query-editor deletion remains
+  single-grapheme; selected ranges and ordinary line joining retain precedence.
 - [Julia classification and faces](../../../src/julia/eval/highlighting.jl).
 - [Native scheduling and result validation](../../../src/view/terminal/highlighting.odin).
 - [Live-edit style retention](../../../src/view/terminal/highlighting_presentation.odin)
@@ -522,6 +537,9 @@ evaluation or the underlying VT grid.
 - [History source retrieval](../../../src/view/terminal/highlighting_history.odin).
 - [Rendering](../../../src/view/terminal/highlighting_render.odin) and
   [tests](../../../src/view/terminal/highlighting_render_test.odin).
+- [Explorer syntax, contrast, persisted-source, and session-reset acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl),
+  [general highlighting/session-reset acceptance](../../../tools/scenarios/terminal-highlighting-acceptance.jsonl),
+  and [explorer layout coverage](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl).
 
 ## Output, Emulation, And Rendering
 

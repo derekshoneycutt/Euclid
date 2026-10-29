@@ -150,8 +150,15 @@ terminal_highlight_slot_current :: proc(
             id.source_revision == termhist.termhist_content_revision(term.history) + 1 &&
             source == termhist.termhist_current_text(term.history)
     }
-    entry := terminal_highlight_history_find(
-        term, id.target_id, id.source_revision)
+    candidate := terminal_highlight_explorer_candidate(
+        h, id.target_kind, id.target_id, id.source_revision)
+    if candidate != nil {
+        return slot.source_length > 0
+    }
+    if id.target_kind != .History_Entry {
+        return false
+    }
+    entry := terminal_highlight_history_find(term, id.target_id, id.source_revision)
     return entry != nil && slot.source_length > 0
 }
 
@@ -168,6 +175,25 @@ terminal_live_highlight_runs :: proc(
     return p.runs[:p.run_count]
 }
 
+// Borrow ready styles only for the exact visible scoped history identity.
+terminal_highlight_cached_runs :: proc(
+    term: ^model.Terminal_State, target_kind: protocol.Highlight_Target,
+    target_id, source_revision: u64) -> []protocol.Highlight_Run {
+    if term == nil || term.highlighting == nil {
+        return nil
+    }
+    for &slot in term.highlighting.cache {
+        if slot.phase == .Ready && slot.visible_epoch == term.highlighting.epoch &&
+            slot.identity.target_kind == target_kind &&
+            slot.identity.target_id == target_id &&
+            slot.identity.source_revision == source_revision &&
+            terminal_highlight_slot_current(term, &slot) {
+            return slot.runs[:slot.run_count]
+        }
+    }
+    return nil
+}
+
 // Select live work first, then visible historical work, with a fixed outstanding limit.
 terminal_highlight_next_slot :: proc(
     term: ^model.Terminal_State, now: f64) -> ^model.Terminal_Highlight_Slot {
@@ -175,6 +201,19 @@ terminal_highlight_next_slot :: proc(
     if h.live.phase == .Scheduled && now >= h.live.due &&
         terminal_highlight_slot_current(term, &h.live) {
         return &h.live
+    }
+    for &candidate in h.explorer_candidates[:h.explorer_candidate_count] {
+        if !candidate.selected || candidate.visible_epoch != h.epoch {
+            continue
+        }
+        slot := terminal_highlight_cache_slot_scoped(
+            term, candidate.target_kind, candidate.target_id,
+            candidate.source_revision)
+        if slot != nil && slot.phase == .Scheduled &&
+            slot.visible_epoch == h.epoch &&
+            terminal_highlight_slot_current(term, slot) {
+            return slot
+        }
     }
     for &slot in h.cache {
         if slot.phase == .Scheduled && slot.visible_epoch == h.epoch &&

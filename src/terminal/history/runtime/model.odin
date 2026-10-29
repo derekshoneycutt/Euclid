@@ -66,6 +66,7 @@ History_Read_Request :: struct {
     priority: History_Read_Priority,
     target: History_Read_Target,
     submission_id: u64,
+    source_scope: termhiststore.History_Record_Scope,
     request_id: u64,
     terminal_generation: u64,
     navigation_epoch: u64,

@@ -58,7 +58,10 @@ end
 
 @testset "complete source and live/history identity survive host egress" begin
     runtime = host()
-    for id in (identity(), identity(2; target=1, target_id=17, revision=8, faces=3))
+    for id in (
+        identity(),
+        identity(2; target=1, target_id=17, revision=8, faces=3),
+        identity(3; target=2, target_id=17, revision=8, faces=3))
         source = "α = \"🙂\"\0\n"
         command = resolve(runtime, id, source)
         @test command.kind == 1 && command.failure_reason == 0
@@ -77,7 +80,7 @@ end
 @testset "invalid mode, source, target, and stopped generation" begin
     runtime = host()
     for id in (
-        identity(0), identity(; target=2), identity(; target_id=3),
+        identity(0), identity(; target=3), identity(; target_id=3),
         identity(; target=1), identity(; revision=0), identity(; faces=0),
         identity(; mode=1), identity(; mode=2), identity(; mode=3),
         identity(; mode=typemax(Int32)))

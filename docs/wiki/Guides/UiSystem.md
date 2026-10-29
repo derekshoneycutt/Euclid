@@ -573,7 +573,10 @@ input, scrollbar, or other essential control indicator.
 These are source-color ratios, not measurements of antialiased glyph-edge pixels.
 The [contrast tests](../../../src/view/ui/contrast_test.odin) cover production
 colors and composited states. Draw-encoder tests and rendered scenarios separately
-check that the intended colors actually reach the draw paths.
+check that the intended colors actually reach the draw paths. Explorer Standard and
+Increased captures, selected/unselected Julia rows, and compact/narrow layouts are
+covered by the [history explorer acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
+and [layout scenario](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl).
 
 Selection, keyboard focus, and pressing have independent meanings. Selected rows
 keep their drawer-rose fill when focus leaves; labels, disclosures, and action
@@ -595,6 +598,19 @@ Euclid neither installs replacement faces nor rehighlights when contrast changes
 Resolved syntax colors are not part of the application's contrast guarantee.
 Completion previews remain application-owned and have a dotted underline as well
 as a distinct, readable foreground.
+
+Terminal History Explorer uses its own selected backing role so application-owned
+fallback text, query selection, age, status, hints, and preview messages keep
+the enabled-text target without changing shared Terminal selection colors. Its
+circle markers stay in a source-independent gutter: small circles for ordinary
+rows and a larger, accented open circle for the current row. Julia is implicit in
+the list; other modes use a prompt-colored grid symbol, expanding to a dark name
+on a mode-colored badge when current. Badge lettering meets the enabled-text
+target, while compact symbols and the current-row marker meet the essential
+indicator target. Arbitrary Julia syntax faces retain the syntax-color exception.
+The recall/cancel hints interrupt the preview's bottom outline, right-aligned on
+an opaque panel backing rather than consuming a separate footer row. The preview
+uses remaining fractional height, avoiding unused space below that footer.
 
 Scope and exceptions:
 
@@ -629,6 +645,10 @@ hover/selected states, prompts, completion previews, and selection lettering.
 Essential control outlines retain the **3:1** target. Disabled controls, authored
 content, Julia syntax colors, and arbitrary terminal output retain the exceptions
 above. These targets are not a claim of full accessibility conformance.
+
+History Explorer uses application text against its local `#2C2C2C` selection
+backing in both modes. Its source-independent current-row marker remains legible
+even when custom syntax backgrounds obscure the selected fill.
 
 | Increased pair | Nominal contrast |
 | --- | --- |

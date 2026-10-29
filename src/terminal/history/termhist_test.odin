@@ -3,6 +3,51 @@ package termhist
 
 import "core:testing"
 
+// Indentation backspace aligns nested and irregular space prefixes as one undoable edit.
+@(test)
+termhist_test_aligned_backspace :: proc(t: ^testing.T) {
+    sources := [?]string{
+        "begin\n        x", "begin\n      x", "begin\n        x",
+        "begin\n        \nend", "begin\nx", "α  x", "e\u0301",
+    }
+    cursors := [?]int{14, 12, 12, 12, 6, 4, len("e\u0301")}
+    expected := [?]string{
+        "begin\n    x", "begin\n    x", "begin\n    x",
+        "begin\n    \nend", "beginx", "α x", "",
+    }
+    for source, index in sources {
+        state: Termhist_State
+        testing.expect(t, termhist_init_with_allocator(&state, 32, context.allocator))
+        defer termhist_destroy(&state)
+        testing.expect(t, termhist_insert_text(&state, source))
+        _ = termhist_set_cursor(&state, cursors[index])
+        testing.expect_value(t, state.cursor, cursors[index])
+        testing.expect(t, termhist_backspace(&state, true))
+        testing.expect_value(t, termhist_current_text(&state), expected[index])
+        testing.expect(t, termhist_undo(&state))
+        testing.expect_value(t, termhist_current_text(&state), source)
+        testing.expect_value(t, state.cursor, cursors[index])
+        testing.expect(t, termhist_redo(&state))
+        testing.expect_value(t, termhist_current_text(&state), expected[index])
+    }
+}
+
+// Query-style deletion remains single-grapheme; selected ranges take precedence.
+@(test)
+termhist_test_backspace_alignment_is_opt_in :: proc(t: ^testing.T) {
+    state: Termhist_State
+    testing.expect(t, termhist_init_with_allocator(&state, 16, context.allocator))
+    defer termhist_destroy(&state)
+    testing.expect(t, termhist_insert_text(&state, "        x"))
+    testing.expect(t, termhist_set_cursor(&state, 8))
+    testing.expect(t, termhist_backspace(&state))
+    testing.expect_value(t, termhist_current_text(&state), "       x")
+    testing.expect(t, termhist_set_cursor(&state, 2))
+    testing.expect(t, termhist_set_cursor(&state, 7, true))
+    testing.expect(t, termhist_backspace(&state, true))
+    testing.expect_value(t, termhist_current_text(&state), "  x")
+}
+
 // Resets distinguish identical recalled commands from edits and cursor movement.
 @(test)
 termhist_test_reset_revision :: proc(t: ^testing.T) {

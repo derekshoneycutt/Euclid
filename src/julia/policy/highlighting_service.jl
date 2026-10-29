@@ -1,7 +1,7 @@
 const HighlightAdapter = EuclidReplEvaluation.SyntaxHighlighting
 const HIGHLIGHT_MAILBOX_CAPACITY = 8
 
-"""Exact source/cache identity; target 0 is live input, target 1 is a history entry."""
+"""Exact source/cache identity; target 0 is live, 1 session history, and 2 saved history."""
 struct HighlightIdentity
     request_id::UInt64
     session_generation::UInt64
@@ -56,14 +56,18 @@ end
 highlight_request_key(identity::HighlightIdentity) =
     HighlightRequestKey(identity.session_generation, identity.request_id)
 
+"""Check whether an identity selects live input or one scoped history source."""
+function valid_highlight_target(id::HighlightIdentity)::Bool
+    return (id.target_kind == 0 && id.target_id == 0) ||
+        ((id.target_kind == 1 || id.target_kind == 2) && id.target_id > 0)
+end
+
 """Check request identity, Normal mode, and source bounds before mailbox admission."""
 function valid_highlight_request(request::HighlightRequested)::Bool
     id = request.identity
-    valid_target = id.target_kind == 0 ? id.target_id == 0 :
-        id.target_kind == 1 && id.target_id > 0
     return id.request_id > 0 && id.session_generation > 0 &&
-        id.source_revision > 0 && id.face_generation > 0 &&
-        id.mode == 0 && valid_target && isvalid(request.source) &&
+        id.source_revision > 0 && id.face_generation > 0 && id.mode == 0 &&
+        valid_highlight_target(id) && isvalid(request.source) &&
         ncodeunits(request.source) <= HighlightAdapter.MAX_SOURCE_BYTES
 end
 

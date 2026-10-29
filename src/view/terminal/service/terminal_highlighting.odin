@@ -53,6 +53,8 @@ terminal_highlight_service_update :: proc(
         count := int(prepared.scroll.view_rect.height / prepared.layout.line_height) + 2
         terminalview.terminal_highlight_observe_history(term, first, first + count)
     }
+    terminalview.terminal_highlight_observe_explorer(
+        term, &term.history_explorer)
     terminal_highlight_schedule_source_read(state)
     request, ready := terminalview.terminal_highlight_take_request(term, now)
     if !ready {
@@ -91,14 +93,16 @@ terminal_highlight_schedule_source_read :: proc(state: ^core.Euclid_General_Stat
         priority = .Speculative,
         target = .Highlighting,
         submission_id = id,
+        source_scope = .Session if
+            source_request.target_kind == .History_Entry else .Persistent,
         request_id = term^.history_source_request_id,
         terminal_generation = term^.animation_generation,
         source_revision = revision,
         face_generation = term^.highlighting.face_generation,
     }
     if terminalview.history_runtime_request_read(history, request) {
-        _ = terminalview.terminal_highlight_source_fetch_begin(
-            term, id, revision, request.request_id)
+        _ = terminalview.terminal_highlight_source_fetch_begin_scoped(
+            term, source_request.target_kind, id, revision, request.request_id)
         term^.history_source_admission_reported = false
     } else if !term^.history_source_admission_reported {
         log.warn("terminal_history_highlight_delayed reason=request_admission")

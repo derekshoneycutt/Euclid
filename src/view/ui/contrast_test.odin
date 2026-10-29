@@ -90,6 +90,45 @@ increased_contrast_presentation_pairs :: proc(t: ^testing.T) {
         theme.appearance_color(true, .Text_Selection_Background))
 }
 
+// Explorer-owned text stays readable on panel and navigation-selected surfaces.
+@(test)
+history_explorer_contrast_covers_selected_and_informational_text :: proc(t: ^testing.T) {
+    modes := [?]bool{false, true}
+    for increased in modes {
+        target := f64(4.5) if !increased else f64(7)
+        panel := contrast_rgb(theme.UI_COMPONENT_BACKGROUND_COLOR)
+        selected := contrast_rgb(theme.appearance_color(
+            increased, .History_Explorer_Selection_Background))
+        foreground := theme.appearance_color(increased, .Text)
+        testing.expect(t, contrast_ratio(foreground, panel) >= target)
+        testing.expect(t, contrast_ratio(foreground, selected) >= target)
+        testing.expect(t,
+            contrast_ratio(theme.appearance_color(increased, .Control_Border),
+                panel) >= 3)
+    }
+}
+
+// Colored mode icons, inverse name badges, and the current-row circle meet their targets.
+@(test)
+history_explorer_contrast_covers_mode_badges_and_marker :: proc(t: ^testing.T) {
+    modes := [?]bool{false, true}
+    roles := [?]theme.Color_Role{.Terminal_Help, .Terminal_Package, .Terminal_Shell}
+    for increased in modes {
+        target := f64(7) if increased else f64(4.5)
+        panel := contrast_rgb(theme.UI_COMPONENT_BACKGROUND_COLOR)
+        selected := contrast_rgb(theme.appearance_color(
+            increased, .History_Explorer_Selection_Background))
+        for role in roles {
+            paint := theme.appearance_color(increased, role)
+            testing.expect(t, contrast_ratio(paint, panel) >= 3)
+            testing.expect(t, contrast_ratio(theme.UI_COMPONENT_BACKGROUND_COLOR,
+                contrast_rgb(paint)) >= target)
+        }
+        testing.expect(t, contrast_ratio(
+            theme.appearance_color(increased, .Terminal_Package), selected) >= 3)
+    }
+}
+
 // contrast_rgb converts opaque sRGB bytes to normalized channels without linearizing.
 contrast_rgb :: proc(value: color.Color_RGBA8) -> [3]f64 {
     return {f64(value.r) / 255, f64(value.g) / 255, f64(value.b) / 255}

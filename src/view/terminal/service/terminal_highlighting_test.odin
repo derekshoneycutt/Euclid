@@ -185,6 +185,7 @@ terminal_service_test_set_highlight_read_result :: proc(
         priority = .Speculative,
         target = .Highlighting,
         submission_id = id,
+        source_scope = .Session,
         request_id = 100,
         terminal_generation = state^.terminal.animation_generation,
         source_revision = revision,
@@ -194,6 +195,8 @@ terminal_service_test_set_highlight_read_result :: proc(
         outcome = .Found,
         record = {
             submission_id = id,
+            scope = .Session,
+            source_id = id,
             mode = .Normal,
             terminal_generation = state^.terminal.animation_generation,
             source_revision = revision,

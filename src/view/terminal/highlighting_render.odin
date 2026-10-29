@@ -214,6 +214,11 @@ terminal_draw_syntax_segment :: proc(
     terminal_syntax_decorations(request.encoder, style, position, width)
 }
 
+// Draw a sanitized explorer fragment with its original full-source style offset.
+terminal_draw_explorer_syntax_fragment :: proc(request: Terminal_Prompt_Text_Draw) {
+    terminal_draw_syntax_segment(request, 0, len(request.current_text))
+}
+
 // Return the byte length of one complete terminal grapheme, matching prompt/grid clustering.
 terminal_syntax_grapheme_length :: proc(text: string) -> int {
     cells: [2]termgrid.Cell

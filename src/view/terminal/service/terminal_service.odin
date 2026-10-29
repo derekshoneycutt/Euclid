@@ -549,12 +549,17 @@ terminal_service_consume_highlight_source :: proc(
     result := completion.result
     found := consumed && result.outcome ==
         termhiststore.History_Read_Outcome.Found &&
-        result.record.submission_id == request.submission_id &&
+        result.record.scope == request.source_scope &&
+        result.record.source_id == request.submission_id &&
         result.record.source_revision == request.source_revision
+    target_kind: protocol.Highlight_Target = .History_Entry
+    if request.source_scope == .Persistent {
+        target_kind = .Persistent_History_Entry
+    }
     identity: protocol.Highlight_Identity = {
         request_id = protocol.Request_Id(request.request_id),
         animation_generation = request.terminal_generation,
-        target_kind = .History_Entry,
+        target_kind = target_kind,
         target_id = request.submission_id,
         source_revision = request.source_revision,
         face_generation = request.face_generation,

@@ -2,12 +2,14 @@ package terminalview
 
 import model "model"
 import protocol "../../core/protocol"
+import termhiststore "../../terminal/history/store"
 import "core:log"
 import "core:unicode/utf8"
 
 Terminal_Highlight_Source_Request :: struct {
     submission_id: u64,
     source_revision: u64,
+    target_kind: protocol.Highlight_Target,
 }
 
 // Remove all output anchors and cached sources for one continued submission.
@@ -23,7 +25,8 @@ terminal_highlight_remove_submission :: proc(
         }
     }
     for &slot in h.cache {
-        if slot.identity.target_id == id {
+        if slot.identity.target_kind == .History_Entry &&
+            slot.identity.target_id == id {
             slot.phase = .Empty
             slot.source_length = 0
             slot.source_fetch_request_id = 0
@@ -44,7 +47,8 @@ terminal_highlight_remove_revision :: proc(
         }
     }
     for &slot in h.cache {
-        if slot.identity.target_id == id &&
+        if slot.identity.target_kind == .History_Entry &&
+            slot.identity.target_id == id &&
             slot.identity.source_revision == revision {
             slot.phase = .Empty
             slot.source_length = 0
@@ -181,24 +185,38 @@ terminal_highlight_mark_visible :: proc(
         terminal_highlight_mark_anchor_visible(term, &entry, first, end)
     }
     for &slot in h.cache {
-        entry := terminal_highlight_history_find(
+        terminal_highlight_mark_slot_visible(term, &slot)
+    }
+}
+
+// Keep a cached style live only while its scope-qualified source remains admissible.
+terminal_highlight_mark_slot_visible :: proc(
+    term: ^model.Terminal_State, slot: ^model.Terminal_Highlight_Slot) {
+    h := term.highlighting
+    entry: ^model.Terminal_Highlight_History
+    if slot.identity.target_kind == .History_Entry {
+        entry = terminal_highlight_history_find(
             term, slot.identity.target_id, slot.identity.source_revision)
-        if entry == nil || slot.identity.face_generation != h.face_generation {
-            slot.phase = .Empty
-            continue
+    }
+    candidate := terminal_highlight_explorer_candidate(
+        h, slot.identity.target_kind, slot.identity.target_id,
+        slot.identity.source_revision)
+    if (entry == nil && candidate == nil) ||
+        slot.identity.face_generation != h.face_generation {
+        slot.phase = .Empty
+        return
+    }
+    visible := candidate != nil
+    for &anchor in h.history {
+        if anchor.id == slot.identity.target_id &&
+            anchor.source_revision == slot.identity.source_revision &&
+            anchor.visible_epoch == h.epoch {
+            visible = true
+            break
         }
-        visible := false
-        for &anchor in h.history {
-            if anchor.id == slot.identity.target_id &&
-                anchor.source_revision == slot.identity.source_revision &&
-                anchor.visible_epoch == h.epoch {
-                visible = true
-                break
-            }
-        }
-        if visible {
-            slot.visible_epoch = h.epoch
-        }
+    }
+    if visible {
+        slot.visible_epoch = h.epoch
     }
 }
 
@@ -215,14 +233,23 @@ terminal_highlight_mark_anchor_visible :: proc(
     }
 }
 
-// Reuse an exact identity or evict the least-recently-visible inactive source slot.
+// Reuse one session-history identity or evict an inactive source slot.
 terminal_highlight_cache_slot :: proc(
     term: ^model.Terminal_State, id, revision: u64) ->
         ^model.Terminal_Highlight_Slot {
+    return terminal_highlight_cache_slot_scoped(
+        term, .History_Entry, id, revision)
+}
+
+// Keep session and persistent identities distinct even when their numeric IDs match.
+terminal_highlight_cache_slot_scoped :: proc(
+    term: ^model.Terminal_State, target_kind: protocol.Highlight_Target,
+    id, revision: u64) -> ^model.Terminal_Highlight_Slot {
     h := term.highlighting
     victim: ^model.Terminal_Highlight_Slot
     for &slot in h.cache {
-        if slot.identity.target_id == id &&
+        if slot.identity.target_kind == target_kind &&
+            slot.identity.target_id == id &&
             slot.identity.source_revision == revision {
             return &slot
         }
@@ -238,6 +265,20 @@ terminal_highlight_cache_slot :: proc(
         h.eviction_count += 1
     }
     return victim
+}
+
+// Find a candidate admitted by the current explorer opening and query.
+terminal_highlight_explorer_candidate :: proc(
+    h: ^model.Terminal_Highlighting, target_kind: protocol.Highlight_Target,
+    id, revision: u64) -> ^model.Terminal_Highlight_Explorer_Candidate {
+    for &candidate in h.explorer_candidates[:h.explorer_candidate_count] {
+        if candidate.target_kind == target_kind &&
+            candidate.target_id == id &&
+            candidate.source_revision == revision {
+            return &candidate
+        }
+    }
+    return nil
 }
 
 // Schedule visible cache hits; uncached identities are fetched asynchronously.
@@ -268,13 +309,22 @@ terminal_highlight_observe_history :: proc(
 terminal_highlight_observe_history_anchor :: proc(
     term: ^model.Terminal_State,
     entry: ^model.Terminal_Highlight_History) -> bool {
-    h := term.highlighting
     slot := terminal_highlight_cache_slot(
         term, entry.id, entry.source_revision)
     if slot == nil {
         return false
     }
-    if slot.identity.target_id != entry.id ||
+    terminal_highlight_prepare_history_slot(term, entry, slot)
+    return true
+}
+
+// Refresh one anchor's scoped identity and schedule its retained exact source.
+terminal_highlight_prepare_history_slot :: proc(
+    term: ^model.Terminal_State, entry: ^model.Terminal_Highlight_History,
+    slot: ^model.Terminal_Highlight_Slot) {
+    h := term.highlighting
+    if slot.identity.target_kind != .History_Entry ||
+        slot.identity.target_id != entry.id ||
         slot.identity.source_revision != entry.source_revision {
         slot.phase = .Empty
         slot.source_length = 0
@@ -296,7 +346,170 @@ terminal_highlight_observe_history_anchor :: proc(
             string(slot.source[:slot.source_length]), slot.identity, 0)
     }
     slot.visible_epoch = h.epoch
-    return true
+}
+
+// Retire explorer-only cache entries when its opening or query identity changes.
+terminal_highlight_retire_explorer_candidates :: proc(
+    term: ^model.Terminal_State) {
+    h := term.highlighting
+    for &slot in h.cache {
+        if slot.identity.target_kind == .Persistent_History_Entry ||
+            (slot.identity.target_kind == .History_Entry &&
+             terminal_highlight_history_find(
+                 term, slot.identity.target_id,
+                 slot.identity.source_revision) == nil) {
+            slot.identity = {}
+            slot.phase = .Empty
+            slot.source_length = 0
+            slot.run_count = 0
+            slot.source_fetch_request_id = 0
+        }
+    }
+    h.explorer_candidate_count = 0
+}
+
+// Observe the explorer's bounded candidate page and reuse an exact selected preview.
+terminal_highlight_observe_explorer :: proc(
+    term: ^model.Terminal_State, explorer: ^model.History_Explorer_State) {
+    if term == nil || term.highlighting == nil || explorer == nil {
+        return
+    }
+    h := term.highlighting
+    active := explorer.active
+    lifecycle_changed := h.explorer_active != active ||
+        active && (h.explorer_opening_generation != explorer.opening_generation ||
+        h.explorer_query_generation != explorer.query_generation ||
+        h.explorer_runtime_epoch != explorer.identity.runtime_epoch)
+    if lifecycle_changed {
+        terminal_highlight_retire_explorer_candidates(term)
+        h.explorer_active = active
+        h.explorer_opening_generation = explorer.opening_generation
+        h.explorer_query_generation = explorer.query_generation
+        h.explorer_runtime_epoch = explorer.identity.runtime_epoch
+    }
+    if !active {
+        return
+    }
+    h.explorer_candidate_count = 0
+    selected := explorer.selected_index
+    if selected >= 0 && selected < explorer.row_count {
+        terminal_highlight_explorer_add_candidate(
+            term, explorer, selected, true)
+    }
+    for index in 0..<explorer.row_count {
+        if index != selected {
+            terminal_highlight_explorer_add_candidate(
+                term, explorer, index, false)
+        }
+    }
+}
+
+// Register one Normal-mode row and schedule it from source already owned by preview.
+terminal_highlight_explorer_add_candidate :: proc(
+    term: ^model.Terminal_State, explorer: ^model.History_Explorer_State,
+    index: int, selected: bool) {
+    if index < 0 || index >= explorer.row_count ||
+        term.highlighting.explorer_candidate_count >=
+            len(term.highlighting.explorer_candidates) {
+        return
+    }
+    record := explorer.rows[index].record
+    if record.mode != .Normal || record.source_id == 0 ||
+        record.source_revision == 0 {
+        return
+    }
+    target_kind: protocol.Highlight_Target = .History_Entry
+    if record.scope == .Persistent {
+        target_kind = .Persistent_History_Entry
+    }
+    if terminal_highlight_explorer_register_candidate(
+        term, explorer, record, target_kind, selected) == nil {
+        return
+    }
+    slot := terminal_highlight_cache_slot_scoped(
+        term, target_kind, record.source_id, record.source_revision)
+    if slot == nil {
+        return
+    }
+    terminal_highlight_prepare_explorer_slot(term, record, target_kind, slot)
+    if selected && slot.source_length == 0 &&
+        terminal_highlight_explorer_preview_matches(explorer, record) {
+        slot.source_fetch_request_id = 0
+        terminal_highlight_schedule(
+            term, slot, string(explorer.preview_source[:explorer.preview_length]),
+            slot.identity, 0)
+    }
+}
+
+// Register one scoped source in the bounded current-query candidate set.
+terminal_highlight_explorer_register_candidate :: proc(
+    term: ^model.Terminal_State, explorer: ^model.History_Explorer_State,
+    record: termhiststore.History_Record,
+    target_kind: protocol.Highlight_Target, selected: bool) ->
+        ^model.Terminal_Highlight_Explorer_Candidate {
+    h := term.highlighting
+    if terminal_highlight_explorer_candidate(
+        h, target_kind, record.source_id, record.source_revision) != nil {
+        return nil
+    }
+    candidate := &h.explorer_candidates[h.explorer_candidate_count]
+    candidate^ = {
+        target_kind = target_kind,
+        target_id = record.source_id,
+        source_revision = record.source_revision,
+        visible_epoch = h.epoch,
+        selected = selected,
+        awaiting_preview = selected &&
+            explorer.preview_status == .Loading,
+    }
+    h.explorer_candidate_count += 1
+    return candidate
+}
+
+// Refresh scoped slot identity while retaining pending request correlation.
+terminal_highlight_prepare_explorer_slot :: proc(
+    term: ^model.Terminal_State, record: termhiststore.History_Record,
+    target_kind: protocol.Highlight_Target, slot: ^model.Terminal_Highlight_Slot) {
+    h := term.highlighting
+    if slot.identity.target_kind != target_kind ||
+        slot.identity.target_id != record.source_id ||
+        slot.identity.source_revision != record.source_revision {
+        slot.identity = {}
+        slot.phase = .Empty
+        slot.source_length = 0
+        slot.run_count = 0
+        slot.source_fetch_request_id = 0
+    }
+    request_id := protocol.Request_Id(0)
+    if slot.phase == .Pending {
+        request_id = slot.identity.request_id
+    }
+    slot.identity = {
+        request_id = request_id,
+        animation_generation = term.animation_generation,
+        target_kind = target_kind,
+        target_id = record.source_id,
+        source_revision = record.source_revision,
+        face_generation = h.face_generation,
+        mode = i32(protocol.Evaluation_Mode.Normal),
+    }
+    slot.visible_epoch = h.epoch
+    if slot.source_length > 0 && slot.phase == .Empty {
+        terminal_highlight_schedule(
+            term, slot, string(slot.source[:slot.source_length]), slot.identity, 0)
+    }
+}
+
+// Match the exact ready Normal-mode preview to its selected candidate identity.
+terminal_highlight_explorer_preview_matches :: proc(
+    explorer: ^model.History_Explorer_State,
+    record: termhiststore.History_Record) -> bool {
+    return explorer.preview_status == .Ready &&
+        explorer.preview_record.scope == record.scope &&
+        explorer.preview_record.source_id == record.source_id &&
+        explorer.preview_record.source_revision == record.source_revision &&
+        explorer.preview_record.mode == .Normal &&
+        explorer.preview_length > 0
 }
 
 // Select one visible uncached source identity for a speculative SQLite read.
@@ -306,8 +519,25 @@ terminal_highlight_source_request_next :: proc(
     if term == nil || term.highlighting == nil {
         return {}, false
     }
-    for &entry in term.highlighting.history {
-        if entry.id == 0 || entry.visible_epoch != term.highlighting.epoch {
+    h := term.highlighting
+    for &candidate in h.explorer_candidates[:h.explorer_candidate_count] {
+        if candidate.visible_epoch != h.epoch || candidate.awaiting_preview {
+            continue
+        }
+        slot := terminal_highlight_cache_slot_scoped(
+            term, candidate.target_kind, candidate.target_id,
+            candidate.source_revision)
+        if slot != nil && slot.source_length == 0 &&
+            slot.source_fetch_request_id == 0 && slot.phase != .Failed {
+            return {
+                submission_id = candidate.target_id,
+                source_revision = candidate.source_revision,
+                target_kind = candidate.target_kind,
+            }, true
+        }
+    }
+    for &entry in h.history {
+        if entry.id == 0 || entry.visible_epoch != h.epoch {
             continue
         }
         slot := terminal_highlight_cache_slot(
@@ -317,6 +547,7 @@ terminal_highlight_source_request_next :: proc(
             return {
                 submission_id = entry.id,
                 source_revision = entry.source_revision,
+                target_kind = .History_Entry,
             }, true
         }
     }
@@ -326,14 +557,27 @@ terminal_highlight_source_request_next :: proc(
 // Bind one admitted speculative history request to its source cache slot.
 terminal_highlight_source_fetch_begin :: proc(
     term: ^model.Terminal_State, id, revision, request_id: u64) -> bool {
-    slot := terminal_highlight_cache_slot(term, id, revision)
+    return terminal_highlight_source_fetch_begin_scoped(
+        term, .History_Entry, id, revision, request_id)
+}
+
+// Bind a keyed session or persistent lookup to its exact visible candidate.
+terminal_highlight_source_fetch_begin_scoped :: proc(
+    term: ^model.Terminal_State, target_kind: protocol.Highlight_Target,
+    id, revision, request_id: u64) -> bool {
+    slot := terminal_highlight_cache_slot_scoped(
+        term, target_kind, id, revision)
+    candidate := terminal_highlight_explorer_candidate(
+        term.highlighting, target_kind, id, revision)
+    anchored := target_kind == .History_Entry &&
+        terminal_highlight_history_find(term, id, revision) != nil
     if slot == nil || slot.source_length > 0 ||
-        terminal_highlight_history_find(term, id, revision) == nil {
+        (candidate == nil && !anchored) {
         return false
     }
     slot.identity = {
         animation_generation = term.animation_generation,
-        target_kind = .History_Entry,
+        target_kind = target_kind,
         target_id = id,
         source_revision = revision,
         face_generation = term.highlighting.face_generation,
@@ -369,10 +613,15 @@ terminal_highlight_source_fetch_publish :: proc(
     slot.source_fetch_request_id = 0
     if identity.animation_generation != term.animation_generation ||
         identity.face_generation != term.highlighting.face_generation ||
+        slot.identity.target_kind != identity.target_kind ||
         slot.identity.target_id != identity.target_id ||
         slot.identity.source_revision != identity.source_revision ||
-        terminal_highlight_history_find(
-            term, identity.target_id, identity.source_revision) == nil {
+        (terminal_highlight_explorer_candidate(
+            term.highlighting, identity.target_kind, identity.target_id,
+            identity.source_revision) == nil &&
+         (identity.target_kind != .History_Entry ||
+          terminal_highlight_history_find(
+              term, identity.target_id, identity.source_revision) == nil)) {
         slot.phase = .Empty
         return
     }
@@ -388,7 +637,7 @@ terminal_highlight_source_fetch_publish :: proc(
     slot.run_count = 0
     slot.identity = {
         animation_generation = identity.animation_generation,
-        target_kind = .History_Entry,
+        target_kind = identity.target_kind,
         target_id = identity.target_id,
         source_revision = identity.source_revision,
         face_generation = identity.face_generation,
@@ -405,7 +654,9 @@ terminal_history_highlight_slot :: proc(
         return nil
     }
     for &slot in term.highlighting.cache {
-        if slot.phase == .Ready && slot.identity.target_id == entry.id &&
+        if slot.phase == .Ready &&
+            slot.identity.target_kind == .History_Entry &&
+            slot.identity.target_id == entry.id &&
             slot.identity.source_revision == entry.source_revision &&
             terminal_highlight_slot_current(term, &slot) {
             return &slot

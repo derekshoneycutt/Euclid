@@ -427,7 +427,7 @@ termhist_replace_input_range :: proc(
 //
 // Returns:
 //   - true if anything was deleted.
-termhist_backspace :: proc(state: ^Termhist_State) -> bool {
+termhist_backspace :: proc(state: ^Termhist_State, align_indent: bool = false) -> bool {
     if start, end := termhist_selection_range(state); start != end {
         changed := termhist_replace_range(state, start, end, "")
         if changed {
@@ -437,6 +437,13 @@ termhist_backspace :: proc(state: ^Termhist_State) -> bool {
     if state.cursor == 0 {
         return false
     }
+    if align_indent {
+        start, end := termhist_backspace_indent_range(
+            string(state.text[:state.text_len]), state.cursor)
+        if start < end {
+            return termhist_replace_range(state, start, end, "")
+        }
+    }
 
     start := coretext.text_grapheme_previous_boundary(
         string(state.text[:state.text_len]), state.cursor)
@@ -444,6 +451,31 @@ termhist_backspace :: proc(state: ^Termhist_State) -> bool {
     if changed {
     }
     return changed
+}
+
+// Align leading ASCII spaces to four-column stops, adjusting the remaining indentation.
+termhist_backspace_indent_range :: proc(source: string, cursor: int) -> (int, int) {
+    line_start := cursor
+    for line_start > 0 && source[line_start - 1] != '\n' {
+        line_start -= 1
+    }
+    if cursor == line_start {
+        return 0, 0
+    }
+    for index in line_start..<cursor {
+        if source[index] != ' ' {
+            return 0, 0
+        }
+    }
+    start := cursor - 1 - (cursor - 1 - line_start) % 4
+    end := cursor
+    for end < len(source) && source[end] == ' ' {
+        end += 1
+    }
+    if end < len(source) && source[end] != '\n' {
+        end = min(end, start + 4)
+    }
+    return start, end
 }
 
 //   Delete the grapheme at the cursor.

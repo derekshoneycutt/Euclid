@@ -89,10 +89,36 @@
 {"set_setting":{"key":"terminal.persist_history","value":true}}
 {"wait_terminal_explorer":"ready","timeout_ms":10000}
 {"assert_terminal_preview":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend"}
+{"screenshot":".build/explorer-syntax-standard.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"down"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase5_runs = @isdefined(phase5_runs) ? phase5_runs + 1 : 1\n    phase5_runs\nend"}
+{"screenshot":".build/explorer-syntax-unselected-row.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_setting":{"key":"interface.increased_contrast","value":true}}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"screenshot":".build/explorer-syntax-increased.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
 {"confirm_terminal_history_delete":"cleared","timeout_ms":10000}
 {"wait_terminal_explorer":"empty","timeout_ms":10000}
 {"key":"enter"}
 {"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":3}}
 {"key":"escape"}
+{"type":"begin\n    phase4_saved = \"persistent explorer source\"\n    phase4_saved\nend"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"terminal_session_ready","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"key":{"name":"r","ctrl":true}}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"type":"phase4_saved"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
+{"assert_terminal_preview":"begin\n    phase4_saved = \"persistent explorer source\"\n    phase4_saved\nend"}
+{"wait_event":"terminal_history_highlight_published","timeout_ms":10000}
+{"screenshot":".build/explorer-persistent-no-anchor.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
 {"assert_no_bad_frees":true}
 {"shutdown":true}

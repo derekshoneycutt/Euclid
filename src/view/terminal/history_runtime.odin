@@ -193,7 +193,10 @@ history_runtime_request_read :: proc(
           !request.cursor_valid)) && request.submission_id == 0) ||
        request.request_id == 0 || request.terminal_generation == 0 ||
        request.terminal_generation != history^.terminal_generation ||
-       (request.target != .Navigation && request.target != .Highlighting) {
+       (request.target != .Navigation && request.target != .Highlighting) ||
+       (request.source_scope == .Persistent &&
+        (request.target != .Highlighting || !history^.persist_enabled ||
+         !history^.store.durable_available)) {
         return false
     }
     queued_request := request
@@ -555,7 +558,13 @@ history_runtime_persistence_unavailable :: proc(
 history_runtime_worker_read :: proc(
     history: ^historyruntime.History_Runtime) -> taskpool.Task_Result {
     request := history^.active_read_request
-    if history^.persist_enabled && history^.store.durable_available &&
+    if request.target == .Highlighting &&
+       request.source_scope == .Persistent {
+        history^.active_read_result =
+            termhiststore.history_store_get_persistent_by_id(
+                &history^.store, request.submission_id,
+                history^.read_result_source[:])
+    } else if history^.persist_enabled && history^.store.durable_available &&
        request.kind != .By_Id {
         history^.active_read_result = history_runtime_worker_read_combined(
             history, request)

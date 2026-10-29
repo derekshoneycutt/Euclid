@@ -5,6 +5,7 @@ package terminalview
 import model "model"
 import protocol "../../core/protocol"
 import termhist "../../terminal/history"
+import termhiststore "../../terminal/history/store"
 import "core:testing"
 import "core:strings"
 
@@ -216,6 +217,157 @@ terminal_test_highlight_visible_history :: proc(t: ^testing.T) {
     testing.expect(t,
         entry != nil && terminal_history_highlight_slot(&term, entry) != nil)
     testing.expect_value(t, len(terminal_live_highlight_runs(&term)), 0)
+}
+
+// Explorer identities separate equal session/saved IDs and reuse exact selected source.
+@(test)
+terminal_test_highlight_explorer_scoped_candidates :: proc(t: ^testing.T) {
+    term: model.Terminal_State
+    terminal_highlight_test_init(t, &term)
+    defer terminal_destroy(&term, context.allocator)
+    rows: [2]termhiststore.History_Candidate_Summary = {
+        {
+            record = {
+                submission_id = 17,
+                scope = .Persistent,
+                source_id = 17,
+                mode = .Normal,
+                source_revision = 3,
+            },
+        },
+        {
+            record = {
+                submission_id = 17,
+                scope = .Session,
+                source_id = 17,
+                mode = .Normal,
+                source_revision = 3,
+            },
+        },
+    }
+    preview: [32]u8
+    copy(preview[:], "saved source")
+    explorer: model.History_Explorer_State = {
+        active = true,
+        opening_generation = 1,
+        query_generation = 1,
+        identity = {
+            terminal_generation = term.animation_generation,
+            opening_generation = 1,
+            query_generation = 1,
+            runtime_epoch = 1,
+        },
+        rows = rows[:],
+        row_count = 2,
+        selected_index = 0,
+        preview_record = rows[0].record,
+        preview_source = preview[:],
+        preview_length = len("saved source"),
+        preview_status = .Ready,
+    }
+    terminal_highlight_observe_explorer(&term, &explorer)
+    saved := terminal_highlight_cache_slot_scoped(
+        &term, .Persistent_History_Entry, 17, 3)
+    session := terminal_highlight_cache_slot_scoped(&term, .History_Entry, 17, 3)
+    testing.expect(t, saved != nil && session != nil && saved != session)
+    request, ready := terminal_highlight_take_request(&term, 1)
+    testing.expect(t, ready)
+    testing.expect_value(t, request.identity.target_kind,
+        protocol.Highlight_Target.Persistent_History_Entry)
+    testing.expect_value(t, request.identity.target_id, u64(17))
+    testing.expect_value(t, request.source, "saved source")
+    testing.expect(t, terminal_highlight_test_publish(&term, request))
+    cached := terminal_highlight_cached_runs(
+        &term, .Persistent_History_Entry, 17, 3)
+    testing.expect_value(t, len(cached), 1)
+    if len(cached) > 0 {
+        testing.expect_value(t, cached[0].end_byte, u32(len("saved source")))
+    }
+    source_request, fetch_ready := terminal_highlight_source_request_next(&term)
+    testing.expect(t, fetch_ready)
+    testing.expect_value(t, source_request.target_kind,
+        protocol.Highlight_Target.History_Entry)
+    testing.expect_value(t, source_request.submission_id, u64(17))
+}
+
+// Closing and reopening retires old explorer work even for the same source revision.
+@(test)
+terminal_test_highlight_explorer_reopen_rejects_stale_result :: proc(t: ^testing.T) {
+    term: model.Terminal_State
+    terminal_highlight_test_init(t, &term)
+    defer terminal_destroy(&term, context.allocator)
+    rows: [1]termhiststore.History_Candidate_Summary = {{
+        record = {
+            scope = .Persistent,
+            source_id = 9,
+            mode = .Normal,
+            source_revision = 1,
+        },
+    }}
+    preview: [32]u8
+    copy(preview[:], "saved")
+    explorer: model.History_Explorer_State = {
+        active = true,
+        opening_generation = 1,
+        query_generation = 1,
+        identity = {
+            terminal_generation = term.animation_generation,
+            opening_generation = 1,
+            query_generation = 1,
+            runtime_epoch = 1,
+        },
+        rows = rows[:],
+        row_count = 1,
+        selected_index = 0,
+        preview_record = rows[0].record,
+        preview_source = preview[:],
+        preview_length = len("saved"),
+        preview_status = .Ready,
+    }
+    terminal_highlight_observe_explorer(&term, &explorer)
+    stale, ready := terminal_highlight_take_request(&term, 1)
+    testing.expect(t, ready)
+    explorer.active = false
+    terminal_highlight_observe_explorer(&term, &explorer)
+    testing.expect(t, !terminal_highlight_test_publish(&term, stale))
+    explorer.active = true
+    explorer.opening_generation = 2
+    explorer.query_generation = 1
+    explorer.identity.opening_generation = 2
+    explorer.identity.runtime_epoch = 2
+    terminal_highlight_observe_explorer(&term, &explorer)
+    current, current_ready := terminal_highlight_take_request(&term, 2)
+    testing.expect(t, current_ready && current.identity != stale.identity)
+    testing.expect(t, terminal_highlight_test_publish(&term, current))
+}
+
+// Help-mode history remains plain and never enters the Julia classifier.
+@(test)
+terminal_test_highlight_explorer_skips_non_julia_modes :: proc(t: ^testing.T) {
+    term: model.Terminal_State
+    terminal_highlight_test_init(t, &term)
+    defer terminal_destroy(&term, context.allocator)
+    rows: [1]termhiststore.History_Candidate_Summary = {{
+        record = {
+            scope = .Persistent,
+            source_id = 4,
+            mode = .Help,
+            source_revision = 1,
+        },
+    }}
+    explorer: model.History_Explorer_State = {
+        active = true,
+        opening_generation = 1,
+        query_generation = 1,
+        rows = rows[:],
+        row_count = 1,
+        selected_index = 0,
+    }
+    terminal_highlight_observe_explorer(&term, &explorer)
+    _, ready := terminal_highlight_take_request(&term, 1)
+    _, source_ready := terminal_highlight_source_request_next(&term)
+    testing.expect(t, !ready && !source_ready)
+    testing.expect_value(t, term.highlighting.explorer_candidate_count, 0)
 }
 
 // Cache eviction is bounded, but an older still-visible command can be re-requested.

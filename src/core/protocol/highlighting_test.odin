@@ -83,6 +83,11 @@ highlight_protocol_validates_identity_and_style_vocabulary :: proc(t: ^testing.T
     testing.expect(t, !highlight_request_valid(request))
     request.identity.target_id = 19
     testing.expect(t, highlight_request_valid(request))
+    request.identity.target_kind = .Persistent_History_Entry
+    testing.expect(t, highlight_request_valid(request))
+    request.identity.target_id = 0
+    testing.expect(t, !highlight_request_valid(request))
+    request.identity.target_id = 19
     request.identity.face_generation = 0
     testing.expect(t, !highlight_request_valid(request))
     testing.expect(t, !highlight_run_style_valid({

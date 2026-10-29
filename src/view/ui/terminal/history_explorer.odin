@@ -41,11 +41,12 @@ terminal_prepare_explorer_frame :: proc(
     prepared: Terminal_Prepared_Frame = {
         available = true,
         bounds = bounds,
-        layout = layout,
+        layout = terminal_explorer_draw_layout(layout, bounds),
         geometry_change = change,
         explorer_active = true,
         explorer = terminal_explorer_layout(
-            layout, viewmessages.shell_message(state, .Terminal_History_Query)),
+            terminal_explorer_draw_layout(layout, bounds),
+            viewmessages.shell_message(state, .Terminal_History_Query)),
     }
     surface := state^.ui_runtime.input.interaction_frame.terminal
     prepared.content_frame = ui_route_terminal_content_frame(surface, frame, bounds, {

@@ -6,9 +6,18 @@
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"wait_terminal_history_idle":true,"timeout_ms":10000}
+{"type":"?sin"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_history_idle":true,"timeout_ms":10000}
 {"key":{"name":"r","ctrl":true}}
 {"wait_terminal_explorer":"ready","timeout_ms":10000}
 {"set_splitters":{"vertical":900,"horizontal":420}}
+{"assert_terminal_preview":"sin"}
+{"screenshot":".build/explorer-mode-badge.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"up"}
+{"wait_terminal_explorer":"ready","timeout_ms":10000}
 {"screenshot":".build/explorer-scale-100.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"set_setting":{"key":"interface.text_size_percent","value":125}}
@@ -29,6 +38,6 @@
 {"wait_event":"capture_completed","timeout_ms":10000}
 {"key":"escape"}
 {"wait_terminal_explorer":"closed","timeout_ms":10000}
-{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":1}}
+{"assert_terminal_editor":{"source":"","mode":"help","cursor":0,"anchor":0,"evaluation_requests":2}}
 {"assert_no_bad_frees":true}
 {"shutdown":true}

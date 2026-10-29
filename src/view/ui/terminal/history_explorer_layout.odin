@@ -26,6 +26,15 @@ Terminal_Explorer_Layout :: struct {
     compact: bool,
 }
 
+// Explorer UI uses the full padded panel, not the VT grid's whole-cell viewport.
+terminal_explorer_draw_layout :: proc(
+    draw: terminalview.Terminal_Draw_Layout,
+    bounds: geometry.Rectangle) -> terminalview.Terminal_Draw_Layout {
+    result := draw
+    result.padded_bounds = terminalview.terminal_padded_bounds(bounds)
+    return result
+}
+
 // Reserve stable whole-line regions without changing the Terminal's native geometry.
 terminal_explorer_layout :: proc(
     draw: terminalview.Terminal_Draw_Layout,
@@ -42,7 +51,7 @@ terminal_explorer_layout :: proc(
         return result
     }
     preview_lines := max(3, lines / 3)
-    rows := lines - preview_lines - 5
+    rows := lines - preview_lines - 4
     result.query = {bounds.x, bounds.y, bounds.width, pitch}
     label_width := min(f32(coretext.text_grapheme_column(
         query_label, len(query_label))) * cell, bounds.width / 2)
@@ -51,11 +60,12 @@ terminal_explorer_layout :: proc(
     result.list = {bounds.x, bounds.y + 2*pitch, bounds.width, f32(rows)*pitch}
     result.status = {bounds.x, result.list.y + result.list.height, bounds.width, pitch}
     result.preview = {bounds.x, result.status.y + pitch,
-        bounds.width, f32(preview_lines)*pitch}
+        bounds.width, bounds.y + bounds.height - pitch / 2 -
+            (result.status.y + pitch)}
     result.preview_text = {bounds.x + cell, result.preview.y + pitch / 2,
         bounds.width - 2*cell, f32(preview_lines - 1)*pitch}
-    result.hints = {bounds.x, result.preview.y + result.preview.height,
-        bounds.width, pitch}
+    result.hints = {bounds.x + cell, bounds.y + bounds.height - pitch,
+        bounds.width - 2*cell, pitch}
     result.row_capacity = rows
     result.preview_rows = preview_lines - 1
     result.preview_columns = max(1, int(result.preview_text.width / cell) - 7)

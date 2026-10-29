@@ -398,6 +398,36 @@ history_runtime_test_write_persistent_revision :: proc(
     testing.expect_value(t, history^.mutation_count, 0)
     testing.expect_value(t, history^.last_write_result.outcome,
         termhiststore.History_Write_Outcome.Updated)
+    history_runtime_test_persistent_highlight_read(t, history, admission, pool)
+}
+
+// Persistent explorer candidates use the admitted keyed read without session-ID lookup.
+history_runtime_test_persistent_highlight_read :: proc(
+    t: ^testing.T, history: ^historyruntime.History_Runtime,
+    admission: ^protocol.User_Data_Connection_Admission,
+    pool: ^taskpool.Task_Pool) {
+    destination: [protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES]u8
+    persistent_id := history^.last_write_result.persistent_entry_id
+    result, consumed := history_runtime_test_read(history, admission, pool, {
+        kind = .By_Id,
+        priority = .Speculative,
+        target = .Highlighting,
+        submission_id = persistent_id,
+        source_scope = .Persistent,
+        request_id = 77,
+        terminal_generation = history^.terminal_generation,
+        source_revision = 2,
+        face_generation = 1,
+    }, destination[:])
+    testing.expect(t, consumed)
+    testing.expect_value(t, result.outcome, termhiststore.History_Read_Outcome.Found)
+    testing.expect_value(t, result.record.scope,
+        termhiststore.History_Record_Scope.Persistent)
+    testing.expect_value(t, result.record.source_id, persistent_id)
+    testing.expect_value(t, result.record.source_revision, u64(2))
+    testing.expect_value(t, result.record.mode, protocol.Evaluation_Mode.Pkg)
+    testing.expect_value(t, string(destination[:result.source_length]),
+        "persisted\n    end")
 }
 
 // Confirm newly persisted and session-only records share one ordered browse.

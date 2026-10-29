@@ -469,6 +469,7 @@ terminal_prepare_visual :: proc(
             state^.ui_runtime.platform_increased_contrast)))
     layout.terminal_focused = false
     if term^.history_explorer.active {
+        layout = terminal_explorer_draw_layout(layout, bounds)
         return {
             available = true,
             bounds = bounds,

@@ -4,12 +4,15 @@ package uiterminal
 import content "../../../core/content"
 import core "../../../core"
 import protocol "../../../core/protocol"
+import coretext "../../../core/text"
+import geometry "../../../core/geometry"
 import termhist "../../../terminal/history"
 import termhiststore "../../../terminal/history/store"
 import terminalview "../../terminal"
 import viewterminalmodel "../../terminal/model"
 import viewmodel "../model"
 import uisemantics "../semantics"
+import theme "../theme"
 import "core:testing"
 
 // Check stable line-based layout, isolated columns, and minimum size at every text scale.
@@ -25,20 +28,43 @@ terminal_explorer_layout_scales_without_overlap :: proc(t: ^testing.T) {
         }
         layout := terminal_explorer_layout(draw, "History search: ")
         testing.expect(t, !layout.compact)
-        testing.expect_value(t, layout.row_capacity, 15)
+        testing.expect_value(t, layout.row_capacity, 16)
         testing.expect_value(t, layout.preview_rows, 9)
         testing.expect(t, layout.list.y + layout.list.height <= layout.status.y)
-        testing.expect(t, layout.preview.y + layout.preview.height <= layout.hints.y)
-        testing.expect(t, layout.hints.y + layout.hints.height <=
+        testing.expect_value(t, layout.preview.y + layout.preview.height,
+            layout.hints.y + layout.hints.height / 2)
+        testing.expect_value(t, layout.hints.y + layout.hints.height,
             draw.padded_bounds.y + draw.padded_bounds.height)
         testing.expect(t, layout.list.x + 2*draw.column_width +
             layout.source_width < layout.mode_x)
         testing.expect(t, layout.mode_x < layout.age_x)
+        draw.padded_bounds.height += draw.line_height / 2
+        fractional := terminal_explorer_layout(draw, "")
+        testing.expect_value(t, fractional.preview.y + fractional.preview.height,
+            draw.padded_bounds.y + draw.padded_bounds.height - draw.line_height / 2)
+        testing.expect_value(t, fractional.hints.y + fractional.hints.height,
+            draw.padded_bounds.y + draw.padded_bounds.height)
         draw.padded_bounds.height = 8*draw.line_height
         testing.expect(t, terminal_explorer_layout(draw, "").compact)
         draw.padded_bounds = {0, 0, 35*draw.column_width, 30*draw.line_height}
         testing.expect(t, terminal_explorer_layout(draw, "").compact)
     }
+}
+
+// Whole-cell terminal rounding must not leave unused space beneath the explorer.
+@(test)
+terminal_explorer_uses_full_panel_instead_of_cell_clamp :: proc(t: ^testing.T) {
+    panel: geometry.Rectangle = {10, 20, 800, 617}
+    draw := terminal_explorer_draw_layout({
+        padded_bounds = {20, 30, 770, 560},
+        column_width = 10,
+        line_height = 20,
+    }, panel)
+    testing.expect_value(t, draw.padded_bounds,
+        terminalview.terminal_padded_bounds(panel))
+    layout := terminal_explorer_layout(draw, "")
+    testing.expect_value(t, layout.hints.y + layout.hints.height,
+        draw.padded_bounds.y + draw.padded_bounds.height)
 }
 
 // Pointer hits use the exact row rectangles, scroll offset, and exclusive lower edge.
@@ -66,12 +92,81 @@ terminal_explorer_text_clips_and_sanitizes :: proc(t: ^testing.T) {
     testing.expect_value(t, row.text, "e\u0301界")
     testing.expect_value(t, row.next, len("e\u0301界"))
     row = terminal_explorer_text_row("\x1b[31m\r\nx\tz", 0, 40, storage[:], true)
-    testing.expect_value(t, row.text, "?[31m \\ x    z")
+    testing.expect_value(t, row.text, "?[31m ↵ x    z")
     row = terminal_explorer_text_row("界", 0, 1, storage[:])
     testing.expect_value(t, row.text, "?")
     testing.expect_value(t, row.next, len("界"))
     row = terminal_explorer_text_row("x\u202ey", 0, 10, storage[:])
     testing.expect_value(t, row.text, "x?y")
+}
+
+// Safe fragments retain original byte ranges across tabs, controls, breaks, and clipping.
+@(test)
+terminal_explorer_text_fragments_keep_source_offsets :: proc(t: ^testing.T) {
+    source := "\t\x1b\r\n界"
+    tab := terminal_explorer_text_fragment(source, 0)
+    testing.expect_value(t, tab.text, "    ")
+    testing.expect_value(t, tab.source_start, 0)
+    testing.expect_value(t, tab.source_end, 1)
+    testing.expect_value(t, tab.columns, 4)
+    testing.expect(t, !tab.synthetic)
+    control := terminal_explorer_text_fragment(source, tab.next)
+    testing.expect_value(t, control.text, "?")
+    testing.expect_value(t, control.source_start, 1)
+    testing.expect_value(t, control.source_end, 2)
+    newline := terminal_explorer_text_fragment(source, control.next)
+    testing.expect(t, newline.hard_break)
+    testing.expect_value(t, newline.source_start, 2)
+    testing.expect_value(t, newline.source_end, 4)
+    flattened := terminal_explorer_text_fragment(source, 2, true)
+    testing.expect_value(t, flattened.text, " ↵ ")
+    testing.expect(t, flattened.synthetic)
+    testing.expect_value(t, flattened.source_end, 4)
+    wide := terminal_explorer_text_fragment(source, flattened.next)
+    testing.expect_value(t, wide.text, "界")
+    testing.expect_value(t, wide.columns, 2)
+    storage: [32]u8
+    row := terminal_explorer_text_row("界x", 0, 1, storage[:])
+    testing.expect_value(t, row.text, "?")
+    testing.expect_value(t, row.source_start, 0)
+    testing.expect_value(t, row.source_end, len("界"))
+    testing.expect_value(t, row.next, len("界"))
+}
+
+// Summary-only whitespace collapse retains exact full-source token offsets.
+@(test)
+terminal_explorer_summary_collapses_indent_without_shifting_source :: proc(t: ^testing.T) {
+    source := "begin\r\n    \n\t  α = 1\nend"
+    fragment := terminal_explorer_text_fragment(source, len("begin"), true)
+    testing.expect_value(t, fragment.text, " ↵ ")
+    testing.expect_value(t, fragment.next, len("begin\r\n    \n\t  "))
+    next := terminal_explorer_text_fragment(source, fragment.next, true)
+    testing.expect_value(t, next.text, "α")
+    testing.expect_value(t, next.source_start, fragment.next)
+    storage: [128]u8
+    row := terminal_explorer_text_row(source, 0, 80, storage[:], true)
+    testing.expect_value(t, row.text, "begin ↵ α = 1 ↵ end")
+    testing.expect_value(t, row.source_end, len(source))
+    preview := terminal_explorer_text_row(source, len("begin\r\n"), 80, storage[:])
+    testing.expect_value(t, preview.text, "    ")
+    clipped := terminal_explorer_text_row(source, 0, 8, storage[:], true)
+    testing.expect_value(t, clipped.text, "begin ↵ ")
+    testing.expect_value(t, clipped.next, fragment.next)
+}
+
+// Only nondefault modes receive an icon or expanded name with their prompt color.
+@(test)
+terminal_explorer_mode_badges_keep_julia_implicit :: proc(t: ^testing.T) {
+    testing.expect_value(t, terminal_explorer_mode(.Normal, false), "")
+    testing.expect_value(t, terminal_explorer_mode(.Normal, true), "")
+    modes := [?]protocol.Evaluation_Mode{.Help, .Pkg, .Shell}
+    labels := [?]string{"help", "pkg", "shell"}
+    roles := [?]theme.Color_Role{.Terminal_Help, .Terminal_Package, .Terminal_Shell}
+    for mode, index in modes {
+        testing.expect_value(t, terminal_explorer_mode(mode, false), "▦")
+        testing.expect_value(t, terminal_explorer_mode(mode, true), labels[index])
+        testing.expect_value(t, terminal_explorer_mode_role(mode), roles[index])
+    }
 }
 
 // Preview wrapping retains CRLF, empty hard lines, indentation, and trailing newlines.
@@ -133,7 +228,8 @@ terminal_explorer_age_and_mode_columns :: proc(t: ^testing.T) {
     testing.expect_value(t, value, i64(99999))
     for mode in protocol.Evaluation_Mode {
         testing.expect(t, len(terminal_explorer_mode(mode, true)) <= 5)
-        testing.expect(t, len(terminal_explorer_mode(mode, false)) <= 2)
+        compact := terminal_explorer_mode(mode, false)
+        testing.expect(t, coretext.text_grapheme_column(compact, len(compact)) <= 1)
     }
 }
 

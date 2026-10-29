@@ -5,6 +5,7 @@ import termmodel "../../../terminal/model"
 
 TERMINAL_HIGHLIGHT_HISTORY_CAPACITY :: 1280
 TERMINAL_HIGHLIGHT_CACHE_CAPACITY :: 8
+TERMINAL_HIGHLIGHT_EXPLORER_CAPACITY :: 32
 TERMINAL_HIGHLIGHT_LINE_CAPACITY :: 256
 TERMINAL_HIGHLIGHT_PENDING_CAPACITY :: 4
 TERMINAL_HIGHLIGHT_DEBOUNCE_SECONDS :: f64(0.12)
@@ -27,6 +28,19 @@ Terminal_Highlight_History :: struct {
 }
 
 Terminal_Highlight_Phase :: enum {Empty, Scheduled, Pending, Ready, Failed}
+
+// One scoped explorer candidate admitted for the current opening and query.
+Terminal_Highlight_Explorer_Candidate :: struct {
+    target_kind: protocol.Highlight_Target,
+    target_id: u64,
+    source_revision: u64,
+    visible_epoch: u64,
+    selected: bool,
+    awaiting_preview: bool,
+}
+
+Terminal_Highlight_Explorer_Candidates ::
+    [TERMINAL_HIGHLIGHT_EXPLORER_CAPACITY]Terminal_Highlight_Explorer_Candidate
 
 // Display-owned result slot; no slice into a bridge envelope survives publication.
 Terminal_Highlight_Slot :: struct {
@@ -63,6 +77,12 @@ Terminal_Highlighting :: struct {
     cache: [TERMINAL_HIGHLIGHT_CACHE_CAPACITY]Terminal_Highlight_Slot,
     history: [TERMINAL_HIGHLIGHT_HISTORY_CAPACITY]Terminal_Highlight_History,
     pending: [TERMINAL_HIGHLIGHT_PENDING_CAPACITY]protocol.Highlight_Identity,
+    explorer_candidates: Terminal_Highlight_Explorer_Candidates,
+    explorer_candidate_count: int,
+    explorer_opening_generation: u64,
+    explorer_query_generation: u64,
+    explorer_runtime_epoch: u64,
+    explorer_active: bool,
     next_request_id: protocol.Request_Id,
     next_history_anchor: int,
     face_generation: u64,
