@@ -20,6 +20,13 @@ import viewmodel "ui/model"
 
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
+// shutdown_starting_julia_runtime stops an admitted host even before application state exists.
+shutdown_starting_julia_runtime :: proc(service: ^bridgemodel.Julia_Runtime_Service) {
+    started_at := time.tick_now()
+    shutdown_id := submit_julia_shutdown(service, started_at)
+    wait_for_julia_shutdown(service, shutdown_id, started_at)
+}
+
 //   Release graphics-owned resources before destroying their backing runtime state.
 shutdown_window_runtime :: proc(
     session: Euclid_Runtime_Session,

@@ -141,9 +141,14 @@ draw_encoded_presentation_geometry :: proc(
         return
     }
     text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
-    ui_dynview.draw_encoded_geometry(&state^.dynview, encoder,
-        text_panel, state^.ui_runtime.presentation.text_scroll_y,
-        theme.ui_scaled_metric(theme.TEXT_PADDING, text_percent))
+    ui_dynview.draw_encoded_geometry({
+        state = state,
+        runtime = &state^.dynview,
+        encoder = encoder,
+        panel = text_panel,
+        scroll_y = state^.ui_runtime.presentation.text_scroll_y,
+        text_padding = theme.ui_scaled_metric(theme.TEXT_PADDING, text_percent),
+    })
 }
 
 // Draw clipped Dynview or fallback content, then its prepared scrollbar overlay.

@@ -34,6 +34,46 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect_value(t,
         setting_value(preferences, .Interface_Text_Size).integer, 100)
     testing.expect(t, !setting_value(preferences, .Persist_Terminal_History).boolean)
+    testing.expect_value(t,
+        setting_value(preferences, .Animation_Scale_Percent).integer, 100)
+    testing.expect(t, !setting_value(preferences, .Animation_Monochrome).boolean)
+}
+
+// Keep animation style defaults, identities, typed access, and validation stable.
+@(test)
+animation_style_preferences_are_typed_and_bounded :: proc(t: ^testing.T) {
+    scale_definition, scale_valid := setting_definition(.Animation_Scale_Percent)
+    testing.expect(t, scale_valid)
+    testing.expect_value(t, scale_definition.namespace, "animation")
+    testing.expect_value(t, scale_definition.key, "scale_percent")
+    testing.expect_value(t, scale_definition.storage_kind, Setting_Storage_Kind.Integer)
+    monochrome_definition, monochrome_valid :=
+        setting_definition(.Animation_Monochrome)
+    testing.expect(t, monochrome_valid)
+    testing.expect_value(t, monochrome_definition.namespace, "animation")
+    testing.expect_value(t, monochrome_definition.key, "monochrome")
+    testing.expect_value(t, monochrome_definition.storage_kind,
+        Setting_Storage_Kind.Boolean)
+
+    for percent in ([3]int{50, 100, 200}) {
+        preferences := default_preferences()
+        testing.expect(t, apply_setting_value(
+            &preferences, .Animation_Scale_Percent, integer_value(percent), .Saved))
+        testing.expect_value(t,
+            setting_value(preferences, .Animation_Scale_Percent).integer, percent)
+        testing.expect(t, .Animation_Scale_Percent in preferences.present)
+    }
+    preferences := default_preferences()
+    testing.expect(t, apply_setting_value(
+        &preferences, .Animation_Monochrome, boolean_value(true), .Override))
+    testing.expect(t, setting_value(preferences, .Animation_Monochrome).boolean)
+    testing.expect(t, .Animation_Monochrome in preferences.overrides)
+    for percent in ([4]int{49, 201, 52, 198}) {
+        testing.expect(t, !apply_setting_value(
+            &preferences, .Animation_Scale_Percent, integer_value(percent), .Saved))
+    }
+    testing.expect(t, !apply_setting_value(
+        &preferences, .Animation_Monochrome, integer_value(1), .Saved))
 }
 
 // Keep durable Terminal history opt-in and typed as a boolean setting.

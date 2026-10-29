@@ -76,7 +76,7 @@ flowchart LR
 | Concern | Owner | What crosses into the UI |
 | --- | --- | --- |
 | Frame order and composition | [`frame.odin`](../../../src/view/frame.odin) | Current application state and display services |
-| Device polling and portable event facts | [`src/view/input/`](../../../src/view/input/) | One `Input_Frame`, with event storage borrowed for that frame |
+| SDL callback ingestion and portable event facts | [`src/view/input/`](../../../src/view/input/) | Bounded copied events retained until one accepted `Input_Frame` |
 | Layout, panels, widgets, and persistent UI interaction | [`src/view/ui/`](../../../src/view/ui/) | Display-owned state, routed input, prepared values |
 | Animation catalogue and search | [`src/view/ui/library/`](../../../src/view/ui/library/) plus content service | IDs, copied labels, and bounded query results |
 | Terminal state and interactive protocol | [`src/view/terminal/`](../../../src/view/terminal/) | Routed input, prepared terminal frame, draw requests |

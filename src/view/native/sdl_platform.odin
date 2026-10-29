@@ -41,6 +41,13 @@ Sdl_Frame_Result :: enum u8 {
     Failed,
 }
 
+// Sdl_Frame_Admission reports target readiness without claiming a presentation occurred.
+Sdl_Frame_Admission :: enum u8 {
+    Ready,
+    Unavailable,
+    Failed,
+}
+
 // Sdl_Window_Metrics records one stable logical and physical window observation.
 Sdl_Window_Metrics :: struct {
     window_width: int,
@@ -181,6 +188,22 @@ Sdl_Scene_Targets :: struct {
     multisample: ^sdl.GPUTexture,
 }
 
+// Sdl_Scene_Target_Operations isolates transactional target admission, not frame scheduling.
+Sdl_Scene_Target_Operations :: struct {
+    metrics: proc(window: ^sdl.Window) -> (Sdl_Window_Metrics, bool),
+    create: proc(device: ^sdl.GPUDevice, width, height: u32,
+        samples: sdl.GPUSampleCount) -> Sdl_Scene_Targets,
+    wait: proc(device: ^sdl.GPUDevice) -> bool,
+    release: proc(device: ^sdl.GPUDevice, scene, multisample: ^sdl.GPUTexture),
+}
+
+SDL_SCENE_TARGET_OPERATIONS :: Sdl_Scene_Target_Operations{
+    metrics = sdl_platform_metrics,
+    create = sdl_scene_targets_create,
+    wait = sdl_scene_target_wait,
+    release = sdl_scene_targets_release,
+}
+
 SDL_WINDOWS_ACCESSIBILITY_OPERATIONS :: Sdl_Windows_Accessibility_Operations{
     hwnd = sdl_windows_native_hwnd,
     publish = sdl_windows_native_publish,
@@ -230,7 +253,8 @@ sdl_platform_metrics :: proc(window: ^sdl.Window) -> (Sdl_Window_Metrics, bool) 
     window_width, window_height: i32
     pixel_width, pixel_height: i32
     if window == nil || !sdl.GetWindowSize(window, &window_width, &window_height) ||
-       !sdl.GetWindowSizeInPixels(window, &pixel_width, &pixel_height) {
+       !sdl.GetWindowSizeInPixels(window, &pixel_width, &pixel_height) ||
+       window_width <= 0 || window_height <= 0 || pixel_width <= 0 || pixel_height <= 0 {
         return {}, false
     }
     pixel_density := sdl_scale_or_one(sdl.GetWindowPixelDensity(window))
@@ -343,39 +367,45 @@ sdl_scene_targets_release :: proc(
 }
 
 // sdl_platform_refresh_target atomically replaces a mismatched scene target.
-sdl_platform_refresh_target :: proc(platform: ^Sdl_Platform) -> bool {
-    metrics, ok := sdl_platform_metrics(platform^.window)
+sdl_platform_refresh_target :: proc(
+    platform: ^Sdl_Platform, operations := SDL_SCENE_TARGET_OPERATIONS) -> bool {
+    metrics, ok := operations.metrics(platform^.window)
     if !ok {
         return false
     }
-    platform^.metrics = metrics
     width := u32(metrics.pixel_width)
     height := u32(metrics.pixel_height)
     if platform^.scene_target != nil && platform^.scene_width == width &&
        platform^.scene_height == height {
+        platform^.metrics = metrics
         platform^.resize_pending = false
         return true
     }
-    candidate := sdl_scene_targets_create(
+    candidate := operations.create(
         platform^.device, width, height, platform^.sample_count)
     if candidate.scene == nil {
        return false
     }
     if platform^.scene_target != nil {
-        if !sdl.WaitForGPUIdle(platform^.device) {
-            sdl_scene_targets_release(
+        if !operations.wait(platform^.device) {
+            operations.release(
                 platform^.device, candidate.scene, candidate.multisample)
             return false
         }
-        sdl_scene_targets_release(platform^.device, platform^.scene_target,
+        operations.release(platform^.device, platform^.scene_target,
             platform^.multisample_target)
     }
     platform^.scene_target = candidate.scene
     platform^.multisample_target = candidate.multisample
-    platform^.scene_width = width
-    platform^.scene_height = height
+    platform^.scene_width, platform^.scene_height = width, height
+    platform^.metrics = metrics
     platform^.resize_pending = false
     return true
+}
+
+// sdl_scene_target_wait retains the conservative global fence until resize stall acceptance is measured.
+sdl_scene_target_wait :: proc(device: ^sdl.GPUDevice) -> bool {
+    return sdl.WaitForGPUIdle(device)
 }
 
 // sdl_scene_color_target_info resolves optional MSAA into the capture target.
@@ -415,14 +445,37 @@ sdl_swapchain_acquire :: proc(
     return image, true
 }
 
+// sdl_platform_prepare_frame admits a complete target and metrics before any frame encoding.
+sdl_platform_prepare_frame :: proc(platform: ^Sdl_Platform) -> Sdl_Frame_Admission {
+    if .MINIMIZED in sdl.GetWindowFlags(platform^.window) {
+        return .Unavailable
+    }
+    metrics, ok := sdl_platform_metrics(platform^.window)
+    if !ok {
+        platform^.unavailable_frames += 1
+        return .Unavailable
+    }
+    changed := metrics != platform^.metrics
+    if changed {
+        platform^.resize_pending = true
+    }
+    if platform^.resize_pending && !sdl_platform_refresh_target(platform) {
+        log.errorf("sdl_frame_target_admission_failed error=%s", sdl.GetError())
+        return .Failed
+    }
+    if changed {
+        log.debugf("sdl_frame_extent_admitted logical=%dx%d pixels=%dx%d target=%dx%d",
+            platform^.metrics.logical_width, platform^.metrics.logical_height,
+            platform^.metrics.pixel_width, platform^.metrics.pixel_height,
+            platform^.scene_width, platform^.scene_height)
+    }
+    return .Ready
+}
+
 // sdl_platform_present_draw submits one bounded encoded scene and swapchain blit.
 sdl_platform_present_draw :: proc(
     platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
     encoder: ^Draw_Encoder, clear_color: sdl.FColor) -> Sdl_Frame_Result {
-    if platform^.resize_pending && !sdl_platform_refresh_target(platform) {
-        platform^.unavailable_frames += 1
-        return .Unavailable
-    }
     command_buffer: ^sdl.GPUCommandBuffer
     image, acquired := sdl_swapchain_acquire(platform, &command_buffer)
     if !acquired {
@@ -432,6 +485,14 @@ sdl_platform_present_draw :: proc(
         platform^.unavailable_frames += 1
         if !sdl.SubmitGPUCommandBuffer(command_buffer) {
            return .Failed
+        }
+        return .Unavailable
+    }
+    if image.width != platform^.scene_width || image.height != platform^.scene_height {
+        platform^.resize_pending = true
+        platform^.unavailable_frames += 1
+        if !sdl.CancelGPUCommandBuffer(command_buffer) {
+            return .Failed
         }
         return .Unavailable
     }
@@ -687,7 +748,6 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
         sdl_platform_destroy_cursors(platform)
         sdl.DestroyWindow(platform^.window)
     }
-    sdl.Quit()
     platform^ = {}
 }
 

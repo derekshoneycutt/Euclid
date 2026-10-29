@@ -21,10 +21,12 @@ import theme "../theme"
 import terminalview "../../terminal"
 import worldmodel "../../world/model"
 import uisemantics "../semantics"
+import uioverlay "../overlay"
 import viewpreferences "../../preferences"
 import viewmodel "../model"
 
 SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
+SETTINGS_ANIMATION_SCALE_SLIDER_ID :: 6106
 SETTINGS_HISTORY_DELETE_BUTTON_ID :: 6104
 SETTINGS_HISTORY_DELETE_STATUS_ID :: 6105
 SETTINGS_HISTORY_DELETE_TIMEOUT_SECONDS :: 5
@@ -41,6 +43,9 @@ Settings_View_Labels :: struct {
     reduce_motion: string,
     increased_contrast: string,
     text_size: string,
+    animation_scale: string,
+    animation_scale_tooltip: string,
+    monochrome: string,
     persist_history: string,
     delete_history: string,
     confirm_delete_history: string,
@@ -90,6 +95,8 @@ Settings_View_Rows :: struct {
     increased_contrast_y: f32,
     system_motion_y: f32,
     system_contrast_y: f32,
+    animation_scale_y: f32,
+    monochrome_y: f32,
     text_size_y: f32,
     save_status_y: f32,
 }
@@ -113,6 +120,7 @@ Settings_View_Preparation :: struct {
     rows: Settings_View_Rows,
     scroll: uiwidgets.Scroll_Container_Update_Result,
     max_particles: uiwidgets.Integer_Slider_Result,
+    animation_scale: uiwidgets.Integer_Slider_Result,
     text_size: uiwidgets.Integer_Slider_Result,
     fps: uiwidgets.Checkbox_Result,
     limit: uiwidgets.Checkbox_Result,
@@ -122,6 +130,7 @@ Settings_View_Preparation :: struct {
     reduce_motion: uiwidgets.Checkbox_Result,
     increased_contrast: uiwidgets.Checkbox_Result,
     persist_history: uiwidgets.Checkbox_Result,
+    monochrome: uiwidgets.Checkbox_Result,
     delete_history: uiwidgets.Text_Button_Result,
     history_delete_status: viewmodel.Ui_History_Delete_Status,
     history_delete_armed: bool,
@@ -233,6 +242,11 @@ settings_view_labels :: proc(
         increased_contrast = viewmessages.shell_message(
             state, .Settings_Increased_Contrast),
         text_size = viewmessages.shell_message(state, .Settings_Text_Size),
+        animation_scale = viewmessages.shell_message(
+            state, .Settings_Animation_Scale),
+        animation_scale_tooltip = viewmessages.shell_message(
+            state, .Settings_Animation_Scale_Tooltip),
+        monochrome = viewmessages.shell_message(state, .Settings_Monochrome),
     }
 }
 
@@ -309,10 +323,11 @@ draw_encoded_slider_geometry :: proc(
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
-    checks: [8]uiwidgets.Checkbox_Result = {
+    checks: [9]uiwidgets.Checkbox_Result = {
         prepared.reduce_motion, prepared.increased_contrast,
         prepared.gpu_dust, prepared.fps, prepared.limit,
         prepared.sound, prepared.simd, prepared.persist_history,
+        prepared.monochrome,
     }
     for check in checks {
         draw_encoded_checkbox_geometry(
@@ -337,6 +352,7 @@ draw_encoded_settings_history_button_geometry :: proc(
 draw_encoded_settings_geometry :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
     draw_encoded_slider_geometry(encoder, prepared.max_particles)
+    draw_encoded_slider_geometry(encoder, prepared.animation_scale)
     draw_encoded_slider_geometry(encoder, prepared.text_size)
     draw_encoded_settings_checkboxes(encoder, prepared)
     draw_encoded_settings_history_button_geometry(encoder, prepared)
@@ -347,7 +363,7 @@ draw_encoded_settings_geometry :: proc(
 draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
-    labels: [8]struct{label: string, y: f32} = {
+    labels: [9]struct{label: string, y: f32} = {
         {viewmessages.shell_message(state, .Settings_Reduce_Motion),
             rows.reduce_motion_y},
         {viewmessages.shell_message(state, .Settings_Increased_Contrast),
@@ -360,6 +376,8 @@ draw_encoded_settings_check_labels :: proc(
         {viewmessages.shell_message(state, .Settings_Limit_Fps), rows.limit_y},
         {viewmessages.shell_message(state, .Settings_Drawing_Sound), rows.sound_y},
         {settings_simd_label(state, prepared.simd_available), rows.simd_y},
+        {viewmessages.shell_message(state, .Settings_Monochrome),
+            rows.monochrome_y},
     }
     for item in labels {
         viewtext.draw_encoded_label(&state^.font_cache, encoder, item.label,
@@ -406,6 +424,10 @@ draw_encoded_settings_text :: proc(
     draw_encoded_settings_section_heading(state, encoder,
         .Settings_Section_Other, x, rows.other_header_y)
     viewtext.draw_encoded_label(&state^.font_cache, encoder,
+        viewmessages.shell_message(state, .Settings_Animation_Scale),
+        x, rows.animation_scale_y)
+    draw_encoded_settings_animation_scale_value(text_ctx, rows.animation_scale_y)
+    viewtext.draw_encoded_label(&state^.font_cache, encoder,
         viewmessages.shell_message(state, .Settings_Text_Size),
         x, rows.text_size_y)
     draw_encoded_settings_size_value(text_ctx, rows.text_size_y)
@@ -414,6 +436,24 @@ draw_encoded_settings_text :: proc(
     draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
     draw_encoded_settings_history_controls(state, encoder, prepared)
     draw_encoded_settings_save_status(state, encoder, x, rows.save_status_y)
+}
+
+// Show the selected animation multiplier, identifying its unmodified default.
+draw_encoded_settings_animation_scale_value :: proc(
+    ctx: Settings_Text_Context, row_y: f32) {
+    scale_percent := ctx.state^.ui_runtime.preferences.values.animation.scale_percent
+    value := fmt.tprintf("%d%%", scale_percent)
+    if scale_percent == 100 {
+        value = viewmessages.shell_message(
+            ctx.state, .Settings_Animation_Scale_Default)
+    }
+    value_width, measured := viewtext.ui_text_measure_monospace(
+        value, ctx.font, theme.ui_font_size(ctx.text_size_percent), 0)
+    if !measured {
+        value_width = 80
+    }
+    viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder, value,
+        settings_right_aligned_x(ctx.panel, value_width), row_y)
 }
 
 // Draw the labels and right-aligned values associated with both Settings sliders.
@@ -530,6 +570,19 @@ settings_right_aligned_x :: #force_inline proc(
 settings_checkbox_params :: proc(
     ctx: Settings_View_Context,
     descriptor: Settings_Checkbox_Descriptor) -> uiwidgets.Checkbox_Params {
+    box_side := theme.SETTINGS_CHECKBOX_SIZE * theme.ui_text_scale_factor(
+        ctx.preferences.interface.text_size_percent)
+    row_rect: geometry.Rectangle = {
+        ctx.panel.x,
+        descriptor.row_y,
+        ctx.panel.width,
+        max(box_side, theme.ui_font_size(
+            ctx.preferences.interface.text_size_percent)),
+    }
+    semantic_domain := viewmodel.Ui_Node_Domain.None
+    if geometry.rectangles_intersect(row_rect, geometry.Rectangle(ctx.panel)) {
+        semantic_domain = .Settings_Control
+    }
     return {
         id = descriptor.id,
         rect = geometry.Rectangle{
@@ -555,10 +608,43 @@ settings_checkbox_params :: proc(
             theme.SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
             ctx.preferences.interface.text_size_percent),
         semantic_focus = ctx.semantic_focus,
-        semantic_domain = .Settings_Control,
+        semantic_domain = semantic_domain,
         semantic_order = descriptor.order,
         semantic_clip = ctx.panel,
     }
+}
+
+// Prepare a Settings slider only while its hit area intersects the visible panel.
+settings_prepare_integer_slider :: proc(
+    ctx: Settings_View_Context,
+    params: uiwidgets.Integer_Slider_Params,
+    interactive: bool) -> uiwidgets.Integer_Slider_Result {
+    slider_params := params
+    track := uiwidgets.slider_track_rect(
+        slider_params.panel, slider_params.row_y,
+        slider_params.text_size_percent)
+    hit := uiwidgets.slider_hit_rect(track)
+    visible := geometry.rectangles_intersect(hit, geometry.Rectangle(ctx.panel))
+    if !visible {
+        owner := ctx.press_owner
+        if owner^.active && owner^.kind == .Slider &&
+            owner^.id == slider_params.press_id {
+            owner^.active = false
+            owner^.kind = .None
+            owner^.id = -1
+        }
+        slider_params.semantic_domain = .None
+        return uiwidgets.prepare_integer_slider(slider_params, false)
+    }
+    owns_press := ctx.press_owner^.active &&
+        ctx.press_owner^.kind == .Slider &&
+        ctx.press_owner^.id == slider_params.press_id
+    if !owns_press && !geometry.rectangle_contains(
+        ctx.panel, {slider_params.mouse_input.mouse_position.x,
+            slider_params.mouse_input.mouse_position.y}) {
+        slider_params.mouse_input.mouse_position = {-1, -1}
+    }
+    return uiwidgets.prepare_integer_slider(slider_params, interactive)
 }
 
 // Build the focusable deletion action with explicit armed state and bounded motion.
@@ -610,7 +696,7 @@ settings_history_delete_button_params :: proc(
             role = .Button,
             states = states,
             region = .Accordion_Content,
-            traversal_order = 5,
+            traversal_order = 7,
             clip_bounds = geometry.Rectangle(ctx.panel),
             label = label,
             value = value,
@@ -651,7 +737,7 @@ settings_publish_history_delete_status :: proc(
         role = .Status,
         states = states,
         region = .Accordion_Content,
-        traversal_order = 6,
+        traversal_order = 8,
         bounds = {
             ctx.panel.x + theme.SETTINGS_PANEL_INSET,
             rows.history_delete_status_y,
@@ -753,7 +839,32 @@ settings_max_particles_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 6,
+        semantic_order = 9,
+    }
+}
+
+// Build the saved animation-scale slider parameters.
+settings_animation_scale_params :: proc(
+    ctx: Settings_View_Context,
+    row_y: f32) -> uiwidgets.Integer_Slider_Params {
+    return {
+        panel = geometry.Rectangle(ctx.panel),
+        row_y = row_y,
+        mouse_input = ctx.mouse_input,
+        press_owner = ctx.press_owner,
+        semantic_focus = ctx.semantic_focus,
+        press_id = SETTINGS_ANIMATION_SCALE_SLIDER_ID,
+        label = ctx.labels.animation_scale,
+        value = ctx.preferences.animation.scale_percent,
+        min_value = 50,
+        max_value = 200,
+        step = 5,
+        value_suffix = "%",
+        text_size_percent = ctx.preferences.interface.text_size_percent,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
+        semantic_domain = .Settings_Control,
+        semantic_order = 3,
     }
 }
 
@@ -778,7 +889,7 @@ settings_text_size_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 3,
+        semantic_order = 5,
     }
 }
 
@@ -874,7 +985,7 @@ settings_view_layout_rows :: proc(
     return layout.rows
 }
 
-// Reserve the Accessibility heading, controls, notices, and text-size slider.
+// Reserve the Accessibility heading, controls, notices, and preference sliders.
 settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_State) {
     rect := layout^.stack_rect
     rows := &layout^.rows
@@ -896,6 +1007,11 @@ settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_Stat
         rows^.system_contrast_y = rect.y + layout^.cursor.offset
         layout^.cursor.offset += layout^.row_gap
     }
+    rows^.animation_scale_y = rect.y + layout^.cursor.offset
+    placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
+    layout^.cursor = placement.cursor_out
+    rows^.monochrome_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
     rows^.text_size_y = rect.y + layout^.cursor.offset
     placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
     layout^.cursor = placement.cursor_out
@@ -964,21 +1080,27 @@ update_settings_controls :: proc(
     result: Settings_View_Preparation = {
         rows = rows,
     }
-    result.max_particles = uiwidgets.prepare_integer_slider(
-        settings_max_particles_params(ctx, rows.slider_label_y), interactive)
-    result.text_size = uiwidgets.prepare_integer_slider(
-        settings_text_size_params(ctx, rows.text_size_y), interactive)
+    result.max_particles = settings_prepare_integer_slider(
+        ctx, settings_max_particles_params(ctx, rows.slider_label_y), interactive)
+    result.animation_scale = settings_prepare_integer_slider(
+        ctx, settings_animation_scale_params(ctx, rows.animation_scale_y), interactive)
+    if interactive && geometry.rectangles_intersect(
+        result.animation_scale.control_geometry.bounds, geometry.Rectangle(ctx.panel)) {
+        settings_offer_animation_scale_tooltip(ctx, result.animation_scale)
+    }
+    result.text_size = settings_prepare_integer_slider(
+        ctx, settings_text_size_params(ctx, rows.text_size_y), interactive)
     result.fps = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, ctx.labels.display_fps,
-        ctx.preferences.interface.display_fps, true, 8}),
+        ctx.preferences.interface.display_fps, true, 11}),
         ctx.press_owner, interactive)
     result.limit = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, ctx.labels.limit_fps,
-        ctx.preferences.rendering.limit_fps, true, 9}),
+        ctx.preferences.rendering.limit_fps, true, 12}),
         ctx.press_owner, interactive)
     result.sound = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
         4004, ctx.labels.drawing_sound,
-        ctx.preferences.drawing.sound_enabled, true, 10}),
+        ctx.preferences.drawing.sound_enabled, true, 13}),
         ctx.press_owner, interactive)
     prepare_settings_optional_controls(ctx, rows, interactive, &result)
     result.delete_history = uiwidgets.prepare_text_button(
@@ -1005,13 +1127,13 @@ prepare_settings_optional_controls :: proc(
     result.simd = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, ctx.labels.simd,
         ctx.preferences.rendering.simd,
-        simd_available, 11}), ctx.press_owner, interactive)
+        simd_available, 14}), ctx.press_owner, interactive)
     gpu_available := ctx.gpu_dust_available
     result.gpu_dust = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {rows.gpu_dust_y,
             4005, ctx.labels.gpu_dust,
             ctx.preferences.rendering.gpu_dust_instancing,
-            gpu_available, 7}),
+            gpu_available, 10}),
         ctx.press_owner, interactive)
     result.simd_available = simd_available
     result.gpu_available = gpu_available
@@ -1030,8 +1152,46 @@ prepare_settings_optional_controls :: proc(
         settings_checkbox_params(ctx, {
             rows.persist_history_y, 4008,
             ctx.labels.persist_history,
-            ctx.preferences.terminal.persist_history, true, 4,
+            ctx.preferences.terminal.persist_history, true, 6,
         }), ctx.press_owner, interactive)
+    result.monochrome = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.monochrome_y, 4009,
+            ctx.labels.monochrome,
+            ctx.preferences.animation.monochrome, true, 4,
+        }), ctx.press_owner, interactive)
+}
+
+// Offer the animation-scale explanation through the shared accessible tooltip path.
+settings_offer_animation_scale_tooltip :: proc(
+    ctx: Settings_View_Context, prepared: uiwidgets.Integer_Slider_Result) {
+    owner := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_ANIMATION_SCALE_SLIDER_ID)
+    source := uioverlay.tooltip_control_source(
+        &ctx.state^.ui_runtime.input, ctx.semantic_focus,
+        owner, SETTINGS_ANIMATION_SCALE_SLIDER_ID)
+    mouse: geometry.Vector2 = {
+        ctx.mouse_input.mouse_position.x,
+        ctx.mouse_input.mouse_position.y,
+    }
+    owns_press := ctx.press_owner^.active &&
+        ctx.press_owner^.kind == .Slider &&
+        ctx.press_owner^.id == SETTINGS_ANIMATION_SCALE_SLIDER_ID
+    if source == .None && (!ctx.press_owner^.active || owns_press) &&
+        geometry.rectangle_contains(ctx.panel, mouse) &&
+        geometry.rectangle_contains(prepared.control_geometry.bounds, mouse) {
+        source = .Pointer
+    }
+    if prepared.changed {
+        uioverlay.tooltip_dismiss(&ctx.state^.ui_runtime.tooltip, owner)
+    }
+    uioverlay.tooltip_offer(&ctx.state^.ui_runtime.tooltip, {
+        owner = owner,
+        source = source,
+        anchor = prepared.control_geometry.bounds,
+        prefer_above = true,
+        text = ctx.labels.animation_scale_tooltip,
+    })
 }
 
 // settings_scroll_content_height reserves every scaled Settings section and status.
@@ -1058,7 +1218,7 @@ register_settings_scroll_semantics :: proc(
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Scroll, .Set_Value},
         region = .Accordion_Content,
-        traversal_order = 10,
+        traversal_order = 15,
         bounds = geometry.Rectangle(scroll.view_rect),
         clip_bounds = geometry.Rectangle(scroll.view_rect),
         numeric_range = {
@@ -1188,6 +1348,10 @@ apply_settings_primary_preparation :: proc(
 // Persist accessibility preferences changed by the prepared Settings frame.
 apply_settings_accessibility_preparation :: proc(
     state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
+    if prepared.animation_scale.changed {
+        settings_record_preference_edit(state, .Animation_Scale_Percent,
+            setting_model.integer_value(prepared.animation_scale.value))
+    }
     if prepared.text_size.changed {
         settings_record_preference_edit(state, .Interface_Text_Size,
             setting_model.integer_value(prepared.text_size.value))
@@ -1203,6 +1367,10 @@ apply_settings_accessibility_preparation :: proc(
     if prepared.persist_history.toggled {
         settings_record_preference_edit(state, .Persist_Terminal_History,
             setting_model.boolean_value(prepared.persist_history.checked_out))
+    }
+    if prepared.monochrome.toggled {
+        settings_record_preference_edit(state, .Animation_Monochrome,
+            setting_model.boolean_value(prepared.monochrome.checked_out))
     }
 }
 
@@ -1289,13 +1457,17 @@ settings_control_edit_preparation :: proc(
     case .Drawing_Dust_Limit:
         prepared.max_particles.changed = true
         prepared.max_particles.value = value.integer
+    case .Animation_Scale_Percent:
+        prepared.animation_scale.changed = true
+        prepared.animation_scale.value = int(value.integer)
     case .Interface_Text_Size:
         prepared.text_size.changed = true
         prepared.text_size.value = int(value.integer)
     case .Interface_Display_Fps, .Interface_Reduce_Motion,
         .Interface_Increased_Contrast, .Rendering_Limit_Fps,
         .Drawing_Sound_Enabled, .Rendering_Simd,
-        .Rendering_Gpu_Dust_Instancing, .Persist_Terminal_History:
+        .Rendering_Gpu_Dust_Instancing, .Persist_Terminal_History,
+        .Animation_Monochrome:
         return settings_boolean_control_edit_preparation(id, value)
     case:
         return {}, false
@@ -1326,6 +1498,11 @@ settings_boolean_control_edit_preparation :: proc(
         }
     case .Persist_Terminal_History:
         prepared.persist_history = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
+    case .Animation_Monochrome:
+        prepared.monochrome = {
             toggled = true,
             checked_out = value.boolean,
         }

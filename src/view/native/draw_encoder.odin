@@ -274,12 +274,15 @@ Draw_Custom_Storage :: struct {
 // Draw_Ink_Sample_Handler receives one independent visible-ink point.
 Draw_Ink_Sample_Handler :: #type proc(
     user_data: rawptr, position: geometry.Vector2,
-    tint: color.Color_RGBA8, coverage: u8)
+    tint: color.Color_RGBA8, coverage: u8, authored: bool)
 
 // Draw_Ink_Sink routes draw-adjacent ink samples to a display-owned collector.
 Draw_Ink_Sink :: struct {
     user_data: rawptr,
     record: Draw_Ink_Sample_Handler,
+    // Sample provenance only; native rendering never transforms vertex colors.
+    source_color: color.Color_RGBA8,
+    authored: bool,
 }
 
 // Draw_Storage borrows fixed-capacity frame buffers from the display owner.
@@ -358,7 +361,13 @@ draw_encoder_record_ink_sample :: #force_inline proc(
         f32((math.floor(pixel_x)+0.5)/scale_x),
         f32((math.floor(pixel_y)+0.5)/scale_y),
     }
-    encoder^.ink_sink.record(encoder^.ink_sink.user_data, snapped, tint, coverage)
+    source := tint
+    if encoder^.ink_sink.authored {
+        source = encoder^.ink_sink.source_color
+    }
+    encoder^.ink_sink.record(
+        encoder^.ink_sink.user_data, snapped, source, coverage,
+        encoder^.ink_sink.authored)
 }
 
 // draw_encoder_triangle_ink_count sizes one solid triangle's ink samples so thin

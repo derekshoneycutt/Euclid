@@ -58,8 +58,11 @@ prepare_one_formation_label :: proc(
     if !has_source {
         return
     }
+    font_size := projection.effective_ink_size(
+        draw.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     signature := formation_label_signature(
-        source, draw.brush_size, draw.source_revision)
+        source, font_size, draw.source_revision)
     if ps^.formation.reveals[reveal_index].topology_signature == signature {
         return
     }
@@ -72,7 +75,7 @@ prepare_one_formation_label :: proc(
     _ = particles.formation_store_label_targets(ps, reveal_index, {
         anchor = draw.point1,
         color = color.Color_RGBA8(draw.color),
-        font_size = draw.brush_size,
+        font_size = font_size,
         signature = signature,
     }, ink[:count])
 }
@@ -84,6 +87,9 @@ collect_formation_label_ink :: proc(
     output: []particlemodel.Formation_Label_Ink_Sample) -> (
         int, viewtext.Ui_Text_Ink_Sample_Status) {
     screen := projection.iso_to_cartesian(draw.point1, state^.iso_scale)
+    font_size := projection.effective_ink_size(
+        draw.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     ink: [FORMATION_LABEL_INK_CAPACITY]viewtext.Ui_Text_Ink_Sample
     count, status := viewtext.ui_text_collect_shaped_ink_samples({
         encoder = encoder,
@@ -93,7 +99,7 @@ collect_formation_label_ink :: proc(
         position = geometry.Vector2{screen.x, screen.y},
         color = color.WHITE,
         font = {view_font.cache_borrow(&state^.font_cache, .Regular),
-            draw.brush_size},
+            font_size},
     }, ink[:])
     if status != .Ready {
         return 0, status

@@ -150,6 +150,19 @@ fit_iso_scale_to_viewport :: proc(
     recompute_iso_scale_precompute(scale)
 }
 
+// viewport_scale_factor reports the uniform fit relative to the reference view.
+viewport_scale_factor :: #force_inline proc(scale: worldmodel.Iso_Scale) -> f32 {
+    return scale.scale / f32(worldmodel.ISO_SCALE_VALUE)
+}
+
+// effective_ink_size applies viewport fit and the saved animation scale to ink.
+effective_ink_size :: #force_inline proc(
+    authored_size: f32, scale: worldmodel.Iso_Scale,
+    user_scale_percent := 100) -> f32 {
+    return authored_size * viewport_scale_factor(scale) *
+        f32(user_scale_percent) * 0.01
+}
+
 //   Fast force-inlined projection helper using precomputed coefficients.
 //
 // Parameters:

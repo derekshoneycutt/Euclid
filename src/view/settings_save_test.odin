@@ -486,6 +486,18 @@ settings_save_expect_committed_preferences :: proc(
     testing.expect(t, .Interface_Increased_Contrast in preferences.present)
 }
 
+// Verify high setting identifiers survive an immutable worker save snapshot.
+settings_save_expect_animation_style_preferences :: proc(
+    t: ^testing.T, store: ^user_data.Store) {
+    preferences := setting_model.default_preferences()
+    loaded := user_data.store_load_settings(store, &preferences)
+    testing.expect_value(t, loaded.failure.kind, user_data.Store_Error_Kind.None)
+    testing.expect_value(t, preferences.animation.scale_percent, 155)
+    testing.expect(t, preferences.animation.monochrome)
+    testing.expect(t, .Animation_Scale_Percent in preferences.present)
+    testing.expect(t, .Animation_Monochrome in preferences.present)
+}
+
 // Populate one coalesced settings batch with repeated and independent edits.
 settings_save_test_set_coalesced_changes :: proc(
     state: ^app_core.Euclid_General_State) {
@@ -500,6 +512,10 @@ settings_save_test_set_coalesced_changes :: proc(
         pending, .Interface_Reduce_Motion, setting_model.boolean_value(true))
     _ = setting_model.change_set_set(
         pending, .Interface_Increased_Contrast, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(
+        pending, .Animation_Scale_Percent, setting_model.integer_value(155))
+    _ = setting_model.change_set_set(
+        pending, .Animation_Monochrome, setting_model.boolean_value(true))
 }
 
 // Verify edits coalesce by setting and commit one batch on a worker.
@@ -530,6 +546,7 @@ settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
     testing.expect_value(t, state^.ui_runtime.preferences.save_status,
         preferencesmodel.Settings_Save_Status.Saved)
     settings_save_expect_committed_preferences(t, &store)
+    settings_save_expect_animation_style_preferences(t, &store)
     testing.expect(t, viewuserdata.connection_admission_is_idle(
         &state^.user_data_admission))
     viewpreferences.settings_save_shutdown(state, &pool)

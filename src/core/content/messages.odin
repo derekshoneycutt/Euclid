@@ -119,6 +119,10 @@ Content_Message_Id :: enum u16 {
     Settings_History_Delete_Pending = 1234,
     Settings_History_Delete_Succeeded = 1235,
     Settings_History_Delete_Failed = 1236,
+    Settings_Animation_Scale = 1237,
+    Settings_Animation_Scale_Tooltip = 1238,
+    Settings_Animation_Scale_Default = 1239,
+    Settings_Monochrome = 1240,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -175,7 +179,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 157
+CONTENT_SHIPPED_MESSAGE_COUNT :: 161
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -286,6 +290,10 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1234, "ui.settings.history_delete.pending"},
     {1235, "ui.settings.history_delete.succeeded"},
     {1236, "ui.settings.history_delete.failed"},
+    {1237, "ui.settings.animation_scale"},
+    {1238, "ui.settings.animation_scale.tooltip"},
+    {1239, "ui.settings.animation_scale.default"},
+    {1240, "ui.settings.monochrome"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},

@@ -4,6 +4,7 @@ package uipresentation
 import "core:testing"
 
 import geometry "../../../core/geometry"
+import color "../../../core/color"
 import native "../../native"
 import uidust "../../../particles/ui_dust"
 
@@ -17,6 +18,70 @@ Presentation_Dust_Test_Draw :: struct {
     draws: [2]native.Dust_Draw,
     custom: native.Draw_Custom_Storage,
     encoder: native.Draw_Encoder,
+}
+
+// Verify live presentation dust resolves authored tint but keeps effect opacity.
+@(test)
+presentation_dust_instance_maps_live_content_color :: proc(t: ^testing.T) {
+    original: color.Color_RGBA8 = {120, 80, 200, 127}
+    monochrome := presentation_dust_instance({
+        tint = original,
+        size = 2,
+        alpha = 0.5,
+        monochrome = true,
+        ink_style = {
+            monochrome = {164, 164, 164, 127},
+            authored = true,
+        },
+    })
+    testing.expect_value(t, monochrome.color[0], f32(164) / 255)
+    testing.expect_value(t, monochrome.color[1], f32(164) / 255)
+    testing.expect_value(t, monochrome.color[2], f32(164) / 255)
+    testing.expect_value(t, monochrome.color[3], f32(0.5))
+
+    original_color := presentation_dust_instance(
+        {
+            tint = original,
+            size = 2,
+            alpha = 0.5,
+            effective_contrast = true,
+        })
+    testing.expect_value(t, original_color.color[0], f32(120) / 255)
+    testing.expect_value(t, original_color.color[1], f32(80) / 255)
+    testing.expect_value(t, original_color.color[2], f32(200) / 255)
+}
+
+// Verify live policy selection preserves ordinary text, restores originals, and agrees with CPU expansion.
+@(test)
+presentation_dust_policy_keeps_ordinary_ink_and_alpha :: proc(t: ^testing.T) {
+    params: Presentation_Dust_Instance_Params = {
+        tint = {70, 130, 180, 77},
+        size = 2,
+        alpha = 0.25,
+        ink_style = {
+            monochrome = {185, 185, 185, 77},
+            increased = {212, 212, 212, 77},
+            authored = true,
+        },
+    }
+    expected: [4]color.Color_RGBA8 = {
+        {70, 130, 180, 63}, {185, 185, 185, 63},
+        {212, 212, 212, 63}, {70, 130, 180, 63}}
+    for tint, index in expected {
+        params.monochrome = index == 1 || index == 2
+        params.effective_contrast = index >= 2
+        instance := presentation_dust_instance(params)
+        vertices: [6]native.Draw_Vertex
+        native.draw_encoder_expand_dust(vertices[:], instance)
+        testing.expect_value(t, vertices[0].color, tint)
+        testing.expect_value(t, instance.color[3], f32(0.25))
+    }
+    params.monochrome = true
+    params.ink_style.authored = false
+    ordinary := presentation_dust_instance(params)
+    testing.expect_value(t, ordinary.color[0], f32(70) / 255)
+    testing.expect_value(t, ordinary.color[1], f32(130) / 255)
+    testing.expect_value(t, ordinary.color[2], f32(180) / 255)
 }
 
 // Allocate one encoder with exactly the shared pane capacity and no native resources.
@@ -90,7 +155,10 @@ presentation_effects_draw_shared_pool_without_duplicates :: proc(t: ^testing.T) 
     dust^.incoming_elapsed = (uidust.UI_DUST_ARRIVAL_HANDOFF_START +
         uidust.UI_DUST_ARRIVAL_HANDOFF_END) / 2
     presentation_test_fill_mixed_dust(t, dust)
-    presentation_draw_effects(&draw^.encoder, dust, viewport, rawptr(uintptr(1)))
+    presentation_draw_effects(&draw^.encoder, viewport, {
+        dust = dust,
+        dust_atlas = rawptr(uintptr(1)),
+    })
     testing.expect_value(t, draw^.encoder.dust_instance_count,
         uidust.UI_DUST_TOTAL_PARTICLES)
     testing.expect_value(t, draw^.encoder.dust_draw_count, 1)
@@ -136,7 +204,10 @@ presentation_effects_draw_clips_outgoing_and_incoming_dust :: proc(t: ^testing.T
         dust, {40, 50}, {4, 5, 6, 255}, 255))
     uidust.ui_dust_advance(dust, uidust.UI_DUST_ARRIVAL_DELAY_MAX + 0.05)
 
-    presentation_draw_effects(&encoder, dust, viewport, rawptr(uintptr(1)))
+    presentation_draw_effects(&encoder, viewport, {
+        dust = dust,
+        dust_atlas = rawptr(uintptr(1)),
+    })
 
     testing.expect_value(t, encoder.dust_instance_count, 2)
     testing.expect_value(t, draws[0].count, u32(2))
@@ -156,7 +227,9 @@ presentation_test_reveal_vertices :: proc(
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
-    presentation_draw_effects(&encoder, dust, viewport, nil)
+    presentation_draw_effects(&encoder, viewport, {
+        dust = dust,
+    })
     return encoder.vertex_count
 }
 

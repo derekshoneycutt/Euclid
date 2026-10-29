@@ -7,6 +7,7 @@ TOOL_LENGTH :: 0.35
 
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
 
+// Authored drawing sizes are exact at this reference viewport and projection.
 VIEW_WIDTH :: 900
 VIEW_HEIGHT :: 500
 

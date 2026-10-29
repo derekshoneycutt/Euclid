@@ -247,12 +247,13 @@ Circle_Dust_Emission :: struct {
     color: Color,
 }
 
-// Group one world-backed clear-burst operation and its render color.
+// Group one world-backed clear burst and identify whether its dust is authored ink.
 Shape_World_Burst_Context :: struct {
     particles: ^Particle_System,
     world: ^shapemodel.Shape_World,
     color: Color,
     projected_scale: f32,
+    authored_ink: bool,
 }
 
 // Set bounded density, view scale, and deterministic seed for region sampling.
@@ -401,7 +402,7 @@ emit_shape_world_cached_polygon_burst :: proc(
     emitted := false
     for sample in samples[:count] {
         emitted = emit_departure_material_sample(ctx.particles, sample.position,
-            sample.coverage, ctx.color) || emitted
+            sample.coverage, ctx.color, ctx.authored_ink) || emitted
     }
     return emitted
 }
@@ -1209,6 +1210,8 @@ formation_region_visual :: proc(
         },
         screen_offset = {particle.ink_x, particle.ink_y},
         color = tint,
+        authored_color = particle.color,
+        white_mix = white,
         diameter = diameter,
         visible = tint.a > 0,
     }
@@ -1292,9 +1295,9 @@ emit_shape_world_arc_burst :: proc(
     emission: Circle_Dust_Emission = {
         center, arc.radius, arc.start_theta, arc.sweep_theta, ctx.color}
     if filled {
-        emit_filled_circle_dust(ctx.particles, emission)
+        emit_filled_circle_dust(ctx.particles, emission, ctx.authored_ink)
     } else {
-        emit_circle_dust(ctx.particles, emission)
+        emit_circle_dust(ctx.particles, emission, ctx.authored_ink)
     }
 }
 
@@ -1315,7 +1318,8 @@ curve_segment_length :: #force_inline proc(first, second: Vector3) -> f32 {
 
 // Emit spatially uniform dust across one explicated ordered curve.
 emit_curve_polyline_dust :: proc(
-    ps: ^Particle_System, vertices: []Vector3, color: Color) {
+    ps: ^Particle_System, vertices: []Vector3, color: Color,
+    authored_ink := false) {
     total_length: f32
     for index in 1..<len(vertices) {
         total_length += curve_segment_length(vertices[index - 1], vertices[index])
@@ -1343,7 +1347,7 @@ emit_curve_polyline_dust :: proc(
         }
         sample := vertices[segment_index - 1] +
             (vertices[segment_index] - vertices[segment_index - 1]) * progress
-        spawn_dust_particle(ps, sample, color)
+        spawn_dust_particle(ps, sample, color, authored_ink)
     }
 }
 
@@ -1361,7 +1365,8 @@ emit_shape_world_trochoid_burst :: proc(
     result := curve.trochoid_explicate(center, value^, vertices[:])
     if result.status != .Invalid_Input && result.vertex_count > 1 {
         emit_curve_polyline_dust(
-            ctx.particles, vertices[:result.vertex_count], ctx.color)
+            ctx.particles, vertices[:result.vertex_count], ctx.color,
+            ctx.authored_ink)
     }
 }
 
@@ -1381,7 +1386,8 @@ emit_shape_world_cycloid_burst :: proc(
     result := curve.cycloid_explicate(first, second, value^, vertices[:])
     if result.status != .Invalid_Input && result.vertex_count > 1 {
         emit_curve_polyline_dust(
-            ctx.particles, vertices[:result.vertex_count], ctx.color)
+            ctx.particles, vertices[:result.vertex_count], ctx.color,
+            ctx.authored_ink)
     }
 }
 
@@ -1417,7 +1423,8 @@ emit_shape_world_geometry_burst :: proc(
     if geometry.kind == .Point {
         position, found := shape_world_burst_position(ctx.world, entity)
         if found {
-           emit_point_burst(ctx.particles, position, ctx.color)
+           emit_point_burst(
+                ctx.particles, position, ctx.color, ctx.authored_ink)
         }
         return
     }
@@ -1427,7 +1434,8 @@ emit_shape_world_geometry_burst :: proc(
         second, second_ok := shape_world_burst_position(
             ctx.world, geometry.payload.line.second)
         if first_ok && second_ok {
-            emit_line_dust(ctx.particles, first, second, ctx.color)
+            emit_line_dust(
+                ctx.particles, first, second, ctx.color, ctx.authored_ink)
         }
         return
     }
@@ -1475,18 +1483,19 @@ emit_shape_world_hide_burst :: proc(
     tint := style^.color
     tint[3] = u8(f32(tint[3]) * min(options.opacity, 1))
     return emit_shape_world_hide_geometry_burst(
-        {ps, world, tint, options.projected_scale}, entity, options.kick_dust)
+        {ps, world, tint, options.projected_scale, true}, entity, options.kick_dust)
 }
 
 // Emit one copied material origin with its sampled coverage.
 emit_departure_material_sample :: proc(
-    ps: ^Particle_System, position: Vector3, coverage: u8, tint: Color) -> bool {
+    ps: ^Particle_System, position: Vector3, coverage: u8, tint: Color,
+    authored_ink := false) -> bool {
     if ps == nil || coverage == 0 {
         return false
     }
     color := tint
     color[3] = u8(u16(tint[3]) * u16(coverage) / 255)
-    spawn_dust_particle(ps, position, color)
+    spawn_dust_particle(ps, position, color, authored_ink)
     return true
 }
 
@@ -1505,7 +1514,7 @@ emit_departure_material_burst :: proc(
     emitted := false
     for sample in samples {
         emitted = emit_departure_material_sample(
-            ps, sample.position, sample.coverage, tint) || emitted
+            ps, sample.position, sample.coverage, tint, true) || emitted
     }
     return emitted
 }
@@ -1531,6 +1540,7 @@ emit_shape_world_clear_geometry_burst :: proc(
             world = world,
             color = style.color,
             projected_scale = projected_scale,
+            authored_ink = true,
         }
         if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
             ps^.departure_capture_failures += 1
@@ -1588,9 +1598,10 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
 
 
 //   Emit point burst dust for one position.
-emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: Color) {
+emit_point_burst :: proc(
+    ps: ^Particle_System, p: Vector3, col: Color, authored_ink := false) {
     for _ in 0..<CLEAR_BURST_POINT_COUNT {
-        spawn_dust_particle(ps, p, col)
+        spawn_dust_particle(ps, p, col, authored_ink)
     }
 }
 
@@ -2164,6 +2175,7 @@ spawn_dust_particle_index_with_generator :: proc(
     ps.low_particles[i].size =
         rand.float32_range(DUST_SIZE_START_MIN, DUST_SIZE_START_MAX, generator)
     ps.low_particles[i].color = col
+    ps.low_particles[i].authored_ink = false
 }
 
 // Return one deterministic scenario-request position inside its selected layout.
@@ -2214,20 +2226,23 @@ emit_scenario_dust :: proc(
 }
 
 //   Reserve one low-layer slot and initialize a randomized dust particle.
-spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: Color) {
+spawn_dust_particle :: proc(
+    ps: ^Particle_System, origin: Vector3, col: Color, authored_ink := false) {
     index, ok := reserve_dead_low_particle_slot(ps)
     if !ok {
         return
     }
 
     spawn_dust_particle_index(ps, index, origin, col)
+    ps^.low_particles[index].authored_ink = authored_ink
     ps^.dust_spawn_sequence += 1
     ps^.dust_slot_spawn_sequences[index] = ps^.dust_spawn_sequence
 
 }
 
 //   Emit dust samples along a line segment between two points.
-emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: Color) {
+emit_line_dust :: proc(
+    ps: ^Particle_System, a, b: Vector3, col: Color, authored_ink := false) {
     sample_count := max(CLEAR_BURST_LINE_SAMPLES, 2)
     denom := f32(sample_count - 1)
     for s in 0..<sample_count {
@@ -2238,7 +2253,7 @@ emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: Color) {
         sample.z = a.z + (b.z - a.z) * t
 
         for _ in 0..<CLEAR_BURST_EDGE_REPEATS {
-            spawn_dust_particle(ps, sample, col)
+            spawn_dust_particle(ps, sample, col, authored_ink)
         }
     }
 }
@@ -2324,7 +2339,8 @@ filled_circle_dust_sample_count :: proc(
 }
 
 //   Emit dust samples along a circular/arc sweep between start and finish points.
-emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
+emit_circle_dust :: proc(
+    ps: ^Particle_System, emission: Circle_Dust_Emission, authored_ink := false) {
     if emission.radius <= 0 {
         return
     }
@@ -2339,12 +2355,13 @@ emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
         sample.x += f32(math.cos(theta)) * emission.radius
         sample.y += f32(math.sin(theta)) * emission.radius
 
-        spawn_dust_particle(ps, sample, emission.color)
+        spawn_dust_particle(ps, sample, emission.color, authored_ink)
     }
 }
 
 //   Emit uniformly distributed dust throughout one rendered circular sector.
-emit_filled_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
+emit_filled_circle_dust :: proc(
+    ps: ^Particle_System, emission: Circle_Dust_Emission, authored_ink := false) {
     if emission.radius <= 0 {
         return
     }
@@ -2359,7 +2376,7 @@ emit_filled_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emis
         sample := emission.center
         sample.x += f32(math.cos(theta)) * radius
         sample.y += f32(math.sin(theta)) * radius
-        spawn_dust_particle(ps, sample, emission.color)
+        spawn_dust_particle(ps, sample, emission.color, authored_ink)
     }
 }
 

@@ -7,10 +7,55 @@ import math "core:math"
 import linalg "core:math/linalg"
 import testing "core:testing"
 import worldmodel "model"
+import projection "projection"
 import geometry "../../core/geometry"
 import core "../../core"
 
 TOOL_BRUSH_TEST_EPSILON :: f32(1e-4)
+
+// Verify authored animation colors follow live user and platform preferences.
+@(test)
+animation_authored_ink_reads_live_preferences :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    original: color.Color_RGBA8 = {70, 130, 180, 91}
+    testing.expect_value(t, resolve_animation_authored_ink(state, original), original)
+
+    state^.ui_runtime.preferences.values.animation.monochrome = true
+    testing.expect_value(t, resolve_animation_authored_ink(state, original),
+        color.Color_RGBA8{185, 185, 185, 91})
+    state^.ui_runtime.preferences.values.interface.increased_contrast = true
+    testing.expect_value(t, resolve_animation_authored_ink(state, original),
+        color.Color_RGBA8{212, 212, 212, 91})
+    state^.ui_runtime.preferences.values.interface.increased_contrast = false
+    state^.ui_runtime.platform_increased_contrast = true
+    testing.expect_value(t, resolve_animation_authored_ink(state, original),
+        color.Color_RGBA8{212, 212, 212, 91})
+}
+
+// Verify forming-label topology uses the same fitted font size as crisp labels.
+@(test)
+formation_label_signature_tracks_effective_font_size :: proc(t: ^testing.T) {
+    iso: worldmodel.Iso_Scale
+    projection.fit_iso_scale_to_viewport(
+        &iso, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT)
+    reference_size := projection.effective_ink_size(20, iso)
+    reference_signature := formation_label_signature("ABC", reference_size, 1)
+
+    projection.fit_iso_scale_to_viewport(
+        &iso, worldmodel.VIEW_WIDTH * 0.5, worldmodel.VIEW_HEIGHT)
+    fitted_size := projection.effective_ink_size(20, iso)
+    fitted_signature := formation_label_signature("ABC", fitted_size, 1)
+    testing.expect_value(t, fitted_size, f32(10))
+    testing.expect(t, fitted_signature != reference_signature)
+
+    iso.x_offset += 40
+    iso.y_offset -= 20
+    testing.expect_value(t,
+        formation_label_signature("ABC",
+            projection.effective_ink_size(20, iso), 1),
+        fitted_signature)
+}
 
 // Return one deterministic projection scale for visible curve run tests.
 curve_visible_test_scale :: proc() -> worldmodel.Iso_Scale {

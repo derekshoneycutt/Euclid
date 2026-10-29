@@ -417,6 +417,86 @@ userdata_commit_load_and_reset_use_atomic_known_key_batches :: proc(t: ^testing.
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
 }
 
+// Persist animation style settings through the existing keyed setting store.
+@(test)
+userdata_round_trips_animation_style_preferences :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    defaults := settings.default_preferences()
+    empty_load := store_load_settings(&store, &defaults)
+    testing.expect_value(t, empty_load.failure.kind, Store_Error_Kind.None)
+    testing.expect_value(t, defaults.animation.scale_percent, 100)
+    testing.expect(t, !defaults.animation.monochrome)
+    testing.expect(t, .Animation_Scale_Percent not_in defaults.present)
+    testing.expect(t, .Animation_Monochrome not_in defaults.present)
+
+    for percent in ([3]int{50, 100, 200}) {
+        changes: settings.Change_Set
+        testing.expect(t, settings.change_set_set(
+            &changes, .Animation_Scale_Percent, settings.integer_value(percent)))
+        testing.expect(t, settings.change_set_set(
+            &changes, .Animation_Monochrome, settings.boolean_value(true)))
+        testing.expect_value(t, store_commit_batch(&store, changes).outcome,
+            Commit_Outcome.Committed)
+        loaded_preferences := settings.default_preferences()
+        loaded := store_load_settings(&store, &loaded_preferences)
+        testing.expect_value(t, loaded.failure.kind, Store_Error_Kind.None)
+        testing.expect_value(t, loaded.invalid_count, 0)
+        testing.expect_value(t, loaded_preferences.animation.scale_percent, percent)
+        testing.expect(t, loaded_preferences.animation.monochrome)
+        testing.expect(t, .Animation_Scale_Percent in loaded_preferences.present)
+        testing.expect(t, .Animation_Monochrome in loaded_preferences.present)
+    }
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Ignore malformed persisted animation style values without replacing defaults.
+@(test)
+userdata_rejects_invalid_animation_style_values :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    testing.expect_value(t,
+        store_exec(&store, "PRAGMA ignore_check_constraints=ON").result, raw.Result.Ok)
+    testing.expect_value(t, store_exec(&store,
+        "INSERT INTO user_setting VALUES ('animation', 'scale_percent', "+
+        "'integer', 52, NULL)").result, raw.Result.Ok)
+    testing.expect_value(t, store_exec(&store,
+        "INSERT INTO user_setting VALUES ('animation', 'monochrome', "+
+        "'boolean', 2, NULL)").result, raw.Result.Ok)
+
+    preferences := settings.default_preferences()
+    loaded := store_load_settings(&store, &preferences)
+    testing.expect_value(t, loaded.failure.kind, Store_Error_Kind.None)
+    testing.expect_value(t, loaded.invalid_count, 2)
+    testing.expect_value(t, preferences.animation.scale_percent, 100)
+    testing.expect(t, !preferences.animation.monochrome)
+    testing.expect(t, .Animation_Scale_Percent not_in preferences.present)
+    testing.expect(t, .Animation_Monochrome not_in preferences.present)
+    testing.expect_value(t, loaded.invalid_values[0].id,
+        settings.Setting_Id.Animation_Scale_Percent)
+    testing.expect_value(t,
+        loaded.invalid_values[0].reason, Invalid_Value_Reason.Value_Range)
+    testing.expect_value(t, loaded.invalid_values[1].id,
+        settings.Setting_Id.Animation_Monochrome)
+    testing.expect_value(t,
+        loaded.invalid_values[1].reason, Invalid_Value_Reason.Value_Range)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
 // Roll back all writes when a later operation in the same batch fails.
 @(test)
 userdata_failed_batch_rolls_back_every_setting :: proc(t: ^testing.T) {

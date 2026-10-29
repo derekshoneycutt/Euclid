@@ -16,7 +16,6 @@ import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
 import log "core:log"
 import worldmodel "world/model"
-import simulationmodel "simulation/model"
 import viewmodel "ui/model"
 import viewcapture "capture"
 import viewmessages "messages"
@@ -32,7 +31,6 @@ import viewpreferences "preferences"
 import libraryservice "ui/library/service"
 import uilibrary "ui/library"
 import viewsimulation "simulation"
-import inputbackend "input/backend"
 import viewtelemetry "telemetry"
 import uiterminal "ui/terminal"
 import uisplitter "ui/layout/splitter"
@@ -68,6 +66,7 @@ Window_Frame_Context :: struct {
     capture_sink: capture.Sink,
     framebuffer_operations: capturemodel.Framebuffer_Capture_Operations,
     display_profile: ^evidence_profile.State,
+    presentation_unavailable: bool,
 }
 
 //   Frame-local values consumed only by observational drawing.
@@ -596,7 +595,10 @@ encode_sdl_ui_geometry :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
     encoder: ^native.Draw_Encoder,
     prepared: ^Frame_Draw_Preparation) {
-    effects: uipresentation.Presentation_Effects_Draw_Params
+    effects: uipresentation.Presentation_Effects_Draw_Params = {
+        monochrome = state^.ui_runtime.preferences.values.animation.monochrome,
+        effective_contrast = prepared^.increased_contrast,
+    }
     if ctx.presentation != nil {
         effects.dust = &ctx.presentation^.dust
     }
@@ -657,21 +659,24 @@ encode_sdl_geometry_frame :: proc(
 // Run one SDL geometry frame while later visual capabilities remain dormant.
 run_sdl_geometry_frame :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
-    clock: ^native.Sdl_Frame_Clock) -> bool {
+    clock: ^native.Sdl_Frame_Clock,
+    input_frame: input.Input_Frame) -> native.Sdl_Frame_Result {
     evidence_profile.zone_begin(ctx.display_profile, "display_frame")
-    frame_started_at := native.sdl_time_ticks()
-    input_frame := inputbackend.sdl_platform_poll_events(ctx.platform, ctx.input_runtime)
     if ctx.platform^.close_requested {
         finish_window_frame(state, ctx.display_profile, false)
-        return false
+        return .Unavailable
     }
     prepared: Frame_Draw_Preparation
     prepare_sdl_frame(state, ctx, clock, input_frame, &prepared)
+    if ctx.presentation_unavailable {
+        finish_window_frame(state, ctx.display_profile, false)
+        return .Unavailable
+    }
     result := encode_sdl_geometry_frame(state, ctx, &prepared)
     if result == .Failed {
         log.error("sdl_frame_present_failed")
         finish_window_frame(state, ctx.display_profile, false)
-        return false
+        return .Failed
     }
     presented := result == .Presented
     if presented {
@@ -682,10 +687,7 @@ run_sdl_geometry_frame :: proc(
         service_scenario_after_present(ctx)
     }
     finish_window_frame(state, ctx.display_profile, presented)
-    if state^.ui_runtime.rendering.limit_fps {
-        native.sdl_delay_until_rate(frame_started_at, u64(simulationmodel.LIMIT_FPS))
-    }
-    return true
+    return result
 }
 
 // Abort protected GIF work before accepting a changed logical window extent.

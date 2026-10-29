@@ -2087,7 +2087,7 @@ cache_ink_capture_mark_drawn :: proc(cache: ^Font_Cache) {
 // Retain a deterministic reservoir sample without borrowing draw or font storage.
 cache_ink_capture_sample :: proc(
     user_data: rawptr, position: geometry.Vector2,
-    tint: color.Color_RGBA8, coverage: u8) {
+    tint: color.Color_RGBA8, coverage: u8, authored := false) {
     cache := cast(^Font_Cache)user_data
     if cache == nil || coverage == 0 {
         return
@@ -2113,6 +2113,7 @@ cache_ink_capture_sample :: proc(
             position = position,
             color = cast([4]u8)tint,
             coverage = coverage,
+            authored = authored,
         }
     }
 }

@@ -133,6 +133,42 @@ evidence, not proof that the scenario passed.
 Scenarios are intentionally separate from `check`: headed scenarios require a display.
 Required evidence loss makes a scenario inconclusive, never passed.
 
+### Native live-resize acceptance
+
+The desktop scheduler is SDL's main-callback interface, including loading. Unit
+regressions cover callback result mapping, nonrecursive admission and nonblocking
+pacing, copied text/IME payloads, bounded off-thread handoff and shutdown, and
+transactional scene-target replacement. Run the complete documented Odin suite;
+the driver does not accept invented file or test selectors.
+
+Use the existing
+[geometry lifecycle](../../../tools/scenarios/sdl3-geometry-lifecycle.jsonl),
+[keyboard focus](../../../tools/scenarios/keyboard-focus-acceptance.jsonl),
+[IME targeting](../../../tools/scenarios/ime-text-target-acceptance.jsonl),
+[MIME presentation](../../../tools/scenarios/mime-presentation-acceptance.jsonl), and
+[GIF cancellation](../../../tools/scenarios/gif-armed-cancellation-restores-allocations.jsonl)
+scenarios as bounded integration checks. A successful process alone is insufficient:
+inspect each manifest's result and trace-completeness fields. These scenarios do not
+themselves synthesize native interactive window resizing.
+
+| Environment | What it can establish | Additional acceptance needed |
+| --- | --- | --- |
+| Linux/Hyprland/Wayland with Vulkan | Callback startup, ordinary input, compositor-requested size changes, relayout, frame/tick progress, target-size agreement, close and restoration | Actual drag gestures, display-scale transitions, and compositor-specific minimize behavior |
+| Linux/X11 with Vulkan | The same lifecycle under the X11 backend when a server is available | Actual WM drag and minimize/restore; XWayland is not a native X11 desktop certification |
+| Windows with D3D12 | SDL modal-resize callback progress | Native Windows machine: loading and ready-state drag, normal/paused animation, close during drag |
+| macOS with Metal | SDL Cocoa live-resize callback progress | Native Mac: loading and ready-state drag, normal/paused animation, close during drag |
+
+During each platform run, check portrait/landscape reversals, Terminal and Dynview
+reflow, DPI/display changes, FPS limiting and vsync on/off, and active GIF cancellation.
+Debug `sdl_frame_extent_admitted` records report logical, pixel, and target dimensions.
+Match those with presented-frame/fixed-step/animation-tick evidence while resizing.
+Programmatic resize requests prove target admission and layout, **not** Windows/macOS
+native modal-loop dispatch. Report unavailable platform checks as unperformed.
+
+Native target replacement currently retains a conservative global GPU-idle wait.
+Measure any drag stutter separately before changing that resource-lifetime guarantee;
+do not infer a scheduling failure solely from compositor/GPU presentation cadence.
+
 ### Input And IME Evidence
 
 The [IME text-target scenario](../../../tools/scenarios/ime-text-target-acceptance.jsonl)

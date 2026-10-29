@@ -109,6 +109,49 @@ durability status in Settings.
 
 ## Execution And Ownership Model
 
+### SDL callback scheduling and live resizing
+
+The desktop entry in [`src/app/desktop.odin`](../../../src/app/desktop.odin)
+uses SDL 3.2+'s foreign-language `RunApp` entry and an SDL-main trampoline whose
+only call is `EnterAppMainCallbacks`. SDL owns event pumping, iteration scheduling,
+the Windows/macOS native live-resize timers, and final global SDL shutdown.
+There is no application resize timer, second renderer, or nested polling loop.
+Help and argument validation still complete before entering SDL.
+
+The app's stable callback owner retains its Odin context and
+[`Window_Session`](../../../src/view/view.odin). The existing process allocation,
+logging, and database envelopes enclose the entire blocking desktop runner.
+Consequently their borrowed settings and collection inputs remain valid through
+`AppQuit` and SDL shutdown, and debug allocation reporting runs after cleanup.
+
+`AppInit` admits native resources and submits asset preparation. Ordinary iterations
+then advance asset, Julia initialization, content initialization, and display-resource
+admission phases. Startup worker results and request identities have session lifetime;
+close during startup joins admitted work before releasing that storage.
+
+`AppEvent` copies relevant events into a fixed synchronized inbox, including transient
+text/IME bytes. It may run off-thread and never mutates visible state or enters Julia.
+The display owner drains lifecycle signals before pacing, retaining ordinary input
+until an accepted frame. Queue overflow is an explicit process failure. `AppQuit`
+closes inbox admission before releasing resources; its storage remains alive until
+`RunApp` returns so concurrent late events cannot access freed memory.
+
+Each nonrecursive `AppIterate` admits current logical/drawable extents and a complete
+scene-target pair before layout and encoding, then runs the ordinary frame pipeline.
+Resizing continues normal animation and fixed-step work, respecting pause controls.
+SDL's callback-rate hint and a nonblocking deadline preserve the FPS preference without
+sleeping in callbacks; size-change redraws can bypass the deadline. Minimized or
+temporarily unavailable presentation continues owner updates at a bounded cadence
+without captures or false frame-presented evidence. GIF resize cancellation remains
+with the existing capture owner.
+
+Target replacement remains transactional and conservatively waits for GPU idle before
+retiring the old pair. Failed allocation/fencing preserves last-good resources and
+fails explicitly; swapchain unavailability is recoverable. SDL's deferred texture-release
+guarantee is not being used to waive outstanding capture/upload ownership.
+See [native resize acceptance](TestingStrategy.md#native-live-resize-acceptance)
+for the platform-specific verification boundary.
+
 Euclid's main runtime roles are distinct owners, not interchangeable worker threads:
 
 | Owner | Owns | Publishes or hands off |

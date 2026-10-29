@@ -29,6 +29,8 @@ Sdl_Input_Accumulation :: struct {
     mouse_left_clicks: u8,
     mouse_released: input.Input_Mouse_Buttons,
     mouse_wheel_delta: f32,
+    mouse_position: input.Input_Position,
+    mouse_down: input.Input_Mouse_Buttons,
     focused: bool,
     diagnostics: native.Sdl_Input_Diagnostics,
 }
@@ -168,31 +170,38 @@ sdl_input_consume_event :: proc(
         if accumulation^.focused {
             sdl_input_append_preedit(runtime, event^.edit, accumulation)
         }
-    case .MOUSE_BUTTON_DOWN, .MOUSE_BUTTON_UP:
-        sdl_input_consume_pointer_event(event, accumulation)
-    case .MOUSE_WHEEL:
+    case .MOUSE_MOTION, .MOUSE_BUTTON_DOWN, .MOUSE_BUTTON_UP, .MOUSE_WHEEL:
         sdl_input_consume_pointer_event(event, accumulation)
     case .WINDOW_FOCUS_GAINED, .WINDOW_FOCUS_LOST:
         sdl_input_consume_focus_event(runtime, event, accumulation)
     }
 }
 
-// sdl_input_consume_pointer_event accumulates one button or wheel event.
+// sdl_input_consume_pointer_event applies pointer position/levels and retains edges.
 sdl_input_consume_pointer_event :: proc(
     event: ^sdl.Event, accumulation: ^Sdl_Input_Accumulation) {
+    if event^.type == .MOUSE_MOTION {
+        accumulation^.mouse_position = {event^.motion.x, event^.motion.y}
+        accumulation^.mouse_down = sdl_input_mouse_buttons(event^.motion.state)
+        return
+    }
     if event^.type == .MOUSE_WHEEL {
+        accumulation^.mouse_position = {event^.wheel.mouse_x, event^.wheel.mouse_y}
         accumulation^.diagnostics.wheel_events += 1
         accumulation^.mouse_wheel_delta += event^.wheel.y
         return
     }
+    accumulation^.mouse_position = {event^.button.x, event^.button.y}
     if button, mapped := sdl_input_mouse_button(event^.button.button); mapped {
         accumulation^.diagnostics.button_events += 1
         if event^.button.down {
+            accumulation^.mouse_down += {button}
             accumulation^.mouse_pressed += {button}
             if button == .Left {
                 accumulation^.mouse_left_clicks = event^.button.clicks
             }
         } else {
+            accumulation^.mouse_down -= {button}
             accumulation^.mouse_released += {button}
         }
     }
@@ -204,7 +213,12 @@ sdl_input_consume_focus_event :: proc(
     accumulation: ^Sdl_Input_Accumulation) {
     accumulation^.diagnostics.focus_events += 1
     accumulation^.focused = event^.type == .WINDOW_FOCUS_GAINED
-    if accumulation^.focused || runtime^.text_target.kind == .None {
+    if !accumulation^.focused {
+        accumulation^.mouse_released += accumulation^.mouse_down
+        accumulation^.mouse_down = {}
+        accumulation^.modifiers = {}
+    }
+    if accumulation^.focused || runtime == nil || runtime^.text_target.kind == .None {
         return
     }
     _ = input.input_runtime_append_event(runtime, {
@@ -250,7 +264,7 @@ sdl_input_commit_diagnostics :: proc(
     platform^.input_diagnostics.event_overflows = event_overflows
 }
 
-// sdl_input_finish_frame samples final pointer levels and publishes one frame.
+// sdl_input_finish_frame publishes owner-applied state without sampling ahead of events.
 sdl_input_finish_frame :: proc(
     platform: ^native.Sdl_Platform, runtime: ^input.Input_Runtime,
     accumulation: Sdl_Input_Accumulation) -> input.Input_Frame {
@@ -260,12 +274,11 @@ sdl_input_finish_frame :: proc(
     frame.window_focused, frame.window_focus_changed =
         input.input_runtime_update_window_focus(runtime, accumulation.focused)
     frame.mouse_modifiers = accumulation.modifiers
-    mouse_x, mouse_y: f32
-    levels := sdl_input_mouse_buttons(sdl.GetMouseState(&mouse_x, &mouse_y))
-    mouse_x = native.sdl_application_coordinate(
-        mouse_x, platform^.metrics.content_scale)
-    mouse_y = native.sdl_application_coordinate(
-        mouse_y, platform^.metrics.content_scale)
+    levels := accumulation.mouse_down
+    mouse_x := native.sdl_application_coordinate(
+        accumulation.mouse_position.x, platform^.metrics.content_scale)
+    mouse_y := native.sdl_application_coordinate(
+        accumulation.mouse_position.y, platform^.metrics.content_scale)
     released := accumulation.mouse_released
     if !accumulation.focused {
         released += runtime^.device_mouse_down
@@ -295,7 +308,7 @@ sdl_platform_handle_event :: proc(
         platform^.close_requested = true
         return
     }
-    if event^.window.windowID != window_id {
+    if !sdl_event_inbox_relevant(event, window_id) {
         return
     }
     if event^.type == .WINDOW_CLOSE_REQUESTED {
@@ -305,46 +318,5 @@ sdl_platform_handle_event :: proc(
        event^.type == .WINDOW_DISPLAY_SCALE_CHANGED {
         platform^.resize_pending = true
     }
-    if runtime != nil {
-        sdl_input_consume_event(runtime, event, accumulation)
-    } else if event^.type == .WINDOW_FOCUS_GAINED {
-        accumulation^.focused = true
-    } else if event^.type == .WINDOW_FOCUS_LOST {
-        accumulation^.focused = false
-    }
-}
-
-// sdl_platform_refresh_observed_metrics updates last-good window observations.
-sdl_platform_refresh_observed_metrics :: proc(platform: ^native.Sdl_Platform) {
-    if !platform^.resize_pending {
-        return
-    }
-    if metrics, ok := native.sdl_platform_metrics(platform^.window); ok {
-        platform^.metrics = metrics
-    }
-}
-
-// sdl_platform_poll_events drains lifecycle and optional application input once.
-sdl_platform_poll_events :: proc(
-    platform: ^native.Sdl_Platform,
-    runtime: ^input.Input_Runtime = nil) -> input.Input_Frame {
-    accumulation: Sdl_Input_Accumulation = {
-        modifiers = sdl_input_modifiers(sdl.GetModState()),
-        focused = .INPUT_FOCUS in sdl.GetWindowFlags(platform^.window),
-    }
-    if runtime != nil && !input.input_runtime_begin_frame(runtime) {
-        return {}
-    }
-    window_id := sdl.GetWindowID(platform^.window)
-    event: sdl.Event
-    for sdl.PollEvent(&event) {
-        sdl_platform_handle_event(
-            platform, runtime, &event, window_id, &accumulation)
-    }
-    sdl_platform_refresh_observed_metrics(platform)
-    native.sdl_platform_service_accessibility(platform, accumulation.focused)
-    if runtime == nil {
-        return {}
-    }
-    return sdl_input_finish_frame(platform, runtime, accumulation)
+    sdl_input_consume_event(runtime, event, accumulation)
 }

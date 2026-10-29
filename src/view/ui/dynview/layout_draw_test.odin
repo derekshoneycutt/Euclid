@@ -6,9 +6,84 @@ import font "../../font"
 
 import "core:testing"
 
+import core "../../../core"
 import dynmath "../../../dynview/math"
 import dyncore "../../../dynview/core"
 import theme "../theme"
+
+// Verify explicit text/math ink maps while default document text retains its policy.
+@(test)
+layout_draw_test_monochrome_maps_explicit_text_and_math_ink :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.ui_runtime.preferences.values.animation.monochrome = true
+    ctx: Layout_Draw_Context = {
+        state = state,
+    }
+
+    testing.expect_value(t,
+        layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT).color,
+        dyncore.STYLE_DEFAULT.color)
+    ctx.has_authored_ink = true
+    ctx.authored_ink = {70, 130, 180, 77}
+    testing.expect_value(t,
+        layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT).color,
+        dynviewmodel.Color{185, 185, 185, 77})
+    testing.expect_value(t,
+        document_selected_draw_color(ctx, {true, {255, 130, 171, 33}}),
+        dynviewmodel.Color{230, 230, 230, 33})
+    item: dynviewmodel.Dynview_Layout_Item = {
+        has_brush_color = true,
+        brush_color = {70, 130, 180, 77},
+    }
+    params := text_run_draw_params(ctx,
+        layout_draw_style(ctx, dyncore.DYNVIEW_STYLE_DEFAULT), item, {}, 0)
+    testing.expect_value(t, params.text_color, dynviewmodel.Color{185, 185, 185, 77})
+}
+
+// Verify all explicit fill, outline, and edge colors resolve without touching absent sentinels.
+@(test)
+layout_draw_test_monochrome_maps_independent_shape_inks :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.ui_runtime.preferences.values.animation.monochrome = true
+    ctx: Layout_Draw_Context = {
+        state = state,
+    }
+    shape: dynviewmodel.Dynview_Document_Shape = {
+        present = true,
+        kind = .Pentagon,
+        color = {true, {70, 130, 180, 255}},
+        width = 4,
+        height = 4,
+        thickness = 1,
+        fill_color = {true, {255, 130, 171, 200}},
+        arc_color = {true, {205, 198, 115, 180}},
+        edge_colors = {
+            {true, {153, 153, 153, 170}},
+            {true, {255, 187, 255, 160}},
+            {true, {144, 238, 144, 150}},
+            {true, {178, 34, 34, 140}},
+            {},
+        },
+    }
+    item, ok := document_shape_draw_item({}, shape, 8)
+    testing.expect(t, ok)
+    resolved := document_shape_resolve_ink(ctx, item, shape, {})
+    testing.expect_value(t, resolved.brush_color,
+        dynviewmodel.Color{230, 230, 230, 200})
+    testing.expect_value(t, resolved.outline_color,
+        dynviewmodel.Color{210, 210, 210, 180})
+    testing.expect_value(t, resolved.shape_edge_color_1,
+        dynviewmodel.Color{165, 165, 165, 170})
+    testing.expect_value(t, resolved.shape_edge_color_2,
+        dynviewmodel.Color{245, 245, 245, 160})
+    testing.expect_value(t, resolved.shape_edge_color_3,
+        dynviewmodel.Color{220, 220, 220, 150})
+    testing.expect_value(t, resolved.shape_edge_color_4,
+        dynviewmodel.Color{190, 190, 190, 140})
+    testing.expect_value(t, resolved.shape_edge_color_5, dynviewmodel.Color{})
+}
 
 // Verify enhanced appearance changes only defaults, with selected and authored provenance intact.
 @(test)

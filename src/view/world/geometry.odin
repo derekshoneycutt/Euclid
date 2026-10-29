@@ -11,6 +11,8 @@ import linalg "core:math/linalg"
 import worldmodel "model"
 import projection "projection"
 import viewtext "../ui/text"
+import authoredink "../ink"
+import uitheme "../ui/theme"
 import core "../../core"
 import particles "../../particles"
 
@@ -295,6 +297,20 @@ Tool_Brush_Occluder_Context :: struct {
     count: int,
 }
 
+
+// resolve_animation_authored_ink reads live preferences without mutating cached colors.
+resolve_animation_authored_ink :: proc(
+    state: ^core.Euclid_General_State,
+    original: color.Color_RGBA8) -> color.Color_RGBA8 {
+    preferences := state^.ui_runtime.preferences.values
+    effective_contrast := uitheme.increased_contrast(
+        preferences.interface.increased_contrast,
+        state^.ui_runtime.platform_increased_contrast)
+    return authoredink.resolve_content_ink(
+        original, preferences.animation.monochrome, effective_contrast)
+}
+
+
 //   Return canonical view depth, with larger values closer to the camera.
 tool_brush_view_depth :: #force_inline proc(point: geometry.Vector3) -> f32 {
     return linalg.dot(point, STROKE3D_VIEW_FORWARD)
@@ -444,8 +460,11 @@ draw_encoded_basic_label :: proc(
     screen := projection.iso_to_cartesian(item^.point1, state^.iso_scale)
     resolver := view_font.cache_terminal_resolver(&state^.font_cache)
     // Zero-alpha ink still submits so forming glyphs keep their rasters resident.
-    draw_color := color.Color_RGBA8(item^.color)
+    draw_color := resolve_animation_authored_ink(state, color.Color_RGBA8(item^.color))
     draw_color.a = u8(f32(draw_color.a) * formation_label_draw_opacity(state, item))
+    font_size := projection.effective_ink_size(
+        item^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     viewtext.ui_text_shaped({
         encoder = encoder,
         resolver = resolver,
@@ -453,7 +472,7 @@ draw_encoded_basic_label :: proc(
         text = source,
         position = geometry.Vector2{screen.x, screen.y},
         color = draw_color,
-        font = {view_font.cache_borrow(&state^.font_cache, .Regular), item^.brush_size},
+        font = {view_font.cache_borrow(&state^.font_cache, .Regular), font_size},
     })
 }
 
@@ -648,6 +667,30 @@ draw_encoded_tool_segment :: proc(
     }
 }
 
+// make_cached_pen_occluders prepares fitted brush footprints for one pen.
+make_cached_pen_occluders :: proc(
+    state: ^core.Euclid_General_State, pen: ^shapemodel.Shapes_Pen_Draw,
+    compass_caster: ^shapemodel.Shapes_Compass_Draw) -> Tool_Brush_Occluder_Context {
+    occluders: Tool_Brush_Occluder_Context
+    if compass_caster == nil {
+        return occluders
+    }
+    receiver := make_tool_brush_occluder(state, pen^.joint1, pen^.joint2,
+        projection.effective_ink_size(pen^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent))
+    first_leg := make_tool_brush_occluder(state, compass_caster^.joint1,
+        compass_caster^.pivot,
+        projection.effective_ink_size(compass_caster^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent))
+    second_leg := make_tool_brush_occluder(state, compass_caster^.pivot,
+        compass_caster^.joint2,
+        projection.effective_ink_size(compass_caster^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent))
+    append_tool_brush_occluder(&occluders, receiver, first_leg)
+    append_tool_brush_occluder(&occluders, receiver, second_leg)
+    return occluders
+}
+
 // draw_encoded_cached_pen restores one cached pen and its active-end indicator.
 draw_encoded_cached_pen :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -665,23 +708,18 @@ draw_encoded_cached_pen :: proc(
            center = second
         }
         _ = native.draw_encoder_circle(
-            encoder, geometry.Vector2(center), pen^.brush_size, active)
+            encoder, geometry.Vector2(center),
+            projection.effective_ink_size(pen^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent),
+            resolve_animation_authored_ink(state, color.Color_RGBA8(active)))
     }
-    occluders: Tool_Brush_Occluder_Context = {}
-    if compass_caster != nil {
-        receiver := make_tool_brush_occluder(
-            state, pen^.joint1, pen^.joint2, pen^.brush_size)
-        first_leg := make_tool_brush_occluder(state, compass_caster^.joint1,
-            compass_caster^.pivot, compass_caster^.brush_size)
-        second_leg := make_tool_brush_occluder(state, compass_caster^.pivot,
-            compass_caster^.joint2, compass_caster^.brush_size)
-        append_tool_brush_occluder(&occluders, receiver, first_leg)
-        append_tool_brush_occluder(&occluders, receiver, second_leg)
-    }
+    occluders := make_cached_pen_occluders(state, pen, compass_caster)
     draw_encoded_tool_segment(state, encoder, {
         first = first,
         second = second,
-        thickness = pen^.brush_size,
+        thickness = projection.effective_ink_size(
+            pen^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
         color = pen^.color,
         occluders = &occluders,
     })
@@ -1907,7 +1945,9 @@ draw_encoded_cached_point :: proc(
     point: ^shapemodel.Shapes_Point_Draw) {
     screen := projection.iso_to_cartesian(point^.point1, state^.iso_scale)
     _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
-        point^.brush_size, color.Color_RGBA8(point^.color))
+        projection.effective_ink_size(point^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
+        resolve_animation_authored_ink(state, color.Color_RGBA8(point^.color)))
 }
 
 
@@ -1927,11 +1967,14 @@ draw_encoded_cached_line :: proc(
         faded := z_split_lower_fragment_color(color.Color_RGBA8(draw_color))
         draw_color = shapemodel.Color(faded)
     }
+    draw_color = shapemodel.Color(resolve_animation_authored_ink(
+        state, color.Color_RGBA8(draw_color)))
     first := projection.iso_to_cartesian(clipped0, state^.iso_scale)
     second := projection.iso_to_cartesian(clipped1, state^.iso_scale)
     points: [2]geometry.Vector2 = {geometry.Vector2(first), geometry.Vector2(second)}
     style: native.Draw_Polyline_Style = {
-        width = line^.brush_size,
+        width = projection.effective_ink_size(line^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
         miter_limit = COLORED_STROKE_MITER_LIMIT,
         color = color.Color_RGBA8(draw_color),
         topology = .Open,
@@ -1967,6 +2010,22 @@ draw_encoded_curve_visible_runs :: proc(
     }
 }
 
+// cached_curve_fragment_color resolves the visible curve's depth treatment.
+cached_curve_fragment_color :: proc(
+    curve: ^shapemodel.Shapes_Curve_Draw,
+    vertices: []geometry.Vector3, keep_above: bool) -> color.Color_RGBA8 {
+    draw_color := color.Color_RGBA8(curve^.color)
+    if !keep_above {
+        for point in vertices {
+            if z_split_sign(point.z) < 0 {
+                draw_color = z_split_lower_fragment_color(draw_color)
+                break
+            }
+        }
+    }
+    return draw_color
+}
+
 // draw_encoded_cached_curve encodes every z-clipped explicated curve run.
 draw_encoded_cached_curve :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -1985,25 +2044,21 @@ draw_encoded_cached_curve :: proc(
     if !result.ok {
         return
     }
-    reduction := reduce_projected_curve_visible_runs(buffers, result,
-        curve^.brush_size, curve_reduction_budget(state^.iso_scale.half_scale))
+    brush_size := projection.effective_ink_size(
+        curve^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    reduction := reduce_projected_curve_visible_runs(buffers, result, brush_size,
+        curve_reduction_budget(state^.iso_scale.half_scale))
     if !reduction.ok {
         return
     }
     native.draw_encoder_record_curve_reduction(
         encoder, reduction.candidate_count, reduction.retained_count)
     result.point_count = reduction.retained_count
-    draw_color := color.Color_RGBA8(curve^.color)
-    if !keep_above {
-        for point in vertices {
-            if z_split_sign(point.z) < 0 {
-                draw_color = z_split_lower_fragment_color(draw_color)
-                break
-            }
-        }
-    }
+    draw_color := resolve_animation_authored_ink(
+        state, cached_curve_fragment_color(curve, vertices, keep_above))
     draw_encoded_curve_visible_runs(
-        encoder, buffers, result, curve^.brush_size, draw_color)
+        encoder, buffers, result, brush_size, draw_color)
 }
 
 // circle_arc_polyline_topology closes only complete sampled circumferences.
@@ -2034,9 +2089,11 @@ draw_encoded_cached_circle :: proc(
     })
     topology := circle_arc_polyline_topology(circle^.sweep_theta)
     style: native.Draw_Polyline_Style = {
-        width = circle^.brush_size,
+        width = projection.effective_ink_size(circle^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
         miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = color.Color_RGBA8(circle^.color),
+        color = resolve_animation_authored_ink(
+            state, color.Color_RGBA8(circle^.color)),
         topology = topology,
         start_cap = .Round,
         finish_cap = .Round,
@@ -2072,7 +2129,9 @@ draw_encoded_cached_filled_circle :: proc(
     for index in 1..<len(projected) {
         _ = native.draw_encoder_triangle(encoder, center,
             geometry.Vector2(projected[index - 1]),
-            geometry.Vector2(projected[index]), color.Color_RGBA8(circle^.color))
+            geometry.Vector2(projected[index]),
+            resolve_animation_authored_ink(
+                state, color.Color_RGBA8(circle^.color)))
     }
 }
 
@@ -2090,7 +2149,8 @@ draw_encoded_cached_polygon :: proc(
     cache := &state^.shape_world.draw_cache
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
-    draw_color := color.Color_RGBA8(polygon^.color)
+    draw_color := resolve_animation_authored_ink(
+        state, color.Color_RGBA8(polygon^.color))
     owner: shapemodel.Shape_Entity = {
         slot = u32(polygon^.source_index + 1),
         generation = polygon^.source_generation,
@@ -2123,7 +2183,9 @@ draw_encoded_cached_point_shadow :: proc(
     screen := shadow_to_screen(point^.point1, state)
     draw_color := encoded_shadow_color(point^.point1.z)
     _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
-        point^.brush_size, draw_color)
+        projection.effective_ink_size(point^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
+        draw_color)
 }
 
 // draw_encoded_cached_line_shadow encodes one elevated line floor shadow.
@@ -2145,7 +2207,10 @@ draw_encoded_cached_line_shadow :: proc(
         geometry.Vector2(shadow_to_screen(clipped0, state)),
         geometry.Vector2(shadow_to_screen(clipped1, state))}
     style: native.Draw_Polyline_Style = {
-        width = math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        width = projection.effective_ink_size(
+            math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+            state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
         miter_limit = COLORED_STROKE_MITER_LIMIT,
         color = draw_color,
         topology = .Open,
@@ -2176,7 +2241,10 @@ draw_encoded_cached_curve_shadow :: proc(
     if !result.ok {
         return
     }
-    thickness := math.max(curve^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    thickness := projection.effective_ink_size(
+        math.max(curve^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     reduction := reduce_projected_curve_visible_runs(buffers, result, thickness,
         curve_reduction_budget(state^.iso_scale.half_scale))
     if !reduction.ok {
@@ -2206,7 +2274,10 @@ draw_encoded_cached_circle_shadow :: proc(
     }
     topology := circle_arc_polyline_topology(circle^.sweep_theta)
     style: native.Draw_Polyline_Style = {
-        width = math.max(circle^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        width = projection.effective_ink_size(
+            math.max(circle^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+            state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
         miter_limit = COLORED_STROKE_MITER_LIMIT,
         color = encoded_shadow_color(circle^.center.z),
         topology = topology,

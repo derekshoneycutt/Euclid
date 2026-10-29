@@ -78,7 +78,7 @@ text_test_resolve_label_ink_glyph :: proc(
 // Retain one mapped glyph sample for text-placement assertions.
 text_test_record_ink_sample :: proc(
     user_data: rawptr, position: geometry.Vector2,
-    tint: color.Color_RGBA8, coverage: u8) {
+    tint: color.Color_RGBA8, coverage: u8, _: bool) {
     state := cast(^Text_Ink_Capture_Test_State)user_data
     state^.count += 1
     state^.position = position

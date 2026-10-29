@@ -129,7 +129,7 @@ launch_run_view :: proc(
         collections = collection_state,
         user_store = store_opened^ ? store : nil,
     }
-    exit_code := view.run_window_loop(settings, &startup)
+    exit_code := run_desktop_application(settings, &startup)
     if !store_opened^ {
         return exit_code
     }

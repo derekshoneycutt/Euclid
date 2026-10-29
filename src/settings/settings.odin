@@ -28,10 +28,12 @@ Setting_Id :: enum u8 {
     Interface_Increased_Contrast,
     Interface_Text_Size,
     Persist_Terminal_History,
+    Animation_Scale_Percent,
+    Animation_Monochrome,
 }
 
-SETTING_COUNT :: 16
-Setting_Set :: bit_set[Setting_Id; u16]
+SETTING_COUNT :: 18
+Setting_Set :: bit_set[Setting_Id; u32]
 ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Window_Width,
     .Window_Height,
@@ -49,6 +51,8 @@ ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Interface_Increased_Contrast,
     .Interface_Text_Size,
     .Persist_Terminal_History,
+    .Animation_Scale_Percent,
+    .Animation_Monochrome,
 }
 
 Window_Mode :: enum u8 {
@@ -106,6 +110,8 @@ SETTING_DEFINITIONS :: [SETTING_COUNT]Setting_Definition{
     {.Interface_Increased_Contrast, "interface", "increased_contrast", .Boolean},
     {.Interface_Text_Size, "interface", "text_size_percent", .Integer},
     {.Persist_Terminal_History, "terminal", "persist_history", .Boolean},
+    {.Animation_Scale_Percent, "animation", "scale_percent", .Integer},
+    {.Animation_Monochrome, "animation", "monochrome", .Boolean},
 }
 
 Setting_Value :: struct {
@@ -145,12 +151,18 @@ Terminal_Preferences :: struct {
     persist_history: bool,
 }
 
+Animation_Preferences :: struct {
+    scale_percent: int,
+    monochrome: bool,
+}
+
 Preferences :: struct {
     window: Window_Startup_Policy,
     rendering: Rendering_Preferences,
     drawing: Drawing_Preferences,
     interface: Interface_Preferences,
     terminal: Terminal_Preferences,
+    animation: Animation_Preferences,
     present: Setting_Set,
     overrides: Setting_Set,
 }
@@ -197,6 +209,10 @@ default_preferences :: proc() -> Preferences {
             increased_contrast = false,
             text_size_percent = 100,
         },
+        animation = {
+            scale_percent = 100,
+            monochrome = false,
+        },
     }
 }
 
@@ -235,7 +251,12 @@ valid_text_size_percent :: proc(percent: i64) -> bool {
     return percent == 100 || percent == 125 || percent == 150 || percent == 175
 }
 
-// Check that an identifier names one of the bounded initial preferences.
+// Check the supported animation ink scale range and discrete step.
+valid_animation_scale_percent :: proc(percent: i64) -> bool {
+    return percent >= 50 && percent <= 200 && (percent - 50) % 5 == 0
+}
+
+// Check that an identifier names one of the bounded preferences.
 valid_setting_id :: proc(id: Setting_Id) -> bool {
     switch id {
     case .Window_Width, .Window_Height, .Window_Mode, .Window_Layout,
@@ -243,7 +264,8 @@ valid_setting_id :: proc(id: Setting_Id) -> bool {
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Dust_Limit, .Drawing_Sound_Enabled, .Interface_Display_Fps,
          .Interface_Reduce_Motion, .Interface_Increased_Contrast,
-         .Interface_Text_Size, .Persist_Terminal_History:
+         .Interface_Text_Size, .Persist_Terminal_History,
+         .Animation_Scale_Percent, .Animation_Monochrome:
         return true
     }
     return false
@@ -273,13 +295,17 @@ valid_setting_value :: proc(id: Setting_Id, value: Setting_Value) -> bool {
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
-         .Interface_Increased_Contrast, .Persist_Terminal_History:
+         .Interface_Increased_Contrast, .Persist_Terminal_History,
+         .Animation_Monochrome:
         return value.kind == .Boolean
     case .Drawing_Dust_Limit:
         return value.kind == .Integer && valid_dust_limit(i64(value.integer))
     case .Interface_Text_Size:
         return value.kind == .Integer &&
             valid_text_size_percent(i64(value.integer))
+    case .Animation_Scale_Percent:
+        return value.kind == .Integer &&
+            valid_animation_scale_percent(i64(value.integer))
     }
     return false
 }
@@ -306,6 +332,8 @@ apply_boolean_preference :: proc(
         preferences^.interface.reduce_motion = value
     case .Interface_Increased_Contrast:
         preferences^.interface.increased_contrast = value
+    case .Animation_Monochrome:
+        preferences^.animation.monochrome = value
     case .Persist_Terminal_History:
         preferences^.terminal.persist_history = value
     }
@@ -323,6 +351,8 @@ apply_integer_preference :: proc(
         preferences^.drawing.dust_limit = value
     case .Interface_Text_Size:
         preferences^.interface.text_size_percent = value
+    case .Animation_Scale_Percent:
+        preferences^.animation.scale_percent = value
     }
 }
 
@@ -398,6 +428,8 @@ read_integer_preference :: proc(
         return integer_value(preferences.drawing.dust_limit)
     case .Interface_Text_Size:
         return integer_value(preferences.interface.text_size_percent)
+    case .Animation_Scale_Percent:
+        return integer_value(preferences.animation.scale_percent)
     }
     return {}
 }
@@ -426,6 +458,8 @@ read_boolean_preference :: proc(
         return boolean_value(preferences.interface.increased_contrast)
     case .Persist_Terminal_History:
         return boolean_value(preferences.terminal.persist_history)
+    case .Animation_Monochrome:
+        return boolean_value(preferences.animation.monochrome)
     }
     return {}
 }
@@ -433,12 +467,14 @@ read_boolean_preference :: proc(
 // Read one typed scalar from the fixed preference record.
 setting_value :: proc(preferences: Preferences, id: Setting_Id) -> Setting_Value {
     switch id {
-    case .Window_Width, .Window_Height, .Drawing_Dust_Limit, .Interface_Text_Size:
+    case .Window_Width, .Window_Height, .Drawing_Dust_Limit,
+         .Interface_Text_Size, .Animation_Scale_Percent:
         return read_integer_preference(preferences, id)
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
-         .Interface_Increased_Contrast, .Persist_Terminal_History:
+         .Interface_Increased_Contrast, .Persist_Terminal_History,
+         .Animation_Monochrome:
         return read_boolean_preference(preferences, id)
     case .Window_Mode:
         return window_mode_value(preferences.window.mode)

@@ -14,12 +14,13 @@ Draw_Ink_Sample_Test_State :: struct {
     coverage: u8,
     low: geometry.Vector2,
     high: geometry.Vector2,
+    authored: bool,
 }
 
 // Retain one emitted sample for draw-encoder contract assertions.
 draw_encoder_test_record_ink :: proc(
     user_data: rawptr, position: geometry.Vector2,
-    tint: color.Color_RGBA8, coverage: u8) {
+    tint: color.Color_RGBA8, coverage: u8, authored: bool) {
     state := cast(^Draw_Ink_Sample_Test_State)user_data
     if state^.count == 0 {
         state^.low, state^.high = position, position
@@ -30,6 +31,7 @@ draw_encoder_test_record_ink :: proc(
     state^.position = position
     state^.tint = tint
     state^.coverage = coverage
+    state^.authored = authored
 }
 
 // Verify colored geometry samples are snapped and clipped to the active pane.
@@ -62,6 +64,13 @@ draw_encoder_test_ink_sink_captures_clipped_triangle :: proc(t: ^testing.T) {
     testing.expect_value(t, state.coverage, u8(255))
     testing.expect(t, state.low.x >= 10 && state.low.y >= 10)
     testing.expect(t, state.high.x < 30 && state.high.y < 30)
+    testing.expect(t, !state.authored)
+    encoder.ink_sink.source_color = {70, 130, 180, 77}
+    encoder.ink_sink.authored = true
+    draw_encoder_record_ink_sample(&encoder, {15, 15}, {185, 185, 185, 77}, 128)
+    testing.expect(t, state.authored)
+    testing.expect_value(t, state.tint, encoder.ink_sink.source_color)
+    testing.expect_value(t, state.coverage, u8(128))
 }
 
 // Verify a thin rule is sampled along its full length near glyph pitch.

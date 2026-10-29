@@ -318,18 +318,8 @@ end
 function euclid_reviewed_naming_policies()
     policy = euclid_odin_naming_policy
     return ReviewedNamingPolicy[
-        policy("bridge-color-abi-name", "src/bridge/model/model.odin", :constant,
-            "Bridge_Color", "Stable public bridge ABI type alias."),
         policy("rgba8-channel-width-name", "src/core/color/color.odin", :type,
             "Color_RGBA8", "Type names RGBA channel order and eight-bit width."),
-        policy("dynview-color-type-alias", "src/dynview/model/model.odin", :constant,
-            "Color", "Public model alias avoids field-name shadowing."),
-        policy("particle-color-type-alias", "src/particles/particles.odin", :constant,
-            "Color", "Local API alias avoids parameter-name shadowing."),
-        policy("shape-color-type-alias", "src/shapes/model/shapes.odin", :constant,
-            "Color", "Public model alias avoids field-name shadowing."),
-        policy("terminal-color-type-alias", "src/view/terminal/types.odin", :constant,
-            "Color", "Terminal package portable color type alias."),
     ]
 end
 

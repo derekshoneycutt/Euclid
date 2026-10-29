@@ -481,6 +481,30 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "Terminal history could not be deleted."),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1237),
+            "ui.settings.animation_scale",
+            "Animation ink-size slider label.",
+            LocalizedContent.MessageArgument[]),
+        "Animation scale"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1238),
+            "ui.settings.animation_scale.tooltip",
+            "Tooltip describing the animation ink-size multiplier and default.",
+            LocalizedContent.MessageArgument[]),
+        "Scales animation ink after viewport fitting; 100% preserves authored sizing."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1239),
+            "ui.settings.animation_scale.default",
+            "Displayed animation scale value when the saved preference is at default.",
+            LocalizedContent.MessageArgument[]),
+        "100% (Default)"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1240),
+            "ui.settings.monochrome",
+            "Persisted monochrome animation preference checkbox label.",
+            LocalizedContent.MessageArgument[]),
+        "Monochrome"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1201), "ui.settings.display_fps",
             "Display FPS checkbox label.", LocalizedContent.MessageArgument[]),
         "Display FPS"),

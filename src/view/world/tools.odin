@@ -128,34 +128,40 @@ draw_encoded_tool_ring :: proc(
 draw_encoded_trochoid_tool :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
+    brush_size := projection.effective_ink_size(
+        tool^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     draw_encoded_tool_ring(state, encoder, {tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, tool^.color})
+        tool^.fixed_radius, brush_size, tool^.color})
     draw_encoded_tool_ring(state, encoder, {tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color})
+        tool^.rolling_radius, brush_size, tool^.color})
     first := projection.iso_to_cartesian(tool^.handle_start, state^.iso_scale)
     second := projection.iso_to_cartesian(tool^.handle_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {first, second,
-        tool^.brush_size, tool^.color, nil})
+        brush_size, tool^.color, nil})
 }
 
 // draw_encoded_cycloid_tool emits its rail, rolling ring, and orientation handle.
 draw_encoded_cycloid_tool :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
+    brush_size := projection.effective_ink_size(
+        tool^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     baseline_start := projection.iso_to_cartesian(
         tool^.baseline_start, state^.iso_scale)
     baseline_finish := projection.iso_to_cartesian(
         tool^.baseline_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {baseline_start,
-        baseline_finish, tool^.brush_size, tool^.color, nil})
+        baseline_finish, brush_size, tool^.color, nil})
     draw_encoded_tool_ring(state, encoder, {tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color})
+        tool^.rolling_radius, brush_size, tool^.color})
     handle_start := projection.iso_to_cartesian(
         tool^.handle_start, state^.iso_scale)
     handle_finish := projection.iso_to_cartesian(
         tool^.handle_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {handle_start,
-        handle_finish, tool^.brush_size, tool^.color, nil})
+        handle_finish, brush_size, tool^.color, nil})
 }
 
 // encoded_compass_arc_fallback draws one butt-ended sampled outside arc.
@@ -211,10 +217,13 @@ draw_encoded_compass_arc :: proc(
     if !ok {
         return
     }
-    draw: Compass_Arc_Draw = {state, compass^.brush_size}
+    brush_size := projection.effective_ink_size(
+        compass^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw: Compass_Arc_Draw = {state, brush_size}
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
-    radius := compass^.brush_size * 0.5
+    radius := brush_size * 0.5
     coverage_radius := radius + 1 / min(scale_x, scale_y)
     samples: Compass_Arc_Samples
     if !encoder^.strokes_enabled || !build_compass_arc_samples(
@@ -237,18 +246,22 @@ encoded_compass_arc_submit :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     submission: Compass_Arc_Submission) {
     compass := submission.compass
+    brush_size := projection.effective_ink_size(
+        compass^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw: Compass_Arc_Draw = {state, brush_size}
     vertices: [COMPASS_TOPCIRCLE_SEGMENTS * 6]native.Stroke_Vertex
     encoded_compass_arc_vertices(submission.samples, vertices[:])
     uniforms := encoded_stroke_fragment_uniforms(
-        state, encoder, {}, {}, compass^.brush_size)
+        state, encoder, {}, {}, brush_size)
     uniforms.stroke_mode = 1
     uniforms.strip_side_extent = submission.coverage_radius /
-        max(compass^.brush_size * 0.5, 0.0001)
+        max(brush_size * 0.5, 0.0001)
     uniforms.arc_intersections_enabled = 1
-    uniforms.intersection_depth_width = compass^.brush_size /
+    uniforms.intersection_depth_width = brush_size /
         max(state^.iso_scale.half_scale, 0.0001)
     uniforms.attachment_extent = compass_arc_attachment_extent(
-        compass^.brush_size, submission.basis.radius,
+        brush_size, submission.basis.radius,
         submission.basis.theta_out,
         state^.iso_scale.half_scale)
     encoded_strip_color(&uniforms, compass^.color)
@@ -256,7 +269,6 @@ encoded_compass_arc_submit :: proc(
         &uniforms, encoder, submission.occluders)
     if !native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), uniforms) {
-        draw: Compass_Arc_Draw = {state, compass^.brush_size}
         encoded_compass_arc_fallback(
             encoder, compass^.pivot, submission.basis, draw, compass^.color)
     }
@@ -279,7 +291,10 @@ encoded_compass_active_dot :: proc(
     }
     center := projection.iso_to_cartesian(point, state^.iso_scale)
     _ = native.draw_encoder_circle(
-        encoder, geometry.Vector2(center), compass^.brush_size, active)
+        encoder, geometry.Vector2(center),
+        projection.effective_ink_size(compass^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
+        resolve_animation_authored_ink(state, color.Color_RGBA8(active)))
 }
 
 // encoded_compass_leg emits one ordered leg with relevant bounded casters.
@@ -301,7 +316,10 @@ encoded_compass_leg :: proc(
             &occluders, receiver, ctx^.pen_occluder)
     }
     draw_encoded_tool_segment(ctx^.state, encoder, {start, finish,
-        ctx^.comp^.brush_size, ctx^.comp^.color, &occluders})
+        projection.effective_ink_size(
+            ctx^.comp^.brush_size, ctx^.state^.iso_scale,
+            ctx^.state^.ui_runtime.preferences.values.animation.scale_percent),
+        ctx^.comp^.color, &occluders})
 }
 
 // encoded_compass_context builds projected legs and the optional pen caster.
@@ -315,14 +333,21 @@ encoded_compass_context :: proc(
         c1 = projection.iso_to_cartesian(compass^.pivot, state^.iso_scale),
         c2 = projection.iso_to_cartesian(compass^.joint2, state^.iso_scale),
         leg1 = make_tool_brush_occluder(state, compass^.joint1,
-            compass^.pivot, compass^.brush_size),
+            compass^.pivot, projection.effective_ink_size(
+                compass^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent)),
         leg2 = make_tool_brush_occluder(state, compass^.pivot,
-            compass^.joint2, compass^.brush_size),
+            compass^.joint2, projection.effective_ink_size(
+                compass^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent)),
         has_pen_occluder = pen_caster != nil,
     }
     if pen_caster != nil {
         result.pen_occluder = make_tool_brush_occluder(state,
-            pen_caster^.joint1, pen_caster^.joint2, pen_caster^.brush_size)
+            pen_caster^.joint1, pen_caster^.joint2,
+            projection.effective_ink_size(
+                pen_caster^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent))
     }
     return result
 }
@@ -383,18 +408,28 @@ draw_encoded_pen_fragment :: proc(
     occluders: Tool_Brush_Occluder_Context
     if draw.compass != nil {
         receiver := make_tool_brush_occluder(
-            state, draw.pen^.joint1, draw.pen^.joint2, draw.pen^.brush_size)
+            state, draw.pen^.joint1, draw.pen^.joint2,
+            projection.effective_ink_size(
+                draw.pen^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent))
         leg1 := make_tool_brush_occluder(
             state, draw.compass^.joint1, draw.compass^.pivot,
-            draw.compass^.brush_size)
+            projection.effective_ink_size(
+                draw.compass^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent))
         leg2 := make_tool_brush_occluder(
             state, draw.compass^.pivot, draw.compass^.joint2,
-            draw.compass^.brush_size)
+            projection.effective_ink_size(
+                draw.compass^.brush_size, state^.iso_scale,
+                state^.ui_runtime.preferences.values.animation.scale_percent))
         append_tool_brush_occluder(&occluders, receiver, leg1)
         append_tool_brush_occluder(&occluders, receiver, leg2)
     }
     draw_encoded_tool_segment(state, encoder, {draw.first, draw.second,
-        draw.pen^.brush_size, draw.pen^.color, &occluders})
+        projection.effective_ink_size(
+            draw.pen^.brush_size, state^.iso_scale,
+            state^.ui_runtime.preferences.values.animation.scale_percent),
+        draw.pen^.color, &occluders})
 }
 
 // draw_encoded_high_regular emits one non-tool item in the elevated layer.
@@ -542,7 +577,10 @@ draw_encoded_pen_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     pen: ^shapemodel.Shapes_Pen_Draw) {
     height := (pen^.joint1.z + pen^.joint2.z) * 0.5
-    thickness := max(pen^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    thickness := projection.effective_ink_size(
+        max(pen^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     draw_encoded_tool_shadow_line(state, encoder,
         {pen^.joint1, pen^.joint2, thickness, height})
 }
@@ -583,7 +621,10 @@ draw_encoded_compass_shadow :: proc(
     pivot := shadow_to_screen(compass^.pivot, state)
     second := shadow_to_screen(compass^.joint2, state)
     height := (compass^.joint1.z + compass^.pivot.z + compass^.joint2.z) / 3
-    thickness := max(compass^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    thickness := projection.effective_ink_size(
+        max(compass^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     if compass_draw_joint1_leg_last(compass, first, pivot, second) {
         draw_encoded_tool_shadow_line(state, encoder,
             {compass^.pivot, compass^.joint2, thickness, height})
@@ -603,7 +644,10 @@ draw_encoded_compass_shadow :: proc(
 draw_encoded_trochoid_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
-    thickness := max(tool^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    thickness := projection.effective_ink_size(
+        max(tool^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     draw_encoded_ring_shadow(
         state, encoder, tool^.fixed_center, tool^.fixed_radius, thickness)
     draw_encoded_ring_shadow(
@@ -617,7 +661,10 @@ draw_encoded_trochoid_shadow :: proc(
 draw_encoded_cycloid_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
-    thickness := max(tool^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    thickness := projection.effective_ink_size(
+        max(tool^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
     rail_height := (tool^.baseline_start.z + tool^.baseline_finish.z) * 0.5
     draw_encoded_tool_shadow_line(state, encoder, {tool^.baseline_start,
         tool^.baseline_finish, thickness, rail_height})

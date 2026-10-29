@@ -58,6 +58,45 @@ The first four colors form the shared working palette for lines, circles,
 planes, and points. Assign them according to object relationships and the
 balance of the complete scene, not fixed object types.
 
+### Monochrome authored ink
+
+Animation and Dynview authored colors share one resolver. Standard palette
+colors use fixed gray-byte assignments; other colors use linear-light Rec. 709
+luminance. The custom fallback decodes sRGB channels using the standard sRGB
+transfer function, maps luminance into the normal `[0.30, 0.82]` or increased
+contrast `[0.55, 1.00]` linear-light range, encodes the result to sRGB, then
+rounds to the nearest byte with half values rounded upward. Alpha is preserved.
+
+| Color | Normal gray | Increased-contrast gray |
+| --- | ---: | ---: |
+| `steelblue` | 185 | 212 |
+| `palevioletred1` | 230 | 246 |
+| `khaki3` | 210 | 230 |
+| `grey60` | 165 | 200 |
+| `plum1` | 245 | 255 |
+| `lightgreen` | 220 | 240 |
+| `firebrick` | 190 | 220 |
+
+These assignments are stable identities, not a guarantee that every pair of
+colors has a perceptually unique shade. Increased contrast is selected by the
+existing combined user and platform contrast preference.
+
+The resolver reads current preferences during display encoding; it does not
+rewrite animation snapshots, Dynview source, or cached authored colors. It
+applies to construction strokes, points, labels, fills and their edges, active
+tool-contact indicators, explicit Dynview ink, and matching formation,
+departure, and presentation fragments. Physical tool materials, environmental
+dust and lighting, ordinary default document text, UI semantic paint, and
+Terminal output remain unchanged.
+
+Dynview ink sampling retains original RGBA and authored provenance, not the
+resolved display gray. Presentation fragments retain original, monochrome,
+and increased-contrast variants in bounded particle storage. Reclaim transitions
+blend each variant independently and preserve them when interrupted. Live
+preference changes select the current variant without restarting effects or
+rebuilding layout; disabling monochrome restores original colors. Ordinary
+text fragments keep their normal colors, including during mixed transfers.
+
 ## Color Relationships
 
 - Shapes that appear at the same time and have a direct geometric relationship

@@ -116,12 +116,14 @@ ui_dust_matching_find :: proc(
 
 // ui_dust_target_include retains a destination before any fresh allocation can evict sources.
 ui_dust_target_include :: proc(
-    system: ^Ui_Dust_System, position: geometry.Vector2, ink: [4]u8, coverage: u8) {
+    system: ^Ui_Dust_System, position: geometry.Vector2, ink: [4]u8,
+    coverage: u8, style: Ui_Dust_Ink = {}) {
     assert(system^.target_count < UI_DUST_MAX_ARRIVAL_PARTICLES)
     system^.targets[system^.target_count] = {
         position = position,
         ink = ink,
         coverage = coverage,
+        style = style,
     }
     system^.target_count += 1
 }
@@ -166,6 +168,7 @@ ui_dust_form_targets :: proc(system: ^Ui_Dust_System) {
             emitted := ui_dust_emit_arrival(
                 system, target.position, target.ink, target.coverage)
             assert(emitted)
+            system^.particles.ink_style[system^.live_tail-1] = target.style
             system^.formation_fresh += 1
         }
     }
@@ -191,6 +194,7 @@ ui_dust_claim_target :: proc(system: ^Ui_Dust_System, target_index: int) {
     particle.target_y = target^.position.y
     particle.target_color = {target^.ink[0], target^.ink[1], target^.ink[2],
         u8(u32(target^.ink[3]) * u32(target^.coverage) / 255)}
+    particle.target_ink_style = target^.style
     particle.target_size = UI_DUST_SIZE_MIN +
         f32(target^.coverage) / 255 * UI_DUST_SIZE_COVERAGE_SCALE
     distance := math.sqrt(
@@ -221,6 +225,7 @@ ui_dust_capture_appearance :: proc(
     particle^.start_velocity_x = appearance.velocity.x
     particle^.start_velocity_y = appearance.velocity.y
     particle^.color = appearance.tint
+    particle^.ink_style = appearance.ink_style
     particle^.captured = true
     particle^.captured_alpha = appearance.alpha
     particle^.size = appearance.size

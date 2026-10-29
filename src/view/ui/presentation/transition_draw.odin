@@ -14,19 +14,32 @@ import theme "../theme"
 Presentation_Effects_Draw_Params :: struct {
     dust: ^uidust.Ui_Dust_System,
     dust_atlas: rawptr,
+    monochrome: bool,
+    effective_contrast: bool,
+}
+
+Presentation_Dust_Instance_Params :: struct {
+    center: geometry.Vector2,
+    size: f32,
+    tint: color.Color_RGBA8,
+    alpha: f32,
+    sprite_index: u8,
+    ink_style: uidust.Ui_Dust_Ink,
+    monochrome: bool,
+    effective_contrast: bool,
 }
 
 // presentation_draw_effects reveals new content and renders pane-clipped dust.
 presentation_draw_effects :: proc(
-    encoder: ^native.Draw_Encoder, dust: ^uidust.Ui_Dust_System,
-    viewport: geometry.Rectangle, dust_atlas: rawptr) {
-    if encoder == nil || dust == nil || viewport.width <= 0 ||
+    encoder: ^native.Draw_Encoder, viewport: geometry.Rectangle,
+    params: Presentation_Effects_Draw_Params) {
+    if encoder == nil || params.dust == nil || viewport.width <= 0 ||
         viewport.height <= 0 || !native.draw_encoder_push_scissor(encoder, viewport) {
         return
     }
-    presentation_draw_fade_mask(encoder, dust, viewport)
-    presentation_draw_reveal_mask(encoder, dust, viewport)
-    presentation_draw_dust(encoder, dust, dust_atlas)
+    presentation_draw_fade_mask(encoder, params.dust, viewport)
+    presentation_draw_reveal_mask(encoder, params.dust, viewport)
+    presentation_draw_dust(encoder, params)
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 
@@ -93,9 +106,9 @@ presentation_draw_fade_mask :: proc(
 // one atlas dust draw. The draw inherits the active pane scissor through the
 // shared dust pipeline.
 presentation_draw_dust :: proc(
-    encoder: ^native.Draw_Encoder, dust: ^uidust.Ui_Dust_System,
-    dust_atlas: rawptr) {
-    if dust_atlas == nil || dust^.live_count == 0 {
+    encoder: ^native.Draw_Encoder, params: Presentation_Effects_Draw_Params) {
+    dust := params.dust
+    if params.dust_atlas == nil || dust^.live_count == 0 {
         return
     }
     staging := native.draw_encoder_dust_staging(encoder)
@@ -110,20 +123,37 @@ presentation_draw_dust :: proc(
             continue
         }
         staging[count] = presentation_dust_instance(
-            appearance.position, appearance.size, appearance.tint,
-            appearance.alpha, appearance.sprite_index)
+            {
+                center = appearance.position,
+                size = appearance.size,
+                tint = appearance.tint,
+                alpha = appearance.alpha,
+                sprite_index = appearance.sprite_index,
+                ink_style = appearance.ink_style,
+                monochrome = params.monochrome,
+                effective_contrast = params.effective_contrast,
+            })
         count += 1
     }
-    _ = native.draw_encoder_commit_dust(encoder, count, dust_atlas)
+    _ = native.draw_encoder_commit_dust(encoder, count, params.dust_atlas)
 }
 
 // presentation_dust_instance converts one pane fragment into a dust atlas instance.
 presentation_dust_instance :: #force_inline proc(
-    center: geometry.Vector2, size: f32, tint: color.Color_RGBA8, alpha: f32,
-    sprite_index: u8) -> native.Dust_Instance {
+    params: Presentation_Dust_Instance_Params) -> native.Dust_Instance {
+    resolved_tint := params.tint
+    if params.monochrome && params.ink_style.authored {
+        resolved_tint = params.ink_style.monochrome
+        if params.effective_contrast {
+            resolved_tint = params.ink_style.increased
+        }
+    }
     return {
-        center_diameter = {center.x, center.y, max(size * 2, 1)},
-        color = {f32(tint.r) / 255, f32(tint.g) / 255, f32(tint.b) / 255, alpha},
-        sprite_index = f32(sprite_index),
+        center_diameter = {
+            params.center.x, params.center.y, max(params.size * 2, 1),
+        },
+        color = {f32(resolved_tint.r) / 255, f32(resolved_tint.g) / 255,
+            f32(resolved_tint.b) / 255, params.alpha},
+        sprite_index = f32(params.sprite_index),
     }
 }

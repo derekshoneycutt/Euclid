@@ -161,7 +161,7 @@ initialize_native_dust_atlas :: proc(
 prepare_formation_targets :: proc(
     ps: ^particlemodel.Particle_System, state: ^core.Euclid_General_State,
     encoder: ^native.Draw_Encoder) {
-    scale := state^.iso_scale.scale / 800
+    scale := projection.viewport_scale_factor(state^.iso_scale)
     _ = particles.formation_prepare_region_targets(
         ps, &state^.shape_world, scale)
     _ = particles.formation_prepare_sweep_targets(
@@ -188,6 +188,9 @@ encode_low_particles :: proc(
         t := math.clamp(
             ps.low_particles.age[index] / ps.low_particles.life[index], 0, 1)
         particle_color := ps.low_particles.color[index]
+        if ps.low_particles.authored_ink[index] {
+            particle_color = resolve_animation_authored_ink(state, particle_color)
+        }
         staging[count] = {
             center_diameter = {screen.x, screen.y,
                 max(ps.low_particles.size[index] * 2, 1)},
@@ -217,7 +220,11 @@ encode_formation_particles :: proc(
         }
         visual := draw^.visuals[slot]
         screen := projection.iso_to_cartesian(visual.position, state^.iso_scale)
-        tint := visual.color
+        tint := resolve_animation_authored_ink(state, visual.authored_color)
+        tint.r = u8(math.lerp(f32(tint.r), 255, visual.white_mix))
+        tint.g = u8(math.lerp(f32(tint.g), 255, visual.white_mix))
+        tint.b = u8(math.lerp(f32(tint.b), 255, visual.white_mix))
+        tint.a = visual.color.a
         staging[count] = {
             center_diameter = {screen.x + visual.screen_offset.x,
                 screen.y + visual.screen_offset.y, max(visual.diameter, 1)},

@@ -113,6 +113,50 @@ fit_iso_scale_to_viewport_uses_limiting_axis :: proc(t: ^testing.T) {
     testing.expect_value(t, iso.y_offset, f32(worldmodel.ISO_Y_OFFSET) * 0.5)
 }
 
+// Verify authored ink sizes follow the fitted projection uniformly.
+@(test)
+effective_ink_size_tracks_reference_viewport_fit :: proc(t: ^testing.T) {
+    iso: worldmodel.Iso_Scale
+    fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT)
+    testing.expect_value(t, effective_ink_size(4, iso), f32(4))
+
+    fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH * 0.5,
+        worldmodel.VIEW_HEIGHT)
+    testing.expect_value(t, effective_ink_size(4, iso), f32(2))
+
+    fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH * 2,
+        worldmodel.VIEW_HEIGHT * 2)
+    testing.expect_value(t, effective_ink_size(4, iso), f32(8))
+}
+
+// Verify the saved animation multiplier composes with the viewport fit.
+@(test)
+effective_ink_size_applies_user_multiplier :: proc(t: ^testing.T) {
+    iso: worldmodel.Iso_Scale
+    fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT)
+    testing.expect_value(t, effective_ink_size(4, iso, 50), f32(2))
+    testing.expect_value(t, effective_ink_size(4, iso, 100), f32(4))
+    testing.expect_value(t, effective_ink_size(4, iso, 200), f32(8))
+
+    fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH * 0.5,
+        worldmodel.VIEW_HEIGHT)
+    testing.expect_value(t, effective_ink_size(4, iso, 50), f32(1))
+    testing.expect_value(t, effective_ink_size(4, iso, 100), f32(2))
+    testing.expect_value(t, effective_ink_size(4, iso, 200), f32(4))
+}
+
+// Verify projection translation does not affect a reference ink size.
+@(test)
+effective_ink_size_ignores_projection_translation :: proc(t: ^testing.T) {
+    iso: worldmodel.Iso_Scale
+    fit_iso_scale_to_viewport(&iso, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT)
+    expected := effective_ink_size(20, iso)
+    iso.x_offset += 125
+    iso.y_offset -= 80
+
+    testing.expect_value(t, effective_ink_size(20, iso), expected)
+}
+
 //   Verify the inline component projection matches the isometric formula.
 @(test)
 iso_to_cartesian_components_inline_matches_projection_formula :: proc(t: ^testing.T) {

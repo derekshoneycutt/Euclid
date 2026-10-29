@@ -414,6 +414,23 @@ replay workspace are lent to serialized save work, not to arbitrary concurrent
 display and worker access. The [domain map](#memory-domain-map) includes this
 separate persistence lifetime.
 
+The desktop callback envelope in
+[`src/app/desktop.odin`](../../../src/app/desktop.odin) retains one stable
+[`Window_Session`](../../../src/view/view.odin) through the complete SDL runner.
+Inline display, font-texture callback, audio, capture, loading-result, scenario,
+and bounded event-inbox storage therefore cannot escape a startup stack frame.
+Independently owned Julia/content services and application runtime state retain
+their existing allocation domains. The borrowed database/replay inputs remain in
+the enclosing app launch scope until the runner returns.
+
+SDL may deliver an event concurrently with `AppQuit`. Closing the synchronized inbox
+stops further admission without freeing it; callback storage is freed only after
+SDL shutdown and `RunApp` return. A startup worker is joined before its result
+storage is released. Runtime workers, Julia requests, capture, and GPU resources
+are retired by their existing owners before the native window/device are destroyed.
+Callbacks restore the retained Odin context only on the display owner; off-thread
+event copying is contextless and does not borrow display frame scratch.
+
 ## Allocator Mechanisms
 
 Allocator choice follows reclamation needs. Similar allocator implementations do

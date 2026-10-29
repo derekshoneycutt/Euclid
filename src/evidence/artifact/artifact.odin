@@ -342,7 +342,8 @@ artifact_settings_state_json :: proc(state: observe.Display) -> string {
         "\"simd\":%v,\"gpu_dust_instancing\":%v}}," +
         "\"drawing\":{{\"dust_limit\":%d,\"sound_enabled\":%v}}," +
         "\"interface\":{{\"display_fps\":%v,\"reduce_motion\":%v," +
-        "\"increased_contrast\":%v}}}},\"status\":%d," +
+        "\"increased_contrast\":%v}}," +
+        "\"animation\":{{\"scale_percent\":%d,\"monochrome\":%v}}}},\"status\":%d," +
         "\"store_available\":%v,\"active\":%v,\"pending_count\":%d," +
         "\"commit_count\":%d,\"failure_count\":%d,\"owner_execution_count\":%d," +
         "\"window_width\":%d,\"window_height\":%d}}",
@@ -354,6 +355,7 @@ artifact_settings_state_json :: proc(state: observe.Display) -> string {
         preferences.drawing.sound_enabled, preferences.interface.display_fps,
         preferences.interface.reduce_motion,
         preferences.interface.increased_contrast,
+        preferences.animation.scale_percent, preferences.animation.monochrome,
         state.settings_save_status,
         state.settings_store_available, state.settings_save_active,
         state.settings_pending_count, state.settings_save_commit_count,

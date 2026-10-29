@@ -325,6 +325,7 @@ Font_Ink_Sample :: struct {
     position: geometry.Vector2,
     color: [4]u8,
     coverage: u8,
+    authored: bool,
 }
 
 // Canonical metadata budget includes every resident face and one replacement candidate.

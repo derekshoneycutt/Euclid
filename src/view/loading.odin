@@ -1,8 +1,8 @@
 package view
 
 import native "native"
+import startup "startup"
 import bridgemodel "../bridge/model"
-import viewcontent "content"
 import files "../files"
 import julia "../bridge"
 import evidence_profile "../evidence/profile"
@@ -10,186 +10,32 @@ import evidence_session "../evidence/session"
 import fmt "core:fmt"
 import log "core:log"
 import strings "core:strings"
-import core "../core"
-import startup "startup"
+import thread "core:thread"
 
 JULIA_UNRESPONSIVE_SECONDS :: 10.0
 
-//   Created Julia runtime service plus its completed initialize request id.
-Loading_Julia_Service :: struct {
-    service: ^bridgemodel.Julia_Runtime_Service,
+Window_Loading_Phase :: enum {
+    Assets,
+    Julia,
+    Content,
+    Render,
+    Ready,
+}
+
+// Window_Loading retains request/worker storage until completion or joined teardown.
+Window_Loading :: struct {
+    display: startup.Loading_Display,
+    phase: Window_Loading_Phase,
+    worker: ^thread.Thread,
+    assets: startup.Packaged_Assets_Worker_Result,
     initialize_id: u64,
+    request_id: u64,
+    started_at: f64,
+    phase_started_at: f64,
+    reported_unresponsive: bool,
 }
 
-
-//   Draw startup frames until the requested Julia worker event is available.
-finish_julia_startup_request :: proc(
-    service: ^bridgemodel.Julia_Runtime_Service, request_id: u64,
-    expected_kind: bridgemodel.Julia_Event_Kind,
-    display: ^startup.Loading_Display) -> bool {
-
-    started_at := native.sdl_time_seconds()
-    reported_unresponsive := false
-    for {
-        event, ok := julia.try_route_julia_egress(service)
-        if ok && event.request_id == request_id && event.kind == expected_kind {
-            if !event.succeeded {
-                fmt.eprintln("Julia startup operation failed; request id: ", request_id)
-            }
-            return event.succeeded
-        }
-        if native.sdl_time_seconds() - started_at >= JULIA_UNRESPONSIVE_SECONDS {
-            if !reported_unresponsive {
-                fmt.eprintln(
-                    "Julia startup operation is not responding; request id: ", request_id)
-                reported_unresponsive = true
-            }
-        }
-        if !startup.present_startup_frame(display) {
-            fmt.eprintln(
-                "Window closed before Julia startup completed; stopping startup.")
-            return false
-        }
-        free_all(context.temp_allocator)
-    }
-}
-
-
-//   Create the Julia runtime service and finish its Initialize phase.
-//
-// Returns:
-//   - result: Created service and initialize id when ok.
-//   - ok: true when the service was created and initialized.
-loading_start_julia_service :: proc(
-    out: ^Loading_Julia_Service, display: ^startup.Loading_Display,
-    profile_path: string = "") -> bool {
-    julia_service, service_err := julia.create_julia_runtime_service(
-        context.allocator, profile_path)
-    if service_err != .None || julia_service == nil {
-        fmt.eprintln("Failed to create Julia runtime service.")
-        log.errorf("julia_startup_failed phase=service_create error=%d",
-            int(service_err))
-        return false
-    }
-    initialize_id, initialize_sent :=
-        julia.try_submit_runtime_initialize(julia_service)
-    if !initialize_sent {
-        log.error("julia_startup_failed phase=initialize_submit")
-        fmt.eprintln("Julia initialization failed.")
-        julia.destroy_julia_runtime_service(julia_service)
-        return false
-    }
-    if !finish_julia_startup_request(
-        julia_service, initialize_id, .Initialized, display) {
-        fmt.eprintln("Julia initialization failed.")
-        log.errorf("julia_startup_failed phase=initialize_wait request_id=%d",
-            initialize_id)
-        julia.destroy_julia_runtime_service(julia_service)
-        return false
-    }
-    out.service = julia_service
-    out.initialize_id = initialize_id
-    return true
-}
-
-//   Report content startup failure and release the partially initialized session.
-loading_content_failed :: proc(
-    state: ^core.Euclid_General_State,
-    julia_service: ^bridgemodel.Julia_Runtime_Service) -> (
-        ^core.Euclid_General_State, bool) {
-    fmt.eprintln("Julia content initialization failed.")
-    shutdown_runtime_session(Euclid_Runtime_Session{
-        state = state,
-        julia_service = julia_service,
-    })
-    return nil, false
-}
-
-//   Allocate runtime state and finish the Julia content Invoke phase.
-//
-// Returns:
-//   - state: Initialized general state when ok.
-//   - ok: true when state was created and content initialization completed.
-loading_load_content :: proc(
-    julia_service: ^bridgemodel.Julia_Runtime_Service,
-    content_service: ^viewcontent.Content_Service,
-    settings: ^core.Euclid_Run_Settings,
-    initialize_id: u64,
-    display: ^startup.Loading_Display) -> (^core.Euclid_General_State, bool) {
-
-    state := initiate_animations_state(julia_service, settings)
-    if state == nil {
-        fmt.eprintln("Runtime state initialization failed.")
-        log.error("julia_startup_failed phase=state_create")
-        julia.destroy_julia_runtime_service(julia_service)
-        return nil, false
-    }
-    if !session_materialize_content(state, content_service) {
-        log.error("content_startup_failed phase=registry_materialize")
-        return loading_content_failed(state, julia_service)
-    }
-    record_runtime_lifecycle(state, .Runtime_Starting, initialize_id)
-    content_id, content_sent := julia.try_submit_runtime_content_initialize(
-        julia_service, state)
-    if !content_sent {
-        log.error("julia_startup_failed phase=content_submit")
-        return loading_content_failed(state, julia_service)
-    }
-    if !finish_julia_startup_request(
-        julia_service, content_id, .Invoke_Complete, display) {
-        log.errorf("julia_startup_failed phase=content_wait request_id=%d",
-            content_id)
-        return loading_content_failed(state, julia_service)
-    }
-    julia.mark_julia_runtime_ready(julia_service)
-    record_runtime_lifecycle(state, .Runtime_Ready, content_id)
-    evidence_session.session_accept_ring(
-        &state^.evidence_session, &state^.evidence_ring)
-    return state, true
-}
-
-//   Prepare packaged assets as one measured startup phase.
-loading_prepare_assets_phase :: proc(
-    profile: ^evidence_profile.State,
-    display: ^startup.Loading_Display) -> bool {
-    evidence_profile.zone_begin(profile, "prepare assets")
-    started_at := startup.begin_startup_phase(display, "Preparing assets", 0.35)
-    assets_ok := startup.prepare_assets_with_loading(display)
-    startup.end_startup_phase("Preparing assets", started_at)
-    evidence_profile.zone_end(profile)
-    if !assets_ok {
-        fmt.eprintln("Packaged asset preparation failed; aborting startup.")
-    }
-    return assets_ok
-}
-
-//   Pair initialized runtime owners for transfer to the window loop.
-loading_runtime_session :: proc(
-    state: ^core.Euclid_General_State,
-    service: ^bridgemodel.Julia_Runtime_Service,
-    content_service: ^viewcontent.Content_Service,
-    startup_inputs: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
-    session: Euclid_Runtime_Session = {
-        state = state,
-        julia_service = service,
-        content_service = content_service,
-        startup = session_startup_inputs(startup_inputs),
-    }
-    session_apply_startup_preferences(
-        state, session.startup.preferences,
-        session.startup.collections, session.startup.user_store)
-    if !session_start_presentation(&session) {
-        _ = shutdown_runtime_session(session)
-        return {}, false
-    }
-    return session, true
-}
-
-//   Initialize startup phases while the window stays responsive.
-//
-// Notes:
-//   - Drives runtime startup through visible progress frames so window event processing never stalls.
-//   - Shares runtime-state ownership with the headless session path after startup completes.
+// loading_set_window_icon borrows packaged icon bytes only during the native call.
 loading_set_window_icon :: proc(platform: ^native.Sdl_Platform) {
     icon_path := strings.clone_to_cstring(
         files.packaged_asset_path("compass_icon.png", context.temp_allocator),
@@ -199,63 +45,165 @@ loading_set_window_icon :: proc(platform: ^native.Sdl_Platform) {
     }
 }
 
-// Start catalogue and Julia services during the visible startup phase.
-loading_start_runtime_services :: proc(
-    timing_profile: ^evidence_profile.State, display: ^startup.Loading_Display,
-    settings: ^core.Euclid_Run_Settings, started: ^Loading_Julia_Service,
-    content_service: ^^viewcontent.Content_Service) -> bool {
-    evidence_profile.zone_begin(timing_profile, "start Julia")
-    started_at := startup.begin_startup_phase(display, "Starting Julia", 0.7)
-    content_service^ = session_create_content_service()
-    if content_service^ == nil {
+// window_loading_phase begins one measured phase without polling or recursively drawing.
+window_loading_phase :: proc(
+    owner: ^Window_Session, phase: Window_Loading_Phase,
+    label: string, progress: f32) {
+    owner^.loading.phase = phase
+    owner^.loading.reported_unresponsive = false
+    owner^.loading.phase_started_at = startup.begin_startup_phase(
+        &owner^.loading.display, label, progress)
+}
+
+// window_loading_begin submits the one asset worker using stable result storage.
+window_loading_begin :: proc(owner: ^Window_Session) -> bool {
+    loading := &owner^.loading
+    loading^.started_at = native.sdl_time_seconds()
+    window_loading_phase(owner, .Assets, "Preparing assets", 0.35)
+    loading^.worker = thread.create(startup.prepare_assets_worker)
+    if loading^.worker == nil {
+        log.error("startup_asset_worker_create_failed")
         return false
     }
-    if !loading_start_julia_service(
-        started, display, julia_worker_profile_path(settings^.profile_path)) {
-        viewcontent.content_service_destroy_owned(content_service^)
-        content_service^ = nil
-        return false
-    }
-    startup.end_startup_phase("Starting Julia", started_at)
-    evidence_profile.zone_end(timing_profile)
+    loading^.worker.data = &loading^.assets
+    loading^.worker.init_context = context
+    thread.start(loading^.worker)
     return true
 }
 
-// Initialize startup phases while the window stays responsive.
-initialize_window_runtime_with_loading :: proc(
-    settings: ^core.Euclid_Run_Settings,
-    timing_profile: ^evidence_profile.State,
-    platform: ^native.Sdl_Platform,
-    draw_runtime: ^native.Sdl_Draw_Runtime,
-    startup_inputs: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
-
-    startup_started_at := native.sdl_time_seconds()
-    display := startup.loading_display_create(platform, draw_runtime)
-    if !loading_prepare_assets_phase(timing_profile, &display) {
-        return {}, false
+// window_loading_start_julia joins asset publication before submitting Initialize once.
+window_loading_start_julia :: proc(owner: ^Window_Session) -> bool {
+    loading := &owner^.loading
+    thread.join(loading^.worker)
+    thread.destroy(loading^.worker)
+    loading^.worker = nil
+    if !loading^.assets.ok {
+        log.error("startup_assets_failed")
+        return false
     }
-    loading_set_window_icon(platform)
-
-    started_service: Loading_Julia_Service
-    content_service: ^viewcontent.Content_Service
-    if !loading_start_runtime_services(
-        timing_profile, &display, settings, &started_service, &content_service) {
-        return {}, false
+    startup.end_startup_phase("Preparing assets", loading^.phase_started_at)
+    loading_set_window_icon(&owner^.platform)
+    window_loading_phase(owner, .Julia, "Starting Julia", 0.7)
+    owner^.runtime.content_service = session_create_content_service()
+    if owner^.runtime.content_service == nil {
+        return false
     }
-
-    evidence_profile.zone_begin(timing_profile, "load content")
-    started_at := startup.begin_startup_phase(&display, "Loading content", 1)
-    state, content_ok := loading_load_content(
-        started_service.service, content_service, settings,
-        started_service.initialize_id, &display)
-    if !content_ok {
-        viewcontent.content_service_destroy_owned(content_service)
-        return {}, false
+    service, err := julia.create_julia_runtime_service(
+        context.allocator, julia_worker_profile_path(owner^.settings.profile_path))
+    owner^.runtime.julia_service = service
+    if err != .None || service == nil {
+        log.errorf("julia_startup_failed phase=service_create error=%d", int(err))
+        return false
     }
-    startup.end_startup_phase("Loading content", started_at)
-    evidence_profile.zone_end(timing_profile)
+    request, sent := julia.try_submit_runtime_initialize(service)
+    loading^.initialize_id, loading^.request_id = request, request
+    if !sent {
+        log.error("julia_startup_failed phase=initialize_submit")
+    }
+    return sent
+}
 
-    startup.end_startup_phase("Total startup", startup_started_at)
-    return loading_runtime_session(
-        state, started_service.service, content_service, startup_inputs)
+// window_loading_request observes one correlated completion and reports stalled startup once.
+window_loading_request :: proc(
+    owner: ^Window_Session,
+    expected: bridgemodel.Julia_Event_Kind) -> (complete, succeeded: bool) {
+    loading := &owner^.loading
+    event, received := julia.try_route_julia_egress(owner^.runtime.julia_service)
+    if received && event.request_id == loading^.request_id &&
+        event.kind == expected {
+        if !event.succeeded {
+            log.errorf("julia_startup_failed request_id=%d", loading^.request_id)
+        }
+        return true, event.succeeded
+    }
+    if !loading^.reported_unresponsive &&
+        native.sdl_time_seconds() - loading^.phase_started_at >=
+            JULIA_UNRESPONSIVE_SECONDS {
+        fmt.eprintln("Julia startup operation is not responding; request id: ",
+            loading^.request_id)
+        loading^.reported_unresponsive = true
+    }
+    return false, true
+}
+
+// window_loading_start_content admits runtime storage before one correlated content request.
+window_loading_start_content :: proc(owner: ^Window_Session) -> bool {
+    startup.end_startup_phase("Starting Julia", owner^.loading.phase_started_at)
+    window_loading_phase(owner, .Content, "Loading content", 1)
+    session := &owner^.runtime
+    session^.state = initiate_animations_state(session^.julia_service, &owner^.settings)
+    if session^.state == nil {
+        log.error("julia_startup_failed phase=state_create")
+        return false
+    }
+    if !session_materialize_content(session^.state, session^.content_service) {
+        log.error("content_startup_failed phase=registry_materialize")
+        return false
+    }
+    record_runtime_lifecycle(
+        session^.state, .Runtime_Starting, owner^.loading.initialize_id)
+    request, sent := julia.try_submit_runtime_content_initialize(
+        session^.julia_service, session^.state)
+    owner^.loading.request_id = request
+    if !sent {
+        log.error("julia_startup_failed phase=content_submit")
+    }
+    return sent
+}
+
+// window_loading_finish_content publishes readiness and display-owned presentation resources.
+window_loading_finish_content :: proc(owner: ^Window_Session) -> bool {
+    session := &owner^.runtime
+    julia.mark_julia_runtime_ready(session^.julia_service)
+    record_runtime_lifecycle(
+        session^.state, .Runtime_Ready, owner^.loading.request_id)
+    evidence_session.session_accept_ring(
+        &session^.state^.evidence_session, &session^.state^.evidence_ring)
+    session^.startup = owner^.startup_inputs
+    if !session_apply_startup_preferences(
+        session^.state, session^.startup.preferences,
+        session^.startup.collections, session^.startup.user_store) {
+        log.error("runtime_startup_failed phase=collections_clone")
+        return false
+    }
+    if !session_start_presentation(session) {
+        return false
+    }
+    startup.end_startup_phase("Loading content", owner^.loading.phase_started_at)
+    owner^.loading.phase = .Render
+    return true
+}
+
+// window_loading_step advances at most one phase and draws at the current admitted size.
+window_loading_step :: proc(owner: ^Window_Session) -> (bool, bool) {
+    switch owner^.loading.phase {
+    case .Assets:
+        if thread.is_done(owner^.loading.worker) &&
+            !window_loading_start_julia(owner) {
+            return false, false
+        }
+    case .Julia:
+        complete, succeeded := window_loading_request(owner, .Initialized)
+        if !succeeded || (complete && !window_loading_start_content(owner)) {
+            return false, false
+        }
+    case .Content:
+        complete, succeeded := window_loading_request(owner, .Invoke_Complete)
+        if !succeeded || (complete && !window_loading_finish_content(owner)) {
+            return false, false
+        }
+    case .Render:
+        if !window_session_admit_render(owner) {
+            return false, false
+        }
+        owner^.loading.phase = .Ready
+        evidence_profile.zone_end(&owner^.profile)
+        startup.end_startup_phase("Total startup", owner^.loading.started_at)
+    case .Ready:
+    }
+    if !owner^.ready && !owner^.drawable_unavailable &&
+        !startup.present_startup_frame(&owner^.loading.display) {
+        return false, false
+    }
+    return true, true
 }

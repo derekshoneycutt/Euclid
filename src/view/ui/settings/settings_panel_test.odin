@@ -93,8 +93,47 @@ persist_history_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T) {
     snapshot := uisemantics.semantic_staging_snapshot(semantic)
     node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
     testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Checkbox)
-    testing.expect_value(t, node.traversal_order, u32(4))
+    testing.expect_value(t, node.traversal_order, u32(6))
     testing.expect(t, .Enabled in node.states && .Checked in node.states)
+    testing.expect(t, .Toggle in node.actions && .Focus in node.actions)
+}
+
+// Monochrome remains an accessible persisted intent toggle without applying recoloring.
+@(test)
+monochrome_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    id := uisemantics.semantic_control_id(.Settings_Control, 4009)
+    semantic^.commands[0] = {
+        target = id,
+        kind = .Toggle,
+    }
+    semantic^.command_count = 1
+    owner: viewmodel.Ui_Press_Owner_State
+    ctx: Settings_View_Context = {
+        panel = {0, 0, 600, 700},
+        semantic_focus = semantic,
+        press_owner = &owner,
+        preferences = setting_model.default_preferences(),
+        labels = {
+            monochrome = "Monochrome",
+        },
+    }
+    rows: Settings_View_Rows = {
+        monochrome_y = 120,
+    }
+    prepared: Settings_View_Preparation
+    prepare_settings_optional_controls(ctx, rows, false, &prepared)
+    testing.expect(t, !prepared.monochrome.checked_out)
+    prepare_settings_optional_controls(ctx, rows, true, &prepared)
+    testing.expect(t, prepared.monochrome.toggled)
+    testing.expect(t, prepared.monochrome.checked_out)
+    snapshot := uisemantics.semantic_staging_snapshot(semantic)
+    node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
+    testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Checkbox)
+    testing.expect_value(t, node.traversal_order, u32(4))
     testing.expect(t, .Toggle in node.actions && .Focus in node.actions)
 }
 
@@ -287,6 +326,31 @@ text_size_programmatic_edit_queues_persisted_value :: proc(t: ^testing.T) {
         .Interface_Text_Size, setting_model.integer_value(110)))
 }
 
+// Animation scale and monochrome intent use the ordinary typed save queue.
+@(test)
+animation_accessibility_edits_queue_persisted_values :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.ui_runtime.preferences.values = setting_model.default_preferences()
+    testing.expect(t, settings_apply_control_edit(state,
+        .Animation_Scale_Percent, setting_model.integer_value(155)))
+    testing.expect_value(t,
+        state^.ui_runtime.preferences.values.animation.scale_percent, 155)
+    testing.expect(t, settings_apply_control_edit(state,
+        .Animation_Monochrome, setting_model.boolean_value(true)))
+    testing.expect(t, state^.ui_runtime.preferences.values.animation.monochrome)
+    pending := &state^.preferences_runtime.settings_pending
+    testing.expect_value(t, pending^.count, 2)
+    testing.expect_value(t, pending^.changes[0].id,
+        setting_model.Setting_Id.Animation_Scale_Percent)
+    testing.expect_value(t, pending^.changes[0].value.integer, 155)
+    testing.expect_value(t, pending^.changes[1].id,
+        setting_model.Setting_Id.Animation_Monochrome)
+    testing.expect(t, pending^.changes[1].value.boolean)
+    testing.expect(t, !settings_apply_control_edit(state,
+        .Animation_Scale_Percent, setting_model.integer_value(151)))
+}
+
 // Contrast stays next to reduced motion without overlapping either platform notice.
 @(test)
 increased_contrast_layout_and_platform_notices_are_independent :: proc(t: ^testing.T) {
@@ -336,6 +400,25 @@ text_size_layout_scales_and_preserves_short_viewport_scrolling :: proc(t: ^testi
             {0, 0, 220, 180}, height, 0, row_gap)
         testing.expect(t, scroll.scrollbar.has_scrollbar)
         testing.expect(t, scroll.maximum > 0)
+    }
+}
+
+// Accessibility slider and checkbox rows remain separated and scroll into reach.
+@(test)
+animation_scale_layout_reserves_slider_and_checkbox_rows :: proc(t: ^testing.T) {
+    stops: [3]int = {100, 150, 200}
+    for percent in stops {
+        rows := settings_view_layout_rows({0, 0, 600, 700}, percent, true, true)
+        track := uiwidgets.slider_track_rect(
+            {0, 0, 400, 1000}, rows.animation_scale_y, percent)
+        testing.expect(t, rows.animation_scale_y > rows.system_contrast_y)
+        testing.expect(t,
+            rows.monochrome_y > track.y + theme.SETTINGS_TRACK_HEIGHT)
+        testing.expect(t, rows.text_size_y > rows.monochrome_y)
+        height := settings_scroll_content_height(true, true, percent)
+        scroll := uiwidgets.scroll_container_visual(
+            {0, 0, 220, 180}, height, 0, settings_scaled_row_gap(percent))
+        testing.expect(t, scroll.scrollbar.has_scrollbar && scroll.maximum > 0)
     }
 }
 
@@ -432,4 +515,80 @@ text_size_slider_snaps_to_supported_stops :: proc(t: ^testing.T) {
     testing.expect_value(t, result.maximum, 175)
     testing.expect_value(t, result.step, 25)
     testing.expect_value(t, result.value, 150)
+}
+
+// Animation scale slider exposes saved values and accessible range actions.
+@(test)
+animation_scale_slider_registers_discrete_accessible_range :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    owner: viewmodel.Ui_Press_Owner_State
+    preferences := setting_model.default_preferences()
+    id := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_ANIMATION_SCALE_SLIDER_ID)
+    semantic^.commands[0] = {
+        target = id,
+        kind = .Increment,
+    }
+    semantic^.command_count = 1
+    preferences.animation.scale_percent = 100
+    ctx: Settings_View_Context = {
+        panel = {0, 0, 400, 300},
+        semantic_focus = semantic,
+        press_owner = &owner,
+        preferences = preferences,
+        labels = {
+            animation_scale = "Animation scale",
+            animation_scale_tooltip = "Scales animation ink.",
+        },
+    }
+    result := uiwidgets.prepare_integer_slider(
+        settings_animation_scale_params(ctx, 40), true)
+    testing.expect_value(t, result.minimum, 50)
+    testing.expect_value(t, result.maximum, 200)
+    testing.expect_value(t, result.step, 5)
+    testing.expect_value(t, result.value, 105)
+    snapshot := uisemantics.semantic_staging_snapshot(semantic)
+    node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
+    testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Slider)
+    testing.expect_value(t, node.traversal_order, u32(3))
+    testing.expect_value(t, node.numeric_range.minimum, f64(50))
+    testing.expect_value(t, node.numeric_range.maximum, f64(200))
+    testing.expect_value(t, node.numeric_range.step, f64(5))
+    testing.expect_value(t, uisemantics.semantic_node_text(
+        snapshot, node.value_offset, node.value_length), "105%")
+}
+
+// An offscreen animation-scale row has no semantic target and releases its capture.
+@(test)
+animation_scale_slider_loses_focus_when_clipped :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(semantic)
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    owner: viewmodel.Ui_Press_Owner_State
+    owner.active = true
+    owner.kind = .Slider
+    owner.id = SETTINGS_ANIMATION_SCALE_SLIDER_ID
+    ctx: Settings_View_Context = {
+        panel = {0, 0, 400, 300},
+        semantic_focus = semantic,
+        press_owner = &owner,
+        preferences = setting_model.default_preferences(),
+        labels = {
+            animation_scale = "Animation scale",
+        },
+    }
+    result := settings_prepare_integer_slider(
+        ctx, settings_animation_scale_params(ctx, 500), true)
+    id := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_ANIMATION_SCALE_SLIDER_ID)
+    snapshot := uisemantics.semantic_staging_snapshot(semantic)
+    testing.expect_value(t, uisemantics.semantic_node_index(snapshot, id), -1)
+    testing.expect(t, !owner.active)
+    testing.expect_value(t, owner.kind, viewmodel.Ui_Press_Owner_Kind.None)
+    testing.expect_value(t, owner.id, -1)
+    testing.expect(t, !result.changed)
 }

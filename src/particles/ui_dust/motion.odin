@@ -81,6 +81,7 @@ ui_dust_evaluate :: proc(
         alpha = ui_dust_particle_alpha(system, index),
         size = particle.size,
         sprite_index = particle.dust_sprite_index,
+        ink_style = particle.ink_style,
     }
     if ui_dust_phase_is_arrival(particle.phase) {
         appearance.position = ui_dust_arrival_position(system, index)
@@ -90,6 +91,7 @@ ui_dust_evaluate :: proc(
             blend := ui_dust_smoothstep(ui_dust_arrival_progress(system, index))
             appearance.tint = ui_dust_blend_tint(
                 particle.color, particle.target_color, blend)
+            appearance.ink_style = ui_dust_blend_ink_style(particle, blend)
             appearance.size += (particle.target_size - particle.size) * blend
         }
     } else if particle.phase == .Airborne_Departure {
@@ -97,6 +99,27 @@ ui_dust_evaluate :: proc(
             particle, system^.viewport.y + system^.viewport.height)
     }
     return appearance, true
+}
+
+// ui_dust_blend_ink_style blends display variants before policy selection, preserving ordinary ink.
+ui_dust_blend_ink_style :: proc(
+    particle: Ui_Dust_Particle, blend: f32) -> Ui_Dust_Ink {
+    start := particle.ink_style
+    target := particle.target_ink_style
+    if !start.authored && !target.authored {
+        return {}
+    }
+    if !start.authored {
+        start.monochrome, start.increased = particle.color, particle.color
+    }
+    if !target.authored {
+        target.monochrome, target.increased = particle.target_color, particle.target_color
+    }
+    return {
+        monochrome = ui_dust_blend_tint(start.monochrome, target.monochrome, blend),
+        increased = ui_dust_blend_tint(start.increased, target.increased, blend),
+        authored = true,
+    }
 }
 
 // ui_dust_reclaimed_motion preserves takeover position and velocity, ending at rest.

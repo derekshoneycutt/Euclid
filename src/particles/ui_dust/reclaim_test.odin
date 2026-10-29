@@ -1,7 +1,47 @@
 package ui_dust
 
 import geometry "../../core/geometry"
+import color "../../core/color"
 import testing "core:testing"
+
+// Verify material blends retain ordinary and both monochrome variants across interruption.
+@(test)
+ui_dust_reclaim_preserves_ink_variants_after_release :: proc(t: ^testing.T) {
+    system := ui_dust_test_system({0, 0, 200, 200})
+    defer free(system, context.allocator)
+    testing.expect(t, ui_dust_emit(system, {20, 40}, {20, 40, 60, 128}, 255, 1))
+    ui_dust_begin_arrival(system, 2, .Falling_Ink)
+    ui_dust_target_include(system, {20, 80}, {70, 130, 180, 255}, 255, {
+        monochrome = {185, 185, 185, 255},
+        increased = {212, 212, 212, 255},
+        authored = true,
+    })
+    ui_dust_form_targets(system)
+    testing.expect_value(t, system^.formation_reclaimed, 1)
+    system^.incoming_elapsed = system^.particles.duration[0] / 2
+    reference: Ui_Dust_Slot_Ref = {0, system^.order[0].generation}
+    appearance, valid := ui_dust_evaluate(system, reference)
+    testing.expect(t, valid)
+    testing.expect_value(t, appearance.tint, color.Color_RGBA8{45, 85, 120, 128})
+    testing.expect_value(t,
+        appearance.ink_style.monochrome, color.Color_RGBA8{102, 112, 122, 128})
+    testing.expect_value(t,
+        appearance.ink_style.increased, color.Color_RGBA8{116, 126, 136, 128})
+    ui_dust_begin_departure(system, 3)
+    released, released_valid := ui_dust_evaluate(system, reference)
+    testing.expect(t, released_valid)
+    testing.expect_value(t, released.tint, appearance.tint)
+    testing.expect_value(t, released.ink_style, appearance.ink_style)
+    testing.expect_value(t, released.alpha, appearance.alpha)
+    ui_dust_begin_arrival(system, 4, .Falling_Ink)
+    ui_dust_target_include(system, {20, 90}, {80, 90, 100, 255}, 255)
+    ui_dust_form_targets(system)
+    system^.incoming_elapsed = system^.particles.duration[0]
+    restored, restored_valid := ui_dust_evaluate(system, reference)
+    testing.expect(t, restored_valid)
+    testing.expect_value(t,
+        restored.ink_style.monochrome, color.Color_RGBA8{80, 90, 100, 128})
+}
 
 // Count one material phase without relying on physical slot density.
 ui_dust_test_phase_count :: proc(system: ^Ui_Dust_System, phase: Ui_Dust_Phase) -> int {

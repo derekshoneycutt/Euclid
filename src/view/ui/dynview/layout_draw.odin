@@ -13,6 +13,7 @@ import math "core:math"
 import fmt "core:fmt"
 import viewtext "../text"
 import theme "../theme"
+import authoredink "../../ink"
 
 //   Measured per-cell items plus per-column widths and per-row extents.
 Matrix_Draw_Cells :: struct {
@@ -222,6 +223,8 @@ Layout_Draw_Context :: struct {
     font_size: f32,
     selected_text: bool,
     selection_clip: geometry.Rectangle,
+    authored_ink: dynviewmodel.Color,
+    has_authored_ink: bool,
 }
 
 //   Complete inputs for emitting one selected horizontal glyph-accent run.
@@ -370,7 +373,38 @@ layout_draw_style :: proc(
     if ctx.selected_text {
         style.color = theme.draw_color(ctx.encoder, .Text_Selection_Foreground)
     }
+    if ctx.has_authored_ink {
+        style.color = resolve_dynview_authored_ink(ctx, ctx.authored_ink)
+    }
     return style
+}
+
+// resolve_dynview_authored_ink applies live content preferences to explicit ink.
+resolve_dynview_authored_ink :: proc(
+    ctx: Layout_Draw_Context,
+    original: dynviewmodel.Color) -> dynviewmodel.Color {
+    if ctx.state == nil {
+        return original
+    }
+    preferences := ctx.state^.ui_runtime.preferences.values
+    effective_contrast := theme.increased_contrast(
+        preferences.interface.increased_contrast,
+        ctx.state^.ui_runtime.platform_increased_contrast)
+    return authoredink.resolve_content_ink(
+        original, preferences.animation.monochrome, effective_contrast)
+}
+
+// dynview_ink_source scopes original color provenance without changing native paint policy.
+dynview_ink_source :: proc(
+    encoder: ^native.Draw_Encoder, original: dynviewmodel.Color,
+    authored: bool) -> native.Draw_Ink_Sink {
+    if encoder == nil {
+        return {}
+    }
+    previous := encoder^.ink_sink
+    encoder^.ink_sink.source_color = original
+    encoder^.ink_sink.authored = authored
+    return previous
 }
 
 //   Draw math text without shaping while allowing any cmap-supported glyph.
@@ -2407,7 +2441,8 @@ text_run_draw_params :: #force_inline proc(
     resolved: Cached_Item_Text,
     item_y: f32) -> Text_Run_Draw_Params {
 
-    text_color := item.has_brush_color ? item.brush_color : style.color
+    text_color := resolve_dynview_authored_ink(ctx, item.brush_color) if
+        item.has_brush_color else style.color
     return Text_Run_Draw_Params{
         encoder = ctx.encoder,
         state = ctx.state,
@@ -2462,11 +2497,21 @@ draw_cached_text_item :: proc(
     item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
 
-    resolved, text_ok := cached_item_resolve_text(ctx, style, item, item_x)
+    use_style := style
+    draw_ctx := ctx
+    if item.has_brush_color {
+        draw_ctx.authored_ink = item.brush_color
+        draw_ctx.has_authored_ink = true
+        use_style = layout_draw_style(draw_ctx, item.style_id)
+    }
+    previous := dynview_ink_source(
+        ctx.encoder, draw_ctx.authored_ink, draw_ctx.has_authored_ink)
+    defer native.draw_encoder_set_ink_sink(ctx.encoder, previous)
+    resolved, text_ok := cached_item_resolve_text(draw_ctx, use_style, item, item_x)
     if !text_ok {
         return
     }
-    draw_cached_text_item_dispatch(ctx, style, item, resolved, item_y)
+    draw_cached_text_item_dispatch(draw_ctx, use_style, item, resolved, item_y)
 }
 
 // draw_regular_text_run draws one ordinary cached shaped text run.
@@ -2546,14 +2591,13 @@ draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
     draw_text_run_underline(params)
 }
 
-//   Draw one cached inline shape item.
+// draw_cached_inline_item resolves authored colors before encoding its cached shape.
 draw_cached_inline_item :: proc(
     ctx: Layout_Draw_Context,
     item: dynviewmodel.Dynview_Layout_Item,
-    item_x, item_y: f32) {
+    item_x,     item_y: f32) {
 
-    selected_ink := layout_draw_style(ctx, item.style_id).color
-    encode_inline_item(ctx.encoder, item, item_x, item_y, selected_ink)
+    encode_inline_item(ctx.encoder, item, item_x, item_y, ctx)
 }
 
 // Resolve one semantic color against the standard Dynview foreground.
@@ -2566,13 +2610,13 @@ document_draw_color :: #force_inline proc(
 document_selected_draw_color :: proc(
     ctx: Layout_Draw_Context,
     authored: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
+    if authored.present {
+        return resolve_dynview_authored_ink(ctx, authored.value)
+    }
     if ctx.selected_text && !authored.present {
         return theme.draw_color(ctx.encoder, .Text_Selection_Foreground)
     }
-    if !authored.present {
-        return theme.draw_color(ctx.encoder, .Text)
-    }
-    return document_draw_color(authored)
+    return theme.draw_color(ctx.encoder, .Text)
 }
 
 // Preserve an optional semantic color as the transparent-zero shape sentinel.
@@ -2628,6 +2672,75 @@ document_shape_draw_item :: proc(
     result.kind = draw_kind.kind
     result.inline_outline_stroke = draw_kind.outline_stroke
     return result, true
+}
+
+// document_shape_resolve_ink maps explicit shape colors and keeps absent sentinels.
+document_shape_resolve_ink :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    shape: dynviewmodel.Dynview_Document_Shape,
+    inherited: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Dynview_Layout_Item {
+    result := item
+    document_shape_resolve_primary_inks(ctx, &result, shape, inherited)
+    document_shape_resolve_edges(ctx, &result, shape)
+    return result
+}
+
+// document_shape_resolve_primary_inks resolves the fill and outline color inheritance.
+document_shape_resolve_primary_inks :: proc(
+    ctx: Layout_Draw_Context,
+    result: ^dynviewmodel.Dynview_Layout_Item,
+    shape: dynviewmodel.Dynview_Document_Shape,
+    inherited: dynviewmodel.Dynview_Document_Color) {
+    fill := shape.fill_color
+    if !fill.present {
+        fill = shape.color
+    }
+    if fill.present {
+        result^.has_brush_color = true
+        result^.brush_color = resolve_dynview_authored_ink(ctx, fill.value)
+    } else if inherited.present {
+        result^.has_brush_color = true
+        result^.brush_color = resolve_dynview_authored_ink(ctx, inherited.value)
+    }
+    outline := shape.arc_color
+    if !outline.present {
+        outline = shape.color
+    }
+    if outline.present {
+        result^.has_outline_color = true
+        result^.outline_color = resolve_dynview_authored_ink(ctx, outline.value)
+    } else if inherited.present {
+        result^.has_outline_color = true
+        result^.outline_color = resolve_dynview_authored_ink(ctx, inherited.value)
+    }
+}
+
+// document_shape_resolve_edges resolves every explicitly authored polygon edge.
+document_shape_resolve_edges :: proc(
+    ctx: Layout_Draw_Context,
+    result: ^dynviewmodel.Dynview_Layout_Item,
+    shape: dynviewmodel.Dynview_Document_Shape) {
+    result^.shape_edge_color_1 =
+        document_resolve_optional_color(ctx, shape.edge_colors[0])
+    result^.shape_edge_color_2 =
+        document_resolve_optional_color(ctx, shape.edge_colors[1])
+    result^.shape_edge_color_3 =
+        document_resolve_optional_color(ctx, shape.edge_colors[2])
+    result^.shape_edge_color_4 =
+        document_resolve_optional_color(ctx, shape.edge_colors[3])
+    result^.shape_edge_color_5 =
+        document_resolve_optional_color(ctx, shape.edge_colors[4])
+}
+
+// document_resolve_optional_color maps present ink and preserves absent-color sentinels.
+document_resolve_optional_color :: #force_inline proc(
+    ctx: Layout_Draw_Context,
+    authored: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
+    if authored.present {
+        return resolve_dynview_authored_ink(ctx, authored.value)
+    }
+    return {}
 }
 
 // Map one semantic shape kind to its draw kind and outline policy.
@@ -2707,6 +2820,9 @@ draw_document_prose_item :: proc(
     if !content.ok {
         return false
     }
+    previous := dynview_ink_source(
+        ctx.encoder, semantic_inline.color.value, semantic_inline.color.present)
+    defer native.draw_encoder_set_ink_sink(ctx.encoder, previous)
     cache := &ctx.runtime^.compile_cache
     run := content.run
     line_top := viewtext.ui_text_cached_run_line_top(
@@ -2729,12 +2845,48 @@ draw_document_prose_item :: proc(
     })
 }
 
+// draw_document_math_item draws one semantic math inline with its authored color.
+draw_document_math_item :: proc(
+    ctx: Layout_Draw_Context,
+    semantic_inline: dynviewmodel.Dynview_Document_Inline,
+    position: geometry.Vector2,
+    baseline: f32) {
+    if semantic_inline.math_program_id < 0 ||
+        semantic_inline.math_program_id >= ctx.runtime^.compile_cache.math_program_count {
+        return
+    }
+    program := ctx.runtime^.compile_cache.math_programs[semantic_inline.math_program_id]
+    math_ctx := ctx
+    if semantic_inline.color.present {
+        math_ctx.authored_ink = semantic_inline.color.value
+        math_ctx.has_authored_ink = true
+    }
+    draw_math_program_at(math_ctx, program, {
+        position.x, baseline, 0,
+        {dynmath.Math_Style_Level(semantic_inline.root_style), false}, 0})
+}
+
+// draw_document_shape_item maps authored fills and edges before encoding one shape.
+draw_document_shape_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item,
+    semantic_inline: dynviewmodel.Dynview_Document_Inline,
+    position: geometry.Vector2) {
+    shape_item, ok := document_shape_draw_item(
+        item, semantic_inline.shape, ctx.runtime^.compile_cache.last_cell_width)
+    if !ok {
+        return
+    }
+    original := document_shape_resolve_ink(
+        {}, shape_item, semantic_inline.shape, semantic_inline.color)
+    encode_inline_item(ctx.encoder, original, position.x, position.y, ctx)
+}
+
 // Draw one semantic layout item at its exact sealed document-space position.
 draw_document_item :: proc(
     ctx: Layout_Draw_Context,
     item: dynviewmodel.Dynview_Document_Layout_Item,
     origin: geometry.Vector2) {
-
     content := &ctx.runtime^.content
     if item.inline_index < 0 || item.inline_index >= len(content^.document_inlines) {
         return
@@ -2745,22 +2897,10 @@ draw_document_item :: proc(
     case .Prose:
         _ = draw_document_prose_item(ctx, item, semantic_inline, position)
     case .Math:
-        if semantic_inline.math_program_id >= 0 && semantic_inline.math_program_id <
-            ctx.runtime^.compile_cache.math_program_count {
-            program := ctx.runtime^.compile_cache.math_programs[
-                semantic_inline.math_program_id]
-            draw_math_program_at(ctx, program, {
-                position.x, origin.y+item.baseline, 0,
-                {dynmath.Math_Style_Level(semantic_inline.root_style), false}, 0})
-        }
+        draw_document_math_item(
+            ctx, semantic_inline, position, origin.y+item.baseline)
     case .Shape:
-        shape_item, ok := document_shape_draw_item(
-            item, semantic_inline.shape, ctx.runtime^.compile_cache.last_cell_width)
-        if ok {
-            style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
-            style.color = document_draw_color(semantic_inline.color)
-            encode_inline_item(ctx.encoder, shape_item, position.x, position.y)
-        }
+        draw_document_shape_item(ctx, item, semantic_inline, position)
     case .None:
     }
 }

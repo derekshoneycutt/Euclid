@@ -1490,6 +1490,8 @@ particle_test_pigment_lifecycle :: proc(ps: ^particlemodel.Particle_System) -> b
         falling.color.a < landed.color.a &&
         falling.diameter < landed.diameter &&
         falling.color.r == particle.color.r &&
+        falling.authored_color == particle.color &&
+        falling.white_mix == 0 &&
         landed.position.x == particle.target_x &&
         landed.position.z == particle.target_z &&
         landed.color.a == particle.color.a
@@ -1510,11 +1512,13 @@ particle_test_leaper_lifecycle :: proc(ps: ^particlemodel.Particle_System) -> bo
     scale := particle.size * FORMATION_LEAPER_SIZE_SCALE
     return launch.visible && launch.diameter > scale * 1.35 &&
         launch.color.r == 255 && launch.color.g == 255 && launch.color.b == 255 &&
+        launch.authored_color == particle.color && launch.white_mix > 0.9 &&
         launch.position.z < apex.position.z &&
         apex.diameter < launch.diameter &&
         falling.color.r == particle.color.r &&
         falling.color.g == particle.color.g &&
         falling.color.b == particle.color.b &&
+        falling.authored_color == particle.color && falling.white_mix == 0 &&
         landed.visible && landed.diameter == scale &&
         landed.color == particle.color &&
         landed.position.z == particle.target_z
@@ -1732,7 +1736,7 @@ polygon_material_sampling_is_stable_across_equivalent_triangulations :: proc(
     polygon := particle_test_visible_square(world, 0, vertices[:])
     testing.expect(t, polygon.prepared)
     tint: color.Color_RGBA8 = {120, 180, 220, 128}
-    context_a: Shape_World_Burst_Context = {first, world, tint, 1}
+    context_a: Shape_World_Burst_Context = {first, world, tint, 1, true}
     testing.expect(t, emit_shape_world_cached_polygon_burst(
         context_a, polygon.entity))
     testing.expect_value(t, first^.low_particles.color[0][3], u8(128))
@@ -1743,7 +1747,7 @@ polygon_material_sampling_is_stable_across_equivalent_triangulations :: proc(
     world.draw_cache.polygon_triangles[polygon.draw.first_triangle+1] = {
         base+1, base+2, base+3,
     }
-    context_b: Shape_World_Burst_Context = {second, world, tint, 1}
+    context_b: Shape_World_Burst_Context = {second, world, tint, 1, true}
     testing.expect(t, emit_shape_world_cached_polygon_burst(
         context_b, polygon.entity))
 
@@ -1879,6 +1883,8 @@ emit_departure_material_burst_preserves_coverage_and_plane :: proc(t: ^testing.T
     testing.expect_value(t, count_live_low_particles(ps), 2)
     testing.expect_value(t, ps^.low_particles.color[0][3], u8(100))
     testing.expect_value(t, ps^.low_particles.color[1][3], u8(200))
+    testing.expect(t, ps^.low_particles.authored_ink[0])
+    testing.expect(t, ps^.low_particles.authored_ink[1])
     test_helpers.expect_close(t, ps^.low_particles.pos_z[0], f32(0.3),
         "label departure remains on its source plane")
     test_helpers.expect_close(t, ps^.low_particles.pos_z[1], f32(0.5),

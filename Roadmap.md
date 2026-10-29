@@ -7,11 +7,11 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Custom notes on collection items
 - Optional checkboxes in tree
 - Animation slider
 - Search history / Autocomplete features
 - Use history / Most viewed / Most recent
+- Custom notes on collection items
 - Export / Import by file
 - Ip-2-ip sharing protocol
 - Accessibility completion work
@@ -218,9 +218,9 @@ General features:
     - [X] Favorites/Collection organization
     - [X] Custom naming in collections
     - [X] Multiple custom collections
-    - [ ] Custom notes in collections
     - [ ] Most viewed (dynamic; non-mutable)
     - [ ] Most recent (dynamic; non-mutable)
+    - [ ] Custom notes in collections
     - [ ] Sharing custom collections
       - [ ] Export/import files
       - [ ] In-network (ip-2-ip) custom collection sharing
@@ -240,7 +240,7 @@ General features:
   - [X] Reduced motion support
   - [X] High contrast mode
   - [X] Large text support
-  - [ ] Animation monochrome and scaling support
+  - [X] Animation monochrome and scaling support
   - [ ] Improved accessibility system
   - [ ] Additional accessibility support : Dynview
   - [ ] Additional accessibility support : Terminal

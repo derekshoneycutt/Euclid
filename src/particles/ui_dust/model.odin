@@ -111,12 +111,20 @@ Ui_Dust_Transition :: enum u8 {
     Independent,
 }
 
-// Ui_Dust_Target retains one bounded sampled destination and its generation-safe claim.
+// Ui_Dust_Ink retains bounded display-prepared color variants through material transfers.
+Ui_Dust_Ink :: struct {
+    monochrome: color.Color_RGBA8,
+    increased: color.Color_RGBA8,
+    authored: bool,
+}
+
+// Ui_Dust_Target retains original ink and its precomputed display variants.
 Ui_Dust_Target :: struct {
     position: geometry.Vector2,
     ink: [4]u8,
     coverage: u8,
     claim: Ui_Dust_Slot_Ref,
+    style: Ui_Dust_Ink,
 }
 
 // Ui_Dust_Match_Link supports constant-time removal from spatial and fallback chains.
@@ -173,6 +181,8 @@ Ui_Dust_Particle :: struct {
     sway_phase: f32,
     target_color: color.Color_RGBA8,
     color: color.Color_RGBA8,
+    ink_style: Ui_Dust_Ink,
+    target_ink_style: Ui_Dust_Ink,
     dust_sprite_index: u8,
     target_x: f32,
     target_y: f32,
@@ -193,6 +203,7 @@ Ui_Dust_Appearance :: struct {
     alpha: f32,
     size: f32,
     sprite_index: u8,
+    ink_style: Ui_Dust_Ink,
 }
 
 // Ui_Dust_Visual_Context identifies one valid visible presentation viewport.

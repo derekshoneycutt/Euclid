@@ -4,6 +4,8 @@ import color "../../core/color"
 import geometry "../../core/geometry"
 import rand "core:math/rand"
 
+Particle_Color :: color.Color_RGBA8
+
 MAX_LOW_PARTICLES :: 65536
 MAX_PARTICLES :: 2048
 MAX_FORMATION_PARTICLES :: 16384
@@ -105,7 +107,7 @@ Dust_Region_Push :: struct {
     vertex_count: int,
 }
 
-// Store one particle's simulation and rendering state.
+// Store one particle's simulation and rendering state; authored_ink excludes environmental dust.
 Particle :: struct {
     pos_x: f32,
     pos_y: f32,
@@ -119,6 +121,7 @@ Particle :: struct {
     size: f32,
     color: color.Color_RGBA8,
     dust_sprite_index: u8,
+    authored_ink: bool,
     alive: bool,
 }
 
@@ -254,12 +257,14 @@ Polygon_Material_Sample :: struct {
     barycentric_u, barycentric_v: f32,
 }
 
-// Describe one formation particle's resolved world position, tint, and size.
+// Describe one formation particle's resolved position, authored tint, highlight mix, and size.
 // Screen offsets are added after projection so label ink stays screen-facing.
 Formation_Particle_Visual :: struct {
     position: geometry.Vector3,
     screen_offset: geometry.Vector2,
-    color: color.Color_RGBA8,
+    color: Particle_Color,
+    authored_color: Particle_Color,
+    white_mix: f32,
     diameter: f32,
     visible: bool,
     // light is a white-hot leaper's local light strength; lift is its hop height.

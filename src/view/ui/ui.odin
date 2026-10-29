@@ -252,8 +252,7 @@ draw_encoded_view_content :: proc(
         uipresentation.draw_encoded_presentation_text(state, encoder, prepared)
         if uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
             uipresentation.presentation_draw_effects(
-                encoder, effects.dust, prepared.scroll.view_rect,
-                effects.dust_atlas)
+                encoder, prepared.scroll.view_rect, effects)
         }
     }
     _ = native.draw_encoder_pop_scissor(encoder)

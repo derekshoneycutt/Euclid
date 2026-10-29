@@ -194,7 +194,7 @@ presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
         &state^.font_cache, context.allocator)
     viewfont.cache_ink_capture_begin(&state^.font_cache)
     viewfont.cache_ink_capture_sample(
-        &state^.font_cache, {20, 30}, {240, 160, 80, 255}, 255)
+        &state^.font_cache, {20, 30}, {70, 130, 180, 255}, 255, true)
     viewfont.cache_ink_capture_sample(
         &state^.font_cache, {40, 50}, {80, 160, 240, 255}, 192)
     viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
@@ -208,6 +208,13 @@ presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
     testing.expect_value(t, presentation^.dust.particle_count, 2)
     testing.expect_value(t, presentation^.dust.particles.pos_x[0], f32(20))
     testing.expect_value(t, presentation^.dust.particles.pos_y[0], f32(30))
+    testing.expect_value(t, presentation^.dust.particles.color[0],
+        dynviewmodel.Color{70, 130, 180, 255})
+    style := presentation^.dust.particles.ink_style[0]
+    testing.expect(t, style.authored)
+    testing.expect_value(t, style.monochrome, dynviewmodel.Color{185, 185, 185, 255})
+    testing.expect_value(t, style.increased, dynviewmodel.Color{212, 212, 212, 255})
+    testing.expect(t, !presentation^.dust.particles.ink_style[1].authored)
     state^.ui_runtime.preferences.values.interface.reduce_motion = true
     next := presentation_test_message(state, 14, bytes)
     next_content, _ := next^.(bridgemodel.View_Content_Ready)

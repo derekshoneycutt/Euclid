@@ -401,6 +401,45 @@ persist_without_overrides_is_noop :: proc(t: ^testing.T) {
     launch_test_path_destroy(path)
 }
 
+// Load animation style settings into the startup preference snapshot.
+@(test)
+launch_loads_saved_animation_style_preferences :: proc(t: ^testing.T) {
+    path := launch_test_path(t)
+    testing.expect(t, path.valid)
+    if !path.valid {
+        return
+    }
+    defer launch_test_path_destroy(path)
+
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    changes: setting_model.Change_Set
+    testing.expect(t, setting_model.change_set_set(
+        &changes, .Animation_Scale_Percent, setting_model.integer_value(175)))
+    testing.expect(t, setting_model.change_set_set(
+        &changes, .Animation_Monochrome, setting_model.boolean_value(true)))
+    testing.expect_value(t, user_data.store_commit_batch(&store, changes).outcome,
+        user_data.Commit_Outcome.Committed)
+    testing.expect_value(t, user_data.store_close(&store).kind,
+        user_data.Store_Error_Kind.None)
+
+    launch := parse_command_line([]string{
+        fmt.tprintf("--user-db=%s", path.filename),
+    })
+    preferences: setting_model.Preferences
+    opened := false
+    testing.expect(t, launch_prepare_preferences(
+        launch, &preferences, &store, &opened))
+    testing.expect(t, opened)
+    testing.expect_value(t, preferences.animation.scale_percent, 175)
+    testing.expect(t, preferences.animation.monochrome)
+    testing.expect(t, .Animation_Scale_Percent in preferences.present)
+    testing.expect(t, .Animation_Monochrome in preferences.present)
+    testing.expect_value(t, user_data.store_close(&store).kind,
+        user_data.Store_Error_Kind.None)
+}
+
 // Load the persisted collection snapshot at the application startup boundary.
 @(test)
 launch_loads_saved_collections_before_runtime_handoff :: proc(t: ^testing.T) {

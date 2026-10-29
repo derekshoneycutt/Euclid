@@ -13,6 +13,7 @@ import observe "../../evidence/observe"
 import taskpool "../../taskpool"
 import terminalservice "../terminal/service"
 import viewfont "../font"
+import authoredink "../ink"
 import uidust "../../particles/ui_dust"
 import uipresentation "../ui/presentation"
 import uiterminal "../ui/terminal"
@@ -557,6 +558,21 @@ presentation_effects_observe_phases :: proc(
     }
 }
 
+// presentation_sample_ink_style caches both policies from original authored samples, never resolved pixels.
+presentation_sample_ink_style :: proc(
+    sample: viewfont.Font_Ink_Sample) -> uidust.Ui_Dust_Ink {
+    if !sample.authored {
+        return {}
+    }
+    return {
+        monochrome = authoredink.resolve_content_ink(
+            cast(dynviewmodel.Color)sample.color, true, false),
+        increased = authoredink.resolve_content_ink(
+            cast(dynviewmodel.Color)sample.color, true, true),
+        authored = true,
+    }
+}
+
 // presentation_effects_begin_departure breaks the last drawn ink into dust.
 // Samples are evenly strided across the bounded snapshot and then consumed so the
 // same ink never departs twice; without samples, any dust already falling
@@ -586,6 +602,8 @@ presentation_effects_begin_departure :: proc(
         if alpha > 0 {
             _ = uidust.ui_dust_emit(&runtime^.dust, sample.position,
                 sample.color, sample.coverage, alpha)
+            runtime^.dust.particles.ink_style[runtime^.dust.live_tail-1] =
+                presentation_sample_ink_style(sample)
         }
     }
     viewfont.cache_ink_capture_discard(&state^.font_cache)
@@ -619,7 +637,8 @@ presentation_effects_begin_formation :: proc(
     for index in 0..<count {
         sample := samples[((2*index + 1)*len(samples))/(2*count)]
         uidust.ui_dust_target_include(
-            &runtime^.dust, sample.position, sample.color, sample.coverage)
+            &runtime^.dust, sample.position, sample.color, sample.coverage,
+            presentation_sample_ink_style(sample))
     }
     uidust.ui_dust_form_targets(&runtime^.dust)
 }
