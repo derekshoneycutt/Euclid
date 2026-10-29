@@ -23,6 +23,7 @@ there rather than maintaining a separate memory policy.
 1. [Odin Rules (Required)](#odin-rules-required)
 1. [Julia Rules (Required)](#julia-rules-required)
 1. [SQLite Rules (Required)](#sqlite-rules-required)
+1. [HLSL Rules (Required)](#hlsl-rules-required)
 1. [Documentation Rules](#documentation-rules)
 1. [Error Handling, Performance, Safety](#error-handling-performance-safety)
 1. [Standard Updates](#standard-updates)
@@ -962,6 +963,62 @@ independently from related APIs.
 - Animation definition files may keep longer phase-oriented `loop` functions
   when that improves readability of animation state flow.
 - This exception is narrow and does not waive general clarity requirements.
+
+## HLSL Rules (Required)
+
+First-party `.hlsl` and `.hlsli` are production source. The standalone analyzer
+owns generic lexical accounting and common formatting checks; Euclid owns shader
+compilation, reflection, pipeline contracts, and host ABI validation through
+[`tools/shaders.jl`](../../../tools/shaders.jl). This dependency is one-way:
+the analyzer MUST NOT depend on Euclid, SDL, SDL_shadercross, or shader build tools.
+
+### Formatting And Source Accounting
+
+- **Automated:** HLSL participates in discovered-file counts and physical,
+  source/nonblank, code, comment-only, and blank line totals. Both extensions
+  share one language. Common no-tabs and line-width policies use the existing
+  responses and thresholds in `tools/analysis_settings.jl`.
+- **Automated:** Comment-only lines are exempt from line-width checks; tabs are
+  checked everywhere. Other HLSL lines use physical character widths, including
+  quoted text and inline comments.
+- **Review:** Use four-space indentation, same-line opening braces, and
+  multiline braced control bodies. Use descriptive `PascalCase` structure names
+  and `snake_case` fields, variables, and helpers; preserve required shader
+  semantics, intrinsics, and the `main` entry-point name.
+- **Review:** New or materially changed entry points and named helpers MUST have
+  useful contract comments. Explain non-obvious spaces, units, channel meanings,
+  and valid input ranges rather than narrating assignments.
+
+The analyzer does not parse HLSL or measure functions, structs, complexity,
+documentation coverage, or shader performance. Structural metrics are unavailable,
+not zero; `stats` supports whole files only. Lexical completion is not syntax
+validation. Preprocessor directives and inactive branches are counted as authored
+source, without macro expansion or include resolution. HLSL does not contribute
+to Odin/Julia complexity denominators or COCOMO/LOCOMO inputs.
+
+### Shader Contracts And Review
+
+- **Review:** Input/output semantics, resource bindings and spaces, uniform
+  layout/padding, and host vertex records MUST agree. Changes MUST update the
+  corresponding Euclid host declarations and build validation contracts together.
+- **Review:** Keep coordinate spaces, projection conventions, matrix layout and
+  multiplication order explicit at their boundaries. Do not rely on an incidental
+  transpose or backend convention.
+- **Review:** Preserve each pipeline's straight/premultiplied alpha, additive
+  output, texture/channel, and interpolation contracts. Document unusual uses
+  such as a channel carrying instance policy rather than color.
+- **Review:** Establish numerical preconditions for division, normalization, and
+  other potentially degenerate operations. Guard inputs where the owning contract
+  does not already exclude invalid or non-finite results.
+- **Review:** Justify costly per-fragment operations, repeated sampling, and
+  data-dependent loops with workload evidence. Branches and literals are not
+  categorically forbidden; prefer clear formulas over speculative micro-optimization.
+- **Automated, Euclid build:** Use the existing shader compilation, reflection,
+  resource/stage-interface, and uniform ABI checks. These remain outside the
+  standalone analyzer.
+- **Review:** Rendering behavior changes require appropriate visual/scenario
+  evidence as well as the normal complete verification gate. Source statistics
+  cannot establish rendering correctness.
 
 ## Documentation Rules
 
