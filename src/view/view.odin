@@ -60,7 +60,8 @@ window_session_begin :: proc(owner: ^Window_Session) -> bool {
     }
     inputbackend.sdl_event_inbox_init(&owner^.events, &owner^.platform)
     if !native.sdl_draw_runtime_create(&owner^.draw, owner^.platform.device,
-        sdl_draw_shader_paths(), owner^.platform.sample_count) {
+        sdl_draw_shader_paths(), owner^.platform.sample_count,
+        native.sdl_platform_swapchain_format(&owner^.platform)) {
         log.error("sdl_draw_runtime_create_failed")
         return false
     }

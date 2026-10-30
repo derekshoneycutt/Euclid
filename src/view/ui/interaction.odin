@@ -120,7 +120,8 @@ ui_world_hover_target :: proc(
             favorite = animation_favorite_eligible,
             membership = animation_membership_eligible,
             hidden = runtime.playback.controls_hidden,
-        })
+        },
+        runtime^.preferences.values.interface.control_size_percent)
     if over_control {
         return viewmodel.ui_interaction_target(.Control, id = control_id)
     }
@@ -140,9 +141,12 @@ ui_splitter_hover_target :: proc(
         return {}
     }
     axis, hovered := uisplitter.splitter_hovered_axis(mouse,
-        runtime^.layout.current_layout_mode,
-        runtime^.layout.vertical_split_x, runtime^.layout.horizontal_split_y,
-        runtime^.layout.window)
+        uisplitter.splitter_geometry_context(
+            runtime^.layout.current_layout_mode,
+            runtime^.layout.vertical_split_x,
+            runtime^.layout.horizontal_split_y,
+            runtime^.layout.window,
+            runtime^.preferences.values.interface.control_size_percent))
     if !hovered {
         return {}
     }

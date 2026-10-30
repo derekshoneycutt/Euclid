@@ -23,6 +23,15 @@ Splitter_Axis :: enum {
     Horizontal,
 }
 
+// Shared pane geometry facts used to lay out and route splitter controls.
+Splitter_Geometry_Context :: struct {
+    mode: viewmodel.Ui_Layout_Mode,
+    split_x: f32,
+    split_y: f32,
+    window: viewmodel.Ui_Window_Metrics,
+    control_size_percent: int,
+}
+
 //   Visible and interactive rectangles for one pane splitter.
 Splitter_Geometry :: struct {
     visible_rect: geometry.Rectangle,
@@ -59,12 +68,21 @@ Splitter_Value_Result :: struct {
     sources: viewmodel.Ui_Control_Action_Source,
 }
 
+// Inputs converged before preparing both splitter axes for one frame.
+Splitter_Preparation_Input :: struct {
+    layout: ^viewmodel.Ui_Layout_State,
+    locked: bool,
+    values: Splitter_Value_Result,
+    control_size_percent: int,
+}
+
 // Splitter_Update_Context carries resolved frame facts through the interaction stages.
 Splitter_Update_Context :: struct {
     layout: ^viewmodel.Ui_Layout_State,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
     semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     mouse_input: input.Input_Frame,
+    control_size_percent: int,
     dt: f32,
     capture_view: capturemodel.Gif_Capture_View,
     axis: Splitter_Axis,
@@ -116,47 +134,59 @@ splitter_axis_preparation :: proc(
             layout^.horizontal_split_hover, present}
 }
 
-//   Build centered visible and hit rectangles for one splitter axis.
-splitter_geometry :: proc(
-    axis: Splitter_Axis, mode: viewmodel.Ui_Layout_Mode,
+// Assemble pane geometry facts with the default control-size scale when omitted.
+splitter_geometry_context :: proc(
+    mode: viewmodel.Ui_Layout_Mode,
     split_x, split_y: f32,
-    window: viewmodel.Ui_Window_Metrics) -> Splitter_Geometry {
+    window: viewmodel.Ui_Window_Metrics,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) ->
+    Splitter_Geometry_Context {
+    return {mode, split_x, split_y, window, control_size_percent}
+}
+
+// Build centered visible and hit rectangles for one splitter axis.
+splitter_geometry :: proc(
+    axis: Splitter_Axis,
+    ctx: Splitter_Geometry_Context) -> Splitter_Geometry {
+    scale := theme.ui_control_size_scale(ctx.control_size_percent)
+    visible_width := SPLITTER_VISIBLE_WIDTH * scale
+    hit_width := SPLITTER_HIT_WIDTH * scale
 
     if axis == .Vertical {
         return {
-            visible_rect = {split_x - SPLITTER_VISIBLE_WIDTH * 0.5, 0,
-                SPLITTER_VISIBLE_WIDTH, f32(window.height)},
-            hit_rect = {split_x - SPLITTER_HIT_WIDTH * 0.5, 0,
-                SPLITTER_HIT_WIDTH, f32(window.height)},
+            visible_rect = {ctx.split_x - visible_width * 0.5, 0,
+                visible_width, f32(ctx.window.height)},
+            hit_rect = {ctx.split_x - hit_width * 0.5, 0,
+                hit_width, f32(ctx.window.height)},
         }
     }
-    horizontal_width := split_x
-    if mode == .Portrait {
-        horizontal_width = f32(window.width)
+    horizontal_width := ctx.split_x
+    if ctx.mode == .Portrait {
+        horizontal_width = f32(ctx.window.width)
     }
     return {
-        visible_rect = {0, split_y - SPLITTER_VISIBLE_WIDTH * 0.5,
-            horizontal_width, SPLITTER_VISIBLE_WIDTH},
-        hit_rect = {0, split_y - SPLITTER_HIT_WIDTH * 0.5,
-            horizontal_width, SPLITTER_HIT_WIDTH},
+        visible_rect = {0, ctx.split_y - visible_width * 0.5,
+            horizontal_width, visible_width},
+        hit_rect = {0, ctx.split_y - hit_width * 0.5,
+            horizontal_width, hit_width},
     }
 }
 
-//   Select the nearest hovered splitter, preferring vertical on an exact tie.
+// Select the nearest hovered splitter, preferring vertical on an exact tie.
 splitter_hovered_axis :: proc(
-    mouse: geometry.Vector2, mode: viewmodel.Ui_Layout_Mode,
-    split_x, split_y: f32,
-    window: viewmodel.Ui_Window_Metrics) -> (Splitter_Axis, bool) {
+    mouse: geometry.Vector2,
+    ctx: Splitter_Geometry_Context) ->
+    (Splitter_Axis, bool) {
 
-    horizontal := splitter_geometry(.Horizontal, mode, split_x, split_y, window)
-    if mode == .Portrait {
+    horizontal := splitter_geometry(.Horizontal, ctx)
+    if ctx.mode == .Portrait {
         return .Horizontal, geometry.rectangle_contains(horizontal.hit_rect, mouse)
     }
-    vertical := splitter_geometry(.Vertical, mode, split_x, split_y, window)
+    vertical := splitter_geometry(.Vertical, ctx)
     over_vertical := geometry.rectangle_contains(vertical.hit_rect, mouse)
     over_horizontal := geometry.rectangle_contains(horizontal.hit_rect, mouse)
     if over_vertical && over_horizontal {
-        if abs(mouse.y - split_y) < abs(mouse.x - split_x) {
+        if abs(mouse.y - ctx.split_y) < abs(mouse.x - ctx.split_x) {
             return .Horizontal, true
         }
         return .Vertical, true
@@ -259,8 +289,11 @@ set_splitter_positions :: proc(
     }
     horizontal_value := splitter_clamp_horizontal(
         horizontal, layout^.window.height)
-    prepared := splitter_preparation(layout, false,
-        vertical_value, horizontal_value, {.Scenario})
+    prepared := splitter_preparation({
+        layout = layout,
+        values = {vertical_value, horizontal_value, {.Scenario}},
+        control_size_percent = theme.CONTROL_SIZE_DEFAULT_PERCENT,
+    })
     apply_splitter_preparation(layout, prepared)
     splitter_cancel_geometry_capture(layout)
     return true
@@ -369,20 +402,20 @@ splitter_apply_semantic_axis :: proc(
 }
 
 // Prepare final splitter hit, clip, and visible geometry after interaction.
-splitter_preparation :: proc(
-    layout: ^viewmodel.Ui_Layout_State,
-    locked: bool, vertical_value, horizontal_value: f32,
-    sources: viewmodel.Ui_Control_Action_Source) -> Splitter_Preparation {
-    vertical := splitter_geometry(.Vertical, layout^.current_layout_mode,
-        vertical_value, horizontal_value, layout^.window)
-    horizontal := splitter_geometry(.Horizontal, layout^.current_layout_mode,
-        vertical_value, horizontal_value, layout^.window)
+splitter_preparation :: proc(ctx: Splitter_Preparation_Input) -> Splitter_Preparation {
+    layout := ctx.layout
+    geometry_context := splitter_geometry_context(
+        layout^.current_layout_mode,
+        ctx.values.vertical, ctx.values.horizontal, layout^.window,
+        ctx.control_size_percent)
+    vertical := splitter_geometry(.Vertical, geometry_context)
+    horizontal := splitter_geometry(.Horizontal, geometry_context)
     return {
         vertical = splitter_axis_preparation(
-            layout, .Vertical, vertical, vertical_value, sources),
+            layout, .Vertical, vertical, ctx.values.vertical, ctx.values.sources),
         horizontal = splitter_axis_preparation(
-            layout, .Horizontal, horizontal, horizontal_value, sources),
-        locked = locked,
+            layout, .Horizontal, horizontal, ctx.values.horizontal, ctx.values.sources),
+        locked = ctx.locked,
     }
 }
 
@@ -449,16 +482,22 @@ update_splitters :: proc(ctx: Splitter_Update_Context) -> Splitter_Preparation {
     locked := splitters_locked_for_gif(ctx.capture_view.phase)
     axis, hovered := splitter_hovered_axis(
         uiwidgets.input_frame_mouse_position(ctx.mouse_input),
-        layout^.current_layout_mode,
-        layout^.vertical_split_x, layout^.horizontal_split_y, layout^.window)
+        splitter_geometry_context(
+            layout^.current_layout_mode,
+            layout^.vertical_split_x, layout^.horizontal_split_y,
+            layout^.window, ctx.control_size_percent))
     update := ctx
     update.axis = axis
     update.hovered = hovered
     update.locked = locked
     values := splitter_resolve_values(update)
     cursor := splitter_update_feedback(update)
-    prepared := splitter_preparation(layout, locked, values.vertical,
-        values.horizontal, values.sources)
+    prepared := splitter_preparation({
+        layout = layout,
+        locked = locked,
+        values = values,
+        control_size_percent = ctx.control_size_percent,
+    })
     prepared.cursor = cursor
     return prepared
 }

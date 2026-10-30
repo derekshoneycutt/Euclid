@@ -13,6 +13,7 @@ import uisemantics "semantics"
 import viewmodel "model"
 import viewpreferences "../preferences"
 import input "../input"
+import theme "theme"
 import userdata "../../userdata"
 
 // Append a real durable destination through ordinary transactional display admission.
@@ -37,6 +38,19 @@ membership_test_fixture :: proc(t: ^testing.T, state: ^core.Euclid_General_State
     state.julia_interface = ji
     ji.selected_animation = &nodes[1]
     state.ui_runtime.layout.ui_regions.world_rect = {0, 0, 640, 480}
+}
+
+// Text-required rows keep their prior height until the independent target scale exceeds it.
+@(test)
+membership_row_height_preserves_text_geometry_and_scales_targets :: proc(t: ^testing.T) {
+    testing.expect_value(t, uioverlay.membership_row_height(100, 100),
+        uioverlay.MEMBERSHIP_ROW_HEIGHT)
+    testing.expect_value(t, uioverlay.membership_row_height(175, 100),
+        theme.ui_font_size(175) + 12)
+    testing.expect_value(t, uioverlay.membership_row_height(100, 150),
+        uioverlay.MEMBERSHIP_ROW_HEIGHT * 1.5)
+    testing.expect_value(t, uioverlay.membership_row_height(175, 200),
+        uioverlay.MEMBERSHIP_ROW_HEIGHT * 2)
 }
 
 // Pointer opening stays visually quiet; keyboard navigation restores visible row focus.

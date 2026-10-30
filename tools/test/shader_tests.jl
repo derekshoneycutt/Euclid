@@ -58,6 +58,7 @@ end
     @test getfield.(specs, :name) == [
         "draw2d_colored.vert", "draw2d_colored.frag",
         "draw2d_textured.vert", "draw2d_textured.frag",
+        "magnifier.vert", "magnifier.frag",
         "stroke3d.vert", "stroke3d.frag",
         "dust_instanced.vert", "dust_instanced.frag",
         "leaper_light.frag"]

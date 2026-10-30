@@ -30,9 +30,13 @@ Setting_Id :: enum u8 {
     Persist_Terminal_History,
     Animation_Scale_Percent,
     Animation_Monochrome,
+    Interface_Hover_Focus,
+    Interface_Control_Size,
+    Interface_Show_Magnifier,
+    Interface_Magnifier_Input_Lock,
 }
 
-SETTING_COUNT :: 18
+SETTING_COUNT :: 22
 Setting_Set :: bit_set[Setting_Id; u32]
 ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Window_Width,
@@ -53,6 +57,10 @@ ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Persist_Terminal_History,
     .Animation_Scale_Percent,
     .Animation_Monochrome,
+    .Interface_Hover_Focus,
+    .Interface_Control_Size,
+    .Interface_Show_Magnifier,
+    .Interface_Magnifier_Input_Lock,
 }
 
 Window_Mode :: enum u8 {
@@ -112,6 +120,10 @@ SETTING_DEFINITIONS :: [SETTING_COUNT]Setting_Definition{
     {.Persist_Terminal_History, "terminal", "persist_history", .Boolean},
     {.Animation_Scale_Percent, "animation", "scale_percent", .Integer},
     {.Animation_Monochrome, "animation", "monochrome", .Boolean},
+    {.Interface_Hover_Focus, "interface", "hover_focus", .Boolean},
+    {.Interface_Control_Size, "interface", "control_size_percent", .Integer},
+    {.Interface_Show_Magnifier, "interface", "show_magnifier", .Boolean},
+    {.Interface_Magnifier_Input_Lock, "interface", "magnifier_input_lock", .Boolean},
 }
 
 Setting_Value :: struct {
@@ -145,6 +157,10 @@ Interface_Preferences :: struct {
     reduce_motion: bool,
     increased_contrast: bool,
     text_size_percent: int,
+    hover_focus: bool,
+    control_size_percent: int,
+    show_magnifier: bool,
+    magnifier_input_lock: bool,
 }
 
 Terminal_Preferences :: struct {
@@ -208,6 +224,10 @@ default_preferences :: proc() -> Preferences {
             reduce_motion = false,
             increased_contrast = false,
             text_size_percent = 100,
+            hover_focus = false,
+            control_size_percent = 100,
+            show_magnifier = false,
+            magnifier_input_lock = false,
         },
         animation = {
             scale_percent = 100,
@@ -251,6 +271,11 @@ valid_text_size_percent :: proc(percent: i64) -> bool {
     return percent == 100 || percent == 125 || percent == 150 || percent == 175
 }
 
+// Check the supported discrete control-size percentages.
+valid_control_size_percent :: proc(percent: i64) -> bool {
+    return percent >= 100 && percent <= 200 && (percent - 100) % 25 == 0
+}
+
 // Check the supported animation ink scale range and discrete step.
 valid_animation_scale_percent :: proc(percent: i64) -> bool {
     return percent >= 50 && percent <= 200 && (percent - 50) % 5 == 0
@@ -265,7 +290,9 @@ valid_setting_id :: proc(id: Setting_Id) -> bool {
          .Drawing_Dust_Limit, .Drawing_Sound_Enabled, .Interface_Display_Fps,
          .Interface_Reduce_Motion, .Interface_Increased_Contrast,
          .Interface_Text_Size, .Persist_Terminal_History,
-         .Animation_Scale_Percent, .Animation_Monochrome:
+         .Animation_Scale_Percent, .Animation_Monochrome,
+         .Interface_Hover_Focus, .Interface_Control_Size,
+         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
         return true
     }
     return false
@@ -296,13 +323,17 @@ valid_setting_value :: proc(id: Setting_Id, value: Setting_Value) -> bool {
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
          .Interface_Increased_Contrast, .Persist_Terminal_History,
-         .Animation_Monochrome:
+         .Animation_Monochrome, .Interface_Hover_Focus,
+         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
         return value.kind == .Boolean
     case .Drawing_Dust_Limit:
         return value.kind == .Integer && valid_dust_limit(i64(value.integer))
     case .Interface_Text_Size:
         return value.kind == .Integer &&
             valid_text_size_percent(i64(value.integer))
+    case .Interface_Control_Size:
+        return value.kind == .Integer &&
+            valid_control_size_percent(i64(value.integer))
     case .Animation_Scale_Percent:
         return value.kind == .Integer &&
             valid_animation_scale_percent(i64(value.integer))
@@ -332,6 +363,12 @@ apply_boolean_preference :: proc(
         preferences^.interface.reduce_motion = value
     case .Interface_Increased_Contrast:
         preferences^.interface.increased_contrast = value
+    case .Interface_Hover_Focus:
+        preferences^.interface.hover_focus = value
+    case .Interface_Show_Magnifier:
+        preferences^.interface.show_magnifier = value
+    case .Interface_Magnifier_Input_Lock:
+        preferences^.interface.magnifier_input_lock = value
     case .Animation_Monochrome:
         preferences^.animation.monochrome = value
     case .Persist_Terminal_History:
@@ -351,6 +388,8 @@ apply_integer_preference :: proc(
         preferences^.drawing.dust_limit = value
     case .Interface_Text_Size:
         preferences^.interface.text_size_percent = value
+    case .Interface_Control_Size:
+        preferences^.interface.control_size_percent = value
     case .Animation_Scale_Percent:
         preferences^.animation.scale_percent = value
     }
@@ -428,6 +467,8 @@ read_integer_preference :: proc(
         return integer_value(preferences.drawing.dust_limit)
     case .Interface_Text_Size:
         return integer_value(preferences.interface.text_size_percent)
+    case .Interface_Control_Size:
+        return integer_value(preferences.interface.control_size_percent)
     case .Animation_Scale_Percent:
         return integer_value(preferences.animation.scale_percent)
     }
@@ -456,6 +497,12 @@ read_boolean_preference :: proc(
         return boolean_value(preferences.interface.reduce_motion)
     case .Interface_Increased_Contrast:
         return boolean_value(preferences.interface.increased_contrast)
+    case .Interface_Hover_Focus:
+        return boolean_value(preferences.interface.hover_focus)
+    case .Interface_Show_Magnifier:
+        return boolean_value(preferences.interface.show_magnifier)
+    case .Interface_Magnifier_Input_Lock:
+        return boolean_value(preferences.interface.magnifier_input_lock)
     case .Persist_Terminal_History:
         return boolean_value(preferences.terminal.persist_history)
     case .Animation_Monochrome:
@@ -468,13 +515,14 @@ read_boolean_preference :: proc(
 setting_value :: proc(preferences: Preferences, id: Setting_Id) -> Setting_Value {
     switch id {
     case .Window_Width, .Window_Height, .Drawing_Dust_Limit,
-         .Interface_Text_Size, .Animation_Scale_Percent:
+         .Interface_Text_Size, .Interface_Control_Size, .Animation_Scale_Percent:
         return read_integer_preference(preferences, id)
     case .Rendering_Vsync, .Rendering_Antialiasing, .Rendering_Limit_Fps,
          .Rendering_Simd, .Rendering_Gpu_Dust_Instancing,
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
          .Interface_Increased_Contrast, .Persist_Terminal_History,
-         .Animation_Monochrome:
+         .Animation_Monochrome, .Interface_Hover_Focus,
+         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
         return read_boolean_preference(preferences, id)
     case .Window_Mode:
         return window_mode_value(preferences.window.mode)

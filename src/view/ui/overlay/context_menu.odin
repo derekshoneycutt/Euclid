@@ -22,6 +22,18 @@ import uiterminal "../terminal"
 CONTEXT_MENU_PADDING :: f32(8)
 CONTEXT_MENU_ROW_HEIGHT :: f32(28)
 
+// context_menu_padding preserves geometry for popup state initialized by older callers.
+context_menu_padding :: #force_inline proc(
+    menu: ^viewmodel.Ui_Context_Menu_State) -> f32 {
+    return CONTEXT_MENU_PADDING if menu^.padding <= 0 else menu^.padding
+}
+
+// context_menu_row_height preserves geometry for popup state initialized by older callers.
+context_menu_row_height :: #force_inline proc(
+    menu: ^viewmodel.Ui_Context_Menu_State) -> f32 {
+    return CONTEXT_MENU_ROW_HEIGHT if menu^.row_height <= 0 else menu^.row_height
+}
+
 // context_menu_id qualifies popup nodes by their opening generation.
 context_menu_id :: proc(
     menu: ^viewmodel.Ui_Context_Menu_State,
@@ -81,9 +93,11 @@ context_menu_move :: proc(
 context_menu_item_rect :: proc(
     menu: ^viewmodel.Ui_Context_Menu_State,
     index: int) -> geometry.Rectangle {
-    return {menu^.bounds.x + CONTEXT_MENU_PADDING,
-        menu^.bounds.y + CONTEXT_MENU_PADDING + f32(index)*CONTEXT_MENU_ROW_HEIGHT,
-        menu^.bounds.width - 2*CONTEXT_MENU_PADDING, CONTEXT_MENU_ROW_HEIGHT}
+    padding := context_menu_padding(menu)
+    row_height := context_menu_row_height(menu)
+    return {menu^.bounds.x + padding,
+        menu^.bounds.y + padding + f32(index)*row_height,
+        menu^.bounds.width - 2*padding, row_height}
 }
 
 // context_menu_hit resolves a row without admitting its disabled action.
@@ -111,6 +125,10 @@ context_menu_target_valid :: proc(state: ^core.Euclid_General_State) -> bool {
     if !uipresentation.ui_presentation_is_visible(
         &state^.ui_runtime.presentation) ||
         menu^.window != state^.ui_runtime.layout.window ||
+        menu^.text_size_percent !=
+            state^.ui_runtime.preferences.values.interface.text_size_percent ||
+        menu^.control_size_percent !=
+            state^.ui_runtime.preferences.values.interface.control_size_percent ||
         menu^.viewport != uiwidgets.text_content_panel(
             state^.ui_runtime.layout.ui_regions.text_rect) {
         return false
@@ -177,6 +195,8 @@ context_menu_append_item :: proc(
 context_menu_size :: proc(state: ^core.Euclid_General_State) -> geometry.Vector2 {
     menu := &state^.ui_runtime.context_menu
     width := f32(140)
+    padding := context_menu_padding(menu)
+    row_height := context_menu_row_height(menu)
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     for &item in menu^.items[:menu^.count] {
         measured_width, measured := viewtext.ui_text_measure_monospace(
@@ -184,10 +204,10 @@ context_menu_size :: proc(state: ^core.Euclid_General_State) -> geometry.Vector2
             theme.ui_font_size(
                 state^.ui_runtime.preferences.values.interface.text_size_percent), 0)
         if measured {
-            width = max(width, measured_width + 2*CONTEXT_MENU_PADDING)
+            width = max(width, measured_width + 2*padding)
         }
     }
-    return {width, 2*CONTEXT_MENU_PADDING + f32(menu^.count)*CONTEXT_MENU_ROW_HEIGHT}
+    return {width, 2*padding + f32(menu^.count)*row_height}
 }
 
 // Supply surface commands independently of popup navigation and rendering.
@@ -224,6 +244,9 @@ context_menu_open :: proc(
     capture := menu^.captured_buttons
     swallowed := menu^.swallowed_activation_keys
     caret := menu^.keyboard_anchor
+    scale := theme.ui_control_size_scale(
+        runtime^.preferences.values.interface.control_size_percent)
+    padding := CONTEXT_MENU_PADDING * scale
     menu^ = {
         active = true,
         target = target,
@@ -238,6 +261,12 @@ context_menu_open :: proc(
         keyboard_anchor = caret,
         window = runtime^.layout.window,
         viewport = uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect),
+        text_size_percent =
+            runtime^.preferences.values.interface.text_size_percent,
+        control_size_percent =
+            runtime^.preferences.values.interface.control_size_percent,
+        padding = padding,
+        row_height = CONTEXT_MENU_ROW_HEIGHT * scale,
     }
     if !context_menu_surface_items(state) {
         context_menu_close(menu, runtime^.semantic_focus, false)
@@ -259,13 +288,16 @@ context_menu_open :: proc(
 // context_menu_keyboard_anchor uses current prepared caret geometry or pane fallback.
 context_menu_keyboard_anchor :: proc(
     state: ^core.Euclid_General_State) -> geometry.Vector2 {
+    scale := theme.ui_control_size_scale(
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
+    padding := CONTEXT_MENU_PADDING * scale
     panel := uiwidgets.text_content_panel(state^.ui_runtime.layout.ui_regions.text_rect)
     caret := state^.ui_runtime.context_menu.keyboard_anchor
     if uiterminal.is_terminal_selected(state) && caret.height > 0 {
         return {
-            max(panel.x, min(caret.x, panel.x+panel.width-CONTEXT_MENU_PADDING)),
+            max(panel.x, min(caret.x, panel.x+panel.width-padding)),
             max(panel.y,
-                min(caret.y+caret.height, panel.y+panel.height-CONTEXT_MENU_PADDING)),
+                min(caret.y+caret.height, panel.y+panel.height-padding)),
         }
     }
     selection := state^.ui_runtime.presentation.selection
@@ -278,12 +310,12 @@ context_menu_keyboard_anchor :: proc(
             text_padding = theme.TEXT_PADDING,
         })
         return {
-            max(panel.x, min(rect.x, panel.x+panel.width-CONTEXT_MENU_PADDING)),
+            max(panel.x, min(rect.x, panel.x+panel.width-padding)),
             max(panel.y,
-                min(rect.y+rect.height, panel.y+panel.height-CONTEXT_MENU_PADDING)),
+                min(rect.y+rect.height, panel.y+panel.height-padding)),
         }
     }
-    return {panel.x + CONTEXT_MENU_PADDING, panel.y + CONTEXT_MENU_PADDING}
+    return {panel.x + padding, panel.y + padding}
 }
 
 // context_menu_pointer_target admits content presses without stealing child capture.
@@ -296,7 +328,9 @@ context_menu_pointer_target :: proc(
         return {}
     }
     panel := uiwidgets.text_content_panel(runtime^.layout.ui_regions.text_rect)
-    panel.width -= theme.SCROLLBAR_WIDTH
+    panel.width -= theme.ui_control_size_metric(
+        theme.SCROLLBAR_WIDTH,
+        runtime^.preferences.values.interface.control_size_percent)
     if !geometry.rectangle_contains(panel, uiwidgets.input_frame_mouse_position(frame)) {
         return {}
     }
@@ -595,11 +629,15 @@ draw_encoded_context_menu :: proc(
     _ = native.draw_encoder_rectangle(
         encoder, menu^.bounds, theme.UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, menu^.bounds, 1, theme.UI_BORDER_COLOR)
+        encoder, menu^.bounds,
+        theme.ui_control_size_scale(menu^.control_size_percent),
+        theme.UI_BORDER_COLOR)
     for &item, index in menu^.items[:menu^.count] {
         row := context_menu_item_rect(menu, index)
         if menu^.focused == index {
-            uiwidgets.draw_encoded_focus_ring(encoder, row)
+            uiwidgets.draw_encoded_focus_ring(
+                encoder, row,
+                theme.ui_control_size_scale(menu^.control_size_percent))
         }
         label := string(item.label[:item.label_length])
         context_menu_draw_label(state, encoder, label, row, item.enabled)

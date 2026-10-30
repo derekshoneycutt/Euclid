@@ -94,7 +94,8 @@ draw_encoded_accordion_child :: proc(
 // draw_encoded_accordion_headers encodes all section headers and disclosures.
 draw_encoded_accordion_headers :: proc(
     encoder: ^native.Draw_Encoder, sections: uiaccordion.Accordion_Section_Set,
-    layout: uiaccordion.Accordion_Layout, active: viewmodel.Ui_Accordion_Section) {
+    layout: uiaccordion.Accordion_Layout, active: viewmodel.Ui_Accordion_Section,
+    scale := f32(1)) {
     for index in 0..<sections.count {
         header := layout.headers[index]
         expanded := sections.items[index].section == active
@@ -105,9 +106,9 @@ draw_encoded_accordion_headers :: proc(
         _ = native.draw_encoder_rectangle(
             encoder, geometry.Rectangle(header), fill)
         _ = native.draw_encoder_rectangle_outline(
-            encoder, geometry.Rectangle(header), 1, theme.UI_BORDER_COLOR)
-        icon_size := min(theme.ACCORDION_DISCLOSURE_SIZE, header.height)
-        icon: geometry.Rectangle = {header.x + theme.ACCORDION_HEADER_PADDING,
+            encoder, geometry.Rectangle(header), scale, theme.UI_BORDER_COLOR)
+        icon_size := min(theme.ACCORDION_DISCLOSURE_SIZE * scale, header.height)
+        icon: geometry.Rectangle = {header.x + theme.ACCORDION_HEADER_PADDING * scale,
             header.y + (header.height - icon_size) * 0.5, icon_size, icon_size}
         uiwidgets.draw_encoded_disclosure(encoder, geometry.Rectangle(icon), expanded)
     }
@@ -124,12 +125,16 @@ draw_encoded_accordion_geometry :: proc(
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(panel), worldmodel.BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(panel), 1, theme.UI_BORDER_COLOR)
+        encoder, geometry.Rectangle(panel),
+        theme.ui_control_size_scale(
+            runtime^.preferences.values.interface.control_size_percent),
+        theme.UI_BORDER_COLOR)
     sections := controls^.accordion.sections
     layout := controls^.accordion.layout
     draw_encoded_accordion_content(state, encoder, layout, controls)
     draw_encoded_accordion_headers(
-        encoder, sections, layout, runtime^.layout.active_accordion_section)
+        encoder, sections, layout, runtime^.layout.active_accordion_section,
+        runtime^.layout.accordion_transition.scale)
 }
 
 
@@ -139,12 +144,15 @@ draw_encoded_panel_text :: proc(
     controls: ^Ui_Control_Preparation) {
     sections := controls^.accordion.sections
     layout := controls^.accordion.layout
+    scale := theme.ui_control_size_scale(
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
     for index in 0..<sections.count {
         header := layout.headers[index]
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             sections.items[index].label,
-            header.x + theme.ACCORDION_HEADER_PADDING + theme.ACCORDION_DISCLOSURE_SIZE +
-                theme.ACCORDION_HEADER_PADDING,
+            header.x + scale * (theme.ACCORDION_HEADER_PADDING +
+                theme.ACCORDION_DISCLOSURE_SIZE +
+                theme.ACCORDION_HEADER_PADDING),
             header.y + (header.height - theme.ui_font_size(
                 state^.ui_runtime.preferences.values.interface.text_size_percent)) * 0.5)
         if sections.items[index].error_indicator {
@@ -218,7 +226,9 @@ draw_encoded_focus_outline :: proc(
     }
     node := snapshot^.nodes[index]
     _ = native.draw_encoder_push_scissor(encoder, node.clip_bounds)
-    uiwidgets.draw_encoded_focus_ring(encoder, node.bounds)
+    uiwidgets.draw_encoded_focus_ring(encoder, node.bounds,
+        theme.ui_control_size_scale(
+            runtime^.preferences.values.interface.control_size_percent))
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 

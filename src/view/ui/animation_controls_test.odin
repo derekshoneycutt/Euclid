@@ -360,6 +360,21 @@ animation_controls_shadows_follow_independent_visibility :: proc(t: ^testing.T) 
         animation_controls_shadow_vertex_count(vertices[:encoder.vertex_count]), 20)
 }
 
+// Animation-control chrome scales only with the independent control-size setting.
+@(test)
+animation_controls_scale_geometry_without_scaling_animation_content :: proc(
+    t: ^testing.T) {
+    world: geometry.Rectangle = {0, 0, 640, 480}
+    baseline := uianimation.animation_control_layout_slots(world, true, true, 100)
+    enlarged := uianimation.animation_control_layout_slots(world, true, true, 200)
+    testing.expect_value(t, baseline.refresh.width,
+        theme.ANIMATION_CONTROL_BUTTON_SIZE)
+    testing.expect_value(t, enlarged.refresh.width,
+        theme.ANIMATION_CONTROL_BUTTON_SIZE * 2)
+    testing.expect_value(t, enlarged.panel.width, baseline.panel.width * 2)
+    testing.expect_value(t, enlarged.favorite.width, baseline.favorite.width * 2)
+}
+
 // Rounded hover backing stays inside the existing control hit rectangle.
 @(test)
 animation_controls_hover_geometry_preserves_hit_bounds :: proc(t: ^testing.T) {

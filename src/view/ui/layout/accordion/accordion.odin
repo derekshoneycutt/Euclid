@@ -53,6 +53,13 @@ Accordion_Context :: struct {
     font_resolver: view_font.Font_Resolver,
     transition: ^viewmodel.Ui_Accordion_Transition,
     reduce_motion: bool,
+    text_size_percent: int,
+    control_size_percent: int,
+}
+
+// accordion_control_scale shares the global policy used by other controls.
+accordion_control_scale :: #force_inline proc(ctx: Accordion_Context) -> f32 {
+    return theme.ui_control_size_scale(ctx.control_size_percent)
 }
 
 // accordion_semantic_id returns the stable identity for one section header.
@@ -197,21 +204,24 @@ accordion_section_index :: proc(
 accordion_layout :: proc(
     panel: geometry.Rectangle,
     sections: Accordion_Section_Set,
-    active: viewmodel.Ui_Accordion_Section) -> Accordion_Layout {
+    active: viewmodel.Ui_Accordion_Section,
+    scale := f32(1)) -> Accordion_Layout {
     inner := panel
-    inner.x += theme.ACCORDION_PANEL_INSET
-    inner.y += theme.ACCORDION_PANEL_INSET
-    inner.width = max(f32(0), inner.width - theme.ACCORDION_PANEL_INSET * 2)
-    inner.height = max(f32(0), inner.height - theme.ACCORDION_PANEL_INSET * 2)
+    inset := theme.ACCORDION_PANEL_INSET * scale
+    header_height := theme.ACCORDION_HEADER_HEIGHT * scale
+    inner.x += inset
+    inner.y += inset
+    inner.width = max(f32(0), inner.width - inset * 2)
+    inner.height = max(f32(0), inner.height - inset * 2)
     content_height := max(
-        inner.height - theme.ACCORDION_HEADER_HEIGHT * f32(sections.count), 0)
+        inner.height - header_height * f32(sections.count), 0)
     result: Accordion_Layout = {}
     cursor_y := inner.y
     active_index := accordion_section_index(sections, active)
     for section_index in 0..<sections.count {
         result.headers[section_index] = {
-            inner.x, cursor_y, inner.width, theme.ACCORDION_HEADER_HEIGHT}
-        cursor_y += theme.ACCORDION_HEADER_HEIGHT
+            inner.x, cursor_y, inner.width, header_height}
+        cursor_y += header_height
         if section_index == active_index {
             result.content = {inner.x, cursor_y, inner.width, content_height}
             result.contents[int(active)] = result.content
@@ -234,8 +244,10 @@ accordion_transition_sample :: proc(
         progress = 1
     }
     remaining := 1 - interface_motion_ease(transition^.start_seconds, now_seconds)
-    height := max(f32(0), transition^.panel.height - theme.ACCORDION_PANEL_INSET * 2 -
-        theme.ACCORDION_HEADER_HEIGHT * f32(transition^.section_count))
+    height := max(f32(0), transition^.panel.height -
+        theme.ACCORDION_PANEL_INSET * transition^.scale * 2 -
+        theme.ACCORDION_HEADER_HEIGHT * transition^.scale *
+        f32(transition^.section_count))
     transition^.heights = {}
     transferred: f32
     for start_height, index in transition^.start_heights {
@@ -266,36 +278,40 @@ ui_reduced_motion :: #force_inline proc(
 // accordion_transition_settle assigns the entire available height without animation.
 accordion_transition_settle :: proc(
     transition: ^viewmodel.Ui_Accordion_Transition, panel: geometry.Rectangle,
-    sections: Accordion_Section_Set, selected: viewmodel.Ui_Accordion_Section) {
+    sections: Accordion_Section_Set, selected: viewmodel.Ui_Accordion_Section,
+    scale := f32(1)) {
     transition^ = {
         initialized = true,
         panel = geometry.Rectangle(panel),
         section_count = sections.count,
+        scale = scale,
         selected = selected,
     }
     transition^.heights[int(selected)] = max(f32(0),
-        panel.height - theme.ACCORDION_PANEL_INSET * 2 -
-        theme.ACCORDION_HEADER_HEIGHT * f32(sections.count))
+        panel.height - theme.ACCORDION_PANEL_INSET * scale * 2 -
+        theme.ACCORDION_HEADER_HEIGHT * scale * f32(sections.count))
 }
 
 // accordion_visual_layout separates full-size child layout from bounded reveal clips.
 accordion_visual_layout :: proc(
     panel: geometry.Rectangle, sections: Accordion_Section_Set,
     transition: ^viewmodel.Ui_Accordion_Transition) -> Accordion_Layout {
-    inner: geometry.Rectangle = {panel.x + theme.ACCORDION_PANEL_INSET,
-        panel.y + theme.ACCORDION_PANEL_INSET,
-        max(f32(0), panel.width - theme.ACCORDION_PANEL_INSET * 2),
-        max(f32(0), panel.height - theme.ACCORDION_PANEL_INSET * 2)}
+    inset := theme.ACCORDION_PANEL_INSET * transition^.scale
+    header_height := theme.ACCORDION_HEADER_HEIGHT * transition^.scale
+    inner: geometry.Rectangle = {panel.x + inset,
+        panel.y + inset,
+        max(f32(0), panel.width - inset * 2),
+        max(f32(0), panel.height - inset * 2)}
     content_height := max(f32(0),
-        inner.height - theme.ACCORDION_HEADER_HEIGHT * f32(sections.count))
+        inner.height - header_height * f32(sections.count))
     result: Accordion_Layout
     cursor_y := inner.y
     for index in 0..<sections.count {
         descriptor := sections.items[index]
         section := int(descriptor.section)
         result.headers[index] = {
-            inner.x, cursor_y, inner.width, theme.ACCORDION_HEADER_HEIGHT}
-        cursor_y += theme.ACCORDION_HEADER_HEIGHT
+            inner.x, cursor_y, inner.width, header_height}
+        cursor_y += header_height
         result.contents[section] = {inner.x, cursor_y, inner.width, content_height}
         result.clips[section] = {
             inner.x, cursor_y, inner.width, transition^.heights[section]}
@@ -314,12 +330,14 @@ accordion_transition_layout :: proc(
     ctx: Accordion_Context, sections: Accordion_Section_Set,
     selected: viewmodel.Ui_Accordion_Section) -> Accordion_Layout {
     transition := ctx.transition
+    scale := accordion_control_scale(ctx)
     if transition == nil {
-        return accordion_layout(ctx.panel, sections, selected)
+        return accordion_layout(ctx.panel, sections, selected, scale)
     }
     if !transition^.initialized || transition^.panel != geometry.Rectangle(ctx.panel) ||
-        transition^.section_count != sections.count || ctx.reduce_motion {
-        accordion_transition_settle(transition, ctx.panel, sections, selected)
+        transition^.section_count != sections.count ||
+        transition^.scale != scale || ctx.reduce_motion {
+        accordion_transition_settle(transition, ctx.panel, sections, selected, scale)
     } else {
         accordion_transition_sample(transition, ctx.mouse_input.sample_time_seconds)
         if transition^.selected != selected {

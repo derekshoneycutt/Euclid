@@ -44,6 +44,7 @@ import termhist "../terminal/history"
 import uiwidgets "ui/widgets"
 import uigif "ui/gif"
 import uisettings "ui/settings"
+import viewmagnifier "magnifier"
 
 when !core.SCENARIOS_ENABLED {
     _ :: storage
@@ -72,8 +73,8 @@ Window_Frame_Context :: struct {
 //   Frame-local values consumed only by observational drawing.
 Frame_Draw_Preparation :: struct {
     increased_contrast: bool,
-    input_frame: input.Input_Frame,
     terminal_frame: uiterminal.Terminal_Prepared_Frame,
+    magnifier: viewmodel.Ui_Magnifier_Presentation,
     controls: ui.Ui_Control_Preparation,
     splitters: uisplitter.Splitter_Preparation,
     layout_interaction: ui.Ui_Layout_Interaction_Preparation,
@@ -98,6 +99,7 @@ Sdl_Text_Input_Target :: struct {
     kind: input.Input_Text_Target_Kind,
     id: int,
     area: geometry.Rectangle,
+    clip_bounds: geometry.Rectangle,
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -356,6 +358,35 @@ prepare_sdl_frame :: proc(
         state^.ui_runtime.platform_increased_contrast)
 }
 
+// Prepare magnifier geometry from the current pointer and admitted window metrics.
+prepare_sdl_frame_magnifier :: proc(
+    state: ^core.Euclid_General_State,
+    ctx: Window_Frame_Context,
+    update: Sdl_Frame_Update,
+    terminal_frame: uiterminal.Terminal_Prepared_Frame) ->
+        viewmodel.Ui_Magnifier_Presentation {
+    preferences := state^.ui_runtime.preferences.values.interface
+    target := sdl_frame_resolve_text_input_target(
+        state, update.input_frame.window_focused, terminal_frame)
+    return viewmagnifier.magnifier_prepare(&state^.ui_runtime.magnifier, {
+        enabled = preferences.show_magnifier,
+        input_lock = preferences.magnifier_input_lock,
+        caret_anchor = target.area,
+        caret_clip = target.clip_bounds,
+        caret_valid = target.kind != .None,
+        window_focused = update.input_frame.window_focused,
+        reduce_motion = preferences.reduce_motion ||
+            state^.ui_runtime.platform_reduce_motion,
+        pointer = {
+            update.input_frame.mouse_position.x,
+            update.input_frame.mouse_position.y,
+        },
+        width = f32(ctx.platform^.metrics.logical_width),
+        height = f32(ctx.platform^.metrics.logical_height),
+        delta_seconds = update.frame_dt,
+    })
+}
+
 // prepare_sdl_frame_owners updates UI, services, simulation, and accessibility in frame order.
 prepare_sdl_frame_owners :: proc(
     state: ^core.Euclid_General_State,
@@ -385,14 +416,23 @@ prepare_sdl_frame_owners :: proc(
     prepared^.layout_interaction = prepare_sdl_layout_and_effects(
         state, ctx, update, terminal_frame)
     execute_context_menu_command(state, ctx.input_runtime)
+    finish_sdl_frame_observations(
+        state, ctx, update.routed_frame.sample_time_seconds)
+    prepared^.terminal_frame = terminal_frame
+    prepared^.splitters = update.ui_geometry.splitters
+    prepared^.magnifier = prepare_sdl_frame_magnifier(
+        state, ctx, update, terminal_frame)
+}
+
+// Publish current Terminal/accessibility observations before scenario waits.
+finish_sdl_frame_observations :: proc(
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
+    sample_time_seconds: f64) {
     terminalview.terminal_highlight_observe_live(
-        &state^.terminal, update.routed_frame.sample_time_seconds)
+        &state^.terminal, sample_time_seconds)
     uiaccessibility.publish_accessibility_controls(
         state^.ui_runtime.semantic_focus, ctx.platform)
     service_scenario_before_present(ctx)
-    prepared^.input_frame = update.input_frame
-    prepared^.terminal_frame = terminal_frame
-    prepared^.splitters = update.ui_geometry.splitters
 }
 
 // Give both SQLite borrowers a fair admission turn before Terminal input is handled.
@@ -476,42 +516,41 @@ sdl_frame_resolve_text_input_target :: proc(
             kind = .Terminal,
             id = target.id,
             area = terminal_frame.editable_geometry.caret,
+            clip_bounds = terminal_frame.editable_geometry.control.clip_bounds,
         }
     }
     if target.kind == .Input_Box {
-        area, eligible := sdl_frame_input_box_caret_area(state, target.id)
-        if eligible {
-            return {
-                kind = .Input_Box,
-                id = target.id,
-                area = area,
-            }
-        }
+        return sdl_frame_input_box_caret_target(state, target.id)
     }
     return {}
 }
 
-// sdl_frame_input_box_caret_area finds the focused mutable semantic input node.
-sdl_frame_input_box_caret_area :: proc(
+// Resolve the focused mutable semantic input node and its prepared caret clip.
+sdl_frame_input_box_caret_target :: proc(
     state: ^core.Euclid_General_State, target_id: int) ->
-        (geometry.Rectangle, bool) {
+        Sdl_Text_Input_Target {
     snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
     if snapshot == nil {
-        return {}, false
+        return {}
     }
     focus := state^.ui_runtime.input.interaction_frame.effective_focus
     if focus.kind != .Input_Box || focus.id != target_id {
-        return {}, false
+        return {}
     }
     semantic_id := state^.ui_runtime.semantic_focus^.logical_focus
     for node in snapshot^.nodes[:snapshot^.node_count] {
         if node.id == semantic_id && node.role == .Input &&
             .Visible in node.states && .Enabled in node.states &&
             .Read_Only not_in node.states {
-            return node.text_input_area, true
+            return {
+                kind = .Input_Box,
+                id = target_id,
+                area = node.text_input_area,
+                clip_bounds = node.clip_bounds,
+            }
         }
     }
-    return {}, false
+    return {}
 }
 
 // prepare_sdl_layout_and_effects resolves UI layout, then advances presentation
@@ -649,9 +688,19 @@ encode_sdl_geometry_frame :: proc(
             ui_dust = ctx.presentation^.dust.live_count,
         })
     encode_sdl_ui_geometry(state, ctx, &encoder, prepared)
+    magnifier: native.Sdl_Magnifier_Presentation = {
+        visible = prepared^.magnifier.visible,
+        source_x = prepared^.magnifier.source.x,
+        source_y = prepared^.magnifier.source.y,
+        lens_x = prepared^.magnifier.lens_rect.x,
+        lens_y = prepared^.magnifier.lens_rect.y,
+        lens_width = prepared^.magnifier.lens_rect.width,
+        lens_height = prepared^.magnifier.lens_rect.height,
+        zoom = viewmagnifier.MAGNIFIER_ZOOM,
+    }
     result := native.sdl_platform_present_draw(
         ctx.platform, ctx.draw_runtime, &encoder,
-        native.to_sdl_color(worldmodel.BACKGROUND_COLOR))
+        native.to_sdl_color(worldmodel.BACKGROUND_COLOR), magnifier)
     font.cache_frame_end(&state^.font_cache)
     return result
 }

@@ -32,6 +32,12 @@ sdl_draw_shader_paths :: proc() -> native.Sdl_Draw_Shader_Paths {
         textured_fragment = files.packaged_asset_path(
             "shaders/draw2d_textured.frag" + native.SDL_GPU_SHADER_SUFFIX,
             context.temp_allocator),
+        magnifier_vertex = files.packaged_asset_path(
+            "shaders/magnifier.vert" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
+        magnifier_fragment = files.packaged_asset_path(
+            "shaders/magnifier.frag" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
     }
 }
 

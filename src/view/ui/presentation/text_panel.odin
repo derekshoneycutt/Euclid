@@ -58,7 +58,8 @@ prepare_presentation_visual :: proc(
     step := dynlayout.presentation_scroll_step_or_fallback(
         &state^.dynview, row_height)
     scroll := uiwidgets.scroll_container_visual(
-        text_panel, content_height, state^.ui_runtime.presentation.text_scroll_y, step)
+        text_panel, content_height, state^.ui_runtime.presentation.text_scroll_y, step,
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
     return {
         active = true,
         text_panel = text_panel,
@@ -232,6 +233,8 @@ prepare_presentation_scroll :: proc(
         mouse_input = mouse_input,
         interaction_space_rect = text_panel,
         wheel_step = scroll_step * theme.WHEEL_SCROLL_MULTIPLIER,
+        control_size_percent =
+            ui_runtime^.preferences.values.interface.control_size_percent,
         press_owner = &ui_runtime^.input.press_owner,
         state_in = {ui_runtime^.presentation.scroll_dragging,
             ui_runtime^.presentation.scroll_drag_off},

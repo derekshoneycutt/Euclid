@@ -31,6 +31,7 @@ Ui_Collection_Membership_State :: struct {
     row_height: f32,
     header_height: f32,
     text_size_percent: int,
+    control_size_percent: int,
     dragging: bool,
     drag_offset: f32,
     press_owner: Ui_Press_Owner_State,

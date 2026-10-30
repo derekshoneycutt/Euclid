@@ -64,3 +64,18 @@ scrollbar_draw_omits_non_overflowing_content :: proc(t: ^testing.T) {
     testing.expect_value(t, encoder.index_count, 0)
     testing.expect_value(t, encoder.command_count, 0)
 }
+
+// Scrollbar targets use control size without inheriting interface text size.
+@(test)
+scrollbar_visual_scales_width_and_thumb_target :: proc(t: ^testing.T) {
+    baseline := scroll_container_visual({10, 20, 100, 100}, 1000, 0, 20, 100)
+    enlarged := scroll_container_visual({10, 20, 100, 100}, 1000, 0, 20, 200)
+    testing.expect_value(t, baseline.scrollbar.track_rect.width,
+        theme.SCROLLBAR_WIDTH)
+    testing.expect_value(t, enlarged.scrollbar.track_rect.width,
+        theme.SCROLLBAR_WIDTH * 2)
+    testing.expect_value(t, baseline.scrollbar.thumb_height,
+        theme.SCROLLBAR_THUMB_MIN_HEIGHT)
+    testing.expect_value(t, enlarged.scrollbar.thumb_height,
+        theme.SCROLLBAR_THUMB_MIN_HEIGHT * 2)
+}

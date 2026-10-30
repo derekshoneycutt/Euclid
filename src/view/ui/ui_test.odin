@@ -371,6 +371,40 @@ gif_controls_fit_supported_text_sizes :: proc(t: ^testing.T) {
         testing.expect(t, field.y >= rows.status_y +
             uigif.gif_path_input_top_offset(text_percent))
     }
+
+}
+
+// Verify control scaling preserves text-sized GIF layout while enlarging targets.
+@(test)
+gif_control_size_preserves_text_layout_baseline :: proc(t: ^testing.T) {
+    text_percent := 175
+    text_scale := theme.ui_text_scale_factor(text_percent)
+    text_segment := max(
+        theme.SETTINGS_GIF_SLIDER_ROW_GAP * text_scale,
+        uiwidgets.slider_track_top_offset(text_percent) +
+            theme.SETTINGS_TRACK_HEIGHT +
+            theme.SETTINGS_TRACK_HIT_PAD_Y * 2 +
+            theme.ui_scaled_metric(4, text_percent))
+    testing.expect_value(t,
+        uigif.gif_slider_row_segment_size(text_percent, 100),
+        text_segment)
+
+    control_scale := theme.ui_control_size_scale(200)
+    control_segment := max(
+        theme.SETTINGS_GIF_SLIDER_ROW_GAP * control_scale,
+        uiwidgets.slider_track_top_offset(text_percent, 200) +
+            (theme.SETTINGS_TRACK_HEIGHT +
+                theme.SETTINGS_TRACK_HIT_PAD_Y * 2) * control_scale +
+            4 * control_scale)
+    testing.expect_value(t,
+        uigif.gif_slider_row_segment_size(text_percent, 200),
+        max(text_segment, control_segment))
+
+    panel: geometry.Rectangle = {10, 20, 240, 480}
+    field := uigif.gif_path_input_rect_for_panel(panel, text_percent, 100)
+    testing.expect_value(t, field.x,
+        panel.x + theme.SETTINGS_PANEL_INSET +
+        theme.ui_scaled_metric(uigif.GIF_PATH_LABEL_WIDTH, text_percent))
 }
 
 // Verify optional settings labels expose unavailable controls without audio changes.
@@ -1096,16 +1130,21 @@ button_action_coalesces_duplicate_sources :: proc(t: ^testing.T) {
 splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
     window: viewmodel.Ui_Window_Metrics = {
         viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT}
-    vertical := uisplitter.splitter_geometry(
-        .Vertical, .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, window)
-    horizontal := uisplitter.splitter_geometry(
-        .Horizontal, .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, window)
+    geometry_context := uisplitter.splitter_geometry_context(
+        .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, window)
+    vertical := uisplitter.splitter_geometry(.Vertical, geometry_context)
+    horizontal := uisplitter.splitter_geometry(.Horizontal, geometry_context)
 
     testing.expect_value(t, vertical.hit_rect.width, f32(8))
     testing.expect_value(t, vertical.visible_rect.width, f32(3))
     testing.expect_value(t, horizontal.hit_rect.height, f32(8))
     testing.expect_value(t, horizontal.visible_rect.height, f32(3))
     testing.expect_value(t, horizontal.hit_rect.width, f32(worldmodel.VIEW_WIDTH))
+    scaled_context := uisplitter.splitter_geometry_context(
+        .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, window, 200)
+    scaled := uisplitter.splitter_geometry(.Vertical, scaled_context)
+    testing.expect_value(t, scaled.hit_rect.width, f32(16))
+    testing.expect_value(t, scaled.visible_rect.width, f32(6))
 
     runtime: viewmodel.Euclid_Ui_Runtime_State = {
         layout = {
@@ -1115,13 +1154,29 @@ splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
         },
     }
     prepared := uisplitter.splitter_preparation(
-        &runtime.layout, false, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, {})
+        {
+            layout = &runtime.layout,
+            values = {worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT, {}},
+            control_size_percent = theme.CONTROL_SIZE_DEFAULT_PERCENT,
+        })
     testing.expect_value(t, prepared.vertical.control_geometry.bounds,
         geometry.Rectangle(vertical.hit_rect))
     testing.expect_value(t, prepared.vertical.control_geometry.clip_bounds,
         geometry.Rectangle{0, 0, viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT})
     testing.expect_value(t, prepared.vertical.visible_rect,
         vertical.visible_rect)
+}
+
+// Accordion geometry stays compatible at text-only scale and follows control size.
+@(test)
+accordion_control_geometry_ignores_text_scale :: proc(t: ^testing.T) {
+    ctx: uiaccordion.Accordion_Context = {
+        text_size_percent = 175,
+        control_size_percent = 100,
+    }
+    testing.expect_value(t, uiaccordion.accordion_control_scale(ctx), 1)
+    ctx.control_size_percent = 200
+    testing.expect_value(t, uiaccordion.accordion_control_scale(ctx), 2)
 }
 
 //   Verify a changed split width invalidates Dynview panel layout for reflow.
@@ -1155,22 +1210,25 @@ split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
 splitter_intersection_selects_nearest_axis :: proc(t: ^testing.T) {
     axis, hovered := uisplitter.splitter_hovered_axis(
         {worldmodel.VIEW_WIDTH - 1, worldmodel.VIEW_HEIGHT - 3},
-        .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT,
-        {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT})
+        uisplitter.splitter_geometry_context(
+            .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT,
+            {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT}))
     testing.expect(t, hovered)
     testing.expect_value(t, axis, uisplitter.Splitter_Axis.Vertical)
 
     axis, hovered = uisplitter.splitter_hovered_axis(
         {worldmodel.VIEW_WIDTH - 3, worldmodel.VIEW_HEIGHT - 1},
-        .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT,
-        {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT})
+        uisplitter.splitter_geometry_context(
+            .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT,
+            {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT}))
     testing.expect(t, hovered)
     testing.expect_value(t, axis, uisplitter.Splitter_Axis.Horizontal)
 
     axis, hovered = uisplitter.splitter_hovered_axis(
         {worldmodel.VIEW_WIDTH - 2, worldmodel.VIEW_HEIGHT - 2},
-        .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT,
-        {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT})
+        uisplitter.splitter_geometry_context(
+            .Landscape, worldmodel.VIEW_WIDTH, worldmodel.VIEW_HEIGHT,
+            {viewmodel.WINDOW_WIDTH, viewmodel.WINDOW_HEIGHT}))
     testing.expect(t, hovered)
     testing.expect_value(t, axis, uisplitter.Splitter_Axis.Vertical)
 }
@@ -1179,15 +1237,17 @@ splitter_intersection_selects_nearest_axis :: proc(t: ^testing.T) {
 @(test)
 portrait_splitter_is_horizontal_and_full_width :: proc(t: ^testing.T) {
     window: viewmodel.Ui_Window_Metrics = {640, 720}
-    horizontal := uisplitter.splitter_geometry(.Horizontal, .Portrait, 640, 360, window)
+    horizontal_context := uisplitter.splitter_geometry_context(
+        .Portrait, 640, 360, window)
+    horizontal := uisplitter.splitter_geometry(.Horizontal, horizontal_context)
     testing.expect_value(t, horizontal.hit_rect.width, f32(640))
 
     axis, hovered := uisplitter.splitter_hovered_axis(
-        {639, 360}, .Portrait, 640, 360, window)
+        {639, 360}, horizontal_context)
     testing.expect(t, hovered)
     testing.expect_value(t, axis, uisplitter.Splitter_Axis.Horizontal)
     axis, hovered = uisplitter.splitter_hovered_axis(
-        {640, 100}, .Portrait, 640, 360, window)
+        {640, 100}, horizontal_context)
     testing.expect(t, !hovered)
 }
 

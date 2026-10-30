@@ -66,7 +66,8 @@ draw_encoded_prepared_tree :: proc(
         encoder = encoder,
         panel = panel,
         row_height = theme.ui_tree_row_height(
-            state^.ui_runtime.preferences.values.interface.text_size_percent),
+            state^.ui_runtime.preferences.values.interface.text_size_percent,
+            state^.ui_runtime.preferences.values.interface.control_size_percent),
         pressed_node = prepared^.pressed_node,
         entry_name_input = &prepared^.entry_name_input,
         entry_name_params = &prepared^.entry_name_params,
@@ -183,8 +184,8 @@ draw_encoded_prepared_tree_label :: proc(
                 theme.ui_scaled_metric(theme.TREE_INDENT, text_percent) +
                 theme.ui_scaled_metric(theme.TREE_ROW_LABEL_OFFSET_X,
                     text_percent),
-             bounds.y + theme.ui_scaled_metric(
-                theme.TREE_ROW_LABEL_OFFSET_Y, text_percent)}, tint)
+             bounds.y + max(f32(0),
+                (bounds.height - theme.ui_font_size(text_percent)) * 0.5)}, tint)
     }
     _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }
@@ -201,8 +202,11 @@ tree_update_scroll :: proc(
         mouse_input = params.mouse_input,
         interaction_space_rect = params.list_panel,
         wheel_step = theme.ui_tree_row_height(
-            params.ui_runtime^.preferences.values.interface.text_size_percent) *
+            params.ui_runtime^.preferences.values.interface.text_size_percent,
+            params.ui_runtime^.preferences.values.interface.control_size_percent) *
             theme.WHEEL_SCROLL_MULTIPLIER,
+        control_size_percent =
+            params.ui_runtime^.preferences.values.interface.control_size_percent,
         press_owner = &params.ui_runtime^.input.press_owner,
         state_in = {
             params.ui_runtime^.library.tree.scroll_dragging,
@@ -219,8 +223,10 @@ tree_refresh_preparation :: proc(
     visual := uiwidgets.scroll_container_visual(params.list_panel,
         prepared^.layout.content_height, params.scroll_y^,
         theme.ui_tree_row_height(
-            params.ui_runtime^.preferences.values.interface.text_size_percent) *
-        theme.WHEEL_SCROLL_MULTIPLIER)
+            params.ui_runtime^.preferences.values.interface.text_size_percent,
+            params.ui_runtime^.preferences.values.interface.control_size_percent) *
+        theme.WHEEL_SCROLL_MULTIPLIER,
+        params.ui_runtime^.preferences.values.interface.control_size_percent)
     params.scroll_y^ = visual.scroll_y_out
     prepared^.scroll.maximum = visual.maximum
     prepared^.scroll.scroll_y_out = visual.scroll_y_out
@@ -239,7 +245,8 @@ tree_update_prepared_rows :: proc(
         interaction = &params.ui_runtime^.input,
         panel = prepared^.scroll.view_rect,
         row_height = theme.ui_tree_row_height(
-            params.ui_runtime^.preferences.values.interface.text_size_percent),
+            params.ui_runtime^.preferences.values.interface.text_size_percent,
+            params.ui_runtime^.preferences.values.interface.control_size_percent),
         scroll_y = prepared^.scroll.scroll_y_out,
         allow_clicks = !prepared^.scroll.pointer_reserved,
         mouse_input = params.mouse_input,
@@ -577,6 +584,8 @@ prepare_tree_visual :: proc(
     prepared^.scroll = uiwidgets.scroll_container_visual(params.list_panel,
         prepared^.layout.content_height, params.scroll_y^,
         theme.ui_tree_row_height(
-            params.ui_runtime^.preferences.values.interface.text_size_percent) *
-        theme.WHEEL_SCROLL_MULTIPLIER)
+            params.ui_runtime^.preferences.values.interface.text_size_percent,
+            params.ui_runtime^.preferences.values.interface.control_size_percent) *
+        theme.WHEEL_SCROLL_MULTIPLIER,
+        params.ui_runtime^.preferences.values.interface.control_size_percent)
 }

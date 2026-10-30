@@ -66,6 +66,10 @@ library_entry_name_input_params :: proc(
         pointer_routed = target.focus.kind == .Input_Box &&
             target.id == TREE_ENTRY_NAME_INPUT_ID,
         padding = .Compact,
+        control_scale = theme.ui_effective_control_scale(
+            text_percent,
+            params.general_state^.ui_runtime.preferences.values.interface.
+                control_size_percent),
         column_advance = theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, text_percent),
         font_size = theme.ui_font_size(text_percent),
         font = params.font,

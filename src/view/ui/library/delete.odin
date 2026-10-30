@@ -20,10 +20,12 @@ TREE_DELETE_SHAKE_SECONDS :: f64(0.3)
 // Place deletion on its own full-width row below routine ordering controls.
 tree_collection_delete_layout :: proc(
     layout: ^viewmodel.Ui_Tree_Actions_Layout,
-    inner: geometry.Rectangle, item_index: int) {
+    inner: geometry.Rectangle, item_index: int,
+    scale := f32(1)) {
     layout.delete_rect = {inner.x,
-        layout.move_down_rect.y + TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP,
-        inner.width, TREE_ACTION_BUTTON_HEIGHT}
+        layout.move_down_rect.y +
+            (TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP) * scale,
+        inner.width, TREE_ACTION_BUTTON_HEIGHT * scale}
     layout.delete_id = tree_actions_control_id(item_index, 3)
 }
 

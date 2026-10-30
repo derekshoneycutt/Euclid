@@ -192,14 +192,16 @@ tree_actions_reconcile :: proc(params: Tree_List_Params) {
 }
 
 // tree_actions_full_height chooses one bounded button arrangement for this pane width.
-tree_actions_full_height :: proc(panel_width: f32, depth: int) -> f32 {
-    label_x := f32(depth) * theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X
-    available := max(panel_width - label_x - TREE_ACTION_DRAWER_PADDING, 0)
-    if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH {
-        return TREE_ACTION_DRAWER_MIN_HEIGHT
+tree_actions_full_height :: proc(
+    panel_width: f32, depth: int, scale := f32(1)) -> f32 {
+    label_x := (f32(depth) * theme.TREE_INDENT +
+        theme.TREE_ROW_LABEL_OFFSET_X) * scale
+    available := max(panel_width - label_x - TREE_ACTION_DRAWER_PADDING * scale, 0)
+    if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH * scale {
+        return TREE_ACTION_DRAWER_MIN_HEIGHT * scale
     }
-    return TREE_ACTION_BUTTON_HEIGHT * 2 + TREE_ACTION_BUTTON_GAP +
-        TREE_ACTION_DRAWER_PADDING * 2
+    return (TREE_ACTION_BUTTON_HEIGHT * 2 + TREE_ACTION_BUTTON_GAP +
+        TREE_ACTION_DRAWER_PADDING * 2) * scale
 }
 
 // tree_actions_current_height returns sampled drawer extent for one owner identity.
@@ -219,12 +221,13 @@ tree_actions_sample :: proc(
     if motion^.entry_id != item^.key {
         return 0
     }
-    target := TREE_ACTION_DRAWER_MIN_HEIGHT
+    scale := ctx.row_height / f32(theme.TREE_ROW_HEIGHT)
+    target := TREE_ACTION_DRAWER_MIN_HEIGHT * scale
     if item^.kind == .Placement || item^.kind == .Collection {
         target = tree_actions_full_height(
-            ctx.panel.width, tree_item_depth(ctx.projection, item))
+            ctx.panel.width, tree_item_depth(ctx.projection, item), scale)
         if item^.kind == .Collection {
-            target += TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP
+            target += (TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP) * scale
         }
     }
     if !motion^.open {
@@ -354,23 +357,26 @@ tree_actions_layout_buttons :: proc(
     projection: ^viewmodel.Ui_Tree_Projection,
     item: ^viewmodel.Ui_Tree_Item,
     layout: ^viewmodel.Ui_Tree_Actions_Layout) {
-    available := max(layout^.drawer_rect.width - layout^.label_clip.x -
-        TREE_ACTION_DRAWER_PADDING, 0)
+    scale := layout^.toggle_rect.width / TREE_ACTION_TOGGLE_WIDTH
+    padding := TREE_ACTION_DRAWER_PADDING * scale
+    button_gap := TREE_ACTION_BUTTON_GAP * scale
+    button_height := TREE_ACTION_BUTTON_HEIGHT * scale
+    available := max(layout^.drawer_rect.width - layout^.label_clip.x - padding, 0)
     inner: geometry.Rectangle = {
-        layout^.label_clip.x + TREE_ACTION_DRAWER_PADDING,
-        layout^.drawer_rect.y + TREE_ACTION_DRAWER_PADDING,
-        max(available - TREE_ACTION_DRAWER_PADDING * 2, 0),
-        TREE_ACTION_BUTTON_HEIGHT}
-    if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH {
-        width := (inner.width - TREE_ACTION_BUTTON_GAP) * 0.5
+        layout^.label_clip.x + padding,
+        layout^.drawer_rect.y + padding,
+        max(available - padding * 2, 0),
+        button_height}
+    if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH * scale {
+        width := (inner.width - button_gap) * 0.5
         layout^.move_up_rect = {inner.x, inner.y, width, inner.height}
-        layout^.move_down_rect = {inner.x + width + TREE_ACTION_BUTTON_GAP,
+        layout^.move_down_rect = {inner.x + width + button_gap,
             inner.y, width, inner.height}
     } else {
         layout^.move_up_rect = inner
         layout^.move_down_rect = {inner.x,
-            inner.y + TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP,
-            inner.width, TREE_ACTION_BUTTON_HEIGHT}
+            inner.y + button_height + button_gap,
+            inner.width, button_height}
     }
     layout^.move_up_enabled = tree_actions_neighbor_exists(
         set, item^.key, .Up)
@@ -383,7 +389,7 @@ tree_actions_layout_buttons :: proc(
     if item^.kind == .Collection {
         _, failure := collections.collection_edit_index(set, item.key)
         layout.delete_enabled = failure == .None
-        tree_collection_delete_layout(layout, inner, item_index)
+        tree_collection_delete_layout(layout, inner, item_index, scale)
     }
 }
 

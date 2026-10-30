@@ -147,6 +147,82 @@ This visual preference does not expand the native accessibility projection. Dynv
 document content and Terminal content remain excluded as described below; larger
 rendered text is not a substitute for screen-reader semantics.
 
+### Interface/Control Size
+
+Settings > Accessibility offers **Control Size**, a persisted setting at
+`interface.control_size_percent`. It defaults to 100% and provides five bounded stops
+from 100% through 200% in 25-point increments. This preference is independent of text
+size: it enlarges control geometry and pointer targets without changing fonts,
+authored animation geometry, or the SDL display scale.
+
+The scale applies to shared control surfaces such as sliders, splitters, scrollbars,
+Library rows and actions, animation controls, accordion headers, and transient menus.
+Existing text-driven minimums remain when needed to fit selected fonts; fixed target
+geometry follows Control Size alone. At 100%, the previous geometry remains intact
+for every text-size setting. Pointer hit bounds, visible geometry, layout reservations,
+focus indication, and published native accessibility bounds are prepared from the
+same owner geometry. Panels retain their normal scrolling when larger controls no
+longer fit the viewport.
+
+Control Size improves motor access, but does not make authored animation content
+larger and is not a substitute for text size or screen-reader support.
+
+### Opt-In Hover Focus
+
+Settings > Accessibility offers **Focus follows mouse hover**, persisted as
+`interface.hover_focus` and off by default. When enabled, pointer movement may move
+logical focus to the topmost visible, enabled, focusable control under the pointer.
+The ordinary semantic bounds and clips determine eligibility, including controls in
+the Library tree and its attached actions.
+
+Hover focus changes focus only. It never activates a control, toggles a checkbox,
+selects a tree item, or moves an input caret or selection. It applies on pointer
+movement rather than reasserting focus every stationary frame, so keyboard traversal
+can move focus while the pointer remains still. A pointer capture, unfocused window,
+context menu, or membership popup keeps its existing owner routing and suppresses this
+general rule. Disabled, hidden, and clipped controls cannot become focused. Keyboard-
+origin focus indication remains unchanged.
+
+The checkbox's localized help is available through the normal pointer and keyboard
+tooltip path. This preference supplements ordinary pointer use; it does not broaden
+the native accessibility projection or imply screen-reader completeness or WCAG
+conformance.
+
+### Opt-In Pointer and Caret Magnifier
+
+Settings > Accessibility offers **Show magnifier**, persisted as
+`interface.show_magnifier` and off by default. When enabled, a 240-by-160 logical-pixel
+lens enlarges the completed scene by 2.5×. By default, it follows the pointer. The
+separate **Lock magnifier to text input** option, persisted as
+`interface.magnifier_input_lock`, switches the same lens to caret mode and is available
+only while the magnifier is enabled. In either mode, the lens chooses an above/below
+placement, clamps to the window edges, and uses the existing brief position easing
+unless reduced motion is requested. A high-contrast frame separates the sampled region
+and magnified view from the ordinary scene.
+
+The magnifier is output-only. It does not change pointer hit targets, native semantic
+bounds, keyboard focus, text carets, or the operating-system cursor. In pointer mode,
+it appears only while the application window is focused and the pointer is inside it.
+In caret mode, it appears only while an eligible mutable input
+owns focus and its prepared caret intersects the visible clip. This includes app-owned
+text fields and the Terminal's current editable draft or history query. With no
+eligible, visible caret, the lens hides; caret mode never falls back to pointer mode.
+The source indicator follows the visible caret geometry, not the mouse.
+
+The renderer samples the already-resolved scene in a final GPU composition pass; it
+does not read pixels back to the CPU or render the world a second time. Screen and GIF
+capture continue to use their existing scene source, without the magnifier overlay. The
+feature assists visual inspection of animation framing and text, but does not expand the
+native accessibility projection or constitute a screen-reader or WCAG conformance
+claim.
+
+The renderer is integrated with the supported SDL GPU backends, but platform support
+must not be inferred from a shader build or a run on another backend. Linux/Vulkan has
+had a live startup and ordinary-presentation run; a magnifier-enabled visual check and
+native macOS/Metal and Windows/D3D12 runtime validation remain outstanding. The
+single-pass design avoids CPU readback, duplicate scene rendering, and per-frame image
+allocation, but no comparative GPU frame-time measurement is claimed here.
+
 ### Explicitly Excluded: Dynview
 
 Dynview document roles are intentionally filtered from the current projection. A named,

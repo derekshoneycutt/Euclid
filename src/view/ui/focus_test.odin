@@ -1,6 +1,7 @@
 package ui
 
 import input "../input"
+import geometry "../../core/geometry"
 import uuid "core:encoding/uuid"
 import testing "core:testing"
 import storage "../../core/storage"
@@ -102,6 +103,289 @@ semantic_test_node :: proc(
         region = region,
         traversal_order = order,
     }
+}
+
+// Build one test focus target with identical visible, hit, and clip bounds.
+semantic_hover_test_node :: proc(
+    id: viewmodel.Ui_Node_Id, bounds: geometry.Rectangle,
+    role: viewmodel.Ui_Node_Role = .Button,
+    region: viewmodel.Ui_Focus_Region = .Accordion_Content,
+    order: u32 = 0) -> viewmodel.Ui_Semantic_Node {
+    node := semantic_test_node(id, {}, region, order)
+    node.role = role
+    node.bounds = bounds
+    node.clip_bounds = bounds
+    return node
+}
+
+// Produce one eligible hover sample for synthetic semantic tests.
+semantic_test_hover_input :: proc(
+    target: viewmodel.Ui_Interaction_Target,
+    position: geometry.Vector2) -> uisemantics.Semantic_Hover_Focus_Input {
+    return {
+        enabled = true,
+        window_focused = true,
+        pointer_moved = true,
+        pointer_target = target,
+        position = position,
+    }
+}
+
+// Register and publish semantic nodes for one synthetic hover sample.
+semantic_publish_hover_test_nodes :: proc(
+    t: ^testing.T,
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    nodes: []viewmodel.Ui_Semantic_Node,
+    labels: []string,
+    hover: uisemantics.Semantic_Hover_Focus_Input) {
+    testing.expect(t, uisemantics.semantic_begin(state))
+    for node, index in nodes {
+        testing.expect_value(t, uisemantics.semantic_register_node(state, {
+            node = node,
+            label = labels[index],
+        }), viewmodel.Ui_Semantic_Status.Ok)
+    }
+    testing.expect_value(t, uisemantics.semantic_publish(state, hover),
+        viewmodel.Ui_Semantic_Status.Ok)
+}
+
+// Pointer focus is opt-in, focus-only, and does not change an input's caret.
+@(test)
+semantic_hover_focus_is_opt_in_and_preserves_input_caret :: proc(t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
+    input_id := semantic_test_id(.Library_Control, 10)
+    input_node := semantic_hover_test_node(
+        input_id, {10, 10, 50, 20}, .Input, .Accordion_Content, 1)
+    input_node.text_cursor_byte = 7
+    input_node.text_anchor_byte = 3
+    input_node.text_present = true
+    button_node := semantic_hover_test_node(
+        semantic_test_id(.Settings_Control, 11),
+        {70, 10, 50, 20}, .Button, .Accordion_Content, 2)
+    nodes: [2]viewmodel.Ui_Semantic_Node = {
+        input_node,
+        button_node,
+    }
+    labels: [2]string = {
+        "Search",
+        "Other control",
+    }
+    target := viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
+    point: geometry.Vector2 = {20, 15}
+    hover := semantic_test_hover_input(target, point)
+    hover.enabled = false
+
+    semantic_publish_hover_test_nodes(t, state, nodes[:], labels[:], hover)
+    testing.expect_value(t, state^.logical_focus, viewmodel.Ui_Node_Id{})
+
+    hover.enabled = true
+    semantic_publish_hover_test_nodes(t, state, nodes[:], labels[:], hover)
+    testing.expect_value(t, state^.logical_focus, input_id)
+    testing.expect_value(t, state^.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
+    snapshot := uisemantics.semantic_snapshot(state)
+    testing.expect_value(t, snapshot^.nodes[0].text_cursor_byte, u32(7))
+    testing.expect_value(t, snapshot^.nodes[0].text_anchor_byte, u32(3))
+    testing.expect_value(t, state^.command_count, 0)
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        semantic_focus = state,
+    }
+    ui_apply_semantic_focus(&runtime, {
+        window_focused = true,
+    }, false)
+    testing.expect_value(t, runtime.input.interaction_frame.logical_focus.kind,
+        viewmodel.Ui_Focus_Kind.Input_Box)
+    testing.expect_value(t, runtime.input.interaction_frame.logical_focus.id, 10)
+}
+
+// Stationary pointer frames preserve keyboard traversal until the pointer moves.
+@(test)
+semantic_hover_focus_waits_for_pointer_motion_after_keyboard_focus :: proc(
+    t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
+    input_id := semantic_test_id(.Library_Control, 10)
+    button_id := semantic_test_id(.Settings_Control, 11)
+    input_node := semantic_hover_test_node(
+        input_id, {10, 10, 50, 20}, .Input, .Accordion_Content, 1)
+    button_node := semantic_hover_test_node(
+        button_id, {70, 10, 50, 20}, .Button, .Accordion_Content, 2)
+    nodes: [2]viewmodel.Ui_Semantic_Node = {
+        input_node,
+        button_node,
+    }
+    labels: [2]string = {
+        "Search",
+        "Other control",
+    }
+    target := viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
+    hover := semantic_test_hover_input(target, {20, 15})
+    hover.pointer_moved = false
+    state^.logical_focus = button_id
+    state^.focus_origin = .Keyboard
+    semantic_publish_hover_test_nodes(t, state, nodes[:], labels[:], hover)
+    testing.expect_value(t, state^.logical_focus, button_id)
+    testing.expect_value(t, state^.focus_origin, viewmodel.Ui_Focus_Origin.Keyboard)
+
+    hover.pointer_moved = true
+    semantic_publish_hover_test_nodes(t, state, nodes[:], labels[:], hover)
+    testing.expect_value(t, state^.logical_focus, input_id)
+    testing.expect_value(t, state^.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
+}
+
+// Disabled, hidden, and clipped semantic targets never receive pointer focus.
+@(test)
+semantic_hover_focus_rejects_disabled_hidden_and_clipped_targets :: proc(
+    t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
+    target := viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
+    enabled_id := semantic_test_id(.Library_Control, 20)
+    disabled_id := semantic_test_id(.Library_Control, 21)
+    enabled := semantic_hover_test_node(
+        enabled_id, {10, 10, 50, 20}, .Button, .Accordion_Content, 1)
+    disabled := semantic_hover_test_node(
+        disabled_id, {10, 10, 50, 20}, .Button, .Accordion_Content, 2)
+    disabled.states -= {.Enabled}
+    hover := semantic_test_hover_input(target, {20, 15})
+    nodes: [2]viewmodel.Ui_Semantic_Node = {
+        enabled,
+        disabled,
+    }
+    labels: [2]string = {
+        "Underlying control",
+        "Disabled topmost control",
+    }
+    semantic_publish_hover_test_nodes(t, state, nodes[:], labels[:], hover)
+    testing.expect_value(t, state^.logical_focus, viewmodel.Ui_Node_Id{})
+
+    clipped := semantic_hover_test_node(
+        semantic_test_id(.Library_Control, 22), {10, 10, 50, 20},
+        .Button, .Accordion_Content, 3)
+    clipped.clip_bounds = {0, 0, 5, 5}
+    semantic_publish_hover_test_nodes(t, state, []viewmodel.Ui_Semantic_Node{clipped},
+        []string{"Clipped control"}, hover)
+    testing.expect_value(t, state^.logical_focus, viewmodel.Ui_Node_Id{})
+
+    hidden := semantic_hover_test_node(
+        semantic_test_id(.Library_Control, 23), {10, 10, 50, 20},
+        .Button, .Accordion_Content, 4)
+    hidden.states -= {.Visible}
+    semantic_publish_hover_test_nodes(t, state, []viewmodel.Ui_Semantic_Node{hidden},
+        []string{"Hidden control"}, hover)
+    testing.expect_value(t, state^.logical_focus, viewmodel.Ui_Node_Id{})
+}
+
+// Pointer focus respects capture, modal ownership, window focus, and splitter priority.
+@(test)
+semantic_hover_focus_respects_owner_guards_and_splitter_target :: proc(t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
+    id := semantic_test_id(.Application, 6201)
+    splitter := semantic_hover_test_node(
+        id, {10, 10, 8, 100}, .Slider, .Pane_Layout, 0)
+    target := viewmodel.ui_interaction_target(.Splitter, .None, 6201)
+
+    for guard in 0..<4 {
+        testing.expect(t, uisemantics.semantic_begin(state))
+        testing.expect_value(t, uisemantics.semantic_register_node(state, {
+            node = splitter,
+            label = "Resize panes",
+        }), viewmodel.Ui_Semantic_Status.Ok)
+        hover: uisemantics.Semantic_Hover_Focus_Input = {
+            enabled = true,
+            window_focused = true,
+            pointer_moved = true,
+            pointer_target = target,
+            position = {12, 20},
+        }
+        switch guard {
+        case 0:
+            hover.window_focused = false
+        case 1:
+            hover.pointer_captured = true
+        case 2:
+            hover.modal_routing = true
+        case 3:
+            hover.enabled = false
+        }
+        testing.expect_value(t, uisemantics.semantic_publish(state, hover),
+            viewmodel.Ui_Semantic_Status.Ok)
+        testing.expect_value(t, state^.logical_focus, viewmodel.Ui_Node_Id{})
+    }
+
+    testing.expect(t, uisemantics.semantic_begin(state))
+    testing.expect_value(t, uisemantics.semantic_register_node(state, {
+        node = splitter,
+        label = "Resize panes",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_publish(state, {
+        enabled = true,
+        window_focused = true,
+        pointer_moved = true,
+        pointer_target = target,
+        position = {12, 20},
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, state^.logical_focus, id)
+    testing.expect_value(t, state^.focus_origin, viewmodel.Ui_Focus_Origin.Pointer)
+}
+
+// A tree action wins over its row, while motion over the row focuses the item itself.
+@(test)
+semantic_hover_focus_targets_tree_items_and_actions :: proc(t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(state)
+    item_id := semantic_test_id(.Animation_Tree, 30)
+    action_id := semantic_test_id(.Library_Action, 31)
+    item := semantic_hover_test_node(
+        item_id, {10, 10, 100, 24}, .Tree_Item, .Accordion_Content, 1)
+    item.actions = {.Focus, .Select, .Expand}
+    action := semantic_hover_test_node(
+        action_id, {82, 10, 24, 24}, .Button, .Accordion_Content, 2)
+    target := viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
+
+    testing.expect(t, uisemantics.semantic_begin(state))
+    testing.expect_value(t, uisemantics.semantic_register_node(state, {
+        node = item,
+        label = "Collection",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_register_node(state, {
+        node = action,
+        label = "Actions for Collection",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_publish(state, {
+        enabled = true,
+        window_focused = true,
+        pointer_moved = true,
+        pointer_target = target,
+        position = {90, 20},
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, state^.logical_focus, action_id)
+    testing.expect_value(t, state^.command_count, 0)
+
+    testing.expect(t, uisemantics.semantic_begin(state))
+    testing.expect_value(t, uisemantics.semantic_register_node(state, {
+        node = item,
+        label = "Collection",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_register_node(state, {
+        node = action,
+        label = "Actions for Collection",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, uisemantics.semantic_publish(state, {
+        enabled = true,
+        window_focused = true,
+        pointer_moved = true,
+        pointer_target = target,
+        position = {30, 20},
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, state^.logical_focus, item_id)
+    testing.expect_value(t, state^.command_count, 0)
 }
 
 // Verify complete domain, UUID, and generation identity prevents aliases.

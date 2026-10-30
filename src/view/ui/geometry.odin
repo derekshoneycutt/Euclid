@@ -102,6 +102,10 @@ prepare_ui_accordion_geometry :: proc(
         reduce_motion = uiaccordion.ui_reduced_motion(
             runtime^.preferences.values.interface.reduce_motion,
             runtime^.platform_reduce_motion),
+        text_size_percent =
+            runtime^.preferences.values.interface.text_size_percent,
+        control_size_percent =
+            runtime^.preferences.values.interface.control_size_percent,
     }, sections, runtime^.layout.active_accordion_section)
     if runtime^.layout.current_layout_mode == .Portrait {
         runtime^.layout.ui_regions.text_rect =
@@ -127,6 +131,8 @@ prepare_ui_geometry :: proc(
         press_owner = &ui_runtime^.input.press_owner,
         semantic_focus = ui_runtime^.semantic_focus,
         mouse_input = mouse_input,
+        control_size_percent =
+            ui_runtime.preferences.values.interface.control_size_percent,
         dt = min(f32(0.05), max(f32(0), frame_dt)),
         capture_view = capturemodel.gif_capture_view(&state^.gif_capture_status),
     })

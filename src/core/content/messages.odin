@@ -123,6 +123,14 @@ Content_Message_Id :: enum u16 {
     Settings_Animation_Scale_Tooltip = 1238,
     Settings_Animation_Scale_Default = 1239,
     Settings_Monochrome = 1240,
+    Settings_Hover_Focus = 1241,
+    Settings_Hover_Focus_Tooltip = 1242,
+    Settings_Control_Size = 1243,
+    Settings_Control_Size_Tooltip = 1244,
+    Settings_Show_Magnifier = 1245,
+    Settings_Show_Magnifier_Tooltip = 1246,
+    Settings_Magnifier_Input_Lock = 1247,
+    Settings_Magnifier_Input_Lock_Tooltip = 1248,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -179,7 +187,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 161
+CONTENT_SHIPPED_MESSAGE_COUNT :: 169
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -294,6 +302,14 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1238, "ui.settings.animation_scale.tooltip"},
     {1239, "ui.settings.animation_scale.default"},
     {1240, "ui.settings.monochrome"},
+    {1241, "ui.settings.hover_focus"},
+    {1242, "ui.settings.hover_focus.tooltip"},
+    {1243, "ui.settings.control_size"},
+    {1244, "ui.settings.control_size.tooltip"},
+    {1245, "ui.settings.show_magnifier"},
+    {1246, "ui.settings.show_magnifier.tooltip"},
+    {1247, "ui.settings.magnifier_input_lock"},
+    {1248, "ui.settings.magnifier_input_lock.tooltip"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},

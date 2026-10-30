@@ -473,6 +473,10 @@ Ui_Context_Menu_State :: struct {
     bounds: geometry.Rectangle,
     viewport: geometry.Rectangle,
     window: Ui_Window_Metrics,
+    text_size_percent: int,
+    control_size_percent: int,
+    padding: f32,
+    row_height: f32,
     pressed_item: int,
     captured_buttons: u8,
     pending: Ui_Context_Command,
@@ -567,6 +571,7 @@ Ui_Accordion_Transition :: struct {
     running: bool,
     panel: geometry.Rectangle,
     section_count: int,
+    scale: f32,
     selected: Ui_Accordion_Section,
     start_seconds: f64,
     heights: [4]f32,
@@ -921,6 +926,19 @@ Ui_Playback_Control_State :: struct {
     rate: animationmodel.Playback_Rate,
 }
 
+// Ui_Magnifier_State retains the display-owned lens position between frames.
+Ui_Magnifier_State :: struct {
+    initialized: bool,
+    lens_rect: geometry.Rectangle,
+}
+
+// Ui_Magnifier_Presentation contains the prepared source point and lens geometry.
+Ui_Magnifier_Presentation :: struct {
+    visible: bool,
+    source: geometry.Vector2,
+    lens_rect: geometry.Rectangle,
+}
+
 // Euclid_Ui_Runtime_State composes persistent display-owned UI state.
 Euclid_Ui_Runtime_State :: struct {
     layout: Ui_Layout_State,
@@ -932,6 +950,7 @@ Euclid_Ui_Runtime_State :: struct {
     preferences: Ui_Preference_State,
     rendering: Ui_Rendering_Control_State,
     playback: Ui_Playback_Control_State,
+    magnifier: Ui_Magnifier_State,
     platform_reduce_motion: bool,
     platform_increased_contrast: bool,
     gif_path_input: Ui_Input_Box_State,

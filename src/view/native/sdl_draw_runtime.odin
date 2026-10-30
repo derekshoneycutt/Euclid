@@ -22,12 +22,26 @@ DUST_EXPANDED_VERTEX_CAPACITY ::
 DRAW_ARENA_RESERVE_SIZE :: 32 * mem.Megabyte
 DRAW_ARENA_INITIAL_COMMIT_SIZE :: 8 * mem.Megabyte
 
-// Sdl_Draw_Shader_Paths names the four packaged 2D shader artifacts.
+// Sdl_Draw_Shader_Paths names 2D and final-composition shader artifacts.
 Sdl_Draw_Shader_Paths :: struct {
     colored_vertex: string,
     colored_fragment: string,
     textured_vertex: string,
     textured_fragment: string,
+    magnifier_vertex: string,
+    magnifier_fragment: string,
+}
+
+// Sdl_Magnifier_Presentation carries a pointer-mode lens in logical display coordinates.
+Sdl_Magnifier_Presentation :: struct {
+    visible: bool,
+    source_x: f32,
+    source_y: f32,
+    lens_x: f32,
+    lens_y: f32,
+    lens_width: f32,
+    lens_height: f32,
+    zoom: f32,
 }
 
 // Sdl_Draw_Vertex_Input owns one complete fixed 2D vertex-input description.
@@ -64,6 +78,7 @@ Sdl_Draw_Submission :: struct {
     command_buffer: ^sdl.GPUCommandBuffer,
     image: Sdl_Swapchain_Image,
     clear_color: sdl.FColor,
+    magnifier: Sdl_Magnifier_Presentation,
 }
 
 // Sdl_Draw_Frame_Statistics records the last successfully submitted frame.
@@ -132,6 +147,7 @@ Sdl_Draw_Runtime_Statistics :: struct {
 Sdl_Draw_Runtime :: struct {
     colored_pipeline: ^sdl.GPUGraphicsPipeline,
     textured_pipeline: ^sdl.GPUGraphicsPipeline,
+    magnifier_pipeline: ^sdl.GPUGraphicsPipeline,
     nearest_sampler: ^sdl.GPUSampler,
     linear_sampler: ^sdl.GPUSampler,
     vertex_buffer: ^sdl.GPUBuffer,
@@ -186,6 +202,9 @@ sdl_draw_runtime_release_core_state :: proc(
     }
     if runtime^.nearest_sampler != nil {
         sdl.ReleaseGPUSampler(device, runtime^.nearest_sampler)
+    }
+    if runtime^.magnifier_pipeline != nil {
+        sdl.ReleaseGPUGraphicsPipeline(device, runtime^.magnifier_pipeline)
     }
     if runtime^.textured_pipeline != nil {
         sdl.ReleaseGPUGraphicsPipeline(device, runtime^.textured_pipeline)
@@ -340,6 +359,46 @@ sdl_draw_pipeline_create_from_shaders :: proc(
     })
 }
 
+// Create the fullscreen composition pipeline for a platform's swapchain format.
+sdl_draw_magnifier_pipeline_create :: proc(
+    device: ^sdl.GPUDevice,
+    vertex_path, fragment_path: string,
+    target_format: sdl.GPUTextureFormat) -> ^sdl.GPUGraphicsPipeline {
+    vertex_shader := sdl_draw_shader_create(device, vertex_path, .VERTEX, 0, 0)
+    if vertex_shader == nil {
+        return nil
+    }
+    defer sdl.ReleaseGPUShader(device, vertex_shader)
+    fragment_shader := sdl_draw_shader_create(
+        device, fragment_path, .FRAGMENT, 2, 1)
+    if fragment_shader == nil {
+        return nil
+    }
+    defer sdl.ReleaseGPUShader(device, fragment_shader)
+    targets: [1]sdl.GPUColorTargetDescription = {
+        {
+            format = target_format,
+        },
+    }
+    return sdl.CreateGPUGraphicsPipeline(device, {
+        vertex_shader = vertex_shader,
+        fragment_shader = fragment_shader,
+        primitive_type = .TRIANGLELIST,
+        rasterizer_state = {
+            fill_mode = .FILL,
+            cull_mode = .NONE,
+            front_face = .COUNTER_CLOCKWISE,
+        },
+        multisample_state = {
+            sample_count = ._1,
+        },
+        target_info = {
+            color_target_descriptions = raw_data(targets[:]),
+            num_color_targets = 1,
+        },
+    })
+}
+
 // sdl_draw_sampler_create creates one clamped nearest or linear sampler.
 sdl_draw_sampler_create :: proc(
     device: ^sdl.GPUDevice, filter: sdl.GPUFilter) -> ^sdl.GPUSampler {
@@ -421,11 +480,14 @@ sdl_draw_runtime_allocate_storage :: proc(runtime: ^Sdl_Draw_Runtime) -> bool {
 // Create all GPU resources for one not-yet-published draw runtime candidate.
 sdl_draw_runtime_create_gpu_resources :: proc(
     candidate: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
-    paths: Sdl_Draw_Shader_Paths, sample_count: sdl.GPUSampleCount) -> bool {
+    paths: Sdl_Draw_Shader_Paths, sample_count: sdl.GPUSampleCount,
+    swapchain_format: sdl.GPUTextureFormat) -> bool {
     candidate^.colored_pipeline = sdl_draw_pipeline_create(device,
         paths.colored_vertex, paths.colored_fragment, false, sample_count)
     candidate^.textured_pipeline = sdl_draw_pipeline_create(device,
         paths.textured_vertex, paths.textured_fragment, true, sample_count)
+    candidate^.magnifier_pipeline = sdl_draw_magnifier_pipeline_create(
+        device, paths.magnifier_vertex, paths.magnifier_fragment, swapchain_format)
     candidate^.nearest_sampler = sdl_draw_sampler_create(device, .NEAREST)
     candidate^.linear_sampler = sdl_draw_sampler_create(device, .LINEAR)
     candidate^.vertex_buffer = sdl.CreateGPUBuffer(device, {
@@ -447,6 +509,7 @@ sdl_draw_runtime_create_gpu_resources :: proc(
         size = TEXTURE_UPLOAD_BYTE_CAPACITY,
     })
     return candidate^.colored_pipeline != nil && candidate^.textured_pipeline != nil &&
+        candidate^.magnifier_pipeline != nil &&
         candidate^.nearest_sampler != nil && candidate^.linear_sampler != nil &&
         candidate^.vertex_buffer != nil && candidate^.index_buffer != nil &&
         candidate^.upload_buffer != nil && candidate^.texture_upload_buffer != nil
@@ -456,7 +519,8 @@ sdl_draw_runtime_create_gpu_resources :: proc(
 sdl_draw_runtime_create :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
     paths: Sdl_Draw_Shader_Paths,
-    sample_count: sdl.GPUSampleCount) -> bool {
+    sample_count: sdl.GPUSampleCount,
+    swapchain_format: sdl.GPUTextureFormat) -> bool {
     if runtime == nil || device == nil {
        return false
     }
@@ -468,7 +532,7 @@ sdl_draw_runtime_create :: proc(
        return false
     }
     if !sdl_draw_runtime_create_gpu_resources(
-        &candidate, device, paths, sample_count) {
+        &candidate, device, paths, sample_count, swapchain_format) {
         return false
     }
     runtime^ = candidate
@@ -1071,7 +1135,76 @@ sdl_draw_pipeline_binding_count :: proc(encoder: ^Draw_Encoder) -> u32 {
     return count
 }
 
-// sdl_draw_submit uploads, renders, blits, and submits one eligible frame.
+// Prepare the fullscreen fragment uniforms in swapchain pixel coordinates.
+sdl_draw_magnifier_uniforms :: proc(
+    platform: ^Sdl_Platform,
+    image: Sdl_Swapchain_Image,
+    magnifier: Sdl_Magnifier_Presentation) -> [12]f32 {
+    scale_x := f32(image.width) / f32(platform^.metrics.logical_width)
+    scale_y := f32(image.height) / f32(platform^.metrics.logical_height)
+    scale := min(scale_x, scale_y)
+    return {
+        magnifier.lens_x * scale_x,
+        magnifier.lens_y * scale_y,
+        magnifier.lens_width * scale_x,
+        magnifier.lens_height * scale_y,
+        magnifier.source_x * scale_x,
+        magnifier.source_y * scale_y,
+        f32(image.width),
+        f32(image.height),
+        magnifier.zoom,
+        12 * scale,
+        3 * scale,
+        2 * scale,
+    }
+}
+
+// Render one fullscreen sampling pass with the lens composed over the resolved scene.
+sdl_draw_compose_magnifier :: proc(
+    platform: ^Sdl_Platform,
+    runtime: ^Sdl_Draw_Runtime,
+    command_buffer: ^sdl.GPUCommandBuffer,
+    image: Sdl_Swapchain_Image,
+    magnifier: Sdl_Magnifier_Presentation) -> bool {
+    target: [1]sdl.GPUColorTargetInfo = {
+        {
+            texture = image.texture,
+            load_op = .DONT_CARE,
+            store_op = .STORE,
+        },
+    }
+    pass := sdl.BeginGPURenderPass(
+        command_buffer, raw_data(target[:]), len(target), nil)
+    if pass == nil {
+        return false
+    }
+    sdl.BindGPUGraphicsPipeline(pass, runtime^.magnifier_pipeline)
+    bindings: [2]sdl.GPUTextureSamplerBinding = {
+        {
+            texture = platform^.scene_target,
+            sampler = runtime^.nearest_sampler,
+        },
+        {
+            texture = platform^.scene_target,
+            sampler = runtime^.linear_sampler,
+        },
+    }
+    sdl.BindGPUFragmentSamplers(pass, 0, raw_data(bindings[:]), len(bindings))
+    uniforms := sdl_draw_magnifier_uniforms(platform, image, magnifier)
+    sdl.PushGPUFragmentUniformData(
+        command_buffer, 0, raw_data(uniforms[:]), size_of(uniforms))
+    sdl.SetGPUViewport(pass, {
+        w = f32(image.width),
+        h = f32(image.height),
+        min_depth = 0,
+        max_depth = 1,
+    })
+    sdl.DrawGPUPrimitives(pass, 3, 1, 0, 0)
+    sdl.EndGPURenderPass(pass)
+    return true
+}
+
+// sdl_draw_submit uploads, renders, and submits one eligible frame.
 sdl_draw_submit :: proc(
     platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
     encoder: ^Draw_Encoder, submission: Sdl_Draw_Submission) -> bool {
@@ -1080,20 +1213,30 @@ sdl_draw_submit :: proc(
         sdl_draw_discard_texture_operations(runtime, platform^.device)
         return false
     }
-    sdl.BlitGPUTexture(submission.command_buffer, {
-        source = {
-            texture = platform^.scene_target,
-            w = platform^.scene_width,
-            h = platform^.scene_height,
-        },
-        destination = {
-            texture = submission.image.texture,
-            w = submission.image.width,
-            h = submission.image.height,
-        },
-        load_op = .DONT_CARE,
-        filter = .NEAREST,
-    })
+    if submission.magnifier.visible {
+        if !sdl_draw_compose_magnifier(
+            platform, runtime, submission.command_buffer,
+            submission.image, submission.magnifier) {
+            _ = sdl.CancelGPUCommandBuffer(submission.command_buffer)
+            sdl_draw_discard_texture_operations(runtime, platform^.device)
+            return false
+        }
+    } else {
+        sdl.BlitGPUTexture(submission.command_buffer, {
+            source = {
+                texture = platform^.scene_target,
+                w = platform^.scene_width,
+                h = platform^.scene_height,
+            },
+            destination = {
+                texture = submission.image.texture,
+                w = submission.image.width,
+                h = submission.image.height,
+            },
+            load_op = .DONT_CARE,
+            filter = .NEAREST,
+        })
+    }
     if !sdl.SubmitGPUCommandBuffer(submission.command_buffer) {
         sdl_draw_discard_texture_operations(runtime, platform^.device)
         return false

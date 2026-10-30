@@ -42,6 +42,17 @@ External_Text_Action_Input :: struct {
     focus: u16,
 }
 
+// Semantic_Hover_Focus_Input carries the owner-approved pointer-focus request for publication.
+Semantic_Hover_Focus_Input :: struct {
+    enabled: bool,
+    window_focused: bool,
+    pointer_moved: bool,
+    pointer_captured: bool,
+    modal_routing: bool,
+    pointer_target: viewmodel.Ui_Interaction_Target,
+    position: geometry.Vector2,
+}
+
 // semantic_control_id qualifies one existing widget identity by owning domain.
 semantic_control_id :: #force_inline proc(
     domain: viewmodel.Ui_Node_Domain, local_id: int) -> viewmodel.Ui_Node_Id {
@@ -918,6 +929,72 @@ semantic_legacy_focus :: proc(
     }, true
 }
 
+// Check whether one semantic node belongs to the routed top-level hover surface.
+semantic_hover_node_matches_target :: proc(
+    node: viewmodel.Ui_Semantic_Node,
+    target: viewmodel.Ui_Interaction_Target) -> bool {
+    #partial switch target.kind {
+    case .Splitter:
+        return node.id.domain == .Application &&
+            node.id.local_id == u64(target.id)
+    case .Control:
+        if target.focus.kind == .None {
+            return node.id.domain == .Animation_Control &&
+                node.id.local_id == u64(target.id)
+        }
+        return target.focus.kind == .Input_Box && node.role == .Input
+    case .Panel_Content:
+        #partial switch target.focus.kind {
+        case .Accordion:
+            return node.region == .Accordion_Headers ||
+                node.region == .Accordion_Content
+        case .Presentation:
+            return node.id.domain == .Presentation
+        case .Terminal:
+            return node.id.domain == .Terminal || node.role == .Terminal
+        }
+    }
+    return false
+}
+
+// Find the topmost visible, clipped focus target in the routed hover surface.
+semantic_hover_focus_candidate :: proc(
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    hover: Semantic_Hover_Focus_Input) -> int {
+    for offset in 0..<snapshot^.node_count {
+        index := snapshot^.node_count - offset - 1
+        node := snapshot^.nodes[index]
+        if .Visible not_in node.states || .Focusable not_in node.states ||
+            !semantic_hover_node_matches_target(node, hover.pointer_target) ||
+            !geometry.rectangle_contains(node.bounds, hover.position) ||
+            !geometry.rectangle_contains(node.clip_bounds, hover.position) {
+            continue
+        }
+        return index
+    }
+    return -1
+}
+
+// Apply pointer-origin focus only after the staging tree has passed validation.
+semantic_apply_hover_focus :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    hover: Semantic_Hover_Focus_Input) {
+    if !hover.enabled || !hover.window_focused || !hover.pointer_moved ||
+        hover.pointer_captured || hover.modal_routing {
+        return
+    }
+    index := semantic_hover_focus_candidate(snapshot, hover)
+    if index < 0 || !semantic_node_is_focus_candidate(snapshot^.nodes[index]) {
+        return
+    }
+    node := snapshot^.nodes[index]
+    state^.logical_focus = node.id
+    state^.focus_origin = .Pointer
+    state^.last_region = node.region
+    state^.last_traversal_order = node.traversal_order
+}
+
 // semantic_nearest_candidate finds the next, then prior, candidate in one local order.
 semantic_nearest_candidate :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
@@ -1059,7 +1136,8 @@ semantic_refresh_focus_visible :: proc(
 
 // semantic_publish validates, reconciles, and atomically commits the staging snapshot.
 semantic_publish :: proc(
-    state: ^viewmodel.Ui_Semantic_Focus_State) -> viewmodel.Ui_Semantic_Status {
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    hover: Semantic_Hover_Focus_Input = {}) -> viewmodel.Ui_Semantic_Status {
     staging := semantic_staging_snapshot(state)
     if staging == nil {
         return .Not_Staging
@@ -1074,6 +1152,7 @@ semantic_publish :: proc(
         state^.staging_active = false
         return status
     }
+    semantic_apply_hover_focus(state, staging, hover)
     previous := semantic_snapshot(state)
     semantic_reconcile_focus(state, staging, previous)
     semantic_refresh_focus_visible(state, staging)

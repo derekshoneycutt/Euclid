@@ -10,6 +10,7 @@ import viewmessages "../../messages"
 import viewmodel "../model"
 import uiwidgets "../widgets"
 import uisemantics "../semantics"
+import theme "../theme"
 
 TREE_ACTION_TOGGLE :: u64(1)
 TREE_ACTION_UP :: u64(2)
@@ -565,7 +566,8 @@ tree_actions_draw_focus :: proc(
     bounds = tree_actions_screen_rect(bounds, panel, scroll_y)
     if geometry.rectangles_intersect(bounds, clip) {
         _ = native.draw_encoder_push_scissor(encoder, clip)
-        uiwidgets.draw_encoded_focus_ring(encoder, bounds)
+        uiwidgets.draw_encoded_focus_ring(
+            encoder, bounds, row.row_height / f32(theme.TREE_ROW_HEIGHT))
         _ = native.draw_encoder_pop_scissor(encoder)
     }
 }

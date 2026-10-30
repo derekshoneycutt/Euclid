@@ -472,10 +472,11 @@ sdl_platform_prepare_frame :: proc(platform: ^Sdl_Platform) -> Sdl_Frame_Admissi
     return .Ready
 }
 
-// sdl_platform_present_draw submits one bounded encoded scene and swapchain blit.
+// sdl_platform_present_draw submits one bounded scene and final presentation.
 sdl_platform_present_draw :: proc(
     platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
-    encoder: ^Draw_Encoder, clear_color: sdl.FColor) -> Sdl_Frame_Result {
+    encoder: ^Draw_Encoder, clear_color: sdl.FColor,
+    magnifier: Sdl_Magnifier_Presentation) -> Sdl_Frame_Result {
     command_buffer: ^sdl.GPUCommandBuffer
     image, acquired := sdl_swapchain_acquire(platform, &command_buffer)
     if !acquired {
@@ -497,7 +498,7 @@ sdl_platform_present_draw :: proc(
         return .Unavailable
     }
     if !sdl_draw_submit(platform, runtime, encoder,
-        {command_buffer, image, clear_color}) {
+        {command_buffer, image, clear_color, magnifier}) {
         return .Failed
     }
     return .Presented
@@ -943,6 +944,12 @@ sdl_platform_log_ready :: proc(
         platform^.metrics.window_height, platform^.metrics.pixel_width,
         platform^.metrics.pixel_height, platform^.metrics.pixel_density,
         platform^.metrics.display_scale, platform^.metrics.content_scale)
+}
+
+// Return the claimed window's swapchain format for the final presentation pipeline.
+sdl_platform_swapchain_format :: proc(
+    platform: ^Sdl_Platform) -> sdl.GPUTextureFormat {
+    return sdl.GetGPUSwapchainTextureFormat(platform^.device, platform^.window)
 }
 
 // sdl_platform_window_flags selects platform-specific initial visibility.

@@ -1154,7 +1154,8 @@ draw_encoded_tree_row :: proc(
         }
         if !ctx.render_only &&
            tree_placement_is_keyboard_active(&ctx.state^.ui_runtime, item) {
-            uiwidgets.draw_encoded_focus_ring(ctx.encoder, row)
+            uiwidgets.draw_encoded_focus_ring(
+                ctx.encoder, row, ctx.row_height / f32(theme.TREE_ROW_HEIGHT))
         }
         if item^.first_child != TREE_NO_ITEM {
             scale := ctx.row_height / f32(theme.TREE_ROW_HEIGHT)
@@ -1945,13 +1946,14 @@ tree_register_semantic_control :: proc(
 tree_reveal_scroll :: proc(
     current_scroll: f32,
     row_index: int,
-    viewport_height, content_height: f32) -> f32 {
+    viewport_height, content_height: f32,
+    row_height := f32(theme.TREE_ROW_HEIGHT)) -> f32 {
 
     safe_viewport_height := max(viewport_height, 0)
     max_scroll := max(content_height - safe_viewport_height, 0)
     scroll := clamp(current_scroll, 0, max_scroll)
-    row_top := f32(row_index) * theme.TREE_ROW_HEIGHT
-    row_bottom := row_top + theme.TREE_ROW_HEIGHT
+    row_top := f32(row_index) * row_height
+    row_bottom := row_top + row_height
     if row_top < scroll {
         scroll = row_top
     } else if row_bottom > scroll + safe_viewport_height {
@@ -1999,7 +2001,10 @@ apply_pending_tree_reveal :: proc(
         return
     }
     params.scroll_y^ = tree_reveal_scroll(
-        params.scroll_y^, row, params.list_panel.height, content_height)
+        params.scroll_y^, row, params.list_panel.height, content_height,
+        theme.ui_tree_row_height(
+            ui_runtime^.preferences.values.interface.text_size_percent,
+            ui_runtime^.preferences.values.interface.control_size_percent))
     ui_runtime^.library.tree.scroll_dragging = false
     ui_runtime^.library.tree.scroll_drag_off = 0
     if uiwidgets.scroll_container_owns_press(&ui_runtime^.input.press_owner, 1003) {

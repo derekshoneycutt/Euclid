@@ -7,25 +7,30 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Optional checkboxes in tree
 - Animation slider
+- Optional checkboxes in tree
 - Search history / Autocomplete features
 - Use history / Most viewed / Most recent
 - Custom notes on collection items
 - Export / Import by file
 - Ip-2-ip sharing protocol
+- Terminal drawing shape suite
+- Persisting terminals
+- Terminal animation recording
+- Terminal exercises
 - Accessibility completion work
 
 -----------------
 
 - UI animation polish
-- Comprehensive terminal animation commands
+- Updated clipping where appropriate
 
 -----------------
 
-- Logic animations
-- Tarski animations
+- v1 Logic/Tarski animations
 - v1 Algebra animations
+- v1 Veblen?
+- v1 Scott?
 - Euclid book 1 animations
 - Proclus animations
 
@@ -163,6 +168,8 @@ General features:
   - [X] Dust
   - [X] Embers
   - [X] Flickers
+  - [X] Updated with burning trails
+  - [X] UI Dust system
 - [X] Comprehensive Odin-Julia Bridge interface between the two languages
 - [X] Basic state-machine supported julia animations structure
 - [X] Initial library of standard animations for drawing primitives
@@ -235,12 +242,21 @@ General features:
   - [X] Julia syntax highlighting
   - [X] History explorer, Julia-familiar
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+  - [ ] Persisting Terminals (runtime-only, as children in the trees of Terminal
+     that can be navigated away from and returned to with persisted internal state;
+     exit cleans REPL state and removes from tree)
+  - [ ] Terminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
+     ... replay_recording!)
+  - [ ] REPL-focused exercises
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support
   - [X] Reduced motion support
   - [X] High contrast mode
   - [X] Large text support
   - [X] Animation monochrome and scaling support
+  - [X] Opt-in mouse-hover keyboard focus for controls
+  - [X] Interface/control size scaling support
+  - [X] Mouse/cursor -following magnifier
   - [ ] Improved accessibility system
   - [ ] Additional accessibility support : Dynview
   - [ ] Additional accessibility support : Terminal
@@ -260,6 +276,7 @@ Final tasks:
   - [X] Core expand/collapse animations
   - [X] UI Shadows
   - [X] Major view text animations
+  - [ ] Update clipping for better 3D feelings on things past pen w/ 1 plane
   - [ ] Extended overall look/feel animations
   - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)
 - [ ] Semantic trace and deterministic animation test harness (default off)
@@ -324,18 +341,10 @@ Core Features:
   - curve candidates: parabolas and hyperbolas, strophoid, spiral, leminiscate,
     tratrix and catenary, concoids, cissoids, pedals, negative pedals, glissettes,
     evolutes and involutes, inversions, caustics
-- Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
-- Terminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
- ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
-- REPL-focused exercise suggestions
-- Persisting Terminals (runtime-only, as children in the trees of Terminal
-  that can be navigated away from and returned to with persisted internal state;
-  exit cleans REPL state and removes from tree)
-- Declarative animations support
 - Transformations
   - Scaling
   - Shearing

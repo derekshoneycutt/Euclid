@@ -7,15 +7,17 @@ import uuid "core:encoding/uuid"
 import input "../../input"
 import viewmodel "../model"
 import uiwidgets "../widgets"
+import theme "../theme"
 
 // Return the shared unclipped row bounds; all painting and hit testing use this geometry.
 membership_row :: proc(
     menu: ^viewmodel.Ui_Collection_Membership_State,
     index: int) -> geometry.Rectangle {
+    scale := theme.ui_control_size_scale(menu.control_size_percent)
     return {
         menu.clip.x,
         menu.clip.y + f32(index)*menu.row_height - menu.scroll_y,
-        max(0, menu.clip.width - 14),
+        max(0, menu.clip.width - 14*scale),
         menu.row_height,
     }
 }
@@ -94,13 +96,14 @@ membership_checkbox :: proc(
     _, policy := collections.collection_animation_identity(
         set, head.id, menu.animation_id)
     row := membership_row(menu, index)
+    scale := theme.ui_control_size_scale(menu.control_size_percent)
     return {
         id = index + 1,
         rect = {
-            row.x + 2,
-            row.y + (row.height - 18) * 0.5,
-            18,
-            18,
+            row.x + 2*scale,
+            row.y + (row.height - 18*scale) * 0.5,
+            18*scale,
+            18*scale,
         },
         checked = policy == .None,
         enabled = failure == .None,
@@ -123,6 +126,7 @@ membership_scroll :: proc(state: ^core.Euclid_General_State,
         mouse_input = frame,
         interaction_space_rect = menu.clip,
         wheel_step = menu.row_height * 3,
+        control_size_percent = menu.control_size_percent,
         press_owner = &menu.press_owner,
         state_in = {menu.dragging, menu.drag_offset},
     })

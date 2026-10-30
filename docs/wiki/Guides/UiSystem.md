@@ -111,6 +111,7 @@ allocation owner.
 | `input` | Shared press owner, routed interaction, and cursor |
 | `preferences` | Current preference values and save feedback |
 | `rendering`, `playback` | Effective display controls and pause intent |
+| `magnifier` | Display-owned pointer/caret lens placement retained between frames |
 | `tooltip`, `context_menu`, `gif_path_input` | Cross-panel transient UI state |
 | `semantic_focus` | Separately owned growable snapshot slots, bounded commands, and logical focus |
 
@@ -240,6 +241,24 @@ The phases answer different questions:
 | Layout-dependent interaction | What can only be resolved after authoritative content layout exists? | Presentation and Dynview UI |
 | Encoding and present | What prepared geometry is submitted? | Display thread |
 
+### Final-frame magnifier composition
+
+The optional magnifier is prepared by the display-frame coordinator from the current
+logical pointer position or the focused input owner's prepared caret and clip, admitted
+window metrics, and reduced-motion state. Caret mode uses the existing text-input target
+resolver, so it follows only an eligible focused mutable input and hides when the caret
+is clipped or its owner is retired; it never falls back to the pointer. The renderer
+receives only that bounded presentation descriptor; it does not alter UI geometry,
+pointer routing, hit testing, text editing, or semantic publication.
+
+When enabled, SDL GPU samples the resolved scene target into the acquired swapchain
+image in one final composition pass. The pass draws the ordinary scene plus the
+magnified lens and source indicator, without rerunning world or UI drawing. When
+disabled, the existing direct scene-to-swapchain blit remains the presentation path.
+Capture continues to read the scene target before this final pass, so screenshots and
+GIF frames are not magnified. The lens has no CPU readback path and owns no per-frame
+image allocation.
+
 One ordering dependency is especially useful when investigating UI bugs: splitters and
 window metrics update before panel regions and Dynview tracking; interaction uses those
 regions; then simulation and Dynview preparation run; finally layout-dependent
@@ -347,6 +366,22 @@ The route is not a generic broadcast. Top-level hit testing chooses the visible
 target; surface-specific filters then preserve only the input facts that surface may
 consume. Existing capture takes precedence over current hover so a drag or release
 does not jump to whichever control happens to be under the pointer now.
+
+### Opt-In Hover Focus
+
+The persisted Accessibility preference `interface.hover_focus` defaults off. When
+enabled, the UI applies pointer-origin logical focus after the current frame has
+registered and validated its semantic controls. The routed top-level surface and
+reverse registration order resolve the topmost focusable control; its visible bounds
+and clip must contain the pointer, and disabled topmost controls do not pass focus
+through to lower controls.
+
+The rule runs only on pointer movement. It does not activate controls or change input
+caret and selection state, and it does not pull focus back from keyboard traversal
+while the pointer is stationary. Pointer capture, window-focus loss, context menus,
+and the Library membership popup remain with their current owner-specific routing.
+See the [Accessibility guide](Accessibility.md#opt-in-hover-focus) for user-facing
+behavior and scope.
 
 ### World Animation Controls
 
@@ -731,6 +766,23 @@ UI text measurement and drawing helpers live under
 [`text/`](../../../src/view/ui/text/); common palette and visual metrics live under
 [`theme/`](../../../src/view/ui/theme/). These helpers route text to the right font
 capability but do not make all text sources share a lifetime.
+
+### Control-size geometry
+
+The persisted `interface.control_size_percent` preference is independent of
+`interface.text_size_percent`. Its 100%-200% range uses 25-point steps and defaults
+to 100%. Shared metric helpers in
+[`theme/metrics.odin`](../../../src/view/ui/theme/metrics.odin) distinguish geometry
+that follows the control-size preference alone from existing geometry that must retain
+a text-size minimum. Font selection remains tied to text size; authored animation
+content does not consume the control-size preference.
+
+Each UI owner prepares the resulting geometry once for rendering, pointer admission,
+and semantic publication. This includes the larger hit bounds for splitters and
+scrollbars, and the reflow or retained scrolling needed by panels with enlarged
+controls. Do not apply the effective text/control scale indiscriminately: fixed target
+metrics must preserve their 100% geometry at every text-size setting, while controls
+whose layout already followed text size must retain that minimum.
 
 ### Capture and the rendered frame
 

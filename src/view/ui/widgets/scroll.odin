@@ -90,10 +90,17 @@ Scroll_Container_Update_Params :: struct {
     scroll_offset: geometry.Vector2,
     interaction_space_rect: geometry.Rectangle,
     wheel_step: f32,
+    control_size_percent: int,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
     state_in: Scroll_Container_State,
     semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     semantic_id: viewmodel.Ui_Node_Id,
+}
+
+// scroll_container_scale matches scrollbar targets to the active UI geometry scale.
+scroll_container_scale :: #force_inline proc(
+    params: Scroll_Container_Update_Params) -> f32 {
+    return theme.ui_control_size_scale(params.control_size_percent)
 }
 
 // Draw the prepared track and thumb above content using the shared UI palette.
@@ -141,7 +148,8 @@ scroll_container_refresh_semantic_geometry :: proc(
     interaction^.scrollbar = build_vertical_scrollbar(
         {params.rect, params.content_height, scroll_y,
             max(0.0, params.content_height - params.rect.height)},
-        theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)
+        theme.SCROLLBAR_WIDTH * scroll_container_scale(params),
+        theme.SCROLLBAR_THUMB_MIN_HEIGHT * scroll_container_scale(params))
 }
 
 // Apply one eligible wheel delta and report whether it was consumed.
@@ -175,7 +183,8 @@ scroll_container_update_thumb_drag :: proc(
     }
     return build_vertical_scrollbar(
         {input.params.rect, input.params.content_height, scroll_y^, input.max_scroll},
-        theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)
+        theme.SCROLLBAR_WIDTH * scroll_container_scale(input.params),
+        theme.SCROLLBAR_THUMB_MIN_HEIGHT * scroll_container_scale(input.params))
 }
 
 // Advance capture, drag, and release state against prepared scrollbar geometry.
@@ -259,7 +268,8 @@ scroll_container_update :: proc(
     sources := range_action_source(scroll_y != initial_scroll, .Pointer)
     scrollbar := build_vertical_scrollbar(
         {view_rect, params.content_height, scroll_y, max_scroll},
-        theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)
+        theme.SCROLLBAR_WIDTH * scroll_container_scale(params),
+        theme.SCROLLBAR_THUMB_MIN_HEIGHT * scroll_container_scale(params))
     hovered_thumb := scrollbar.has_scrollbar && in_interaction &&
         geometry.rectangle_contains(scrollbar.thumb_rect, local_mouse)
     interaction := scroll_container_update_interaction(
@@ -277,7 +287,9 @@ scroll_container_update :: proc(
 // scroll_container_visual builds a draw-only scroll result without ownership or commands.
 scroll_container_visual :: proc(
     rect: geometry.Rectangle,
-    content_height, retained_scroll, step: f32) -> Scroll_Container_Update_Result {
+    content_height, retained_scroll, step: f32,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) ->
+    Scroll_Container_Update_Result {
     panel := uilayout.clamp_non_negative_rect(rect)
     maximum := max(f32(0), content_height - panel.height)
     scroll := clamp(retained_scroll, 0, maximum)
@@ -293,7 +305,10 @@ scroll_container_visual :: proc(
             content_height,
             scroll,
             maximum,
-        }, theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT),
+        }, theme.ui_control_size_metric(
+                theme.SCROLLBAR_WIDTH, control_size_percent),
+            theme.ui_control_size_metric(
+                theme.SCROLLBAR_THUMB_MIN_HEIGHT, control_size_percent)),
     }
 }
 

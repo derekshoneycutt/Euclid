@@ -339,7 +339,13 @@ terminal_prepare_scroll :: proc(
         layout.content_height,
         initial_scroll,
         max_scroll,
-    }, theme.SCROLLBAR_WIDTH, theme.SCROLLBAR_THUMB_MIN_HEIGHT)
+    },
+        theme.ui_control_size_metric(
+            theme.SCROLLBAR_WIDTH,
+            state^.ui_runtime.preferences.values.interface.control_size_percent),
+        theme.ui_control_size_metric(
+            theme.SCROLLBAR_THUMB_MIN_HEIGHT,
+            state^.ui_runtime.preferences.values.interface.control_size_percent))
     mouse := uiwidgets.input_frame_mouse_position(resolved)
     over_track := preview.has_scrollbar && geometry.rectangle_contains(
         preview.track_rect, mouse)
@@ -352,6 +358,8 @@ terminal_prepare_scroll :: proc(
         mouse_input = scroll_frame,
         interaction_space_rect = bounds,
         wheel_step = layout.line_height * theme.WHEEL_SCROLL_MULTIPLIER,
+        control_size_percent =
+            state^.ui_runtime.preferences.values.interface.control_size_percent,
         press_owner = &state^.ui_runtime.input.press_owner,
         state_in = {
             state^.ui_runtime.terminal.scroll_dragging,
@@ -483,7 +491,8 @@ terminal_prepare_visual :: proc(
         term, layout.padded_bounds, layout.content_height)
     scroll := uiwidgets.scroll_container_visual(
         layout.padded_bounds, layout.content_height,
-        initial_scroll, layout.line_height * theme.WHEEL_SCROLL_MULTIPLIER)
+        initial_scroll, layout.line_height * theme.WHEEL_SCROLL_MULTIPLIER,
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
     return {
         available = true,
         bounds = bounds,

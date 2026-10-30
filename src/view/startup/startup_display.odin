@@ -53,7 +53,7 @@ present_startup_frame :: proc(display: ^Loading_Display) -> bool {
         &display^.outline, &encoder, theme.UI_BORDER_COLOR, worldmodel.TOOL_COLOR)
     result := native.sdl_platform_present_draw(
         display^.platform, display^.draw_runtime, &encoder,
-        native.to_sdl_color(worldmodel.BACKGROUND_COLOR))
+        native.to_sdl_color(worldmodel.BACKGROUND_COLOR), {})
     if result == .Failed {
         log.error("sdl_startup_present_failed")
         return false

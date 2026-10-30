@@ -23,6 +23,11 @@ TEXT_SIZE_MIN_PERCENT :: 100
 TEXT_SIZE_STEP_PERCENT :: 25
 TEXT_SIZE_MAX_PERCENT :: 175
 
+CONTROL_SIZE_DEFAULT_PERCENT :: 100
+CONTROL_SIZE_MIN_PERCENT :: 100
+CONTROL_SIZE_STEP_PERCENT :: 25
+CONTROL_SIZE_MAX_PERCENT :: 200
+
 TEXT_ROW_HEIGHT :: 22
 
 TEXT_PADDING :: 8
@@ -130,15 +135,46 @@ SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET :: 18
 
 SETTINGS_GIF_STATUS_PATH_ROW_OFFSET :: 36
 
-// Keep panel action buttons padded consistently at every supported text size.
-ui_panel_button_height :: #force_inline proc(percent: int) -> f32 {
-    return max(ui_scaled_metric(SETTINGS_GIF_BUTTON_HEIGHT, percent),
-        ui_font_size(percent) + 8 * ui_text_scale_factor(percent))
+// Keep panel action buttons padded consistently at every supported UI scale.
+ui_panel_button_height :: #force_inline proc(
+    text_percent: int,
+    control_percent := CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    scale := ui_effective_control_scale(text_percent, control_percent)
+    return max(ui_control_scaled_metric(
+            SETTINGS_GIF_BUTTON_HEIGHT, text_percent, control_percent),
+        ui_font_size(text_percent) + 8 * scale)
 }
 
 // ui_text_scale_factor converts a validated text-size preference to a safe multiplier.
 ui_text_scale_factor :: #force_inline proc(percent: int) -> f32 {
     return f32(clamp(percent, TEXT_SIZE_MIN_PERCENT, TEXT_SIZE_MAX_PERCENT)) / 100
+}
+
+// ui_effective_control_scale preserves text-driven geometry while allowing larger controls.
+ui_effective_control_scale :: #force_inline proc(
+    text_percent, control_percent: int) -> f32 {
+    text_scale := ui_text_scale_factor(text_percent)
+    control_scale := f32(clamp(control_percent,
+        CONTROL_SIZE_MIN_PERCENT, CONTROL_SIZE_MAX_PERCENT)) / 100
+    return max(text_scale, control_scale)
+}
+
+// ui_control_size_scale applies only the independent non-font control preference.
+ui_control_size_scale :: #force_inline proc(control_percent: int) -> f32 {
+    return f32(clamp(control_percent,
+        CONTROL_SIZE_MIN_PERCENT, CONTROL_SIZE_MAX_PERCENT)) / 100
+}
+
+// ui_control_scaled_metric composes control and text geometry without altering fonts.
+ui_control_scaled_metric :: #force_inline proc(
+    value: f32, text_percent, control_percent: int) -> f32 {
+    return value * ui_effective_control_scale(text_percent, control_percent)
+}
+
+// ui_control_size_metric scales a target-only metric without text-size side effects.
+ui_control_size_metric :: #force_inline proc(
+    value: f32, control_percent: int) -> f32 {
+    return value * ui_control_size_scale(control_percent)
 }
 
 // ui_font_size resolves a logical UI font size under the active text-size preference.
@@ -152,6 +188,8 @@ ui_scaled_metric :: #force_inline proc(value: f32, percent: int) -> f32 {
 }
 
 // ui_tree_row_height keeps Library row hit targets matched to larger labels.
-ui_tree_row_height :: #force_inline proc(percent: int) -> f32 {
-    return ui_scaled_metric(f32(TREE_ROW_HEIGHT), percent)
+ui_tree_row_height :: #force_inline proc(
+    text_percent: int, control_percent := CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    return ui_control_scaled_metric(
+        f32(TREE_ROW_HEIGHT), text_percent, control_percent)
 }

@@ -20,6 +20,14 @@ Userdata_Test_Path :: struct {
     valid: bool,
 }
 
+// Userdata_Motor_Accessibility_Case captures one persisted feature combination.
+Userdata_Motor_Accessibility_Case :: struct {
+    hover_focus: bool,
+    show_magnifier: bool,
+    input_lock: bool,
+    control_size_percent: int,
+}
+
 // Create a deterministic nonzero UUID for collection persistence fixtures.
 userdata_test_id :: proc(value: u8) -> uuid.Identifier {
     identifier: uuid.Identifier
@@ -455,6 +463,238 @@ userdata_round_trips_animation_style_preferences :: proc(t: ^testing.T) {
         testing.expect(t, .Animation_Monochrome in loaded_preferences.present)
     }
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Persist, reload, and reset the opt-in interface hover-focus preference.
+@(test)
+userdata_round_trips_hover_focus_preference :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.interface.hover_focus)
+
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Hover_Focus, settings.boolean_value(true)))
+    testing.expect_value(t, store_commit_batch(&store, changes).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, preferences.interface.hover_focus)
+    testing.expect(t, .Interface_Hover_Focus in preferences.present)
+
+    reset: settings.Change_Set
+    testing.expect(t, settings.change_set_reset(&reset, .Interface_Hover_Focus))
+    testing.expect_value(t, store_commit_batch(&store, reset).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.interface.hover_focus)
+    testing.expect(t, .Interface_Hover_Focus not_in preferences.present)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Persist, reload, and reset the independent interface control-size preference.
+@(test)
+userdata_round_trips_control_size_preference :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, preferences.interface.control_size_percent, 100)
+
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Control_Size, settings.integer_value(175)))
+    testing.expect_value(t, store_commit_batch(&store, changes).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, preferences.interface.control_size_percent, 175)
+    testing.expect(t, .Interface_Control_Size in preferences.present)
+
+    reset: settings.Change_Set
+    testing.expect(t, settings.change_set_reset(&reset, .Interface_Control_Size))
+    testing.expect_value(t, store_commit_batch(&store, reset).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, preferences.interface.control_size_percent, 100)
+    testing.expect(t, .Interface_Control_Size not_in preferences.present)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Persist, reload, and reset the opt-in pointer magnifier preference.
+@(test)
+userdata_round_trips_show_magnifier_preference :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.interface.show_magnifier)
+
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Show_Magnifier, settings.boolean_value(true)))
+    testing.expect_value(t, store_commit_batch(&store, changes).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, preferences.interface.show_magnifier)
+    testing.expect(t, .Interface_Show_Magnifier in preferences.present)
+
+    reset: settings.Change_Set
+    testing.expect(t, settings.change_set_reset(&reset, .Interface_Show_Magnifier))
+    testing.expect_value(t, store_commit_batch(&store, reset).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.interface.show_magnifier)
+    testing.expect(t, .Interface_Show_Magnifier not_in preferences.present)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Persist, reload, and reset the caret-locked magnifier preference.
+@(test)
+userdata_round_trips_magnifier_input_lock_preference :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.interface.magnifier_input_lock)
+
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Magnifier_Input_Lock, settings.boolean_value(true)))
+    testing.expect_value(t, store_commit_batch(&store, changes).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, preferences.interface.magnifier_input_lock)
+    testing.expect(t, .Interface_Magnifier_Input_Lock in preferences.present)
+
+    reset: settings.Change_Set
+    testing.expect(t,
+        settings.change_set_reset(&reset, .Interface_Magnifier_Input_Lock))
+    testing.expect_value(t, store_commit_batch(&store, reset).outcome,
+        Commit_Outcome.Committed)
+    preferences = settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.interface.magnifier_input_lock)
+    testing.expect(t,
+        .Interface_Magnifier_Input_Lock not_in preferences.present)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// All motor-access combinations survive loading preferences as after a restart.
+@(test)
+userdata_round_trips_motor_accessibility_preference_matrix :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    defaults := settings.default_preferences()
+    testing.expect(t, !defaults.interface.hover_focus)
+    testing.expect(t, !defaults.interface.show_magnifier)
+    testing.expect(t, !defaults.interface.magnifier_input_lock)
+    testing.expect_value(t, defaults.interface.control_size_percent, 100)
+
+    booleans := [?]bool{false, true}
+    control_sizes := [?]int{100, 125, 150, 175, 200}
+    for hover_focus in booleans {
+        for show_magnifier in booleans {
+            for input_lock in booleans {
+                for control_size in control_sizes {
+                    userdata_round_trip_motor_accessibility_case(t, &store, {
+                        hover_focus,
+                        show_magnifier,
+                        input_lock,
+                        control_size,
+                    })
+                }
+            }
+        }
+    }
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Commit a feature combination and load a fresh default snapshot from storage.
+userdata_round_trip_motor_accessibility_case :: proc(
+    t: ^testing.T, store: ^Store, preference_case: Userdata_Motor_Accessibility_Case) {
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Hover_Focus,
+        settings.boolean_value(preference_case.hover_focus)))
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Show_Magnifier,
+        settings.boolean_value(preference_case.show_magnifier)))
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Magnifier_Input_Lock,
+        settings.boolean_value(preference_case.input_lock)))
+    testing.expect(t, settings.change_set_set(
+        &changes, .Interface_Control_Size,
+        settings.integer_value(preference_case.control_size_percent)))
+    testing.expect_value(t, store_commit_batch(store, changes).outcome,
+        Commit_Outcome.Committed)
+
+    restarted := settings.default_preferences()
+    loaded := store_load_settings(store, &restarted)
+    testing.expect_value(t, loaded.failure.kind, Store_Error_Kind.None)
+    testing.expect_value(t, loaded.invalid_count, 0)
+    testing.expect_value(t, restarted.interface.hover_focus,
+        preference_case.hover_focus)
+    testing.expect_value(t, restarted.interface.show_magnifier,
+        preference_case.show_magnifier)
+    testing.expect_value(t, restarted.interface.magnifier_input_lock,
+        preference_case.input_lock)
+    testing.expect_value(t, restarted.interface.control_size_percent,
+        preference_case.control_size_percent)
 }
 
 // Ignore malformed persisted animation style values without replacing defaults.

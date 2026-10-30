@@ -96,12 +96,15 @@ membership_draw_row :: proc(
     params := membership_checkbox(state, index, {})
     if head.id == menu.focused &&
         state.ui_runtime.semantic_focus.focus_origin == .Keyboard {
-        uiwidgets.draw_encoded_focus_ring(encoder, row)
+        uiwidgets.draw_encoded_focus_ring(encoder, row,
+            theme.ui_control_size_scale(menu.control_size_percent))
     }
-    uiwidgets.draw_encoded_checkbox_geometry(encoder, params.rect, params.checked)
+    uiwidgets.draw_encoded_checkbox_geometry(encoder, params.rect, params.checked,
+        theme.ui_control_size_scale(menu.control_size_percent))
     label := row
-    label.x += 28
-    label.width -= 28
+    scale := theme.ui_control_size_scale(menu.control_size_percent)
+    label.x += 28 * scale
+    label.width -= 28 * scale
     context_menu_draw_label(state, encoder,
         string(head.name[:head.name_length]), label, params.enabled)
 }
@@ -113,16 +116,17 @@ draw_encoded_membership :: proc(
     if !menu.active {
         return
     }
+    scale := theme.ui_control_size_scale(menu.control_size_percent)
     _ = uiwidgets.surface_shadow_draw(encoder, menu.bounds, .High)
     _ = native.draw_encoder_rectangle(
         encoder, menu.bounds, theme.UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, menu.bounds, 1, theme.UI_BORDER_COLOR)
+        encoder, menu.bounds, scale, theme.UI_BORDER_COLOR)
     _ = native.draw_encoder_push_scissor(encoder, menu.bounds)
     context_menu_draw_label(state, encoder,
         viewmessages.shell_message(state, .Animation_Add_Collections), {
-            menu.bounds.x + 8, menu.bounds.y + 4, menu.bounds.width - 16,
-            menu.header_height - 8,
+            menu.bounds.x + 8*scale, menu.bounds.y + 4*scale,
+            menu.bounds.width - 16*scale, menu.header_height - 8*scale,
         }, true)
     _ = native.draw_encoder_push_scissor(encoder, menu.clip)
     for index in 0..<menu.count {
@@ -130,7 +134,8 @@ draw_encoded_membership :: proc(
     }
     _ = native.draw_encoder_pop_scissor(encoder)
     scrolling := uiwidgets.scroll_container_visual(menu.clip,
-        f32(menu.count)*menu.row_height, menu.scroll_y, menu.row_height * 3)
+        f32(menu.count)*menu.row_height, menu.scroll_y, menu.row_height * 3,
+        menu.control_size_percent)
     uiwidgets.draw_encoded_scrollbar(encoder, scrolling.scrollbar)
     _ = native.draw_encoder_pop_scissor(encoder)
 }

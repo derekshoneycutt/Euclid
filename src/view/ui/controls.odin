@@ -362,12 +362,34 @@ prepare_outgoing_accordion_section :: proc(
     }
 }
 
-// finish_ui_semantics atomically publishes all geometry and layout registrations.
-finish_ui_semantics :: proc(state: ^core.Euclid_General_State) {
+// finish_ui_semantics publishes controls and admits owner-approved hover focus.
+finish_ui_semantics :: proc(
+    state: ^core.Euclid_General_State, frame: input.Input_Frame) {
     if state == nil {
         return
     }
-    _ = uisemantics.semantic_publish(state^.ui_runtime.semantic_focus)
+    runtime := &state^.ui_runtime
+    semantic := runtime^.semantic_focus
+    previous_focus := semantic^.logical_focus
+    previous_origin := semantic^.focus_origin
+    interaction := runtime^.input.interaction_frame
+    status := uisemantics.semantic_publish(semantic, {
+        enabled = runtime^.preferences.values.interface.hover_focus,
+        window_focused = frame.window_focused,
+        pointer_moved = frame.mouse_moved,
+        pointer_captured = runtime^.input.press_owner.active ||
+            interaction.pointer_capture.kind != .None,
+        modal_routing = runtime^.context_menu.active || runtime^.membership.active,
+        pointer_target = interaction.hover,
+        position = {
+            frame.mouse_position.x,
+            frame.mouse_position.y,
+        },
+    })
+    if status == .Ok && (semantic^.logical_focus != previous_focus ||
+        semantic^.focus_origin != previous_origin) {
+        ui_apply_semantic_focus(runtime, frame, uiterminal.is_terminal_selected(state))
+    }
 }
 
 // prepare_and_finish_ui_layout resolves layout interaction and publishes semantics.
@@ -378,7 +400,7 @@ prepare_and_finish_ui_layout :: proc(
     result := prepare_ui_layout_interaction(state, frame, terminal)
     uioverlay.context_menu_prepare(state)
     uioverlay.membership_prepare(state)
-    finish_ui_semantics(state)
+    finish_ui_semantics(state, frame)
     return result
 }
 

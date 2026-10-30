@@ -79,18 +79,24 @@ Gif_Timing_Button_Descriptor :: struct {
 // gif_path_input_rect_for_panel resolves the saved-path field from GIF row layout.
 gif_path_input_rect_for_panel :: proc(
     panel: geometry.Rectangle,
-    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT) -> geometry.Rectangle {
-    stack: geometry.Rectangle = {panel.x + theme.SETTINGS_PANEL_INSET,
-        panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - theme.SETTINGS_PANEL_INSET * 2,
-        panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
-    rows := gif_view_layout_rows(stack, text_size_percent)
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> geometry.Rectangle {
+    inset := theme.ui_control_size_metric(
+        theme.SETTINGS_PANEL_INSET, control_size_percent)
+    header_offset := theme.ui_control_size_metric(
+        theme.SETTINGS_HEADER_TOP_OFFSET, control_size_percent)
+    stack: geometry.Rectangle = {panel.x + inset,
+        panel.y + header_offset,
+        panel.width - inset * 2,
+        panel.height - header_offset}
+    rows := gif_view_layout_rows(stack, text_size_percent, control_size_percent)
     label_width := theme.ui_scaled_metric(
         GIF_PATH_LABEL_WIDTH, text_size_percent)
     return {stack.x + label_width,
-        rows.status_y + gif_path_input_top_offset(text_size_percent),
+        rows.status_y + gif_path_input_top_offset(
+            text_size_percent, control_size_percent),
         max(f32(0), stack.width - label_width),
-        gif_path_input_height(text_size_percent)}
+        gif_path_input_height(text_size_percent, control_size_percent)}
 }
 
 // gif_path_input_visible reports whether the saved-path control exists this frame.
@@ -106,7 +112,8 @@ gif_path_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
     return gif_path_input_rect_for_panel(
         uiaccordion.accordion_content_rect(&runtime^.layout, .Save_Gif),
-        runtime^.preferences.values.interface.text_size_percent)
+        runtime^.preferences.values.interface.text_size_percent,
+        runtime^.preferences.values.interface.control_size_percent)
 }
 
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
@@ -114,6 +121,7 @@ draw_encoded_gif_geometry :: proc(
     encoder: ^native.Draw_Encoder, prepared: Gif_View_Preparation) {
     uisettings.draw_encoded_slider_geometry(encoder, prepared.downsample)
     uisettings.draw_encoded_slider_geometry(encoder, prepared.frame_step)
+    control_scale := prepared.downsample.track.height / theme.SETTINGS_TRACK_HEIGHT
     animation := prepared.animation_timing.control_geometry.bounds
     recorded := prepared.recorded_timing.control_geometry.bounds
     if prepared.timing_mode == .Animation {
@@ -124,14 +132,16 @@ draw_encoded_gif_geometry :: proc(
             encoder, recorded, theme.draw_color(encoder, .Selection_Background))
     }
     _ = native.draw_encoder_rectangle_outline(
-        encoder, animation, 1, theme.draw_color(encoder, .Control_Border))
+        encoder, animation, control_scale,
+        theme.draw_color(encoder, .Control_Border))
     _ = native.draw_encoder_rectangle_outline(
-        encoder, recorded, 1, theme.draw_color(encoder, .Control_Border))
+        encoder, recorded, control_scale,
+        theme.draw_color(encoder, .Control_Border))
     button := prepared.save_button.control_geometry.bounds
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(button), theme.UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(button), 1,
+        encoder,         geometry.Rectangle(button), control_scale,
         theme.draw_color(encoder, .Control_Border))
 }
 
@@ -139,12 +149,17 @@ draw_encoded_gif_geometry :: proc(
 draw_encoded_gif_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle, prepared: Gif_View_Preparation) {
+    control_percent :=
+        state^.ui_runtime.preferences.values.interface.control_size_percent
+    inset := theme.ui_control_size_metric(theme.SETTINGS_PANEL_INSET, control_percent)
+    header_offset := theme.ui_control_size_metric(
+        theme.SETTINGS_HEADER_TOP_OFFSET, control_percent)
     rows := gif_view_layout_rows({
-        panel.x + theme.SETTINGS_PANEL_INSET, panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - theme.SETTINGS_PANEL_INSET * 2,
-        panel.height - theme.SETTINGS_HEADER_TOP_OFFSET},
-        state^.ui_runtime.preferences.values.interface.text_size_percent)
-    x := panel.x + theme.SETTINGS_PANEL_INSET
+        panel.x + inset, panel.y + header_offset,
+        panel.width - inset * 2, panel.height - header_offset},
+        state^.ui_runtime.preferences.values.interface.text_size_percent,
+        control_percent)
+    x := panel.x + inset
     draw_encoded_gif_slider_text(state, encoder, panel, rows, prepared)
     viewtext.draw_encoded_label(&state^.font_cache, encoder,
         viewmessages.shell_message(state, .Gif_Playback_Timing), x, rows.timing_y)
@@ -167,7 +182,9 @@ draw_encoded_gif_slider_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle, rows: Gif_View_Rows,
     prepared: Gif_View_Preparation) {
-    x := panel.x + theme.SETTINGS_PANEL_INSET
+    x := panel.x + theme.ui_control_size_metric(
+        theme.SETTINGS_PANEL_INSET,
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
     storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     viewtext.draw_encoded_label(
         &state^.font_cache, encoder, viewmessages.shell_message(state, .Gif_Output_Scale),
@@ -206,7 +223,8 @@ draw_encoded_gif_status :: proc(
             state^.ui_runtime.preferences.values.interface.text_size_percent
         field := gif_path_input_rect_for_panel(
             uiaccordion.accordion_content_rect(
-                &state^.ui_runtime.layout, .Save_Gif), text_percent)
+                &state^.ui_runtime.layout, .Save_Gif), text_percent,
+            state^.ui_runtime.preferences.values.interface.control_size_percent)
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             viewmessages.shell_message(state, .Gif_Saved_Path_Label), x,
                 field.y + (field.height - theme.ui_font_size(text_percent)) * 0.5)
@@ -250,6 +268,8 @@ gif_path_input_params :: proc(
         focused = focus.kind == .Input_Box && focus.id == GIF_PATH_INPUT_BOX_ID,
         pointer_routed = target.focus.kind == .Input_Box &&
             target.id == GIF_PATH_INPUT_BOX_ID,
+        control_scale = theme.ui_effective_control_scale(
+            text_percent, runtime^.preferences.values.interface.control_size_percent),
         column_advance = advance,
         font_size = font_size,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
@@ -303,23 +323,26 @@ gif_capture_cadence_label :: proc(
 // gif_timing_button_rects divides one row into two stable timing choices.
 gif_timing_button_rects :: proc(
     panel: geometry.Rectangle, row_y: f32,
-    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT) ->
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) ->
     (geometry.Rectangle, geometry.Rectangle) {
-    available := panel.width - theme.SETTINGS_PANEL_INSET * 2 -
-        theme.SETTINGS_GIF_TIMING_BUTTON_GAP
+    control_scale := theme.ui_control_size_scale(control_size_percent)
+    inset := theme.SETTINGS_PANEL_INSET * control_scale
+    button_gap := theme.SETTINGS_GIF_TIMING_BUTTON_GAP * control_scale
+    available := panel.width - inset * 2 - button_gap
     width := max(f32(0), available * 0.5)
-    y := row_y + gif_timing_button_top_offset(text_size_percent)
-    height := gif_timing_button_height(text_size_percent)
-    animation: geometry.Rectangle = {panel.x + theme.SETTINGS_PANEL_INSET, y,
+    y := row_y + gif_timing_button_top_offset(text_size_percent, control_size_percent)
+    height := gif_timing_button_height(text_size_percent, control_size_percent)
+    animation: geometry.Rectangle = {panel.x + inset, y,
         width, height}
     recorded: geometry.Rectangle = {animation.x + width +
-        theme.SETTINGS_GIF_TIMING_BUTTON_GAP, y, width, height}
-    if gif_timing_buttons_stack(panel.width, text_size_percent) {
-        stacked_width := max(f32(0), panel.width - theme.SETTINGS_PANEL_INSET * 2)
+        button_gap, y, width, height}
+    if gif_timing_buttons_stack(
+        panel.width, text_size_percent, control_size_percent) {
+        stacked_width := max(f32(0), panel.width - inset * 2)
         animation.width = stacked_width
         recorded = {animation.x,
-            animation.y + height + theme.ui_scaled_metric(
-                theme.SETTINGS_GIF_TIMING_BUTTON_GAP, text_size_percent),
+            animation.y + height + button_gap,
             stacked_width, height}
     }
     return animation, recorded
@@ -365,6 +388,8 @@ gif_slider_params :: proc(
         font = ctx.font,
         text_size_percent =
             ctx.ui_runtime^.preferences.values.interface.text_size_percent,
+        control_size_percent =
+            ctx.ui_runtime^.preferences.values.interface.control_size_percent,
         font_resolver = ctx.resolver,
         semantic_domain = .Gif_Control,
         semantic_order = u32(press_id - 6201),
@@ -379,11 +404,16 @@ gif_save_button_params :: proc(
     return {
         id = 3001,
         rect = {
-            ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+            ctx.panel.x + theme.ui_control_size_metric(
+                theme.SETTINGS_PANEL_INSET,
+                ctx.ui_runtime^.preferences.values.interface.control_size_percent),
             row_y,
-            ctx.panel.width - theme.SETTINGS_PANEL_INSET * 2,
+            max(f32(0), ctx.panel.width - theme.ui_control_size_metric(
+                theme.SETTINGS_PANEL_INSET * 2,
+                ctx.ui_runtime^.preferences.values.interface.control_size_percent)),
             gif_save_button_height(
-                ctx.ui_runtime^.preferences.values.interface.text_size_percent),
+                ctx.ui_runtime^.preferences.values.interface.text_size_percent,
+                ctx.ui_runtime^.preferences.values.interface.control_size_percent),
         },
         label = gif_capture_button_label(ctx.state, phase),
         enabled = gif_capture_button_enabled(phase),
@@ -514,9 +544,11 @@ gif_accessibility_status_label :: proc(
 register_gif_status :: proc(
     ctx: Gif_Panel_Context, result: ^Gif_View_Preparation) {
     text_percent := ctx.ui_runtime.preferences.values.interface.text_size_percent
-    bounds: geometry.Rectangle = {ctx.panel.x + theme.SETTINGS_PANEL_INSET,
-        result^.rows.status_y, max(f32(0),
-            ctx.panel.width - theme.SETTINGS_PANEL_INSET * 2),
+    inset := theme.ui_control_size_metric(
+        theme.SETTINGS_PANEL_INSET,
+        ctx.ui_runtime.preferences.values.interface.control_size_percent)
+    bounds: geometry.Rectangle = {ctx.panel.x + inset,
+        result^.rows.status_y, max(f32(0), ctx.panel.width - inset * 2),
         gif_status_line_height(text_percent)}
     states: viewmodel.Ui_Node_State = {.Visible}
     if result^.phase == .Recording || result^.phase == .Finalizing {
@@ -566,62 +598,91 @@ gif_stack_row :: #force_inline proc(
 }
 
 // Give each GIF slider enough room for its scaled label, track, and hit target.
-gif_slider_row_segment_size :: #force_inline proc(text_size_percent: int) -> f32 {
-    track_extent := uiwidgets.slider_track_top_offset(text_size_percent) +
+gif_slider_row_segment_size :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    text_scale := theme.ui_text_scale_factor(text_size_percent)
+    control_scale := theme.ui_control_size_scale(control_size_percent)
+    text_track_extent := uiwidgets.slider_track_top_offset(text_size_percent) +
         theme.SETTINGS_TRACK_HEIGHT + theme.SETTINGS_TRACK_HIT_PAD_Y * 2 +
         theme.ui_scaled_metric(4, text_size_percent)
-    return max(theme.ui_scaled_metric(
-        theme.SETTINGS_GIF_SLIDER_ROW_GAP, text_size_percent), track_extent)
+    control_track_extent := uiwidgets.slider_track_top_offset(
+        text_size_percent, control_size_percent) +
+        (theme.SETTINGS_TRACK_HEIGHT + theme.SETTINGS_TRACK_HIT_PAD_Y * 2) *
+            control_scale + 4 * control_scale
+    return max(max(theme.SETTINGS_GIF_SLIDER_ROW_GAP * text_scale,
+        text_track_extent), max(theme.SETTINGS_GIF_SLIDER_ROW_GAP * control_scale,
+        control_track_extent))
 }
 
 // Scale timing buttons while preserving room for the selected font's glyphs.
-gif_timing_button_height :: #force_inline proc(text_size_percent: int) -> f32 {
-    return theme.ui_panel_button_height(text_size_percent)
+gif_timing_button_height :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    return theme.ui_panel_button_height(
+        text_size_percent, control_size_percent)
 }
 
 // Keep the timing choices below their label with text-scale-aware separation.
-gif_timing_button_top_offset :: #force_inline proc(text_size_percent: int) -> f32 {
-    return max(theme.ui_scaled_metric(
-        theme.SETTINGS_GIF_TIMING_BUTTON_TOP_OFFSET, text_size_percent),
+gif_timing_button_top_offset :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
+    return max(theme.SETTINGS_GIF_TIMING_BUTTON_TOP_OFFSET * scale,
         theme.ui_font_size(text_size_percent) +
-            2 * theme.ui_text_scale_factor(text_size_percent))
+            2 * scale)
 }
 
 // Stack timing choices when scaled text no longer fits each side-by-side button.
 gif_timing_buttons_stack :: #force_inline proc(
-    panel_width: f32, text_size_percent: int) -> bool {
+    panel_width: f32, text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> bool {
+    scale := theme.ui_control_size_scale(control_size_percent)
     available := max(f32(0), panel_width -
-        theme.SETTINGS_PANEL_INSET * 2 - theme.SETTINGS_GIF_TIMING_BUTTON_GAP)
+        (theme.SETTINGS_PANEL_INSET * 2 +
+            theme.SETTINGS_GIF_TIMING_BUTTON_GAP) * scale)
     estimated_label_width := theme.ui_font_size(text_size_percent) * 5
     return estimated_label_width > available * 0.5
 }
 
 // Reserve both timing choices and their margins inside the timing section.
 gif_timing_segment_size :: #force_inline proc(
-    panel_width: f32, text_size_percent: int) -> f32 {
-    scale := theme.ui_text_scale_factor(text_size_percent)
-    buttons_height := gif_timing_button_height(text_size_percent)
+    panel_width: f32, text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
+    buttons_height := gif_timing_button_height(text_size_percent, control_size_percent)
     button_count := 1
     if gif_timing_buttons_stack(
-        panel_width + theme.SETTINGS_PANEL_INSET * 2, text_size_percent) {
+        panel_width + theme.SETTINGS_PANEL_INSET * 2 *
+            theme.ui_control_size_scale(control_size_percent),
+        text_size_percent, control_size_percent) {
         button_count = 2
     }
-    return gif_timing_button_top_offset(text_size_percent) +
+    return gif_timing_button_top_offset(
+        text_size_percent, control_size_percent) +
         f32(button_count) * buttons_height +
-        f32(button_count - 1) * theme.ui_scaled_metric(
-            theme.SETTINGS_GIF_TIMING_BUTTON_GAP, text_size_percent) +
+        f32(button_count - 1) * theme.SETTINGS_GIF_TIMING_BUTTON_GAP * scale +
         6 * scale
 }
 
 // Size the Save button row and following status gap for the active text scale.
-gif_save_button_height :: #force_inline proc(text_size_percent: int) -> f32 {
-    return theme.ui_panel_button_height(text_size_percent)
+gif_save_button_height :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    return theme.ui_panel_button_height(
+        text_size_percent, control_size_percent)
 }
 
 // Reserves scaled button height and the status row's top margin.
-gif_save_button_segment_size :: #force_inline proc(text_size_percent: int) -> f32 {
-    return gif_save_button_height(text_size_percent) +
-        theme.ui_scaled_metric(theme.SETTINGS_PANEL_INSET * 0.75, text_size_percent)
+gif_save_button_segment_size :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
+    return gif_save_button_height(text_size_percent, control_size_percent) +
+        theme.SETTINGS_PANEL_INSET * 0.75 * scale
 }
 
 // Provides enough vertical room for one line of status text.
@@ -638,38 +699,51 @@ gif_status_note_offset :: #force_inline proc(text_size_percent: int) -> f32 {
 }
 
 // Places the saved-path field below status and optional detail text.
-gif_path_input_top_offset :: #force_inline proc(text_size_percent: int) -> f32 {
+gif_path_input_top_offset :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
     note_bottom := gif_status_note_offset(text_size_percent) +
         gif_status_line_height(text_size_percent) +
-        theme.ui_scaled_metric(6, text_size_percent)
-    return max(theme.ui_scaled_metric(
-        GIF_PATH_INPUT_TOP_OFFSET, text_size_percent), note_bottom)
+        6 * scale
+    return max(GIF_PATH_INPUT_TOP_OFFSET * scale, note_bottom)
 }
 
 // Reserves a readable, scale-aware height for the saved-path input.
-gif_path_input_height :: #force_inline proc(text_size_percent: int) -> f32 {
-    return max(theme.ui_scaled_metric(
-        GIF_PATH_INPUT_HEIGHT, text_size_percent),
+gif_path_input_height :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
+    return max(GIF_PATH_INPUT_HEIGHT * scale,
         theme.ui_font_size(text_size_percent) +
-            8 * theme.ui_text_scale_factor(text_size_percent))
+            8 * scale)
 }
 
 // Lay out every GIF control using the active interface text scale.
 gif_view_layout_rows :: proc(
     stack_rect: geometry.Rectangle,
-    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT) -> Gif_View_Rows {
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> Gif_View_Rows {
     stack_cursor := uilayout.stack_panel_cursor_zero()
-    stack_cursor.offset = theme.ui_scaled_metric(
-        theme.SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE, text_size_percent)
-    downsample_row := gif_stack_row(stack_rect,
-        gif_slider_row_segment_size(text_size_percent), stack_cursor)
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
+    stack_cursor.offset = theme.SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE * scale
+    downsample_row := gif_stack_row(
+        stack_rect,
+        gif_slider_row_segment_size(text_size_percent, control_size_percent),
+        stack_cursor)
     frame_step_row := gif_stack_row(stack_rect,
-        gif_slider_row_segment_size(text_size_percent), downsample_row.cursor_out)
+        gif_slider_row_segment_size(text_size_percent, control_size_percent),
+        downsample_row.cursor_out)
     timing_row := gif_stack_row(stack_rect,
-        gif_timing_segment_size(stack_rect.width, text_size_percent),
+        gif_timing_segment_size(
+            stack_rect.width, text_size_percent, control_size_percent),
         frame_step_row.cursor_out)
     save_button_row := gif_stack_row(stack_rect,
-        gif_save_button_segment_size(text_size_percent), timing_row.cursor_out)
+        gif_save_button_segment_size(text_size_percent, control_size_percent),
+        timing_row.cursor_out)
     status_row := gif_stack_row(stack_rect, 0, save_button_row.cursor_out)
     return {
         sliders = {downsample_row.segment_rect.y, frame_step_row.segment_rect.y},
@@ -685,7 +759,8 @@ prepare_gif_timing_controls :: proc(
     timing_y: f32, result: ^Gif_View_Preparation, interactive := true) {
     text_percent := ctx.ui_runtime^.preferences.values.interface.text_size_percent
     animation_rect, recorded_rect := gif_timing_button_rects(
-        panel, timing_y, text_percent)
+        panel, timing_y, text_percent,
+        ctx.ui_runtime^.preferences.values.interface.control_size_percent)
     result^.animation_timing = uiwidgets.prepare_text_button(gif_timing_button_params(
         ctx, {6203, viewmessages.shell_message(ctx.state, .Gif_Timing_Animation),
             viewmessages.shell_message(ctx.state, .Gif_Timing_Animation_Description),
@@ -716,7 +791,8 @@ prepare_gif_path_input :: proc(
     }
     params := gif_path_input_params(state,
         gif_path_input_rect_for_panel(ctx.panel,
-            ctx.ui_runtime^.preferences.values.interface.text_size_percent),
+            ctx.ui_runtime^.preferences.values.interface.text_size_percent,
+            ctx.ui_runtime^.preferences.values.interface.control_size_percent),
         mouse_input, result^.last_path)
     if !interactive {
         params.focused = false
@@ -774,13 +850,17 @@ prepare_gif_view :: proc(
         &state.gif_capture_status,
         view_font.cache_borrow(&state.font_cache, .Regular),
         view_font.cache_terminal_resolver(&state.font_cache)}
-    stack_rect: geometry.Rectangle = {panel.x + theme.SETTINGS_PANEL_INSET,
-        panel.y + theme.SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - theme.SETTINGS_PANEL_INSET * 2,
-        panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
+    control_percent := ctx.ui_runtime^.preferences.values.interface.control_size_percent
+    inset := theme.ui_control_size_metric(theme.SETTINGS_PANEL_INSET, control_percent)
+    header_offset := theme.ui_control_size_metric(
+        theme.SETTINGS_HEADER_TOP_OFFSET, control_percent)
+    stack_rect: geometry.Rectangle = {panel.x + inset,
+        panel.y + header_offset,
+        panel.width - inset * 2,
+        panel.height - header_offset}
     text_percent := ctx.ui_runtime^.preferences.values.interface.text_size_percent
     result: Gif_View_Preparation = {
-        rows = gif_view_layout_rows(stack_rect, text_percent),
+        rows = gif_view_layout_rows(stack_rect, text_percent, control_percent),
     }
     prepare_gif_sliders(ctx, &result, interactive)
     prepare_gif_timing_controls(ctx, panel, result.rows.timing_y, &result, interactive)

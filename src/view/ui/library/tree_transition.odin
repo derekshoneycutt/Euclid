@@ -278,7 +278,8 @@ tree_frame_context :: proc(params: Tree_List_Params) -> Tree_Frame_Context {
         visibility = params.visibility,
         panel = geometry.Rectangle(params.list_panel),
         row_height = theme.ui_tree_row_height(
-            runtime^.preferences.values.interface.text_size_percent),
+            runtime^.preferences.values.interface.text_size_percent,
+            runtime^.preferences.values.interface.control_size_percent),
         now_seconds = params.mouse_input.sample_time_seconds,
         reduce_motion = reduce_motion,
     }

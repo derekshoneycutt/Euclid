@@ -227,7 +227,7 @@ struct ShaderCommandResult
     error_output::String
 end
 
-"""Return the ordered colored and textured 2D shader contracts."""
+"""Return 2D drawing and final-composition shader contracts."""
 function draw2d_shader_specs(shader_root::String)
     return ShaderSpec[
         ShaderSpec("draw2d_colored.vert",
@@ -247,6 +247,12 @@ function draw2d_shader_specs(shader_root::String)
             joinpath(shader_root, "draw2d_textured.frag.hlsl"),
             "fragment", 0, 1,
             [0 => "float2", 1 => "float4"], [0 => "float4"]),
+        ShaderSpec("magnifier.vert",
+            joinpath(shader_root, "magnifier.vert.hlsl"),
+            "vertex", 0, 0, Pair{Int,String}[], [0 => "float2"]),
+        ShaderSpec("magnifier.frag",
+            joinpath(shader_root, "magnifier.frag.hlsl"),
+            "fragment", 1, 2, [0 => "float2"], [0 => "float4"]),
     ]
 end
 
@@ -289,6 +295,11 @@ function shader_abis()
             0, [1], [0, 0, 0], [0, 8, 16], [24, 24, 24]),
         "draw2d_textured.frag" => ShaderAbi(
             "", 0, Int[], 0, [2, 2], Int[], Int[], Int[]),
+        "magnifier.vert" => ShaderAbi(
+            "", 0, Int[], 0, Int[], Int[], Int[], Int[]),
+        "magnifier.frag" => ShaderAbi(
+            "MagnifierUniforms", 48, [0, 16, 24, 32, 36, 40, 44],
+            0, [2, 2, 2, 2, 3], Int[], Int[], Int[]),
         "stroke3d.vert" => ShaderAbi("StrokeVertexUniforms", 64, [0], 0,
             [1], [0, 0, 0], [0, 12, 20], [36, 36, 36]),
         "stroke3d.frag" => ShaderAbi("StrokeFragmentUniforms", 192,
@@ -312,6 +323,9 @@ function validate_pipeline_contracts(specs::Vector{ShaderSpec}, abis=shader_abis
     by_name["draw2d_textured.vert"].outputs ==
         by_name["draw2d_textured.frag"].inputs ||
         error("Textured 2D stage interface mismatch.")
+    by_name["magnifier.vert"].outputs ==
+        by_name["magnifier.frag"].inputs ||
+        error("Magnifier stage interface mismatch.")
     by_name["stroke3d.vert"].outputs == by_name["stroke3d.frag"].inputs ||
         error("Stroke stage interface mismatch.")
     by_name["dust_instanced.vert"].outputs ==

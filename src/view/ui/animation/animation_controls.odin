@@ -123,23 +123,29 @@ animation_favorite_eligible :: #force_inline proc(
 // Anchor transport controls bottom-left and eligible Favorites bottom-right.
 animation_control_layout_slots :: proc(
     world_rect: geometry.Rectangle,
-    favorite_visible: bool, membership_visible := false) -> Animation_Control_Slots {
-    panel_width := theme.ANIMATION_CONTROL_PADDING * 2 +
-        theme.ANIMATION_CONTROL_BUTTON_SIZE * 3 + theme.ANIMATION_CONTROL_BUTTON_GAP * 2
+    favorite_visible: bool, membership_visible := false,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) ->
+    Animation_Control_Slots {
+    scale := theme.ui_control_size_scale(control_size_percent)
+    padding := theme.ANIMATION_CONTROL_PADDING * scale
+    button_size := theme.ANIMATION_CONTROL_BUTTON_SIZE * scale
+    button_gap := theme.ANIMATION_CONTROL_BUTTON_GAP * scale
+    edge_inset := theme.ANIMATION_CONTROL_EDGE_INSET * scale
+    panel_width := padding * 2 + button_size * 3 + button_gap * 2
     panel_height :=
-        theme.ANIMATION_CONTROL_PADDING * 2 + theme.ANIMATION_CONTROL_BUTTON_SIZE
+        padding * 2 + button_size
     panel: geometry.Rectangle = {
-        world_rect.x + theme.ANIMATION_CONTROL_EDGE_INSET,
+        world_rect.x + edge_inset,
         world_rect.y + world_rect.height -
-            theme.ANIMATION_CONTROL_EDGE_INSET - panel_height,
+            edge_inset - panel_height,
         panel_width,
         panel_height,
     }
-    button_y := panel.y + theme.ANIMATION_CONTROL_PADDING
-    refresh: geometry.Rectangle = {panel.x + theme.ANIMATION_CONTROL_PADDING, button_y,
-        theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE}
+    button_y := panel.y + padding
+    refresh: geometry.Rectangle = {panel.x + padding, button_y,
+        button_size, button_size}
     pause := refresh
-    pause.x += theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
+    pause.x += button_size + button_gap
     result: Animation_Control_Slots = {
         panel = panel,
         refresh = refresh,
@@ -147,36 +153,39 @@ animation_control_layout_slots :: proc(
     }
     result.speed = pause
     result.speed.x +=
-        theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
+        button_size + button_gap
     result.eye = {
-        world_rect.x + world_rect.width - theme.ANIMATION_CONTROL_EDGE_INSET -
-            theme.ANIMATION_CONTROL_BUTTON_SIZE,
-        world_rect.y + theme.ANIMATION_CONTROL_EDGE_INSET,
-        theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE,
+        world_rect.x + world_rect.width - edge_inset - button_size,
+        world_rect.y + edge_inset,
+        button_size, button_size,
     }
     if favorite_visible {
-        animation_collection_layout_slots(world_rect, membership_visible, &result)
+        animation_collection_layout_slots(
+            world_rect, membership_visible, scale, &result)
     }
     return result
 }
 
 // Reserve one or two bottom-right slots without changing legacy star-only geometry.
 animation_collection_layout_slots :: proc(
-    world: geometry.Rectangle, membership: bool, slots: ^Animation_Control_Slots) {
+    world: geometry.Rectangle, membership: bool, scale: f32,
+    slots: ^Animation_Control_Slots) {
     height := slots.panel.height
     width := height
-    extra := theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP
+    extra := (theme.ANIMATION_CONTROL_BUTTON_SIZE +
+        theme.ANIMATION_CONTROL_BUTTON_GAP) * scale
     if membership {
         width += extra
     }
     slots.favorite_panel = {
-        world.x + world.width - theme.ANIMATION_CONTROL_EDGE_INSET - width,
+        world.x + world.width - theme.ANIMATION_CONTROL_EDGE_INSET * scale - width,
         slots.panel.y,
         width, height,
     }
     slots.favorite = {slots.favorite_panel.x + theme.ANIMATION_CONTROL_PADDING,
         slots.panel.y + theme.ANIMATION_CONTROL_PADDING,
-        theme.ANIMATION_CONTROL_BUTTON_SIZE, theme.ANIMATION_CONTROL_BUTTON_SIZE}
+        theme.ANIMATION_CONTROL_BUTTON_SIZE * scale,
+        theme.ANIMATION_CONTROL_BUTTON_SIZE * scale}
     if membership {
         slots.membership = slots.favorite
         slots.membership.x += extra
@@ -188,15 +197,25 @@ animation_control_hit_test :: proc(
     world_rect: geometry.Rectangle,
     phase: capturemodel.Gif_Capture_Phase,
     point: geometry.Vector2,
-    visibility: Animation_Control_Visibility) -> (int, bool) {
+    visibility: Animation_Control_Visibility,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> (int, bool) {
     if !animation_controls_visible(phase) {
         return 0, false
     }
     slots := animation_control_layout_slots(
-        world_rect, visibility.favorite, visibility.membership)
+        world_rect, visibility.favorite, visibility.membership,
+        control_size_percent)
     if geometry.rectangle_contains(slots.eye, point) {
         return ANIMATION_VISIBILITY_BUTTON_ID, true
     }
+    return animation_control_hit_test_remaining(slots, point, visibility)
+}
+
+// Resolve visible non-eye controls after visibility and layout have been established.
+animation_control_hit_test_remaining :: proc(
+    slots: Animation_Control_Slots,
+    point: geometry.Vector2,
+    visibility: Animation_Control_Visibility) -> (int, bool) {
     if visibility.hidden {
         return 0, false
     }
@@ -479,7 +498,8 @@ prepare_animation_controls :: proc(
     membership_visible := favorite_visible && uioverlay.membership_available(state)
     slots := animation_control_layout_slots(
         geometry.Rectangle(ui_runtime^.layout.ui_regions.world_rect),
-        favorite_visible, membership_visible)
+        favorite_visible, membership_visible,
+        ui_runtime^.preferences.values.interface.control_size_percent)
     eye := prepare_animation_visibility_control(state, slots, mouse_input)
     if ui_runtime^.playback.controls_hidden {
         return {
@@ -813,10 +833,12 @@ draw_encoded_animation_control_backing :: proc(
 
 // Draw matching background and border chrome for either animation-control group.
 draw_encoded_animation_control_panel :: proc(
-    encoder: ^native.Draw_Encoder, panel: geometry.Rectangle) {
+    encoder: ^native.Draw_Encoder, panel: geometry.Rectangle,
+    scale := f32(1)) {
     _ = uiwidgets.surface_shadow_draw(encoder, panel, .Medium)
     _ = native.draw_encoder_rectangle(encoder, panel, theme.UI_COMPONENT_BACKGROUND_COLOR)
-    _ = native.draw_encoder_rectangle_outline(encoder, panel, 1, theme.UI_BORDER_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, panel, scale, theme.UI_BORDER_COLOR)
 }
 
 // Encode the prepared overlay with font-independent transport and visibility glyphs.
@@ -826,6 +848,8 @@ draw_encoded_animation_controls :: proc(
     if !prepared.visible {
         return
     }
+    control_scale := theme.ui_control_size_scale(
+        state.ui_runtime.preferences.values.interface.control_size_percent)
     draw_encoded_animation_eye(encoder, prepared.eye,
         state.ui_runtime.playback.controls_hidden)
     if !prepared.overlay_visible {
@@ -833,7 +857,8 @@ draw_encoded_animation_controls :: proc(
     }
     draw_encoded_animation_transport(state, encoder, prepared)
     if prepared.favorite_visible {
-        draw_encoded_animation_control_panel(encoder, prepared.slots.favorite_panel)
+        draw_encoded_animation_control_panel(
+            encoder, prepared.slots.favorite_panel, control_scale)
         _ = draw_encoded_animation_control_backing(
             encoder, prepared.slots.favorite, prepared.favorite.hovered,
             prepared.favorite.pressed, false)
@@ -850,7 +875,10 @@ draw_encoded_animation_controls :: proc(
 draw_encoded_animation_transport :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Animation_Control_Preparation) {
-    draw_encoded_animation_control_panel(encoder, prepared.slots.panel)
+    draw_encoded_animation_control_panel(
+        encoder, prepared.slots.panel,
+        theme.ui_control_size_scale(
+            state^.ui_runtime.preferences.values.interface.control_size_percent))
     results: [2]uiwidgets.Icon_Button_Result = {prepared.refresh, prepared.pause}
     icons: [2]uiwidgets.Icon_Button_Id = {.Refresh,
         state^.ui_runtime.playback.simulation_paused ? .Play : .Pause}
@@ -879,13 +907,15 @@ draw_encoded_animation_speed :: proc(
     rate := capturemodel.gif_capture_playback_rate(state.ui_runtime.playback.rate,
         state.gif_capture_status.gif_capture_phase,
         state.gif_capture_status.save_gif_requested)
-    draw_encoded_speed_glyph(encoder, prepared.speed.icon_drawn_rect, tint, rate)
+    draw_encoded_speed_glyph(encoder, prepared.speed.icon_drawn_rect, tint, rate,
+        prepared.slots.speed.width / theme.ANIMATION_CONTROL_BUTTON_SIZE)
 }
 
 // Encode crossed-out fast-forward at normal speed, otherwise an inset circular rate badge.
 draw_encoded_speed_glyph :: proc(
     encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
-    tint: color.Color_RGBA8, rate: animationmodel.Playback_Rate) {
+    tint: color.Color_RGBA8, rate: animationmodel.Playback_Rate,
+    scale := f32(1)) {
     for index in 0..<2 {
         x := rect.x + rect.width*(0.12 + f32(index)*0.36)
         _ = native.draw_encoder_triangle(encoder,
@@ -896,7 +926,7 @@ draw_encoded_speed_glyph :: proc(
     if rate == .Normal {
         _ = native.draw_encoder_line(encoder,
             {rect.x + rect.width*0.18, rect.y + rect.height*0.12},
-            {rect.x + rect.width*0.86, rect.y + rect.height*0.84}, 1.8, tint)
+            {rect.x + rect.width*0.86, rect.y + rect.height*0.84}, 1.8*scale, tint)
     } else {
         draw_encoded_playback_badge(encoder, rect, tint, rate)
     }
@@ -931,6 +961,8 @@ draw_encoded_playback_badge :: proc(
 draw_encoded_animation_eye :: proc(
     encoder: ^native.Draw_Encoder,
     result: uiwidgets.Icon_Button_Result, hidden: bool) {
+    scale := result.control_geometry.bounds.width /
+        theme.ANIMATION_CONTROL_BUTTON_SIZE
     tint := draw_encoded_animation_control_backing(encoder,
         result.control_geometry.bounds, result.hovered, result.pressed, false)
     rect := result.icon_drawn_rect
@@ -944,7 +976,7 @@ draw_encoded_animation_eye :: proc(
                 rect.x + rect.width*(0.12 + 0.76*t),
                 center.y + sign*rect.height*0.25*f32(math.sin(f64(t)*math.PI)),
             }
-            _ = native.draw_encoder_line(encoder, previous, current, 1.6, tint)
+            _ = native.draw_encoder_line(encoder, previous, current, 1.6*scale, tint)
             previous = current
         }
     }
@@ -952,7 +984,7 @@ draw_encoded_animation_eye :: proc(
     if hidden {
         _ = native.draw_encoder_line(encoder,
             {rect.x + rect.width*0.16, rect.y + rect.height*0.16},
-            {rect.x + rect.width*0.84, rect.y + rect.height*0.84}, 2, tint)
+            {rect.x + rect.width*0.84, rect.y + rect.height*0.84}, 2*scale, tint)
     }
 }
 

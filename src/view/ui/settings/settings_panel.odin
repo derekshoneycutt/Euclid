@@ -29,6 +29,10 @@ SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 SETTINGS_ANIMATION_SCALE_SLIDER_ID :: 6106
 SETTINGS_HISTORY_DELETE_BUTTON_ID :: 6104
 SETTINGS_HISTORY_DELETE_STATUS_ID :: 6105
+SETTINGS_HOVER_FOCUS_CHECKBOX_ID :: 4010
+SETTINGS_CONTROL_SIZE_SLIDER_ID :: 6107
+SETTINGS_SHOW_MAGNIFIER_CHECKBOX_ID :: 4011
+SETTINGS_MAGNIFIER_INPUT_LOCK_CHECKBOX_ID :: 4012
 SETTINGS_HISTORY_DELETE_TIMEOUT_SECONDS :: 5
 SETTINGS_HISTORY_DELETE_SHAKE_SECONDS :: 0.3
 
@@ -42,6 +46,14 @@ Settings_View_Labels :: struct {
     gpu_dust: string,
     reduce_motion: string,
     increased_contrast: string,
+    hover_focus: string,
+    hover_focus_tooltip: string,
+    show_magnifier: string,
+    show_magnifier_tooltip: string,
+    magnifier_input_lock: string,
+    magnifier_input_lock_tooltip: string,
+    control_size: string,
+    control_size_tooltip: string,
     text_size: string,
     animation_scale: string,
     animation_scale_tooltip: string,
@@ -93,10 +105,14 @@ Settings_View_Rows :: struct {
     history_delete_status_y: f32,
     reduce_motion_y: f32,
     increased_contrast_y: f32,
+    hover_focus_y: f32,
+    show_magnifier_y: f32,
+    magnifier_input_lock_y: f32,
+    monochrome_y: f32,
     system_motion_y: f32,
     system_contrast_y: f32,
+    control_size_y: f32,
     animation_scale_y: f32,
-    monochrome_y: f32,
     text_size_y: f32,
     save_status_y: f32,
 }
@@ -118,9 +134,12 @@ Settings_View_Layout_State :: struct {
 //   Fixed prepared interaction results for all settings controls.
 Settings_View_Preparation :: struct {
     rows: Settings_View_Rows,
+    text_size_percent: int,
+    control_size_percent: int,
     scroll: uiwidgets.Scroll_Container_Update_Result,
     max_particles: uiwidgets.Integer_Slider_Result,
     animation_scale: uiwidgets.Integer_Slider_Result,
+    control_size: uiwidgets.Integer_Slider_Result,
     text_size: uiwidgets.Integer_Slider_Result,
     fps: uiwidgets.Checkbox_Result,
     limit: uiwidgets.Checkbox_Result,
@@ -129,6 +148,9 @@ Settings_View_Preparation :: struct {
     gpu_dust: uiwidgets.Checkbox_Result,
     reduce_motion: uiwidgets.Checkbox_Result,
     increased_contrast: uiwidgets.Checkbox_Result,
+    hover_focus: uiwidgets.Checkbox_Result,
+    show_magnifier: uiwidgets.Checkbox_Result,
+    magnifier_input_lock: uiwidgets.Checkbox_Result,
     persist_history: uiwidgets.Checkbox_Result,
     monochrome: uiwidgets.Checkbox_Result,
     delete_history: uiwidgets.Text_Button_Result,
@@ -164,6 +186,108 @@ Settings_Text_Context :: struct {
     stats_y: f32,
     encoder: ^native.Draw_Encoder,
     text_size_percent: int,
+    control_size_percent: int,
+}
+
+// Offer the control-size explanation through the shared accessible tooltip path.
+settings_offer_control_size_tooltip :: proc(
+    ctx: Settings_View_Context,
+    prepared: uiwidgets.Integer_Slider_Result, interactive: bool) {
+    if !interactive {
+        return
+    }
+    owner := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_CONTROL_SIZE_SLIDER_ID)
+    source := uioverlay.tooltip_control_source(
+        &ctx.state^.ui_runtime.input, ctx.semantic_focus,
+        owner, SETTINGS_CONTROL_SIZE_SLIDER_ID)
+    mouse: geometry.Vector2 = {
+        ctx.mouse_input.mouse_position.x,
+        ctx.mouse_input.mouse_position.y,
+    }
+    press_active := ctx.press_owner != nil && ctx.press_owner^.active
+    if source == .None && !press_active &&
+        geometry.rectangle_contains(ctx.panel, mouse) &&
+        geometry.rectangle_contains(prepared.control_geometry.bounds, mouse) {
+        source = .Pointer
+    }
+    uioverlay.tooltip_offer(&ctx.state^.ui_runtime.tooltip, {
+        owner = owner,
+        source = source,
+        anchor = prepared.control_geometry.bounds,
+        prefer_above = true,
+        text = ctx.labels.control_size_tooltip,
+    })
+}
+
+// Offer pointer-magnifier help through the shared accessible tooltip path.
+settings_offer_magnifier_tooltip :: proc(
+    ctx: Settings_View_Context,
+    prepared: uiwidgets.Checkbox_Result,
+    interactive: bool) {
+    if !interactive {
+        return
+    }
+    owner := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_SHOW_MAGNIFIER_CHECKBOX_ID)
+    source := uioverlay.tooltip_control_source(
+        &ctx.state^.ui_runtime.input, ctx.semantic_focus,
+        owner, SETTINGS_SHOW_MAGNIFIER_CHECKBOX_ID)
+    mouse: geometry.Vector2 = {
+        ctx.mouse_input.mouse_position.x,
+        ctx.mouse_input.mouse_position.y,
+    }
+    press_active := ctx.press_owner != nil && ctx.press_owner^.active
+    if source == .None && !press_active &&
+        geometry.rectangle_contains(ctx.panel, mouse) &&
+        geometry.rectangle_contains(prepared.control_geometry.bounds, mouse) {
+        source = .Pointer
+    }
+    if prepared.toggled {
+        uioverlay.tooltip_dismiss(&ctx.state^.ui_runtime.tooltip, owner)
+    }
+    uioverlay.tooltip_offer(&ctx.state^.ui_runtime.tooltip, {
+        owner = owner,
+        source = source,
+        anchor = prepared.control_geometry.bounds,
+        prefer_above = true,
+        text = ctx.labels.show_magnifier_tooltip,
+    })
+}
+
+// Offer caret-lock help through the shared accessible tooltip path.
+settings_offer_magnifier_input_lock_tooltip :: proc(
+    ctx: Settings_View_Context,
+    prepared: uiwidgets.Checkbox_Result,
+    interactive: bool) {
+    if !interactive {
+        return
+    }
+    owner := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_MAGNIFIER_INPUT_LOCK_CHECKBOX_ID)
+    source := uioverlay.tooltip_control_source(
+        &ctx.state^.ui_runtime.input, ctx.semantic_focus,
+        owner, SETTINGS_MAGNIFIER_INPUT_LOCK_CHECKBOX_ID)
+    mouse: geometry.Vector2 = {
+        ctx.mouse_input.mouse_position.x,
+        ctx.mouse_input.mouse_position.y,
+    }
+    press_active := ctx.press_owner != nil && ctx.press_owner^.active
+    if source == .None && !press_active &&
+        geometry.rectangle_contains(ctx.panel, mouse) &&
+        geometry.rectangle_contains(prepared.control_geometry.bounds, mouse) {
+        source = .Pointer
+    }
+    if prepared.toggled {
+        uioverlay.tooltip_dismiss(&ctx.state^.ui_runtime.tooltip, owner)
+    }
+    uioverlay.tooltip_offer(&ctx.state^.ui_runtime.tooltip, {
+        owner = owner,
+        source = source,
+        anchor = prepared.control_geometry.bounds,
+        prefer_above = true,
+        text = ctx.labels.magnifier_input_lock_tooltip,
+    })
 }
 
 // settings_cancel_geometry_capture releases transient panel drags after layout changes.
@@ -213,41 +337,61 @@ settings_view_context :: proc(
     }
 }
 
+// Snapshot history labels into the shared Settings label record.
+settings_history_labels :: proc(
+    state: ^core.Euclid_General_State, labels: ^Settings_View_Labels) {
+    labels^.persist_history =
+        viewmessages.shell_message(state, .Settings_Persist_Terminal_History)
+    labels^.delete_history =
+        viewmessages.shell_message(state, .Settings_Delete_Terminal_History)
+    labels^.confirm_delete_history =
+        viewmessages.shell_message(state, .Settings_Confirm_Delete_Terminal_History)
+    labels^.confirm_delete_history_value =
+        viewmessages.shell_message(state, .Settings_History_Delete_Confirm_Value)
+    labels^.history_delete_pending =
+        viewmessages.shell_message(state, .Settings_History_Delete_Pending)
+    labels^.history_delete_succeeded =
+        viewmessages.shell_message(state, .Settings_History_Delete_Succeeded)
+    labels^.history_delete_failed =
+        viewmessages.shell_message(state, .Settings_History_Delete_Failed)
+}
+
 // Snapshot localized Settings labels before leaf-control preparation.
 settings_view_labels :: proc(
     state: ^core.Euclid_General_State,
     simd_available, gpu_available: bool) -> Settings_View_Labels {
-    return {
-        persist_history = viewmessages.shell_message(
-            state, .Settings_Persist_Terminal_History),
-        delete_history = viewmessages.shell_message(
-            state, .Settings_Delete_Terminal_History),
-        confirm_delete_history = viewmessages.shell_message(
-            state, .Settings_Confirm_Delete_Terminal_History),
-        confirm_delete_history_value = viewmessages.shell_message(
-            state, .Settings_History_Delete_Confirm_Value),
-        history_delete_pending = viewmessages.shell_message(
-            state, .Settings_History_Delete_Pending),
-        history_delete_succeeded = viewmessages.shell_message(
-            state, .Settings_History_Delete_Succeeded),
-        history_delete_failed = viewmessages.shell_message(
-            state, .Settings_History_Delete_Failed),
-        maximum_dust = viewmessages.shell_message(state, .Settings_Maximum_Dust),
-        display_fps = viewmessages.shell_message(state, .Settings_Display_Fps),
-        limit_fps = viewmessages.shell_message(state, .Settings_Limit_Fps),
-        drawing_sound = viewmessages.shell_message(state, .Settings_Drawing_Sound),
-        simd = settings_simd_label(state, simd_available),
-        gpu_dust = settings_gpu_dust_label(state, gpu_available),
-        reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion),
-        increased_contrast = viewmessages.shell_message(
-            state, .Settings_Increased_Contrast),
-        text_size = viewmessages.shell_message(state, .Settings_Text_Size),
-        animation_scale = viewmessages.shell_message(
-            state, .Settings_Animation_Scale),
-        animation_scale_tooltip = viewmessages.shell_message(
-            state, .Settings_Animation_Scale_Tooltip),
-        monochrome = viewmessages.shell_message(state, .Settings_Monochrome),
-    }
+    labels: Settings_View_Labels
+    settings_history_labels(state, &labels)
+    labels.maximum_dust = viewmessages.shell_message(state, .Settings_Maximum_Dust)
+    labels.display_fps = viewmessages.shell_message(state, .Settings_Display_Fps)
+    labels.limit_fps = viewmessages.shell_message(state, .Settings_Limit_Fps)
+    labels.drawing_sound = viewmessages.shell_message(state, .Settings_Drawing_Sound)
+    labels.simd = settings_simd_label(state, simd_available)
+    labels.gpu_dust = settings_gpu_dust_label(state, gpu_available)
+    labels.reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion)
+    labels.increased_contrast =
+        viewmessages.shell_message(state, .Settings_Increased_Contrast)
+    labels.hover_focus = viewmessages.shell_message(state, .Settings_Hover_Focus)
+    labels.hover_focus_tooltip =
+        viewmessages.shell_message(state, .Settings_Hover_Focus_Tooltip)
+    labels.show_magnifier =
+        viewmessages.shell_message(state, .Settings_Show_Magnifier)
+    labels.show_magnifier_tooltip =
+        viewmessages.shell_message(state, .Settings_Show_Magnifier_Tooltip)
+    labels.magnifier_input_lock =
+        viewmessages.shell_message(state, .Settings_Magnifier_Input_Lock)
+    labels.magnifier_input_lock_tooltip =
+        viewmessages.shell_message(state, .Settings_Magnifier_Input_Lock_Tooltip)
+    labels.control_size = viewmessages.shell_message(state, .Settings_Control_Size)
+    labels.control_size_tooltip =
+        viewmessages.shell_message(state, .Settings_Control_Size_Tooltip)
+    labels.text_size = viewmessages.shell_message(state, .Settings_Text_Size)
+    labels.animation_scale =
+        viewmessages.shell_message(state, .Settings_Animation_Scale)
+    labels.animation_scale_tooltip =
+        viewmessages.shell_message(state, .Settings_Animation_Scale_Tooltip)
+    labels.monochrome = viewmessages.shell_message(state, .Settings_Monochrome)
+    return labels
 }
 
 // Center the destructive label inside the prepared panel button, including its shake.
@@ -298,13 +442,15 @@ draw_encoded_settings_history_controls :: proc(
 
 // draw_encoded_checkbox_geometry encodes one checkbox without its deferred label.
 draw_encoded_checkbox_geometry :: proc(
-    encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
-    uiwidgets.draw_encoded_checkbox_geometry(encoder, rectangle, checked)
+    encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool,
+    scale := f32(1)) {
+    uiwidgets.draw_encoded_checkbox_geometry(encoder, rectangle, checked, scale)
 }
 
 // draw_encoded_slider_geometry encodes one slider track, fill, and knob.
 draw_encoded_slider_geometry :: proc(
     encoder: ^native.Draw_Encoder, prepared: uiwidgets.Integer_Slider_Result) {
+    scale := prepared.track.height / theme.SETTINGS_TRACK_HEIGHT
     knob_center_x := prepared.knob.x + prepared.knob.width * 0.5
     _ = native.draw_encoder_rectangle(
         encoder, prepared.track, worldmodel.BACKGROUND_COLOR)
@@ -315,23 +461,26 @@ draw_encoded_slider_geometry :: proc(
     _ = native.draw_encoder_rectangle(
         encoder, prepared.knob, theme.draw_color(encoder, .Text))
     _ = native.draw_encoder_rectangle_outline(
-        encoder, prepared.track, 1, theme.draw_color(encoder, .Control_Border))
+        encoder, prepared.track, scale, theme.draw_color(encoder, .Control_Border))
     _ = native.draw_encoder_rectangle_outline(
-        encoder, prepared.knob, 1, theme.UI_SELECTION_TEXT_COLOR)
+        encoder, prepared.knob, scale, theme.UI_SELECTION_TEXT_COLOR)
 }
 
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
-    checks: [9]uiwidgets.Checkbox_Result = {
-        prepared.reduce_motion, prepared.increased_contrast,
-        prepared.gpu_dust, prepared.fps, prepared.limit,
-        prepared.sound, prepared.simd, prepared.persist_history,
-        prepared.monochrome,
+    checks: [12]uiwidgets.Checkbox_Result = {
+        prepared.reduce_motion, prepared.increased_contrast, prepared.hover_focus,
+        prepared.show_magnifier, prepared.magnifier_input_lock,
+        prepared.monochrome, prepared.gpu_dust,
+        prepared.fps, prepared.limit, prepared.sound, prepared.simd,
+        prepared.persist_history,
     }
     for check in checks {
         draw_encoded_checkbox_geometry(
-            encoder, check.box_rect, check.checked_out)
+            encoder, check.box_rect, check.checked_out,
+            theme.ui_effective_control_scale(
+                prepared.text_size_percent, prepared.control_size_percent))
     }
 }
 
@@ -345,13 +494,16 @@ draw_encoded_settings_history_button_geometry :: proc(
     }
     _ = native.draw_encoder_rectangle(
         encoder, button, theme.UI_COMPONENT_BACKGROUND_COLOR)
-    _ = native.draw_encoder_rectangle_outline(encoder, button, 1, border)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, button,
+        theme.ui_control_size_scale(prepared.control_size_percent), border)
 }
 
 // draw_encoded_settings_geometry encodes settings controls without text.
 draw_encoded_settings_geometry :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
     draw_encoded_slider_geometry(encoder, prepared.max_particles)
+    draw_encoded_slider_geometry(encoder, prepared.control_size)
     draw_encoded_slider_geometry(encoder, prepared.animation_scale)
     draw_encoded_slider_geometry(encoder, prepared.text_size)
     draw_encoded_settings_checkboxes(encoder, prepared)
@@ -363,11 +515,19 @@ draw_encoded_settings_geometry :: proc(
 draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
-    labels: [9]struct{label: string, y: f32} = {
+    labels: [12]struct{label: string, y: f32} = {
         {viewmessages.shell_message(state, .Settings_Reduce_Motion),
             rows.reduce_motion_y},
         {viewmessages.shell_message(state, .Settings_Increased_Contrast),
             rows.increased_contrast_y},
+        {viewmessages.shell_message(state, .Settings_Hover_Focus),
+            rows.hover_focus_y},
+        {viewmessages.shell_message(state, .Settings_Show_Magnifier),
+            rows.show_magnifier_y},
+        {viewmessages.shell_message(state, .Settings_Magnifier_Input_Lock),
+            rows.magnifier_input_lock_y},
+        {viewmessages.shell_message(state, .Settings_Monochrome),
+            rows.monochrome_y},
         {viewmessages.shell_message(state, .Settings_Persist_Terminal_History),
             rows.persist_history_y},
         {settings_gpu_dust_label(state, prepared.gpu_available),
@@ -376,8 +536,6 @@ draw_encoded_settings_check_labels :: proc(
         {viewmessages.shell_message(state, .Settings_Limit_Fps), rows.limit_y},
         {viewmessages.shell_message(state, .Settings_Drawing_Sound), rows.sound_y},
         {settings_simd_label(state, prepared.simd_available), rows.simd_y},
-        {viewmessages.shell_message(state, .Settings_Monochrome),
-            rows.monochrome_y},
     }
     for item in labels {
         viewtext.draw_encoded_label(&state^.font_cache, encoder, item.label,
@@ -396,15 +554,17 @@ draw_encoded_settings_check_labels :: proc(
     }
 }
 
-// draw_encoded_settings_text emits current labels, values, and counters.
+// Draw all current Settings labels, values, and counters.
 draw_encoded_settings_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Settings_View_Preparation) {
     panel := prepared.scroll.view_rect
     rows := prepared.rows
-    x := panel.x + theme.SETTINGS_PANEL_INSET
-    face := view_font.cache_borrow(&state^.font_cache, .Regular)
     text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    control_percent := state^.ui_runtime.preferences.values.interface.control_size_percent
+    x := panel.x + theme.ui_control_size_metric(
+        theme.SETTINGS_PANEL_INSET, control_percent)
+    face := view_font.cache_borrow(&state^.font_cache, .Regular)
     text_ctx: Settings_Text_Context = {
         state = state,
         panel = panel,
@@ -413,8 +573,35 @@ draw_encoded_settings_text :: proc(
         stats_y = rows.stats_y,
         encoder = encoder,
         text_size_percent = text_percent,
+        control_size_percent = control_percent,
     }
     draw_encoded_settings_slider_labels(text_ctx, rows)
+    draw_encoded_settings_section_headings(state, encoder, x, rows)
+    viewtext.draw_encoded_label(&state^.font_cache, encoder,
+        viewmessages.shell_message(state, .Settings_Control_Size),
+        x, rows.control_size_y)
+    draw_encoded_settings_control_size_value(text_ctx, rows.control_size_y)
+    viewtext.draw_encoded_label(&state^.font_cache, encoder,
+        viewmessages.shell_message(state, .Settings_Text_Size),
+        x, rows.text_size_y)
+    draw_encoded_settings_size_value(text_ctx, rows.text_size_y)
+    viewtext.draw_encoded_label(&state^.font_cache, encoder,
+        viewmessages.shell_message(state, .Settings_Animation_Scale),
+        x, rows.animation_scale_y)
+    draw_encoded_settings_animation_scale_value(text_ctx, rows.animation_scale_y)
+    draw_settings_particle_stats(text_ctx)
+    draw_settings_animation_count(text_ctx, rows.animation_entries_y)
+    draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
+    draw_encoded_settings_history_controls(state, encoder, prepared)
+    draw_encoded_settings_save_status(state, encoder, x, rows.save_status_y)
+}
+
+// Draw the four section headings using the prepared Settings row positions.
+draw_encoded_settings_section_headings :: proc(
+    state: ^core.Euclid_General_State,
+    encoder: ^native.Draw_Encoder,
+    x: f32,
+    rows: Settings_View_Rows) {
     draw_encoded_settings_section_heading(state, encoder,
         .Settings_Section_Accessibility, x, rows.accessibility_header_y)
     draw_encoded_settings_section_heading(state, encoder,
@@ -423,19 +610,21 @@ draw_encoded_settings_text :: proc(
         .Settings_Section_Particles, x, rows.particles_header_y)
     draw_encoded_settings_section_heading(state, encoder,
         .Settings_Section_Other, x, rows.other_header_y)
-    viewtext.draw_encoded_label(&state^.font_cache, encoder,
-        viewmessages.shell_message(state, .Settings_Animation_Scale),
-        x, rows.animation_scale_y)
-    draw_encoded_settings_animation_scale_value(text_ctx, rows.animation_scale_y)
-    viewtext.draw_encoded_label(&state^.font_cache, encoder,
-        viewmessages.shell_message(state, .Settings_Text_Size),
-        x, rows.text_size_y)
-    draw_encoded_settings_size_value(text_ctx, rows.text_size_y)
-    draw_settings_particle_stats(text_ctx)
-    draw_settings_animation_count(text_ctx, rows.animation_entries_y)
-    draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
-    draw_encoded_settings_history_controls(state, encoder, prepared)
-    draw_encoded_settings_save_status(state, encoder, x, rows.save_status_y)
+}
+
+// Show the chosen control-size scale without implying a font-size change.
+draw_encoded_settings_control_size_value :: proc(
+    ctx: Settings_Text_Context, row_y: f32) {
+    value := fmt.tprintf("%d%%",
+        ctx.state^.ui_runtime.preferences.values.interface.control_size_percent)
+    value_width, measured := viewtext.ui_text_measure_monospace(
+        value, ctx.font, theme.ui_font_size(ctx.text_size_percent), 0)
+    if !measured {
+        value_width = 48
+    }
+    viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder, value,
+        settings_right_aligned_x(
+            ctx.panel, value_width, ctx.control_size_percent), row_y)
 }
 
 // Show the selected animation multiplier, identifying its unmodified default.
@@ -453,7 +642,8 @@ draw_encoded_settings_animation_scale_value :: proc(
         value_width = 80
     }
     viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder, value,
-        settings_right_aligned_x(ctx.panel, value_width), row_y)
+        settings_right_aligned_x(
+            ctx.panel, value_width, ctx.control_size_percent), row_y)
 }
 
 // Draw the labels and right-aligned values associated with both Settings sliders.
@@ -469,9 +659,12 @@ draw_encoded_settings_slider_labels :: proc(
     }
     viewtext.draw_encoded_label(&state^.font_cache, ctx.encoder,
         viewmessages.shell_message(state, .Settings_Maximum_Dust),
-        ctx.panel.x + theme.SETTINGS_PANEL_INSET, rows.slider_label_y)
+        ctx.panel.x + theme.ui_control_size_metric(
+            theme.SETTINGS_PANEL_INSET, ctx.control_size_percent),
+        rows.slider_label_y)
     viewtext.draw_encoded_label(&state^.font_cache, ctx.encoder, dust_value,
-        settings_right_aligned_x(ctx.panel, dust_width), rows.slider_label_y)
+        settings_right_aligned_x(
+            ctx.panel, dust_width, ctx.control_size_percent), rows.slider_label_y)
 }
 
 // Draw the selected percentage beside the text-size slider label.
@@ -484,7 +677,8 @@ draw_encoded_settings_size_value :: proc(
         value_width = 40
     }
     viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder, value,
-        settings_right_aligned_x(ctx.panel, value_width), row_y)
+        settings_right_aligned_x(
+            ctx.panel, value_width, ctx.control_size_percent), row_y)
 }
 
 // Draw the current Julia animation count as the first Other Settings row.
@@ -562,16 +756,21 @@ settings_gpu_dust_label :: proc(
 
 // settings_right_aligned_x keeps one measured value inside the panel inset.
 settings_right_aligned_x :: #force_inline proc(
-    panel: geometry.Rectangle, text_width: f32) -> f32 {
-    return panel.x + panel.width - theme.SETTINGS_PANEL_INSET - max(text_width, 0)
+    panel: geometry.Rectangle, text_width: f32,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    inset := theme.ui_control_size_metric(
+        theme.SETTINGS_PANEL_INSET, control_size_percent)
+    return panel.x + panel.width - inset - max(text_width, 0)
 }
 
 //   Build one settings checkbox parameter record from shared row context.
 settings_checkbox_params :: proc(
     ctx: Settings_View_Context,
     descriptor: Settings_Checkbox_Descriptor) -> uiwidgets.Checkbox_Params {
-    box_side := theme.SETTINGS_CHECKBOX_SIZE * theme.ui_text_scale_factor(
-        ctx.preferences.interface.text_size_percent)
+    scale := theme.ui_effective_control_scale(
+        ctx.preferences.interface.text_size_percent,
+        ctx.preferences.interface.control_size_percent)
+    box_side := theme.SETTINGS_CHECKBOX_SIZE * scale
     row_rect: geometry.Rectangle = {
         ctx.panel.x,
         descriptor.row_y,
@@ -586,11 +785,11 @@ settings_checkbox_params :: proc(
     return {
         id = descriptor.id,
         rect = geometry.Rectangle{
-            ctx.panel.x + theme.SETTINGS_PANEL_INSET, descriptor.row_y,
-            theme.SETTINGS_CHECKBOX_SIZE * theme.ui_text_scale_factor(
-                ctx.preferences.interface.text_size_percent),
-            theme.SETTINGS_CHECKBOX_SIZE * theme.ui_text_scale_factor(
-                ctx.preferences.interface.text_size_percent),},
+            ctx.panel.x + theme.ui_control_size_metric(
+                theme.SETTINGS_PANEL_INSET,
+                ctx.preferences.interface.control_size_percent), descriptor.row_y,
+            box_side,
+            box_side,},
         checked = descriptor.checked,
         enabled = descriptor.enabled,
         mouse = ctx.mouse_input,
@@ -601,12 +800,14 @@ settings_checkbox_params :: proc(
         font_resolver = ctx.font_resolver,
         label_font_size = theme.ui_font_size(
             ctx.preferences.interface.text_size_percent),
-        label_offset_x = theme.ui_scaled_metric(
+        label_offset_x = theme.ui_control_scaled_metric(
             theme.SETTINGS_CHECKBOX_LABEL_GAP,
-            ctx.preferences.interface.text_size_percent),
-        label_offset_y = -theme.ui_scaled_metric(
+            ctx.preferences.interface.text_size_percent,
+            ctx.preferences.interface.control_size_percent),
+        label_offset_y = -theme.ui_control_scaled_metric(
             theme.SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-            ctx.preferences.interface.text_size_percent),
+            ctx.preferences.interface.text_size_percent,
+            ctx.preferences.interface.control_size_percent),
         semantic_focus = ctx.semantic_focus,
         semantic_domain = semantic_domain,
         semantic_order = descriptor.order,
@@ -622,8 +823,9 @@ settings_prepare_integer_slider :: proc(
     slider_params := params
     track := uiwidgets.slider_track_rect(
         slider_params.panel, slider_params.row_y,
-        slider_params.text_size_percent)
-    hit := uiwidgets.slider_hit_rect(track)
+        slider_params.text_size_percent, slider_params.control_size_percent)
+    scale := theme.ui_control_size_scale(slider_params.control_size_percent)
+    hit := uiwidgets.slider_hit_rect(track, scale)
     visible := geometry.rectangles_intersect(hit, geometry.Rectangle(ctx.panel))
     if !visible {
         owner := ctx.press_owner
@@ -648,6 +850,34 @@ settings_prepare_integer_slider :: proc(
 }
 
 // Build the focusable deletion action with explicit armed state and bounded motion.
+settings_history_delete_button_rect :: proc(
+    ctx: Settings_View_Context,
+    rows: Settings_View_Rows,
+    armed: bool) -> geometry.Rectangle {
+    panel_state := ctx.settings_panel
+    rectangle: geometry.Rectangle = {
+        ctx.panel.x + theme.ui_control_size_metric(
+            theme.SETTINGS_PANEL_INSET,
+            ctx.preferences.interface.control_size_percent),
+        rows.delete_history_y,
+        max(f32(0), ctx.panel.width -
+            2*theme.ui_control_size_metric(
+                theme.SETTINGS_PANEL_INSET,
+                ctx.preferences.interface.control_size_percent)),
+        theme.ui_panel_button_height(
+            ctx.preferences.interface.text_size_percent,
+            ctx.preferences.interface.control_size_percent),
+    }
+    if armed {
+        rectangle.x += settings_history_delete_shake_offset(
+            panel_state, ctx.mouse_input.sample_time_seconds,
+            ctx.preferences.interface.reduce_motion ||
+                ctx.platform_reduce_motion)
+    }
+    return rectangle
+}
+
+// Build the focusable deletion action with explicit armed state and bounded motion.
 settings_history_delete_button_params :: proc(
     ctx: Settings_View_Context, rows: Settings_View_Rows) ->
         uiwidgets.Text_Button_Params {
@@ -665,18 +895,7 @@ settings_history_delete_button_params :: proc(
     if pending {
         states += {.Busy}
     }
-    rectangle: geometry.Rectangle = {
-        ctx.panel.x + theme.SETTINGS_PANEL_INSET,
-        rows.delete_history_y,
-        max(f32(0), ctx.panel.width - 2*theme.SETTINGS_PANEL_INSET),
-        theme.ui_panel_button_height(ctx.preferences.interface.text_size_percent),
-    }
-    if armed {
-        rectangle.x += settings_history_delete_shake_offset(
-            panel_state, ctx.mouse_input.sample_time_seconds,
-            ctx.preferences.interface.reduce_motion ||
-                ctx.platform_reduce_motion)
-    }
+    rectangle := settings_history_delete_button_rect(ctx, rows, armed)
     semantic_id := uisemantics.semantic_control_id(
         .Settings_Control, SETTINGS_HISTORY_DELETE_BUTTON_ID)
     return {
@@ -696,7 +915,7 @@ settings_history_delete_button_params :: proc(
             role = .Button,
             states = states,
             region = .Accordion_Content,
-            traversal_order = 7,
+            traversal_order = 8,
             clip_bounds = geometry.Rectangle(ctx.panel),
             label = label,
             value = value,
@@ -737,7 +956,7 @@ settings_publish_history_delete_status :: proc(
         role = .Status,
         states = states,
         region = .Accordion_Content,
-        traversal_order = 8,
+        traversal_order = 9,
         bounds = {
             ctx.panel.x + theme.SETTINGS_PANEL_INSET,
             rows.history_delete_status_y,
@@ -836,6 +1055,7 @@ settings_max_particles_params :: proc(
         min_value = 0,
         max_value = particlemodel.MAX_LOW_PARTICLES,
         text_size_percent = ctx.preferences.interface.text_size_percent,
+        control_size_percent = ctx.preferences.interface.control_size_percent,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
@@ -861,10 +1081,37 @@ settings_animation_scale_params :: proc(
         step = 5,
         value_suffix = "%",
         text_size_percent = ctx.preferences.interface.text_size_percent,
+        control_size_percent = ctx.preferences.interface.control_size_percent,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 3,
+        semantic_order = 7,
+    }
+}
+
+// Build the bounded interface control-size slider parameters.
+settings_control_size_params :: proc(
+    ctx: Settings_View_Context,
+    row_y: f32) -> uiwidgets.Integer_Slider_Params {
+    return {
+        panel = geometry.Rectangle(ctx.panel),
+        row_y = row_y,
+        mouse_input = ctx.mouse_input,
+        press_owner = ctx.press_owner,
+        semantic_focus = ctx.semantic_focus,
+        press_id = SETTINGS_CONTROL_SIZE_SLIDER_ID,
+        label = ctx.labels.control_size,
+        value = ctx.preferences.interface.control_size_percent,
+        min_value = theme.CONTROL_SIZE_MIN_PERCENT,
+        max_value = theme.CONTROL_SIZE_MAX_PERCENT,
+        step = theme.CONTROL_SIZE_STEP_PERCENT,
+        value_suffix = "%",
+        text_size_percent = ctx.preferences.interface.text_size_percent,
+        control_size_percent = ctx.preferences.interface.control_size_percent,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
+        semantic_domain = .Settings_Control,
+        semantic_order = 5,
     }
 }
 
@@ -886,10 +1133,11 @@ settings_text_size_params :: proc(
         step = theme.TEXT_SIZE_STEP_PERCENT,
         value_suffix = "%",
         text_size_percent = ctx.preferences.interface.text_size_percent,
+        control_size_percent = ctx.preferences.interface.control_size_percent,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 5,
+        semantic_order = 6,
     }
 }
 
@@ -922,9 +1170,10 @@ draw_settings_stat_row :: proc(
         key = .Regular,
         text = label,
         position = {
-            ctx.panel.x + theme.SETTINGS_PANEL_INSET,
+            ctx.panel.x + theme.ui_control_size_metric(
+                theme.SETTINGS_PANEL_INSET, ctx.control_size_percent),
             ctx.stats_y + f32(row)*settings_scaled_row_gap(
-                ctx.text_size_percent),
+                ctx.text_size_percent, ctx.control_size_percent),
         },
         color = theme.draw_color(ctx.encoder, .Text),
         font = viewtext.ui_text_font(ctx.font, ctx.text_size_percent),
@@ -932,10 +1181,14 @@ draw_settings_stat_row :: proc(
 }
 
 // settings_scaled_row_gap keeps text rows separated at every supported size.
-settings_scaled_row_gap :: #force_inline proc(text_size_percent: int) -> f32 {
-    return max(max(theme.SETTINGS_TOGGLE_ROW_GAP,
+settings_scaled_row_gap :: #force_inline proc(
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    control_scale := theme.ui_control_size_scale(control_size_percent)
+    text_required := max(max(theme.SETTINGS_TOGGLE_ROW_GAP,
         theme.SETTINGS_STATS_ROW_GAP),
         theme.ui_font_size(text_size_percent) + 6)
+    return max(text_required, theme.SETTINGS_TOGGLE_ROW_GAP * control_scale)
 }
 
 //   Place one fixed-size settings row and return it with the advanced cursor.
@@ -961,20 +1214,24 @@ settings_view_layout_rows :: proc(
     stack_rect: geometry.Rectangle,
     text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
     system_motion_notice := false,
-    system_contrast_notice := false) -> Settings_View_Rows {
+    system_contrast_notice := false,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> Settings_View_Rows {
     font_size := theme.ui_font_size(text_size_percent)
+    control_scale := theme.ui_control_size_scale(control_size_percent)
     layout: Settings_View_Layout_State = {
         stack_rect = stack_rect,
         cursor = uilayout.stack_panel_cursor_zero(),
-        row_gap = settings_scaled_row_gap(text_size_percent),
+        row_gap = settings_scaled_row_gap(text_size_percent, control_size_percent),
         heading_height = font_size + 10,
-        action_height = theme.ui_panel_button_height(text_size_percent),
-        action_status_gap = theme.ui_scaled_metric(
-            theme.SETTINGS_PANEL_INSET * 0.75, text_size_percent),
+        action_height = theme.ui_panel_button_height(
+            text_size_percent, control_size_percent),
+        action_status_gap = theme.ui_control_size_metric(
+            theme.SETTINGS_PANEL_INSET * 0.75, control_size_percent),
         slider_height = max(font_size + 6,
-            uiwidgets.slider_track_top_offset(text_size_percent) +
-            theme.SETTINGS_TRACK_HEIGHT +
-            theme.SETTINGS_TRACK_HIT_PAD_Y * 2) + 6,
+            uiwidgets.slider_track_top_offset(text_size_percent,
+                control_size_percent) +
+            (theme.SETTINGS_TRACK_HEIGHT +
+                theme.SETTINGS_TRACK_HIT_PAD_Y * 2) * control_scale + 6),
         system_motion_notice = system_motion_notice,
         system_contrast_notice = system_contrast_notice,
     }
@@ -997,6 +1254,9 @@ settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_Stat
     layout^.cursor.offset += layout^.row_gap
     rows^.increased_contrast_y = rect.y + layout^.cursor.offset
     layout^.cursor.offset += layout^.row_gap
+    rows^.hover_focus_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    settings_layout_magnifier_accessibility_rows(layout)
     rows^.system_motion_y = -1
     rows^.system_contrast_y = -1
     if layout^.system_motion_notice {
@@ -1007,14 +1267,28 @@ settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_Stat
         rows^.system_contrast_y = rect.y + layout^.cursor.offset
         layout^.cursor.offset += layout^.row_gap
     }
-    rows^.animation_scale_y = rect.y + layout^.cursor.offset
+    rows^.control_size_y = rect.y + layout^.cursor.offset
     placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
     layout^.cursor = placement.cursor_out
-    rows^.monochrome_y = rect.y + layout^.cursor.offset
-    layout^.cursor.offset += layout^.row_gap
     rows^.text_size_y = rect.y + layout^.cursor.offset
     placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
     layout^.cursor = placement.cursor_out
+    rows^.animation_scale_y = rect.y + layout^.cursor.offset
+    placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
+    layout^.cursor = placement.cursor_out
+}
+
+// Keep the lens modes and monochrome checkbox in one ordered Accessibility group.
+settings_layout_magnifier_accessibility_rows :: proc(
+    layout: ^Settings_View_Layout_State) {
+    rows := &layout^.rows
+    rect := layout^.stack_rect
+    rows^.show_magnifier_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.magnifier_input_lock_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.monochrome_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
 }
 
 // Reserve the History heading, persistence checkbox, deletion action, and status.
@@ -1079,17 +1353,10 @@ update_settings_controls :: proc(
     rows: Settings_View_Rows, interactive := true) -> Settings_Control_Update {
     result: Settings_View_Preparation = {
         rows = rows,
+        text_size_percent = ctx.preferences.interface.text_size_percent,
+        control_size_percent = ctx.preferences.interface.control_size_percent,
     }
-    result.max_particles = settings_prepare_integer_slider(
-        ctx, settings_max_particles_params(ctx, rows.slider_label_y), interactive)
-    result.animation_scale = settings_prepare_integer_slider(
-        ctx, settings_animation_scale_params(ctx, rows.animation_scale_y), interactive)
-    if interactive && geometry.rectangles_intersect(
-        result.animation_scale.control_geometry.bounds, geometry.Rectangle(ctx.panel)) {
-        settings_offer_animation_scale_tooltip(ctx, result.animation_scale)
-    }
-    result.text_size = settings_prepare_integer_slider(
-        ctx, settings_text_size_params(ctx, rows.text_size_y), interactive)
+    settings_prepare_sliders(ctx, rows, interactive, &result)
     result.fps = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, ctx.labels.display_fps,
         ctx.preferences.interface.display_fps, true, 11}),
@@ -1103,6 +1370,11 @@ update_settings_controls :: proc(
         ctx.preferences.drawing.sound_enabled, true, 13}),
         ctx.press_owner, interactive)
     prepare_settings_optional_controls(ctx, rows, interactive, &result)
+    settings_offer_hover_focus_tooltip(ctx, result.hover_focus, interactive)
+    settings_offer_magnifier_tooltip(ctx, result.show_magnifier, interactive)
+    settings_offer_magnifier_input_lock_tooltip(
+        ctx, result.magnifier_input_lock, interactive)
+    settings_offer_control_size_tooltip(ctx, result.control_size, interactive)
     result.delete_history = uiwidgets.prepare_text_button(
         settings_history_delete_button_params(ctx, rows),
         ctx.press_owner, interactive)
@@ -1117,6 +1389,27 @@ update_settings_controls :: proc(
         settings_publish_history_delete_status(ctx, rows)
     }
     return {result, result.simd_available, result.gpu_available}
+}
+
+// Prepare Settings sliders and offer the animation-scale tooltip when eligible.
+settings_prepare_sliders :: proc(
+    ctx: Settings_View_Context,
+    rows: Settings_View_Rows,
+    interactive: bool,
+    result: ^Settings_View_Preparation) {
+    result^.max_particles = settings_prepare_integer_slider(
+        ctx, settings_max_particles_params(ctx, rows.slider_label_y), interactive)
+    result^.control_size = settings_prepare_integer_slider(
+        ctx, settings_control_size_params(ctx, rows.control_size_y), interactive)
+    result^.text_size = settings_prepare_integer_slider(
+        ctx, settings_text_size_params(ctx, rows.text_size_y), interactive)
+    result^.animation_scale = settings_prepare_integer_slider(
+        ctx, settings_animation_scale_params(ctx, rows.animation_scale_y), interactive)
+    if interactive && geometry.rectangles_intersect(
+        result^.animation_scale.control_geometry.bounds,
+        geometry.Rectangle(ctx.panel)) {
+        settings_offer_animation_scale_tooltip(ctx, result^.animation_scale)
+    }
 }
 
 // Prepare capability-gated toggles and interface policy without committing preference edits.
@@ -1148,18 +1441,71 @@ prepare_settings_optional_controls :: proc(
             ctx.labels.increased_contrast,
             ctx.preferences.interface.increased_contrast, true, 2,
         }), ctx.press_owner, interactive)
+    result.hover_focus = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {
+        rows.hover_focus_y, SETTINGS_HOVER_FOCUS_CHECKBOX_ID,
+        ctx.labels.hover_focus,
+        ctx.preferences.interface.hover_focus, true, 3,
+    }), ctx.press_owner, interactive)
+    result.show_magnifier = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.show_magnifier_y, SETTINGS_SHOW_MAGNIFIER_CHECKBOX_ID,
+            ctx.labels.show_magnifier,
+            ctx.preferences.interface.show_magnifier, true, 4,
+        }), ctx.press_owner, interactive)
+    result.magnifier_input_lock = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.magnifier_input_lock_y,
+            SETTINGS_MAGNIFIER_INPUT_LOCK_CHECKBOX_ID,
+            ctx.labels.magnifier_input_lock,
+            ctx.preferences.interface.magnifier_input_lock,
+            ctx.preferences.interface.show_magnifier, 5,
+        }), ctx.press_owner, interactive)
     result.persist_history = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
             rows.persist_history_y, 4008,
             ctx.labels.persist_history,
-            ctx.preferences.terminal.persist_history, true, 6,
+            ctx.preferences.terminal.persist_history, true, 7,
         }), ctx.press_owner, interactive)
     result.monochrome = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
             rows.monochrome_y, 4009,
             ctx.labels.monochrome,
-            ctx.preferences.animation.monochrome, true, 4,
+            ctx.preferences.animation.monochrome, true, 6,
         }), ctx.press_owner, interactive)
+}
+
+// Offer localized hover-focus help through the shared keyboard and pointer tooltip path.
+settings_offer_hover_focus_tooltip :: proc(
+    ctx: Settings_View_Context,
+    prepared: uiwidgets.Checkbox_Result, interactive: bool) {
+    if !interactive {
+        return
+    }
+    owner := uisemantics.semantic_control_id(
+        .Settings_Control, SETTINGS_HOVER_FOCUS_CHECKBOX_ID)
+    source := uioverlay.tooltip_control_source(
+        &ctx.state^.ui_runtime.input, ctx.semantic_focus,
+        owner, SETTINGS_HOVER_FOCUS_CHECKBOX_ID)
+    mouse: geometry.Vector2 = {
+        ctx.mouse_input.mouse_position.x,
+        ctx.mouse_input.mouse_position.y,
+    }
+    press_active := ctx.press_owner != nil && ctx.press_owner^.active
+    if source == .None && !press_active &&
+        geometry.rectangle_contains(ctx.panel, mouse) &&
+        geometry.rectangle_contains(prepared.control_geometry.bounds, mouse) {
+        source = .Pointer
+    }
+    if prepared.toggled {
+        uioverlay.tooltip_dismiss(&ctx.state^.ui_runtime.tooltip, owner)
+    }
+    uioverlay.tooltip_offer(&ctx.state^.ui_runtime.tooltip, {
+        owner = owner,
+        source = source,
+        anchor = prepared.control_geometry.bounds,
+        prefer_above = true,
+        text = ctx.labels.hover_focus_tooltip,
+    })
 }
 
 // Offer the animation-scale explanation through the shared accessible tooltip path.
@@ -1197,9 +1543,10 @@ settings_offer_animation_scale_tooltip :: proc(
 // settings_scroll_content_height reserves every scaled Settings section and status.
 settings_scroll_content_height :: proc(
     system_motion_notice: bool, system_contrast_notice := false,
-    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT) -> f32 {
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
     rows := settings_view_layout_rows({}, text_size_percent,
-        system_motion_notice, system_contrast_notice)
+        system_motion_notice, system_contrast_notice, control_size_percent)
     return theme.SETTINGS_HEADER_TOP_OFFSET + rows.save_status_y +
         theme.ui_font_size(text_size_percent) + theme.SETTINGS_PANEL_INSET
 }
@@ -1239,11 +1586,14 @@ prepare_settings_scroll :: proc(
     panel_state := ctx.settings_panel
     height := settings_scroll_content_height(
         ctx.platform_reduce_motion, ctx.platform_increased_contrast,
-        ctx.preferences.interface.text_size_percent)
-    row_gap := max(theme.SETTINGS_TOGGLE_ROW_GAP,
-        theme.ui_font_size(ctx.preferences.interface.text_size_percent) + 6)
+        ctx.preferences.interface.text_size_percent,
+        ctx.preferences.interface.control_size_percent)
+    row_gap := settings_scaled_row_gap(
+        ctx.preferences.interface.text_size_percent,
+        ctx.preferences.interface.control_size_percent)
     scroll := uiwidgets.scroll_container_visual(
-        ctx.panel, height, panel_state^.scroll_y, row_gap)
+        ctx.panel, height, panel_state^.scroll_y, row_gap,
+        ctx.preferences.interface.control_size_percent)
     if interactive {
         scroll = uiwidgets.scroll_container_update({
             id = 6102,
@@ -1257,6 +1607,7 @@ prepare_settings_scroll :: proc(
             state_in = {panel_state^.scroll_dragging, panel_state^.scroll_drag_off},
             semantic_focus = ctx.semantic_focus,
             semantic_id = uisemantics.semantic_control_id(.Settings_Control, 6102),
+            control_size_percent = ctx.preferences.interface.control_size_percent,
         })
         panel_state^.scroll_y = scroll.scroll_y_out
         panel_state^.scroll_dragging = scroll.state_out.is_dragging_thumb
@@ -1264,7 +1615,9 @@ prepare_settings_scroll :: proc(
     }
     if scroll.scrollbar.has_scrollbar {
         scroll.view_rect.width =
-            max(f32(0), scroll.view_rect.width - theme.SCROLLBAR_WIDTH)
+            max(f32(0), scroll.view_rect.width -
+                theme.ui_control_size_metric(theme.SCROLLBAR_WIDTH,
+                    ctx.preferences.interface.control_size_percent))
     }
     return scroll
 }
@@ -1284,13 +1637,16 @@ prepare_settings_view :: proc(
     }
     scroll := prepare_settings_scroll(ctx, interactive)
     content_panel := scroll.view_rect
-    stack_rect: geometry.Rectangle = {content_panel.x + theme.SETTINGS_PANEL_INSET,
+    panel_inset := theme.ui_control_size_metric(
+        theme.SETTINGS_PANEL_INSET, ctx.preferences.interface.control_size_percent)
+    stack_rect: geometry.Rectangle = {content_panel.x + panel_inset,
         content_panel.y + theme.SETTINGS_HEADER_TOP_OFFSET - scroll.scroll_y_out,
-        content_panel.width - theme.SETTINGS_PANEL_INSET * 2,
+        content_panel.width - panel_inset * 2,
         content_panel.height - theme.SETTINGS_HEADER_TOP_OFFSET}
     rows := settings_view_layout_rows(stack_rect,
         ctx.preferences.interface.text_size_percent,
-        ctx.platform_reduce_motion, ctx.platform_increased_contrast)
+        ctx.platform_reduce_motion, ctx.platform_increased_contrast,
+        ctx.preferences.interface.control_size_percent)
     ctx.panel = content_panel
     update := update_settings_controls(ctx, rows, interactive)
     update.prepared.scroll = scroll
@@ -1352,6 +1708,10 @@ apply_settings_accessibility_preparation :: proc(
         settings_record_preference_edit(state, .Animation_Scale_Percent,
             setting_model.integer_value(prepared.animation_scale.value))
     }
+    if prepared.control_size.changed {
+        settings_record_preference_edit(state, .Interface_Control_Size,
+            setting_model.integer_value(prepared.control_size.value))
+    }
     if prepared.text_size.changed {
         settings_record_preference_edit(state, .Interface_Text_Size,
             setting_model.integer_value(prepared.text_size.value))
@@ -1364,6 +1724,7 @@ apply_settings_accessibility_preparation :: proc(
         settings_record_preference_edit(state, .Interface_Increased_Contrast,
             setting_model.boolean_value(prepared.increased_contrast.checked_out))
     }
+    apply_settings_pointer_accessibility_preparation(state, prepared)
     if prepared.persist_history.toggled {
         settings_record_preference_edit(state, .Persist_Terminal_History,
             setting_model.boolean_value(prepared.persist_history.checked_out))
@@ -1371,6 +1732,23 @@ apply_settings_accessibility_preparation :: proc(
     if prepared.monochrome.toggled {
         settings_record_preference_edit(state, .Animation_Monochrome,
             setting_model.boolean_value(prepared.monochrome.checked_out))
+    }
+}
+
+// Persist pointer-only accessibility toggles from the prepared Settings frame.
+apply_settings_pointer_accessibility_preparation :: proc(
+    state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
+    if prepared.hover_focus.toggled {
+        settings_record_preference_edit(state, .Interface_Hover_Focus,
+            setting_model.boolean_value(prepared.hover_focus.checked_out))
+    }
+    if prepared.show_magnifier.toggled {
+        settings_record_preference_edit(state, .Interface_Show_Magnifier,
+            setting_model.boolean_value(prepared.show_magnifier.checked_out))
+    }
+    if prepared.magnifier_input_lock.toggled {
+        settings_record_preference_edit(state, .Interface_Magnifier_Input_Lock,
+            setting_model.boolean_value(prepared.magnifier_input_lock.checked_out))
     }
 }
 
@@ -1463,11 +1841,15 @@ settings_control_edit_preparation :: proc(
     case .Interface_Text_Size:
         prepared.text_size.changed = true
         prepared.text_size.value = int(value.integer)
+    case .Interface_Control_Size:
+        prepared.control_size.changed = true
+        prepared.control_size.value = int(value.integer)
     case .Interface_Display_Fps, .Interface_Reduce_Motion,
         .Interface_Increased_Contrast, .Rendering_Limit_Fps,
         .Drawing_Sound_Enabled, .Rendering_Simd,
         .Rendering_Gpu_Dust_Instancing, .Persist_Terminal_History,
-        .Animation_Monochrome:
+        .Animation_Monochrome, .Interface_Hover_Focus,
+        .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
         return settings_boolean_control_edit_preparation(id, value)
     case:
         return {}, false
@@ -1493,6 +1875,21 @@ settings_boolean_control_edit_preparation :: proc(
         }
     case .Interface_Increased_Contrast:
         prepared.increased_contrast = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
+    case .Interface_Hover_Focus:
+        prepared.hover_focus = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
+    case .Interface_Show_Magnifier:
+        prepared.show_magnifier = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
+    case .Interface_Magnifier_Input_Lock:
+        prepared.magnifier_input_lock = {
             toggled = true,
             checked_out = value.boolean,
         }

@@ -33,10 +33,85 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
     testing.expect_value(t,
         setting_value(preferences, .Interface_Text_Size).integer, 100)
+    testing.expect(t, !setting_value(preferences, .Interface_Hover_Focus).boolean)
+    testing.expect_value(t,
+        setting_value(preferences, .Interface_Control_Size).integer, 100)
+    testing.expect(t, !setting_value(preferences, .Interface_Show_Magnifier).boolean)
+    testing.expect(t, !setting_value(
+        preferences, .Interface_Magnifier_Input_Lock).boolean)
     testing.expect(t, !setting_value(preferences, .Persist_Terminal_History).boolean)
     testing.expect_value(t,
         setting_value(preferences, .Animation_Scale_Percent).integer, 100)
     testing.expect(t, !setting_value(preferences, .Animation_Monochrome).boolean)
+}
+
+// Keep the pointer magnifier opt-in and persist it as an interface preference.
+@(test)
+show_magnifier_uses_typed_persisted_preference :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Interface_Show_Magnifier)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "interface")
+    testing.expect_value(t, definition.key, "show_magnifier")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Boolean)
+
+    preferences := default_preferences()
+    testing.expect(t, !preferences.interface.show_magnifier)
+    testing.expect(t, apply_setting_value(
+        &preferences, .Interface_Show_Magnifier, boolean_value(true), .Saved))
+    testing.expect(t, preferences.interface.show_magnifier)
+    testing.expect(t, .Interface_Show_Magnifier in preferences.present)
+    changes: Change_Set
+    testing.expect(t, change_set_reset(&changes, .Interface_Show_Magnifier))
+}
+
+// Keep caret-lock opt-in and persist it as a typed interface preference.
+@(test)
+magnifier_input_lock_uses_typed_persisted_preference :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Interface_Magnifier_Input_Lock)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "interface")
+    testing.expect_value(t, definition.key, "magnifier_input_lock")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Boolean)
+
+    preferences := default_preferences()
+    testing.expect(t, !preferences.interface.magnifier_input_lock)
+    testing.expect(t, apply_setting_value(
+        &preferences, .Interface_Magnifier_Input_Lock, boolean_value(true), .Saved))
+    testing.expect(t, preferences.interface.magnifier_input_lock)
+    testing.expect(t, .Interface_Magnifier_Input_Lock in preferences.present)
+    changes: Change_Set
+    testing.expect(t,
+        change_set_reset(&changes, .Interface_Magnifier_Input_Lock))
+}
+
+// Keep control size bounded, discrete, persisted, and separate from text size.
+@(test)
+control_size_uses_five_supported_persisted_stops :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Interface_Control_Size)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "interface")
+    testing.expect_value(t, definition.key, "control_size_percent")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Integer)
+    for percent in ([5]int{100, 125, 150, 175, 200}) {
+        preferences := default_preferences()
+        testing.expect(t, apply_setting_value(
+            &preferences, .Interface_Control_Size, integer_value(percent), .Saved))
+        testing.expect_value(t,
+            setting_value(preferences, .Interface_Control_Size).integer, percent)
+        testing.expect_value(t,
+            preferences.interface.text_size_percent, 100)
+        testing.expect(t, .Interface_Control_Size in preferences.present)
+    }
+    preferences := default_preferences()
+    testing.expect(t, apply_setting_value(
+        &preferences, .Interface_Control_Size, integer_value(175), .Override))
+    testing.expect(t, .Interface_Control_Size in preferences.overrides)
+    for percent in ([4]int{99, 101, 124, 201}) {
+        testing.expect(t, !apply_setting_value(
+            &preferences, .Interface_Control_Size, integer_value(percent), .Saved))
+    }
+    testing.expect(t, !apply_setting_value(
+        &preferences, .Interface_Control_Size, boolean_value(true), .Saved))
 }
 
 // Keep animation style defaults, identities, typed access, and validation stable.
@@ -113,6 +188,28 @@ increased_contrast_uses_typed_persisted_preference :: proc(t: ^testing.T) {
         .Interface_Increased_Contrast, boolean_value(false), .Override))
     testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
     testing.expect(t, .Interface_Increased_Contrast in preferences.overrides)
+}
+
+// Keep hover focus opt-in and independently typed as a boolean preference.
+@(test)
+hover_focus_uses_typed_persisted_preference :: proc(t: ^testing.T) {
+    definition, valid := setting_definition(.Interface_Hover_Focus)
+    testing.expect(t, valid)
+    testing.expect_value(t, definition.namespace, "interface")
+    testing.expect_value(t, definition.key, "hover_focus")
+    testing.expect_value(t, definition.storage_kind, Setting_Storage_Kind.Boolean)
+    preferences := default_preferences()
+    testing.expect(t, !preferences.interface.hover_focus)
+    testing.expect(t, apply_setting_value(&preferences,
+        .Interface_Hover_Focus, boolean_value(true), .Saved))
+    testing.expect(t, preferences.interface.hover_focus)
+    testing.expect(t, .Interface_Hover_Focus in preferences.present)
+    testing.expect(t, apply_setting_value(&preferences,
+        .Interface_Hover_Focus, boolean_value(false), .Override))
+    testing.expect(t, !preferences.interface.hover_focus)
+    testing.expect(t, .Interface_Hover_Focus in preferences.overrides)
+    testing.expect(t, !apply_setting_value(&preferences,
+        .Interface_Hover_Focus, integer_value(1), .Saved))
 }
 
 // Keep all supported text-size stops stable as typed persisted integer values.

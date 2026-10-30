@@ -51,7 +51,9 @@ prepare_library_search_visual :: proc(
     panel: geometry.Rectangle) -> Library_Search_Preparation {
     result: Library_Search_Preparation = {
         layout = library_search_layout(
-            panel, state^.ui_runtime.library.search.suggestion_length > 0),
+            panel, state^.ui_runtime.library.search.suggestion_length > 0,
+            state^.ui_runtime.preferences.values.interface.text_size_percent,
+            state^.ui_runtime.preferences.values.interface.control_size_percent),
     }
     params := library_search_input_params(state, result.layout, {}, panel)
     params.focused = false
@@ -61,31 +63,36 @@ prepare_library_search_visual :: proc(
 
 // library_search_layout reserves correction rows only while a suggestion is visible.
 library_search_layout :: proc(
-    panel: geometry.Rectangle, show_suggestion: bool) -> Library_Search_Layout {
+    panel: geometry.Rectangle, show_suggestion: bool,
+    text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) ->
+    Library_Search_Layout {
+    scale := theme.ui_effective_control_scale(
+        text_size_percent, control_size_percent)
     inner: geometry.Rectangle = {
-        x = panel.x + LIBRARY_SEARCH_INSET,
-        y = panel.y + LIBRARY_SEARCH_INSET,
-        width = max(f32(0), panel.width - LIBRARY_SEARCH_INSET * 2),
-        height = max(f32(0), panel.height - LIBRARY_SEARCH_INSET * 2),
+        x = panel.x + LIBRARY_SEARCH_INSET * scale,
+        y = panel.y + LIBRARY_SEARCH_INSET * scale,
+        width = max(f32(0), panel.width - LIBRARY_SEARCH_INSET * 2 * scale),
+        height = max(f32(0), panel.height - LIBRARY_SEARCH_INSET * 2 * scale),
     }
     input: geometry.Rectangle = {
         x = inner.x,
         y = inner.y,
         width = inner.width,
-        height = min(LIBRARY_SEARCH_INPUT_HEIGHT, inner.height),
+        height = min(LIBRARY_SEARCH_INPUT_HEIGHT * scale, inner.height),
     }
-    action_width := min(LIBRARY_SEARCH_ACTION_WIDTH, input.width)
+    action_width := min(LIBRARY_SEARCH_ACTION_WIDTH * scale, input.width)
     prompt_y := input.y + input.height
     prompt_height := f32(0)
     suggestion_height := f32(0)
     if show_suggestion {
-        prompt_height = min(LIBRARY_SEARCH_PROMPT_HEIGHT,
+        prompt_height = min(LIBRARY_SEARCH_PROMPT_HEIGHT * scale,
             max(f32(0), inner.y + inner.height - prompt_y))
-        suggestion_height = min(LIBRARY_SEARCH_SUGGESTION_HEIGHT,
+        suggestion_height = min(LIBRARY_SEARCH_SUGGESTION_HEIGHT * scale,
             max(f32(0), inner.y + inner.height - prompt_y - prompt_height))
     }
     suggestion_y := prompt_y + prompt_height
-    suggestion_x := inner.x + uiwidgets.INPUT_BOX_TEXT_INSET * 2
+    suggestion_x := inner.x + uiwidgets.INPUT_BOX_TEXT_INSET * 2 * scale
     suggestion: geometry.Rectangle = {
         x = suggestion_x,
         y = suggestion_y,
@@ -133,7 +140,9 @@ library_search_visible :: #force_inline proc(
 library_search_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
     return library_search_layout(
-        uiaccordion.accordion_content_rect(&runtime^.layout, .Library), false).text_input
+        uiaccordion.accordion_content_rect(&runtime^.layout, .Library), false,
+        runtime^.preferences.values.interface.text_size_percent,
+        runtime^.preferences.values.interface.control_size_percent).text_input
 }
 
 // library_search_input_params borrows bounded query storage for one editable frame.
@@ -160,6 +169,9 @@ library_search_input_params :: proc(
         font_size = theme.ui_font_size(text_percent),
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        control_scale = theme.ui_effective_control_scale(
+            text_percent,
+            state^.ui_runtime.preferences.values.interface.control_size_percent),
         edit_target = {search^.query[:], &search^.query_length},
         edit_policy = {
             unicode_completion = true,
@@ -385,7 +397,10 @@ prepare_library_search :: proc(
     frame: input.Input_Frame) -> Library_Search_Preparation {
     search := &state^.ui_runtime.library.search
     result: Library_Search_Preparation = {
-        layout = library_search_layout(panel, search^.suggestion_length > 0),
+        layout = library_search_layout(
+            panel, search^.suggestion_length > 0,
+            state^.ui_runtime.preferences.values.interface.text_size_percent,
+            state^.ui_runtime.preferences.values.interface.control_size_percent),
     }
     params := library_search_input_params(state, result.layout, frame, panel)
     result.input = uiwidgets.input_box_prepare(
@@ -393,7 +408,10 @@ prepare_library_search :: proc(
     library_search_apply_input(search, result.input)
     prepare_library_unicode_status(state, result.input)
     result.clear = prepare_library_clear(state, panel, frame, result.layout)
-    result.layout = library_search_layout(panel, search^.suggestion_length > 0)
+    result.layout = library_search_layout(
+        panel, search^.suggestion_length > 0,
+        state^.ui_runtime.preferences.values.interface.text_size_percent,
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
     result.suggestion = prepare_library_suggestion(
         state, panel, frame, result.layout)
     prepare_library_search_status(state)

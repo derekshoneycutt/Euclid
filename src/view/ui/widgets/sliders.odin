@@ -25,6 +25,7 @@ Integer_Slider_Params :: struct {
     step: int,
     value_suffix: string,
     text_size_percent: int,
+    control_size_percent: int,
     font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
     semantic_domain: viewmodel.Ui_Node_Domain,
@@ -78,44 +79,53 @@ slider_snap_value :: #force_inline proc(
 // Build knob geometry from track bounds and normalized ratio.
 build_slider_knob :: proc(
     slider_track: geometry.Rectangle,
-    ratio: f32) -> (f32, geometry.Rectangle) {
+    ratio: f32, scale := f32(1)) -> (f32, geometry.Rectangle) {
+    knob_width := theme.SETTINGS_KNOB_WIDTH * scale
+    knob_pad_y := theme.SETTINGS_KNOB_PAD_Y * scale
     knob_center_x := slider_track.x + ratio * slider_track.width
     knob: geometry.Rectangle = {
-        knob_center_x - theme.SETTINGS_KNOB_WIDTH * 0.5,
-        slider_track.y - theme.SETTINGS_KNOB_PAD_Y,
-        theme.SETTINGS_KNOB_WIDTH,
-        slider_track.height + theme.SETTINGS_KNOB_PAD_Y * 2,
+        knob_center_x - knob_width * 0.5,
+        slider_track.y - knob_pad_y,
+        knob_width,
+        slider_track.height + knob_pad_y * 2,
     }
     return knob_center_x, knob
 }
 
 // Resolve the vertical gap needed to keep a slider below its row label.
 slider_track_top_offset :: #force_inline proc(
-    text_size_percent: int) -> f32 {
-    return max(theme.SETTINGS_TRACK_TOP_OFFSET,
+    text_size_percent: int,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> f32 {
+    control_scale := theme.ui_control_size_scale(control_size_percent)
+    return max(theme.SETTINGS_TRACK_TOP_OFFSET * control_scale,
         theme.ui_font_size(text_size_percent) + 6)
 }
 
 //   Build the slider track rectangle for one settings row.
 slider_track_rect :: #force_inline proc(
     panel: geometry.Rectangle, row_y: f32,
-    text_size_percent := 100) -> geometry.Rectangle {
+    text_size_percent := 100,
+    control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> geometry.Rectangle {
+    scale := theme.ui_control_size_scale(control_size_percent)
+    inset := theme.SETTINGS_PANEL_INSET * scale
     return geometry.Rectangle{
-        panel.x + theme.SETTINGS_PANEL_INSET,
-        row_y + slider_track_top_offset(text_size_percent),
-        panel.width - theme.SETTINGS_PANEL_INSET * 2,
-        theme.SETTINGS_TRACK_HEIGHT,
+        panel.x + inset,
+        row_y + slider_track_top_offset(text_size_percent, control_size_percent),
+        panel.width - inset * 2,
+        theme.SETTINGS_TRACK_HEIGHT * scale,
     }
 }
 
 //   Build the expanded hit area around a slider track.
 slider_hit_rect :: #force_inline proc(
-    track: geometry.Rectangle) -> geometry.Rectangle {
+    track: geometry.Rectangle,
+    scale := f32(1)) -> geometry.Rectangle {
+    hit_pad_y := theme.SETTINGS_TRACK_HIT_PAD_Y * scale
     return geometry.Rectangle{
         track.x,
-        track.y - theme.SETTINGS_TRACK_HIT_PAD_Y,
+        track.y - hit_pad_y,
         track.width,
-        track.height + theme.SETTINGS_TRACK_HIT_PAD_Y * 2,
+        track.height + hit_pad_y * 2,
     }
 }
 
@@ -282,7 +292,8 @@ slider_result :: proc(
     spec := range_integer_spec(params.min_value, params.max_value, step,
         max(step, ((params.max_value - params.min_value) / 10 / step) * step))
     ratio := range_integer_normalized(value, spec)
-    _, knob := build_slider_knob(track, ratio)
+    scale := theme.ui_control_size_scale(params.control_size_percent)
+    _, knob := build_slider_knob(track, ratio, scale)
     return {
         value = value,
         minimum = spec.minimum,
@@ -304,8 +315,10 @@ slider_result :: proc(
 update_settings_integer_slider :: proc(
     params: Integer_Slider_Params) -> Integer_Slider_Result {
     track := slider_track_rect(
-        params.panel, params.row_y, params.text_size_percent)
-    hit := slider_hit_rect(track)
+        params.panel, params.row_y, params.text_size_percent,
+        params.control_size_percent)
+    scale := theme.ui_control_size_scale(params.control_size_percent)
+    hit := slider_hit_rect(track, scale)
 
     pointer := slider_resolve_value(params, track, hit)
     clamped := pointer.value
@@ -352,8 +365,10 @@ prepare_integer_slider :: proc(
         return update_settings_integer_slider(params)
     }
     track := slider_track_rect(
-        params.panel, params.row_y, params.text_size_percent)
-    return slider_result(params, track, slider_hit_rect(track),
+        params.panel, params.row_y, params.text_size_percent,
+        params.control_size_percent)
+    scale := theme.ui_control_size_scale(params.control_size_percent)
+    return slider_result(params, track, slider_hit_rect(track, scale),
         slider_snap_value(params.value, params.min_value, params.max_value,
             slider_step(params)), {})
 }

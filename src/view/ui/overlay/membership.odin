@@ -15,6 +15,16 @@ MEMBERSHIP_CONTROL_ID :: 2104
 MEMBERSHIP_ROW_HEIGHT :: f32(30)
 MEMBERSHIP_PADDING :: f32(8)
 
+// Keep existing text-required row geometry while independently enlarging its target.
+membership_row_height :: #force_inline proc(
+    text_size_percent, control_size_percent: int) -> f32 {
+    text_required := max(MEMBERSHIP_ROW_HEIGHT,
+        theme.ui_font_size(text_size_percent) + 12)
+    control_target := MEMBERSHIP_ROW_HEIGHT *
+        theme.ui_control_size_scale(control_size_percent)
+    return max(text_required, control_target)
+}
+
 // Custom destinations include empty and read-only heads, but never Favorites.
 membership_available :: proc(state: ^core.Euclid_General_State) -> bool {
     set := &state.preferences_runtime.collections_state
@@ -112,18 +122,27 @@ membership_open :: proc(
     menu.window = state.ui_runtime.layout.window
     menu.text_size_percent =
         state.ui_runtime.preferences.values.interface.text_size_percent
-    menu.row_height = max(MEMBERSHIP_ROW_HEIGHT,
-        theme.ui_font_size(menu.text_size_percent) + 12)
-    menu.header_height = menu.row_height + 8
+    menu.control_size_percent =
+        state.ui_runtime.preferences.values.interface.control_size_percent
+    scale := theme.ui_control_size_scale(menu.control_size_percent)
+    menu.row_height = membership_row_height(
+        menu.text_size_percent, menu.control_size_percent)
+    menu.header_height = menu.row_height + MEMBERSHIP_PADDING * scale
     menu.scroll_y, menu.drag_offset = 0, 0
     menu.focused =
         state.preferences_runtime.collections_state.collections[menu.order[0]].id
     menu.pending_valid, menu.dragging = false, false
     membership_place(state)
-    origin := state.ui_runtime.semantic_focus.focus_origin
-    membership_focus(state, menu.focused)
-    state.ui_runtime.semantic_focus.focus_origin = origin
+    membership_set_initial_focus(state, menu.focused)
     return true
+}
+
+// Focus the initial collection row without changing the caller's focus origin.
+membership_set_initial_focus :: proc(
+    state: ^core.Euclid_General_State, id: uuid.Identifier) {
+    origin := state.ui_runtime.semantic_focus.focus_origin
+    membership_focus(state, id)
+    state.ui_runtime.semantic_focus.focus_origin = origin
 }
 
 // Anchor loss, recording, target changes and generation replacement invalidate opening intent.
@@ -140,6 +159,8 @@ membership_valid :: proc(state: ^core.Euclid_General_State) -> bool {
         menu.window == state.ui_runtime.layout.window &&
         menu.text_size_percent ==
             state.ui_runtime.preferences.values.interface.text_size_percent &&
+        menu.control_size_percent ==
+            state.ui_runtime.preferences.values.interface.control_size_percent &&
         collections.find_collection(
             &state.preferences_runtime.collections_state, menu.focused) >= 0 &&
         menu.viewport == geometry.Rectangle(
@@ -151,14 +172,17 @@ membership_valid :: proc(state: ^core.Euclid_General_State) -> bool {
 membership_place :: proc(state: ^core.Euclid_General_State) {
     menu := &state.ui_runtime.membership
     pane := menu.viewport
-    width := min(f32(360), max(pane.width - 16, 0))
-    height := min(f32(menu.count)*menu.row_height + menu.header_height + 8,
-        max(pane.height - 16, 0))
+    scale := theme.ui_control_size_scale(menu.control_size_percent)
+    padding := MEMBERSHIP_PADDING * scale
+    width := min(f32(360) * scale, max(pane.width - 2*padding, 0))
+    height := min(f32(menu.count)*menu.row_height + menu.header_height + padding,
+        max(pane.height - 2*padding, 0))
     menu.bounds = {clamp(menu.anchor.x + menu.anchor.width - width,
-        pane.x + 8, pane.x + max(8, pane.width - width - 8)),
-        max(pane.y + 8, menu.anchor.y - height - 4), width, height}
-    menu.clip = {menu.bounds.x + 8, menu.bounds.y + menu.header_height,
-        max(width - 16, 0), max(height - menu.header_height - 8, 0)}
+        pane.x + padding, pane.x + max(padding, pane.width - width - padding)),
+        max(pane.y + padding, menu.anchor.y - height - 4*scale), width, height}
+    menu.clip = {menu.bounds.x + padding, menu.bounds.y + menu.header_height,
+        max(width - 2*padding, 0),
+        max(height - menu.header_height - padding, 0)}
     menu.scroll_y = clamp(menu.scroll_y, 0,
         max(f32(menu.count)*menu.row_height - menu.clip.height, 0))
 }

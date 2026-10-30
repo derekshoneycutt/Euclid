@@ -136,19 +136,31 @@ prepare_accordion_view :: proc(
         reduce_motion = uiaccordion.ui_reduced_motion(
             ui_runtime^.preferences.values.interface.reduce_motion,
             ui_runtime^.platform_reduce_motion),
+        text_size_percent =
+            ui_runtime^.preferences.values.interface.text_size_percent,
+        control_size_percent =
+            ui_runtime^.preferences.values.interface.control_size_percent,
     }, sections, &ui_runtime^.layout.active_accordion_section)
     if active_before != ui_runtime^.layout.active_accordion_section {
-        ui_release_geometry_capture(ui_runtime)
-        if active_before == .Settings &&
-           ui_runtime^.layout.active_accordion_section != .Settings {
-            uisettings.settings_cancel_history_confirmation(
-                &ui_runtime^.settings_panel)
-        }
-        ui_runtime^.tooltip = {}
-        ui_runtime^.context_menu.active = false
-        _ = ui_publish_presentation_visibility(
-            &ui_runtime^.layout, &ui_runtime^.presentation,
-            &ui_runtime^.input, &ui_runtime^.terminal)
+        commit_accordion_section_change(state, active_before)
     }
     return prepared
+}
+
+// Clear section-scoped interactions after the active accordion section changes.
+commit_accordion_section_change :: proc(
+    state: ^core.Euclid_General_State,
+    active_before: viewmodel.Ui_Accordion_Section) {
+    ui_runtime := &state^.ui_runtime
+    ui_release_geometry_capture(ui_runtime)
+    if active_before == .Settings &&
+       ui_runtime^.layout.active_accordion_section != .Settings {
+        uisettings.settings_cancel_history_confirmation(
+            &ui_runtime^.settings_panel)
+    }
+    ui_runtime^.tooltip = {}
+    ui_runtime^.context_menu.active = false
+    _ = ui_publish_presentation_visibility(
+        &ui_runtime^.layout, &ui_runtime^.presentation,
+        &ui_runtime^.input, &ui_runtime^.terminal)
 }

@@ -43,6 +43,7 @@ Input_Box_Params :: struct {
     pointer_routed: bool,
     defer_semantics: bool,
     padding: Input_Box_Padding,
+    control_scale: f32,
     column_advance: f32,
     font_size: f32,
     font: view_font.Font_Face,
@@ -99,10 +100,11 @@ Input_Box_Result :: struct {
 
 // input_box_text_inset resolves the horizontal inset used by every input surface.
 input_box_text_inset :: #force_inline proc(params: Input_Box_Params) -> f32 {
+    scale := f32(1) if params.control_scale <= 0 else params.control_scale
     if params.padding == .Compact {
-        return INPUT_BOX_COMPACT_TEXT_INSET
+        return INPUT_BOX_COMPACT_TEXT_INSET * scale
     }
-    return INPUT_BOX_TEXT_INSET
+    return INPUT_BOX_TEXT_INSET * scale
 }
 
 // input_box_clamp_boundary clamps one byte offset to a complete grapheme boundary.
@@ -978,7 +980,8 @@ draw_encoded_input_box :: proc(
         border = theme.draw_color(encoder, .Error_Text)
     }
     _ = native.draw_encoder_rectangle_outline(
-        encoder, prepared.control_geometry.bounds, 1, border)
+        encoder, prepared.control_geometry.bounds,
+        f32(1) if params.control_scale <= 0 else params.control_scale, border)
     _ = native.draw_encoder_push_scissor(encoder, prepared.inner)
     if prepared.selection.width > 0 {
         _ = native.draw_encoder_rectangle(

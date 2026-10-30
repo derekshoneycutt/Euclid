@@ -70,6 +70,7 @@ context_menu_opens_exact_surface_commands :: proc(t: ^testing.T) {
             unit_index = 1,
         },
     }
+    state^.ui_runtime.preferences.values.interface.text_size_percent = 175
     uioverlay.context_menu_open(state,
         uipresentation.presentation_semantic_id(state), {120, 120})
     menu := &state^.ui_runtime.context_menu
@@ -79,6 +80,13 @@ context_menu_opens_exact_surface_commands :: proc(t: ^testing.T) {
         viewmodel.Ui_Context_Command.Select_All)
     testing.expect_value(t,
         string(menu^.items[1].label[:menu^.items[1].label_length]), "Select All")
+    testing.expect_value(t, menu^.padding, uioverlay.CONTEXT_MENU_PADDING)
+    testing.expect_value(t, menu^.row_height, uioverlay.CONTEXT_MENU_ROW_HEIGHT)
+    state^.ui_runtime.preferences.values.interface.control_size_percent = 200
+    uioverlay.context_menu_open(state,
+        uipresentation.presentation_semantic_id(state), {120, 120})
+    testing.expect_value(t, menu^.padding, uioverlay.CONTEXT_MENU_PADDING * 2)
+    testing.expect_value(t, menu^.row_height, uioverlay.CONTEXT_MENU_ROW_HEIGHT * 2)
     testing.expect(t, selection^.active && selection^.head.unit_index == 1)
     animation: bridgemodel.Euclid_Julia_Animation_Interface = {
         node_kind = .Terminal,
