@@ -16,31 +16,34 @@ Desktop_Application :: struct {
     callback_limit: bool,
 }
 
-// Only AppInit reads this early handoff; RunApp is entered once on the process main thread.
-desktop_bootstrap: ^Desktop_Application
+// Desktop_Entry owns a valid argv prefix and its private owner handoff through AppInit.
+// The callback entry forwards this exact argv address without copying it.
+Desktop_Entry :: struct {
+    arguments: [2]cstring,
+    application: ^Desktop_Application,
+}
 
 // run_desktop_application keeps borrowed launch/store inputs alive until SDL has fully shut down.
 run_desktop_application :: proc(
     settings: ^core.Euclid_Run_Settings, startup: ^view.Session_Startup_Inputs) -> int {
-    if desktop_bootstrap != nil {
-        log.error("desktop_callback_runner_already_active")
-        return 1
-    }
     owner := new(Desktop_Application, context.allocator)
     defer free(owner, context.allocator)
     owner^.window.settings = settings^
     owner^.window.startup_inputs = startup^
     owner^.callback_context = context
-    desktop_bootstrap = owner
-    defer desktop_bootstrap = nil
-    result := int(sdl.RunApp(0, nil, desktop_sdl_main, nil))
+    entry: Desktop_Entry = {
+        arguments = {"Euclid", nil},
+        application = owner,
+    }
+    sdl.SetMainReady()
+    result := int(desktop_sdl_main(1, raw_data(entry.arguments[:])))
     if result != 0 {
         return result
     }
     return owner^.cleanup_result
 }
 
-// desktop_sdl_main is SDL's foreign-language main trampoline, not an initialized window loop.
+// desktop_sdl_main hands the caller-owned entry directly to SDL's desktop callback runner.
 desktop_sdl_main :: proc "c" (argc: c.int, argv: [^]cstring) -> c.int {
     return sdl.EnterAppMainCallbacks(
         argc, argv, desktop_init, desktop_iterate, desktop_event, desktop_quit)
@@ -48,8 +51,9 @@ desktop_sdl_main :: proc "c" (argc: c.int, argv: [^]cstring) -> c.int {
 
 // desktop_init restores the process context before admitting callback-owned display resources.
 desktop_init :: proc "c" (
-    appstate: ^rawptr, _: c.int, _: [^]cstring) -> sdl.AppResult {
-    owner := desktop_bootstrap
+    appstate: ^rawptr, _: c.int, argv: [^]cstring) -> sdl.AppResult {
+    entry := cast(^Desktop_Entry)argv
+    owner := entry^.application
     appstate^ = owner
     context = owner^.callback_context
     desktop_update_pacing(owner, true)

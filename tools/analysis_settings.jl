@@ -628,11 +628,11 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "view-window-platform-owner-release",
-                "src/view/view.odin",
-                "run_window_loop",
+                "desktop-callback-owner-release",
+                "src/app/desktop.odin",
+                "run_desktop_application",
                 :context,
-                "The window-loop owner frees its platform state with the same process allocator after the display loop ends.";
+                "The process entry owner frees its callback envelope with the allocating process context only after the SDL callback runner returns and all callbacks have retired.";
                 operation="allocator-pass",
                 target="free",
                 allocator_source="context.allocator",
@@ -669,7 +669,7 @@ AnalysisSettings(
             ReviewedAllocationPolicy(
                 "loading-julia-service-owner-allocator",
                 "src/view/loading.odin",
-                "loading_start_julia_service",
+                "window_loading_start_julia",
                 :context,
                 "The startup owner selects the process tracking allocator for the Julia service, whose constructor retains it through service teardown.";
                 operation="allocator-pass",
@@ -1967,13 +1967,13 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "view-window-loop-platform-owner",
-                "src/view/view.odin",
-                "run_window_loop",
+                "desktop-callback-owner",
+                "src/app/desktop.odin",
+                "run_desktop_application",
                 :context,
-                "Window-session native state is allocated once and explicitly destroyed and freed when the display loop ends.";
+                "The process entry owner allocates one stable callback envelope containing the inline window session; its borrowers retire before the SDL callback runner returns and the envelope is freed.";
                 operation="new",
-                target="native.Sdl_Platform",
+                target="Desktop_Application",
                 allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore,

@@ -105,6 +105,24 @@ end
         @test occursin("expected 2 import", result.diagnostics[1].message)
     end
 
+    @testset "callback owners remain exact and drift checked" begin
+        owners = (
+            ("src/app/desktop.odin", "process SDL callback entry"),
+            ("src/view/input/backend/sdl_event_inbox.odin",
+                "bounded callback event handoff"))
+        for (path, category) in owners
+            result = analyze_sdl_dependencies(expected_sdl_dependencies())
+            @test result.artifacts["allowed_imports_by_category"][category] ==
+                ["$(path):vendor:sdl3"]
+            dependencies = filter(dependency -> dependency.source_path != path,
+                expected_sdl_dependencies())
+            result = analyze_sdl_dependencies(dependencies)
+            @test length(result.diagnostics) == 1
+            @test result.diagnostics[1].path == path
+            @test occursin("expected 1 import", result.diagnostics[1].message)
+        end
+    end
+
     @testset "fixtures are outside exact owner policy" begin
         dependencies = expected_sdl_dependencies()
         append!(dependencies, [

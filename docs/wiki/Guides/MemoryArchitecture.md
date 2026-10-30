@@ -423,9 +423,17 @@ Independently owned Julia/content services and application runtime state retain
 their existing allocation domains. The borrowed database/replay inputs remain in
 the enclosing app launch scope until the runner returns.
 
+The envelope is one reviewed process-context allocation, paired with release in
+the same runner after SDL returns; it is not a frame or subsystem heap.
+SDL's `AppInit` ABI has no caller-userdata argument. A runner-local
+`Desktop_Entry` starts with a valid null-terminated argv array and retains the
+owner beside it. The desktop callback entry forwards that exact array address
+to `AppInit`, which recovers the containing entry and publishes the owner as
+SDL's `appstate`. No package global or SDL property stores the handoff.
+
 SDL may deliver an event concurrently with `AppQuit`. Closing the synchronized inbox
 stops further admission without freeing it; callback storage is freed only after
-SDL shutdown and `RunApp` return. A startup worker is joined before its result
+SDL shutdown and callback-runner return. A startup worker is joined before its result
 storage is released. Runtime workers, Julia requests, capture, and GPU resources
 are retired by their existing owners before the native window/device are destroyed.
 Callbacks restore the retained Odin context only on the display owner; off-thread

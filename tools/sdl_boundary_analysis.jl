@@ -16,6 +16,7 @@ const SdlOwnerPolicy = @NamedTuple begin
 end
 
 const SDL_OWNER_POLICIES = SdlOwnerPolicy[
+    (path="src/app/desktop.odin", category="process SDL callback entry", count=1),
     (path="src/terminal/graphics/native/sdl_image.odin",
         category="Terminal static and animated image codec", count=2),
     (path="src/view/native/sdl_gif_encoder.odin",
@@ -31,6 +32,8 @@ const SDL_OWNER_POLICIES = SdlOwnerPolicy[
     (path="src/view/native/sdl_timing.odin", category="display timing", count=1),
     (path="src/view/input/clipboard.odin", category="system clipboard", count=1),
     (path="src/view/input/backend/sdl_input.odin", category="display input backend", count=1),
+    (path="src/view/input/backend/sdl_event_inbox.odin",
+        category="bounded callback event handoff", count=1),
 ]
 
 """Return the stable Euclid SDL-boundary extension identity."""

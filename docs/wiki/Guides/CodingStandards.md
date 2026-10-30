@@ -234,7 +234,9 @@ removed backend target.
 
 SDL imports are admitted only at exact native owners. The extension currently admits
 only the exact display-owned native color, icon, platform, platform-service, and timing
-files, the clipboard adapter, and the display input coordinator. Tests and the
+files, the clipboard adapter, the display input coordinator and bounded callback
+event inbox, and the process SDL callback entry. The entry owns only SDL callback
+scheduling; native display resources remain display-owned. Tests and the
 checked-in capability probe are fixtures, not production owners. Add or move an SDL
 import only with a corresponding ownership and architecture update.
 

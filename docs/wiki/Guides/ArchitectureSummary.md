@@ -112,8 +112,12 @@ durability status in Settings.
 ### SDL callback scheduling and live resizing
 
 The desktop entry in [`src/app/desktop.odin`](../../../src/app/desktop.odin)
-uses SDL 3.2+'s foreign-language `RunApp` entry and an SDL-main trampoline whose
-only call is `EnterAppMainCallbacks`. SDL owns event pumping, iteration scheduling,
+uses `SetMainReady` for the Odin-owned desktop process entry and an SDL-main
+trampoline whose only call is `EnterAppMainCallbacks`. A runner-local entry with
+a valid argv prefix carries the owner to `AppInit`, avoiding mutable globals.
+The process already parsed its arguments; SDL's `RunApp` argument conversion is
+not needed (and Windows would replace a caller-supplied argv).
+SDL owns event pumping, iteration scheduling,
 the Windows/macOS native live-resize timers, and final global SDL shutdown.
 There is no application resize timer, second renderer, or nested polling loop.
 Help and argument validation still complete before entering SDL.
@@ -134,7 +138,7 @@ text/IME bytes. It may run off-thread and never mutates visible state or enters 
 The display owner drains lifecycle signals before pacing, retaining ordinary input
 until an accepted frame. Queue overflow is an explicit process failure. `AppQuit`
 closes inbox admission before releasing resources; its storage remains alive until
-`RunApp` returns so concurrent late events cannot access freed memory.
+the callback runner returns so concurrent late events cannot access freed memory.
 
 Each nonrecursive `AppIterate` admits current logical/drawable extents and a complete
 scene-target pair before layout and encoding, then runs the ordinary frame pipeline.

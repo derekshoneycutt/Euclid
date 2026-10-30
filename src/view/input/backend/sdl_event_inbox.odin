@@ -86,7 +86,9 @@ sdl_event_inbox_copy_text :: proc "contextless" (
 // sdl_event_inbox_store owns relevant event bytes without retaining SDL text pointers.
 sdl_event_inbox_store :: proc "contextless" (
     destination: ^Sdl_Queued_Event, event: ^sdl.Event) -> bool {
-    destination^ = {event = event^}
+    destination^ = {
+        event = event^,
+    }
     if event^.type == .TEXT_INPUT {
         destination^.event.text.text = nil
         destination^.text_present = event^.text.text != nil

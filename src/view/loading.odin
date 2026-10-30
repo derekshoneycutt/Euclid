@@ -174,32 +174,40 @@ window_loading_finish_content :: proc(owner: ^Window_Session) -> bool {
     return true
 }
 
-// window_loading_step advances at most one phase and draws at the current admitted size.
-window_loading_step :: proc(owner: ^Window_Session) -> (bool, bool) {
+// window_loading_advance admits at most one startup phase without rendering recursively.
+window_loading_advance :: proc(owner: ^Window_Session) -> bool {
     switch owner^.loading.phase {
     case .Assets:
         if thread.is_done(owner^.loading.worker) &&
             !window_loading_start_julia(owner) {
-            return false, false
+            return false
         }
     case .Julia:
         complete, succeeded := window_loading_request(owner, .Initialized)
         if !succeeded || (complete && !window_loading_start_content(owner)) {
-            return false, false
+            return false
         }
     case .Content:
         complete, succeeded := window_loading_request(owner, .Invoke_Complete)
         if !succeeded || (complete && !window_loading_finish_content(owner)) {
-            return false, false
+            return false
         }
     case .Render:
         if !window_session_admit_render(owner) {
-            return false, false
+            return false
         }
         owner^.loading.phase = .Ready
         evidence_profile.zone_end(&owner^.profile)
         startup.end_startup_phase("Total startup", owner^.loading.started_at)
     case .Ready:
+    }
+    return true
+}
+
+// window_loading_step advances startup and draws at the current admitted size.
+window_loading_step :: proc(owner: ^Window_Session) -> (bool, bool) {
+    if !window_loading_advance(owner) {
+        return false, false
     }
     if !owner^.ready && !owner^.drawable_unavailable &&
         !startup.present_startup_frame(&owner^.loading.display) {

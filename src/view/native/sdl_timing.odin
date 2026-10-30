@@ -30,18 +30,6 @@ sdl_frame_clock_step :: proc(clock: ^Sdl_Frame_Clock) -> f32 {
     return f32(f64(current - previous) / f64(NANOSECONDS_PER_SECOND))
 }
 
-// sdl_delay_until_rate sleeps for the remainder of one requested frame interval.
-sdl_delay_until_rate :: proc(started_at: u64, frames_per_second: u64) {
-    if frames_per_second == 0 {
-        return
-    }
-    interval := NANOSECONDS_PER_SECOND / frames_per_second
-    elapsed := sdl.GetTicksNS() - started_at
-    if elapsed < interval {
-        sdl.DelayNS(interval - elapsed)
-    }
-}
-
 // sdl_time_ticks returns the current monotonic nanosecond counter.
 sdl_time_ticks :: proc() -> u64 {
     return sdl.GetTicksNS()
