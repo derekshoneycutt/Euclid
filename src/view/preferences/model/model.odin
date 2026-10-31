@@ -1,7 +1,7 @@
 package preferencesmodel
 
 import settings "../../../settings"
-import user_data "../../../userdata"
+import user_data "../../../persistence/userdata"
 import taskpool "../../../taskpool"
 import collections "../../../collections"
 

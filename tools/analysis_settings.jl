@@ -375,7 +375,7 @@ function euclid_architecture_settings()
                 "src/core/storage",
                 "src/core/text",
                 "src/settings",
-                "src/userdata",
+                "src/persistence",
                 ViewSubstratePaths...,
             ]),
             ArchitectureLayer("composition", ["src/core"            ]),
@@ -456,7 +456,7 @@ function add_tlsf_owner_callback_reviews!(reviews)
         ("test-collection-backing-allocator-abi-parameters",
             "src/collections/storage_failure_test.odin", "collections_test_reject_backing"),
         ("test-replay-backing-allocator-abi-parameters",
-            "src/userdata/library_storage_test.odin", "userdata_replay_reject_backing"))
+            "src/persistence/userdata/library_storage_test.odin", "userdata_replay_reject_backing"))
         push!(reviews, ReviewedComplexity(
             id, path, :odin, name, :parameters,
             "The allocator callback implements Odin's required seven-parameter ABI.";
@@ -2096,7 +2096,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "userdata-test-overlong-path-buffer",
-                "src/userdata/database_test.odin",
+                "src/persistence/userdata/database_test.odin",
                 "userdata_paths_are_durable_bounded_and_absolute",
                 :temporary,
                 "Test-only buffer of DATABASE_PATH_MAX_BYTES + 1 bytes exercises rejection before filesystem access; borrowed synchronously by path validation and reclaimed by the test temporary-allocator reset.";
@@ -2109,7 +2109,7 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "userdata-test-prefixed-path-overflow-buffer",
-                "src/userdata/database_test.odin",
+                "src/persistence/userdata/database_test.odin",
                 "userdata_rejected_paths_leave_no_allocations",
                 :temporary,
                 "Test-only DATABASE_PATH_MAX_BYTES buffer forces overflow after the working-directory prefix is joined; stays outside the allocator under test, is consumed synchronously, and is reclaimed by the test temporary-allocator reset.";

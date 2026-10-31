@@ -5,6 +5,7 @@ import core "../../../../core"
 import evidence_session "../../../../evidence/session"
 import evidence_trace "../../../../evidence/trace"
 import viewcontent "../../../content"
+import contentstore "../../../../persistence/content"
 import uuid "core:encoding/uuid"
 import viewmodel "../../model"
 import log "core:log"
@@ -204,7 +205,7 @@ library_search_submit_current :: proc(
     service: ^viewcontent.Content_Service) -> bool {
     search := &state^.ui_runtime.library.search
     source := string(search^.query[:search^.query_length])
-    compiled := viewcontent.search_query_compile(source)
+    compiled := contentstore.search_query_compile(source)
     if compiled.status != .Success {
         search^.invalid_query = true
         search^.query_dirty = false

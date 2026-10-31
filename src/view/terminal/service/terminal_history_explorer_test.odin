@@ -4,7 +4,7 @@ package terminalservice
 import core "../../../core"
 import historyruntime "../../../terminal/history/runtime"
 import termhist "../../../terminal/history"
-import termhiststore "../../../terminal/history/store"
+import termhiststore "../../../persistence/userdata/history"
 import terminalview ".."
 import "core:testing"
 

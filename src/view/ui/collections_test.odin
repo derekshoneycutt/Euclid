@@ -4,7 +4,7 @@ package ui
 import core "../../core"
 import collections "../../collections"
 import bridgemodel "../../bridge/model"
-import userdata "../../userdata"
+import userdata "../../persistence/userdata"
 import uuid "core:encoding/uuid"
 import testing "core:testing"
 import log "core:log"

@@ -77,7 +77,9 @@ function discover_odin_packages(config::OdinWikiConfig)
             relative = normalize_repo_path(relpath(directory, config.repository_root))
             filter!(name -> !path_is_excluded(
                 normalize_repo_path(joinpath(relative, name)), excluded), subdirectories)
-            if !path_is_excluded(relative, excluded) && any(endswith(".odin"), files)
+            has_source = any(name -> endswith(name, ".odin") &&
+                !endswith(name, "_test.odin"), files)
+            if !path_is_excluded(relative, excluded) && has_source
                 push!(packages, relative)
             end
         end

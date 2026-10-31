@@ -1,171 +1,18 @@
 #+test
 package content
 
+import reader "../../persistence/content"
+
+import contentfixture "../../persistence/content/testsupport"
+
 import sqlite3 "../../../libs/sqlite3"
 import contentdata "../../core/content"
 
 import "core:c"
-import "core:fmt"
 import "core:os"
-import "core:path/filepath"
 import "core:strings"
 import "core:sync/chan"
 import "core:testing"
-
-SEARCH_TEST_FINGERPRINT ::
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-SEARCH_TEST_CANDIDATE_FINGERPRINT ::
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-
-SEARCH_TEST_SCHEMA :: `
-CREATE TABLE search_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
-PRAGMA foreign_keys=ON;
-CREATE TABLE animation_catalog(
-    rowid INTEGER PRIMARY KEY,
-    source_namespace TEXT NOT NULL,
-    animation_id TEXT NOT NULL,
-    parent_animation_id TEXT,
-    node_kind INTEGER NOT NULL,
-    display_name TEXT NOT NULL,
-    sibling_order INTEGER NOT NULL,
-    catalog_order INTEGER NOT NULL,
-    implementation_path TEXT,
-    hierarchy_path TEXT NOT NULL,
-    aliases TEXT NOT NULL,
-    semantic_text TEXT NOT NULL,
-    UNIQUE(source_namespace, animation_id),
-    UNIQUE(source_namespace, catalog_order),
-    FOREIGN KEY(source_namespace, parent_animation_id)
-        REFERENCES animation_catalog(source_namespace, animation_id)
-        DEFERRABLE INITIALLY DEFERRED);
-CREATE UNIQUE INDEX animation_catalog_root_order
-ON animation_catalog(source_namespace, sibling_order)
-WHERE parent_animation_id IS NULL;
-CREATE UNIQUE INDEX animation_catalog_child_order
-ON animation_catalog(source_namespace, parent_animation_id, sibling_order)
-WHERE parent_animation_id IS NOT NULL;
-CREATE VIRTUAL TABLE animation_search USING fts5(
-    display_name, hierarchy_path, aliases, semantic_text,
-    content='animation_catalog', content_rowid='rowid',
-    tokenize='porter unicode61 remove_diacritics 2', detail=full);
-CREATE VIRTUAL TABLE search_terms USING spellfix1;
-INSERT INTO animation_catalog VALUES
-    (1, 'builtin', '00000000-0000-0000-0000-000000000001', NULL, 1,
-     'Perpendicular', 0, 0, 'synthetic/1.jl',
-        'Elements Book I Perpendicular', 'normal line right angle',
-     'A line forming equal adjacent right angles is perpendicular.'),
-    (2, 'builtin', '00000000-0000-0000-0000-000000000002', NULL, 1,
-     'Circle', 1, 1, 'synthetic/2.jl',
-        'Elements Circle', 'round circumference',
-     'A circle has points equally distant from its center.'),
-    (3, 'builtin', '00000000-0000-0000-0000-000000000003', NULL, 1,
-     'Line Construction', 2, 2, 'synthetic/3.jl',
-        'Elements Book I Line Construction', 'straight line',
-     'Construct a straight line through two points.');
-WITH RECURSIVE sequence(value) AS (
-    VALUES(4) UNION ALL SELECT value + 1 FROM sequence WHERE value < 138)
-INSERT INTO animation_catalog
-SELECT value, 'builtin', printf('00000000-0000-0000-0000-%012d', value), NULL, 1,
-       printf('Synthetic %03d', value), value - 1, value - 1,
-       printf('synthetic/%d.jl', value),
-    'Synthetic Scale', 'generated fixture',
-       'Synthetic searchable geometry document'
-FROM sequence;
-UPDATE animation_catalog SET node_kind=2, display_name='Terminal',
-    implementation_path=NULL WHERE rowid=138;
-INSERT INTO animation_search(animation_search) VALUES('rebuild');
-INSERT INTO search_terms(word, rank) VALUES
-    ('perpendicular', 1), ('circle', 2), ('construction', 3), ('line', 4);
-INSERT INTO search_metadata VALUES
-    ('schema_version', '2'),
-    ('sqlite_version', '3.53.4'),
-    ('catalog_fingerprint', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
-    ('document_count', '138'),
-    ('tokenizer_version', 'porter-unicode61-v1'),
-    ('query_contract_version', '1'),
-    ('index_generation', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
-`
-
-// Owned paths and creation outcome for one temporary search database.
-Search_Test_Database :: struct {
-    directory: string,
-    path: string,
-    ok: bool,
-}
-
-// Execute one fixed fixture SQL program and release any SQLite diagnostic.
-search_test_execute_sql :: proc(database: ^sqlite3.Database, sql: cstring) -> bool {
-    message: cstring
-    status := sqlite3.sqlite3_exec(database, sql, nil, nil, &message)
-    if message != nil {
-       sqlite3.sqlite3_free(rawptr(message))
-    }
-    return status == .Ok
-}
-
-// Create one isolated immutable-search database fixture under the OS temp directory.
-search_test_database_create :: proc(
-    suffix: string) -> Search_Test_Database {
-    result: Search_Test_Database
-    temp, temp_error := os.temp_directory(context.temp_allocator)
-    if temp_error != nil {
-       return result
-    }
-    directory_name := fmt.tprintf("euclid-search-worker-%s", suffix)
-    result.directory, _ = filepath.join(
-        []string{temp, directory_name}, context.allocator)
-    if len(result.directory) == 0 {
-       return result
-    }
-    _ = os.remove_all(result.directory)
-    if os.make_directory_all(result.directory) != nil {
-       return result
-    }
-    result.path, _ = filepath.join(
-        []string{result.directory, "search.sqlite3"}, context.allocator)
-    if len(result.path) == 0 {
-       return result
-    }
-    database: ^sqlite3.Database
-    flags := c.int(sqlite3.Open_Flag.Readwrite) | c.int(sqlite3.Open_Flag.Create)
-    encoded_path := strings.clone_to_cstring(result.path, context.temp_allocator)
-    if sqlite3.sqlite3_open_v2(encoded_path, &database, flags, nil) != .Ok {
-        return result
-    }
-    registered := sqlite3.euclid_sqlite_register_spellfix(database) == .Ok
-    populated := registered && search_test_execute_sql(database, SEARCH_TEST_SCHEMA) &&
-        search_test_populate_content(database)
-    closed := sqlite3.sqlite3_close(database) == .Ok
-    result.ok = populated && closed
-    return result
-}
-
-// Give one fixture a distinct admitted generation and visible catalogue value.
-search_test_make_candidate :: proc(
-    t: ^testing.T, fixture: ^Search_Test_Database) {
-    database: ^sqlite3.Database
-    encoded_path := strings.clone_to_cstring(fixture.path, context.temp_allocator)
-    opened := sqlite3.sqlite3_open_v2(encoded_path, &database,
-        c.int(sqlite3.Open_Flag.Readwrite), nil)
-    testing.expect_value(t, opened, sqlite3.Result.Ok)
-    if opened != .Ok {
-        return
-    }
-    mutation := "UPDATE search_metadata SET value='" +
-        SEARCH_TEST_CANDIDATE_FINGERPRINT + "' WHERE key IN " +
-        "('catalog_fingerprint', 'index_generation');" +
-        "UPDATE content_metadata SET value='" +
-        SEARCH_TEST_CANDIDATE_FINGERPRINT + "' WHERE key IN " +
-        "('content_fingerprint', 'generation_identity');" +
-        "UPDATE ui_translation SET template='Candidate message' "+
-        "WHERE message_key NOT IN (SELECT message_key FROM ui_argument);"+
-        "UPDATE edition SET unique_name='Candidate Original' WHERE edition_id='original';"+
-        "UPDATE animation_catalog SET display_name='Candidate Perpendicular' " +
-        "WHERE rowid=1;"
-    encoded := strings.clone_to_cstring(mutation, context.temp_allocator)
-    testing.expect(t, search_test_execute_sql(database, encoded))
-    testing.expect_value(t, sqlite3.sqlite3_close(database), sqlite3.Result.Ok)
-}
 
 // Wait for one result in tests after a successful nonblocking submission.
 search_test_receive :: proc(service: ^Content_Service) -> Search_Query_Result {
@@ -176,7 +23,7 @@ search_test_receive :: proc(service: ^Content_Service) -> Search_Query_Result {
 // Mutate one valid fixture and require catalogue startup to reject its snapshot.
 search_test_rejects_catalog_mutation :: proc(
     t: ^testing.T, suffix, mutation: string) {
-    fixture := search_test_database_create(suffix)
+    fixture := contentfixture.search_test_database_create(suffix)
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
@@ -190,11 +37,11 @@ search_test_rejects_catalog_mutation :: proc(
        return
     }
     encoded_mutation := strings.clone_to_cstring(mutation, context.temp_allocator)
-    testing.expect(t, search_test_execute_sql(database, encoded_mutation))
+    testing.expect(t, contentfixture.search_test_execute_sql(database, encoded_mutation))
     testing.expect_value(t, sqlite3.sqlite3_close(database), sqlite3.Result.Ok)
     service: Content_Service
     testing.expect(t, !content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     testing.expect(t, !service.running)
 }
 
@@ -221,19 +68,20 @@ search_test_query_window :: proc(
 // Verify immutable startup, friendly query behavior, ranking, and joined shutdown.
 @(test)
 search_worker_executes_bounded_ranked_queries :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("queries")
+    fixture := contentfixture.search_test_database_create("queries")
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
     testing.expect(t, generation != nil)
     testing.expect_value(t, generation^.generation, service.index_generation)
-    testing.expect_value(t, generation^.record_count, u16(CATALOG_EXPECTED_RECORD_COUNT))
+    testing.expect_value(t,
+        generation^.record_count, u16(reader.CATALOG_EXPECTED_RECORD_COUNT))
     testing.expect_value(t,
         generation^.records[137].node_kind, Catalog_Node_Kind.Terminal)
     name, name_status := contentdata.content_generation_text(
@@ -285,14 +133,14 @@ catalog_snapshot_rejects_invalid_rows_and_capacity_overflow :: proc(t: ^testing.
 // Verify spellfix suggestions are published only after a corrected query has results.
 @(test)
 search_worker_verifies_corrections_against_real_results :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("correction")
+    fixture := contentfixture.search_test_database_create("correction")
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
 
     misspelled := search_test_query(t, &service, 1, "perpendiculr")
@@ -310,7 +158,7 @@ search_worker_verifies_corrections_against_real_results :: proc(t: ^testing.T) {
 // Verify incompatible metadata prevents worker readiness before any query executes.
 @(test)
 search_worker_rejects_stale_index_metadata :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("metadata")
+    fixture := contentfixture.search_test_database_create("metadata")
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
@@ -324,11 +172,11 @@ search_worker_rejects_stale_index_metadata :: proc(t: ^testing.T) {
 // Exercise discard, provisional rollback, and finalized candidate publication.
 search_test_catalog_candidate_lifecycle :: proc(
     t: ^testing.T, service: ^Content_Service,
-    candidate: ^Search_Test_Database, active_generation: u64) {
+    candidate: ^contentfixture.Search_Test_Database, active_generation: u64) {
     queued, valid := search_query_request_make(1, 0, "perpendicular")
     testing.expect(t, valid && content_service_try_submit(service, queued))
     testing.expect(t, content_service_stage(
-        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+        service, candidate.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT))
     staged := content_service_staged_generation(service)
     testing.expect(t, staged != nil && staged^.generation != active_generation)
     before_commit := search_test_receive(service)
@@ -336,7 +184,7 @@ search_test_catalog_candidate_lifecycle :: proc(
     testing.expect(t, content_service_discard(service))
 
     testing.expect(t, content_service_stage(
-        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+        service, candidate.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT))
     staged = content_service_staged_generation(service)
     staged_generation := staged^.generation
     staged^.generation += 1
@@ -346,7 +194,7 @@ search_test_catalog_candidate_lifecycle :: proc(
     testing.expect_value(t, content_service_index_generation(service), active_generation)
 
     testing.expect(t, content_service_stage(
-        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+        service, candidate.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT))
     candidate_generation := content_service_staged_generation(service)^.generation
     testing.expect(t, content_service_commit(service))
     testing.expect(t, content_service_discard(service))
@@ -354,7 +202,7 @@ search_test_catalog_candidate_lifecycle :: proc(
     testing.expect_value(t, after_rollback.index_generation, active_generation)
 
     testing.expect(t, content_service_stage(
-        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+        service, candidate.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT))
     testing.expect(t, content_service_commit(service))
     testing.expect(t, content_service_finalize(service))
     after_commit := search_test_query(t, service, 3, "perpendicular")
@@ -364,8 +212,8 @@ search_test_catalog_candidate_lifecycle :: proc(
 // Verify staging is isolated and commit advances snapshot and query generations together.
 @(test)
 content_worker_stages_discards_and_commits_one_candidate :: proc(t: ^testing.T) {
-    active := search_test_database_create("transaction-active")
-    candidate := search_test_database_create("transaction-candidate")
+    active := contentfixture.search_test_database_create("transaction-active")
+    candidate := contentfixture.search_test_database_create("transaction-candidate")
     defer delete(active.directory)
     defer delete(active.path)
     defer delete(candidate.directory)
@@ -373,11 +221,11 @@ content_worker_stages_discards_and_commits_one_candidate :: proc(t: ^testing.T) 
     defer _ = os.remove_all(active.directory)
     defer _ = os.remove_all(candidate.directory)
     testing.expect(t, active.ok && candidate.ok)
-    search_test_make_candidate(t, &candidate)
+    contentfixture.search_test_make_candidate(t, &candidate)
 
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, active.path, SEARCH_TEST_FINGERPRINT))
+        &service, active.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     active_generation := content_service_index_generation(&service)
     search_test_catalog_candidate_lifecycle(
@@ -400,14 +248,14 @@ search_protocol_is_fixed_and_bounded :: proc(t: ^testing.T) {
 // Verify large result sets use stable nonoverlapping windows and exact totals.
 @(test)
 search_worker_pages_large_corpora_without_message_growth :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("windows")
+    fixture := contentfixture.search_test_database_create("windows")
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
 
     first := search_test_query_window(t, &service, 1, 0, "synthetic")

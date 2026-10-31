@@ -6,7 +6,7 @@ import bridgemodel "../../bridge/model"
 import testing "core:testing"
 import uilibrary "library"
 import viewmodel "model"
-import userdata "../../userdata"
+import userdata "../../persistence/userdata"
 import uuid "core:encoding/uuid"
 
 // Head naming shares debounce/flush while empty input preserves accepted text and draft.

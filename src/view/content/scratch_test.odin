@@ -1,6 +1,8 @@
 #+test
 package content
 
+import contentfixture "../../persistence/content/testsupport"
+
 import "base:runtime"
 import "core:mem"
 import "core:os"
@@ -62,8 +64,9 @@ content_test_init_scratch_service :: proc(
 content_test_queue_scratch_requests :: proc(
     t: ^testing.T, service: ^Content_Service, path: string) {
     failed, failed_valid := content_stage_request_make(
-        path, SEARCH_TEST_CANDIDATE_FINGERPRINT)
-    stage, valid := content_stage_request_make(path, SEARCH_TEST_FINGERPRINT)
+        path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT)
+    stage, valid := content_stage_request_make(
+        path, contentfixture.SEARCH_TEST_FINGERPRINT)
     query, query_valid := search_query_request_make(1, 0, "perpendicular")
     testing.expect(t, failed_valid && valid && query_valid)
     requests: [8]Content_Worker_Request = {
@@ -95,14 +98,14 @@ content_test_queue_scratch_requests :: proc(
 // Verify startup and control-only workloads reclaim scratch before the next request.
 @(test)
 content_worker_reclaims_startup_and_request_scratch :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("scratch-requests")
+    fixture := contentfixture.search_test_database_create("scratch-requests")
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
     service: Content_Service
     initialized := content_test_init_scratch_service(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT)
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT)
     testing.expect(t, initialized)
     if !initialized {
         return
@@ -154,14 +157,14 @@ content_test_check_scratch_results :: proc(t: ^testing.T, service: ^Content_Serv
 // Verify failed startup releases admission scratch without waiting for a first query.
 @(test)
 content_worker_reclaims_failed_startup_scratch :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("scratch-failed-startup")
+    fixture := contentfixture.search_test_database_create("scratch-failed-startup")
     defer delete(fixture.directory)
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
     service: Content_Service
     initialized := content_test_init_scratch_service(
-        &service, fixture.path, SEARCH_TEST_CANDIDATE_FINGERPRINT)
+        &service, fixture.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT)
     testing.expect(t, initialized)
     if !initialized {
         return

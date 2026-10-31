@@ -3,7 +3,7 @@ package historyruntime
 import protocol "../../../core/protocol"
 import sqlite "../../../sqlite"
 import taskpool "../../../taskpool"
-import termhiststore "../store"
+import termhiststore "../../../persistence/userdata/history"
 import termhistsearch "../search"
 
 HISTORY_RUNTIME_MUTATION_CAPACITY :: 8

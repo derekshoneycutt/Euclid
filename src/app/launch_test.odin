@@ -4,7 +4,7 @@ package app
 import core "../core"
 import evidence_session "../evidence/session"
 import setting_model "../settings"
-import user_data "../userdata"
+import user_data "../persistence/userdata"
 import collections "../collections"
 import uuid "core:encoding/uuid"
 

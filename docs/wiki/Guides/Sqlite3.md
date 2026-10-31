@@ -36,11 +36,26 @@ these as one generic “application database” would obscure those distinct res
 | Runtime access | Read-only connection owned by the content worker | Read and write through the user-data store |
 | Lifetime | Packaged asset and staged/active content generations | User-data file, admitted for the application session |
 | Current publication model | Build, validate, package, then replace as a complete immutable asset | Load saved values; write validated setting batches transactionally |
-| Schema ownership | Content builder and content-store admission | `src/userdata/`, using typed definitions from `src/settings/` |
+| Schema ownership | Content builder and content-store admission | `src/persistence/userdata/`, using typed definitions from `src/settings/` |
 
 Both databases use `src/sqlite/` for explicit connection, statement, binding, and column
-operations. Sharing that substrate does not make their connections interchangeable:
-each consumer owns its SQL and policy. The content worker keeps its connection exclusive
+operations. Runtime SQL, binding, decoding, and statement cleanup live in two concrete
+API sets under [`src/persistence/`](../../../src/persistence/):
+
+- [`content/`](../../../src/persistence/content/) owns immutable database admission,
+  native generation materialization, friendly-query-to-FTS compilation, and search.
+- [`userdata/`](../../../src/persistence/userdata/) owns user-store admission,
+  migrations, settings, collections, and their atomic commit composition.
+  Its [`history/`](../../../src/persistence/userdata/history/) child keeps TEMP and
+  durable history operations together, including SQLite search callbacks.
+
+These are ordinary operation APIs, not a generic repository framework. Their SQL
+files and native binding/decoding contracts have the same implementation home.
+The user-store root still creates and migrates durable history tables using the
+schema beside history SQL. The content builder remains a separate tool-owned writer.
+
+Sharing the substrate does not make connections interchangeable.
+The content worker keeps its connection exclusive
 while servicing content requests. The settings connection is opened and admitted by the
 application coordinator; settings writes run as worker-only tasks, are joined before
 their payload or store can be reused, and are drained during shutdown.
@@ -199,12 +214,12 @@ inactive slot while the active slot remains available, then publication either p
 the candidate or retires it. This native generation storage is distinct from both
 SQLite's temporary workspace and the packaged database.
 
-The worker copies SQLite column values into the admitted generation before stepping
-statements again; those borrowed column views do not escape. Query execution likewise
-uses worker-local temporary storage, releases it after publishing the bounded result, and
-returns identifiers and copied suggestion values—not SQLite pointers. The display
-checks query and index generations before resolving accepted identifiers against the
-active catalogue.
+The content-reader API copies SQLite column values into the admitted generation before
+stepping statements again; those borrowed column views do not escape. Query execution
+likewise uses worker-local temporary storage, releases it after publishing the bounded
+result, and returns identifiers and copied suggestion values—not SQLite pointers. The
+display checks query and index generations before resolving accepted identifiers against
+the active catalogue.
 
 For editorial declarations and consumer behavior, see
 [Localization And Editions](Localization.md). For Library search syntax and UI policy,
@@ -357,8 +372,8 @@ This feature leaves `user_version` at schema version 2 and adds no migration or
 compatibility branch. Pre-feature local development databases are disposable and may be
 removed and recreated; wrong-application and unsupported/future-version admission
 checks remain unchanged. The checked-in schema is maintained under
-[`src/userdata/`](../../../src/userdata/) and
-[`src/terminal/history/store/`](../../../src/terminal/history/store/).
+[`src/persistence/userdata/`](../../../src/persistence/userdata/) and
+[`src/persistence/userdata/history/`](../../../src/persistence/userdata/history/).
 
 ## Shared SQLite Mechanics
 
@@ -427,10 +442,12 @@ in a case is full-file validation.
 | SQLite native build and binding | [`libs/sqlite3/`](../../../libs/sqlite3/) and [`build_config.jl`](../../../tools/build_config.jl) |
 | Content declarations, editions, or search corpus | [`src/content/localization/`](../../../src/content/localization/), [`src/julia/search/`](../../../src/julia/search/) |
 | Content database schema and generation | [`schema.sql`](../../../tools/content_builder/sql/schema.sql), [`content_builder/`](../../../tools/content_builder/) |
-| Content admission, named SQL, or worker lifecycle | [`src/view/content/`](../../../src/view/content/) |
-| Search syntax and query validation | [`query.odin`](../../../src/view/content/query.odin) |
+| Content admission, named SQL, native decoding, or search execution | [`src/persistence/content/`](../../../src/persistence/content/) |
+| Search syntax and query validation | [`query.odin`](../../../src/persistence/content/query.odin) |
+| Content worker scheduling, generation publication, or reload lifecycle | [`src/view/content/`](../../../src/view/content/) |
 | Known preference identities, defaults, and validation | [`src/settings/`](../../../src/settings/) |
-| User database schema, path, admission, and transactions | [`src/userdata/`](../../../src/userdata/) |
+| User database schema, path, admission, and transactions | [`src/persistence/userdata/`](../../../src/persistence/userdata/) |
+| TEMP/durable history SQL, native rows, or SQLite search adapters | [`history/`](../../../src/persistence/userdata/history/) |
 | Startup preference loading and overrides | [`launch.odin`](../../../src/app/launch.odin) |
 | Placement-name bounds, rename mutation, and inline draft admission | [`model.odin`](../../../src/collections/model.odin), [`entry_name.odin`](../../../src/view/ui/library/entry_name.odin) |
 | Runtime saves and shutdown drain | [`settings_save.odin`](../../../src/view/preferences/settings_save.odin), [`shutdown.odin`](../../../src/view/shutdown.odin) |

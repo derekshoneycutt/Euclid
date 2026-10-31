@@ -2,7 +2,7 @@ package uiterminal
 
 import content "../../../core/content"
 import termhistsearch "../../../terminal/history/search"
-import termhiststore "../../../terminal/history/store"
+import termhiststore "../../../persistence/userdata/history"
 import geometry "../../../core/geometry"
 import viewterminalmodel "../../terminal/model"
 import native "../../native"

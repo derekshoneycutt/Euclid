@@ -4,7 +4,7 @@ package ui
 import viewmodel "model"
 import bridgemodel "../../bridge/model"
 import collections "../../collections"
-import userdata "../../userdata"
+import userdata "../../persistence/userdata"
 import geometry "../../core/geometry"
 import app_core "../../core"
 import testing "core:testing"

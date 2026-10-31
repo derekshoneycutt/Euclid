@@ -12,35 +12,35 @@ end
 """Install ephemeral and durable history schemas before exercising their statements."""
 function euclid_history_schema_steps()
     return SQLiteValidationStep[
-        euclid_sqlite_file_step("src/terminal/history/store/sql/schema.sql"; role=:setup),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/index.sql"; role=:setup),
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/schema.sql"; role=:setup),
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/index.sql"; role=:setup),
         euclid_sqlite_file_step(
-            "src/userdata/sql/user_terminal_history.sql"; role=:setup),
+            "src/persistence/userdata/history/sql/user_terminal_history.sql"; role=:setup),
     ]
 end
 
 """Insert and update session/durable rows with the native caller's slot types."""
 function euclid_history_mutation_steps()
     return SQLiteValidationStep[
-        euclid_sqlite_file_step("src/terminal/history/store/sql/insert_persistent.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/insert_persistent.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("persisted source"), SQLiteInteger(1), SQLiteInteger(100),
                 SQLiteInteger(1), SQLiteInteger(1))),
         euclid_sqlite_file_step(
-            "src/terminal/history/store/sql/insert_linked_session.sql";
+            "src/persistence/userdata/history/sql/insert_linked_session.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteInteger(2), SQLiteInteger(1), SQLiteText("linked source"),
                 SQLiteInteger(1), SQLiteInteger(101),
                 SQLiteInteger(1), SQLiteInteger(1))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/insert.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/insert.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteInteger(3), SQLiteText("session source"), SQLiteInteger(0),
                 SQLiteInteger(102), SQLiteInteger(1), SQLiteInteger(1))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/update_persistent.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/update_persistent.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("updated persistent"), SQLiteInteger(1), SQLiteInteger(2),
                 SQLiteInteger(1), SQLiteInteger(1))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/update.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/update.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("updated session"), SQLiteInteger(0), SQLiteInteger(2),
                 SQLiteInteger(3), SQLiteInteger(1))),
@@ -50,25 +50,25 @@ end
 """Exercise history lookups, navigation boundaries, and cleanup operations."""
 function euclid_history_query_steps()
     return SQLiteValidationStep[
-        euclid_sqlite_file_step("src/terminal/history/store/sql/get_by_id.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/get_by_id.sql";
             bindings=euclid_sqlite_bindings(SQLiteInteger(3))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/get_persistent_by_id.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/get_persistent_by_id.sql";
             bindings=euclid_sqlite_bindings(SQLiteInteger(1))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/older.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/older.sql";
             bindings=euclid_sqlite_bindings(SQLiteInteger(3))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/newer.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/newer.sql";
             bindings=euclid_sqlite_bindings(SQLiteInteger(2))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/combined_older.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/combined_older.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteInteger(101), SQLiteInteger(0), SQLiteInteger(2))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/combined_newer.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/combined_newer.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteInteger(101), SQLiteInteger(0), SQLiteInteger(2))),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/combined_latest.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/combined_latest.sql"),
         euclid_sqlite_file_step(
-            "src/terminal/history/store/sql/durable_table_exists.sql"),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/delete_persistent.sql"),
-        euclid_sqlite_file_step("src/terminal/history/store/sql/delete_session.sql"),
+            "src/persistence/userdata/history/sql/durable_table_exists.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/delete_persistent.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/history/sql/delete_session.sql"),
     ]
 end
 
@@ -93,7 +93,7 @@ function euclid_history_search_steps()
             end
             push!(steps, SQLiteFileStep(
                 "$name-$cursor_valid",
-                "src/terminal/history/store/sql/$name.sql"; bindings))
+                "src/persistence/userdata/history/sql/$name.sql"; bindings))
         end
     end
     return steps
@@ -116,31 +116,31 @@ function euclid_sqlite_userdata_case()
     entry_id = SQLiteBlob(fill(UInt8(0x22), 16))
     animation_id = SQLiteBlob(fill(UInt8(0x33), 16))
     steps = SQLiteValidationStep[
-        euclid_sqlite_file_step("src/userdata/sql/user_setting.sql"; role=:setup),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/user_setting.sql"; role=:setup),
         euclid_sqlite_file_step(
-            "src/userdata/sql/user_collection_schema.sql"; role=:setup),
-        euclid_sqlite_file_step("src/userdata/sql/upsert_setting.sql";
+            "src/persistence/userdata/sql/user_collection_schema.sql"; role=:setup),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/upsert_setting.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("phase5"), SQLiteText("manifest"), SQLiteText("text"),
                 SQLiteNull(), SQLiteText("typed validation"))),
-        euclid_sqlite_file_step("src/userdata/sql/read_setting.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/sql/read_setting.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("phase5"), SQLiteText("manifest"))),
-        euclid_sqlite_file_step("src/userdata/sql/insert_collection.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/sql/insert_collection.sql";
             bindings=euclid_sqlite_bindings(
                 collection_id, SQLiteNull(), SQLiteText("Validation collection"),
                 SQLiteInteger(1), SQLiteInteger(0))),
-        euclid_sqlite_file_step("src/userdata/sql/insert_collection_entry.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/sql/insert_collection_entry.sql";
             bindings=euclid_sqlite_bindings(
                 entry_id, collection_id, SQLiteNull(), SQLiteInteger(0),
                 SQLiteText("animation"), animation_id, SQLiteNull())),
-        euclid_sqlite_file_step("src/userdata/sql/read_collections.sql"),
-        euclid_sqlite_file_step("src/userdata/sql/read_collection_entries.sql"),
-        euclid_sqlite_file_step("src/userdata/sql/delete_setting.sql";
+        euclid_sqlite_file_step("src/persistence/userdata/sql/read_collections.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/read_collection_entries.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/delete_setting.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("phase5"), SQLiteText("manifest"))),
-        euclid_sqlite_file_step("src/userdata/sql/delete_collection_entries.sql"),
-        euclid_sqlite_file_step("src/userdata/sql/delete_collections.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/delete_collection_entries.sql"),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/delete_collections.sql"),
     ]
     return SQLiteValidationCase("user-settings-and-collections"; steps)
 end
@@ -199,27 +199,27 @@ end
 """Read authored content interfaces and query both compiled-in search modules."""
 function euclid_content_search_read_steps()
     return SQLiteValidationStep[
-        euclid_sqlite_file_step("src/view/content/sql/argument_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/availability_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/catalog_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/edition_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/locale_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/message_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/name_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/projection_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/raw_metadata_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/search_metadata.sql";
+        euclid_sqlite_file_step("src/persistence/content/sql/argument_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/availability_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/catalog_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/edition_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/locale_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/message_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/name_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/projection_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/raw_metadata_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/search_metadata.sql";
             bindings=euclid_sqlite_bindings(SQLiteText("schema_version"))),
-        euclid_sqlite_file_step("src/view/content/sql/search_count.sql";
+        euclid_sqlite_file_step("src/persistence/content/sql/search_count.sql";
             bindings=euclid_sqlite_bindings(SQLiteText("case"))),
-        euclid_sqlite_file_step("src/view/content/sql/search_rows.sql";
+        euclid_sqlite_file_step("src/persistence/content/sql/search_rows.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("case"), SQLiteInteger(10), SQLiteInteger(0))),
-        euclid_sqlite_file_step("src/view/content/sql/search_spellfix.sql";
+        euclid_sqlite_file_step("src/persistence/content/sql/search_spellfix.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("case"), SQLiteInteger(10), SQLiteInteger(10))),
-        euclid_sqlite_file_step("src/view/content/sql/subject_rows.sql"),
-        euclid_sqlite_file_step("src/view/content/sql/translation_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/subject_rows.sql"),
+        euclid_sqlite_file_step("src/persistence/content/sql/translation_rows.sql"),
     ]
 end
 

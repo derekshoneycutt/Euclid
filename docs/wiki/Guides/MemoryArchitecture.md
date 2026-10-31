@@ -497,7 +497,7 @@ Exact quotas and byte sizes belong to the linked models and implementations.
 | Task scheduler | Fixed virtual backing, mutex-wrapped TLSF, retained workers/queues/slots | Join task results and fences; stop pool before backing release | [Task pool](../../../src/taskpool/taskpool.odin) |
 | Fonts | Cache-owned metadata TLSF for canonical glyphs, optional-raster records, and visible-ink samples; separate static preparation arena and display-owned atlas resources | Join preparation; copy/publish accepted data; release generation metadata on retirement and destroy cache storage after all consumers stop | [Font Rasterization](FontRasterization.md), [font cache](../../../src/view/font/font.odin) |
 | Collections and Library | Display-owned TLSF records and stable UI nodes, optional copied labels, UUID indexes, and an independent Store replay owner | Same-generation edits patch only affected nodes; display and replay Sets own separate TLSF domains and are deep-copied between owners | [Collections](../../../src/collections/model.odin), [Library projection](../../../src/view/ui/model/tree_projection_storage.odin), [Library section](#library-and-persistence-memory) |
-| User-data persistence | App-owned store, sequentially owned SQLite connection/statements, operation-scoped replay snapshots | Join save work before payload reuse or connection/store close; reclaim scratch at its operation boundary | [User-data model](../../../src/userdata/model.odin), [save coordinator](../../../src/view/preferences/settings_save.odin) |
+| User-data persistence | App-owned store, sequentially owned SQLite connection/statements, operation-scoped replay snapshots | Join save work before payload reuse or connection/store close; reclaim scratch at its operation boundary | [User-data model](../../../src/persistence/userdata/model.odin), [save coordinator](../../../src/view/preferences/settings_save.odin) |
 | Terminal graphics and shell | Display-lifetime service owners, generation-bound attachments, joined jobs, native process resources | Unbind/close generation consumers before reset; stop services before pool destruction | [Graphics service](../../../src/view/terminal/service/terminal_graphics_service.odin), [shell service](../../../src/view/terminal/service/shell_service.odin) |
 | Renderer and capture | Fixed CPU staging, SDL GPU resources, framebuffer owner, capture-owned GIF arena, native encoder, and output transaction | Reuse staged pixels within a capture; close/abort native work before resetting storage; retain published path until capture policy copies it | [Draw runtime](../../../src/view/native/sdl_draw_runtime.odin), [capture backend](../../../src/view/capture/backend/sdl_gif_capture.odin), [GIF encoder](../../../src/view/native/sdl_gif_encoder.odin) |
 | Julia runtime | Ordinary Julia GC heap, rooted runtime host and active/candidate generations | Reachability and GC, plus explicit host shutdown; not Odin arena reset | [Julia host bridge](../../../src/bridge/runtime_service.odin), [Julia section](#julia-heap-and-rooting-windows) |
@@ -700,7 +700,7 @@ Persistence has a separate consumption lifetime:
 
 - A bounded immutable mutation batch crosses to save work; the worker does not
   borrow the display's mutable collection state.
-- [Durable replay](../../../src/userdata/collections.odin) loads a separate
+- [Durable replay](../../../src/persistence/userdata/collections.odin) loads a separate
   Store-owned TLSF `Set`, backed by the explicit runtime heap allocator. It is
   reused to validate and apply the batch, persists it within the database
   transaction, and is destroyed when the Store closes. Launch deep-clones the
@@ -712,8 +712,13 @@ Persistence has a separate consumption lifetime:
 The [SQLite boundary](../../../src/sqlite/model.odin) owns connection and
 statement handles, not display collection data. SQLite column bytes are copied
 into snapshot storage rather than retained past statement validity.
+The [runtime persistence APIs](../../../src/persistence/) own database-specific
+binding and decoding, not new allocator domains. Content reading populates the
+existing generation owner directly; history writes into caller-owned bounded
+destinations. Moving database operations does not transfer scheduling or memory
+ownership from the existing service and task owners.
 
-Terminal history's [search owner](../../../src/terminal/history/store/model.odin)
+Terminal history's [search owner](../../../src/persistence/userdata/history/model.odin)
 retains its query and condition storage inline and owns PCRE2 handles across pages.
 SQLite registers a stable adapter borrowed from that store; its destructor ends the
 registration borrow without freeing the inline child. Each execution temporarily

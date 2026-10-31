@@ -339,6 +339,12 @@ layout. SQL comments and literals obey token-aware line accounting.
 
 ### SQL Interfaces, State And Ownership
 
+Runtime database-specific SQL and its native adaptation belong under
+`src/persistence/content/` or `src/persistence/userdata/`, including the latter's
+history specialization. Keep binding, decoding, and statement cleanup beside the
+queries. `src/sqlite/` remains schema-agnostic; feature owners retain scheduling
+and publication. Tool-only content writing remains under `tools/content_builder/`.
+
 Projection order, bind positions, nullability and SQLite storage classes are native
 interfaces. Changes MUST preserve the owning decoder/binder contract or update and
 test both sides together. Specify units (for example Unix milliseconds), integer

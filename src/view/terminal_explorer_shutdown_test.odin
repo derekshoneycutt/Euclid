@@ -1,7 +1,7 @@
 #+test
 package view
 
-import user_data "../userdata"
+import user_data "../persistence/userdata"
 import historyruntime "../terminal/history/runtime"
 import terminalview "terminal"
 import taskpool "../taskpool"

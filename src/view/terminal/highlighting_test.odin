@@ -5,7 +5,7 @@ package terminalview
 import model "model"
 import protocol "../../core/protocol"
 import termhist "../../terminal/history"
-import termhiststore "../../terminal/history/store"
+import termhiststore "../../persistence/userdata/history"
 import "core:testing"
 import "core:strings"
 

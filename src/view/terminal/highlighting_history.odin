@@ -2,7 +2,7 @@ package terminalview
 
 import model "model"
 import protocol "../../core/protocol"
-import termhiststore "../../terminal/history/store"
+import termhiststore "../../persistence/userdata/history"
 import "core:log"
 import "core:unicode/utf8"
 

@@ -30,9 +30,12 @@ $(Char(9))$(Char(9))sample.odin
     mktempdir() do directory
         mkpath(joinpath(directory, "src", "first"))
         mkpath(joinpath(directory, "src", "excluded", "nested"))
+        mkpath(joinpath(directory, "src", "testsupport"))
         write(joinpath(directory, "src", "root.odin"), "package root\n")
         write(joinpath(directory, "src", "first", "first.odin"), "package first\n")
         write(joinpath(directory, "src", "excluded", "nested", "skip.odin"), "package skip\n")
+        write(joinpath(directory, "src", "testsupport", "fixture_test.odin"),
+            "#+test\npackage fixture\n")
         config = OdinWikiConfig(
             repository_root=directory,
             excluded_roots=["src/excluded"])

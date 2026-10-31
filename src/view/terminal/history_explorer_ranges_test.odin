@@ -2,7 +2,7 @@
 package terminalview
 
 import historyruntime "../../terminal/history/runtime"
-import termhiststore "../../terminal/history/store"
+import termhiststore "../../persistence/userdata/history"
 import "core:testing"
 
 // Range capacity failures are visible presentation failures, never failed filtering or recall.

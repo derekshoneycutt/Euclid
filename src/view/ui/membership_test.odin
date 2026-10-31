@@ -14,7 +14,7 @@ import viewmodel "model"
 import viewpreferences "../preferences"
 import input "../input"
 import theme "theme"
-import userdata "../../userdata"
+import userdata "../../persistence/userdata"
 
 // Append a real durable destination through ordinary transactional display admission.
 membership_test_head :: proc(

@@ -7,9 +7,7 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Animation slider
-- Optional checkboxes in tree
-- Search history / Autocomplete features
+- Search history / Autocomplete
 - Use history / Most viewed / Most recent
 - Custom notes on collection items
 - Export / Import by file
@@ -206,9 +204,6 @@ General features:
 - [X] Comprehensive mouse/keyboard focus system
 - [X] Improved input after full input system migration (IME, etc.)
 - [X] Fast-forward option
-- [ ] Animation Slider
-  - [ ] Initial slider support
-  - [ ] Existing animation slider support
 - [ ] Sqlite backend
   - [X] Initial creation and access
   - [X] Full-text search tables
@@ -217,9 +212,8 @@ General features:
   - [X] Localization tables
   - [X] Basic initial user settings structure
   - [X] Persistent REPL history
-  - [ ] Optional completed checkboxes in tree
-  - [ ] Search and use history
-  - [ ] Search auto-completion features
+  - [ ] Search history and auto-completion feature
+  - [ ] Animation view history
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
     - [X] Favorites/Collection organization
@@ -257,6 +251,7 @@ General features:
   - [X] Opt-in mouse-hover keyboard focus for controls
   - [X] Interface/control size scaling support
   - [X] Mouse/cursor -following magnifier
+  - [ ] Input caret handles (maybe; maybe v2... tbd)
   - [ ] Improved accessibility system
   - [ ] Additional accessibility support : Dynview
   - [ ] Additional accessibility support : Terminal
@@ -269,6 +264,7 @@ Final tasks:
   - [X] Julia Actor Model infrastructure
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
+  - [X] Isolate SQLite persistence module
 - [ ] Render polishes
   - [X] Shader-based particle drawing
   - [X] PIC dust particle physics
@@ -342,6 +338,8 @@ Core Features:
     tratrix and catenary, concoids, cissoids, pedals, negative pedals, glissettes,
     evolutes and involutes, inversions, caustics
 - Limited lifetime line/arc segments--disintegrate after drawing
+- Optional completed checkboxes in tree
+- Animation slider
 - More LaTeX support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods

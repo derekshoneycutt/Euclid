@@ -1,139 +1,31 @@
 #+test
 package content
 
+import contentfixture "../../persistence/content/testsupport"
+
 import contentdata "../../core/content"
 import storage "../../core/storage"
-import sqlite3 "../../../libs/sqlite3"
-import sqlite "../../sqlite"
-import files "../../files"
 
-import "core:c"
 import "core:os"
 import "core:strings"
 import "core:testing"
 
-// The packaged authored dataset, not just a synthetic fixture, preserves every baseline byte.
-@(test)
-content_packaged_messages_match_native_output_baselines :: proc(t: ^testing.T) {
-    config: files.Asset_Root_Config = {
-        asset_root_override = "bin",
-    }
-    asset, resolved := files.packaged_content_asset_with_config(
-        &config, context.allocator)
-    testing.expect(t, resolved)
-    if !resolved {
-        return
-    }
-    defer delete(asset.database_path, context.allocator)
-    defer delete(asset.corpus_fingerprint, context.allocator)
-    generation := new(Content_Generation, context.allocator)
-    defer free(generation, context.allocator)
-    testing.expect_value(t, contentdata.content_generation_init(generation),
-        contentdata.Content_Generation_Status.Ok)
-    defer contentdata.content_generation_destroy(generation)
-    database: Content_Database
-    opened := content_database_open(
-        &database, asset.database_path, asset.corpus_fingerprint, generation)
-    testing.expect(t, opened)
-    if !opened {
-        return
-    }
-    defer _ = content_database_close(&database)
-    templates := contentdata.CONTENT_MESSAGE_TEST_TEMPLATES
-    for id in contentdata.Content_Message_Id {
-        if id == .Invalid {
-            continue
-        }
-        view, status := contentdata.content_message_lookup(generation, id)
-        testing.expect_value(t, status, contentdata.Content_Message_Status.Ok)
-        testing.expect_value(t, view.template, templates[view.ordinal])
-        contentdata.content_message_test_output(
-            t, generation, id, templates[view.ordinal])
-    }
-}
-
-// Synthetic candidates carry the same named signatures as the production consumers.
-@(test)
-content_fixture_materializes_native_message_signatures :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("content-signature-fixture")
-    defer delete(fixture.directory, context.allocator)
-    defer delete(fixture.path, context.allocator)
-    defer _ = os.remove_all(fixture.directory)
-    testing.expect(t, fixture.ok)
-    database: Content_Database
-    failure := sqlite.connection_open(
-        &database.connection, fixture.path, .Immutable_Readonly, context.temp_allocator)
-    testing.expect_value(t, failure.result, sqlite3.Result.Ok)
-    defer _ = content_database_close(&database)
-    registered := sqlite.connection_register_spellfix(&database.connection)
-    testing.expect_value(t, registered.result, sqlite3.Result.Ok)
-    testing.expect(t, content_database_prepare_statements(&database))
-    testing.expect(t,
-        content_database_validate_metadata(&database, SEARCH_TEST_FINGERPRINT))
-    generation := new(Content_Generation, context.allocator)
-    defer free(generation, context.allocator)
-    testing.expect_value(t, contentdata.content_generation_init(generation),
-        contentdata.Content_Generation_Status.Ok)
-    defer contentdata.content_generation_destroy(generation)
-    testing.expect_value(t, contentdata.content_generation_begin(
-        generation, database.index_generation), contentdata.Content_Generation_Status.Ok)
-    testing.expect(t, content_admission_read_locales(&database, generation))
-    testing.expect(t, content_admission_read_messages(&database, generation))
-    testing.expect(t, content_admission_read_arguments(&database, generation))
-    testing.expect(t, content_admission_read_translations(&database, generation))
-    testing.expect_value(t, generation.data.argument_count, u16(17))
-    testing.expect(t, content_admission_validate_messages(generation))
-    testing.expect(t, content_admission_validate_translations(generation))
-}
-
-// Apply one mutation to a closed fixture before immutable admission.
-content_test_mutate :: proc(fixture: ^Search_Test_Database, sql: string) -> bool {
-    database: ^sqlite3.Database
-    path := strings.clone_to_cstring(fixture.path, context.temp_allocator)
-    if sqlite3.sqlite3_open_v2(
-        path, &database, c.int(sqlite3.Open_Flag.Readwrite), nil) != .Ok {
-        return false
-    }
-    changed := search_test_execute_sql(
-        database, strings.clone_to_cstring(sql, context.temp_allocator))
-    counted := changed && content_test_refresh_counts(database)
-    return sqlite3.sqlite3_close(database) == .Ok && counted
-}
-
-// Keep fixture metadata honest so invalid data, rather than stale counts, rejects admission.
-content_test_refresh_counts :: proc(database: ^sqlite3.Database) -> bool {
-    sql := `UPDATE content_metadata SET value='1=6;2='||(SELECT count(*) FROM locale)||
-        ';3='||(SELECT count(*) FROM ui_message)||';4='||(SELECT count(*) FROM ui_argument)||
-        ';5='||(SELECT count(*) FROM ui_translation)||';6='||(SELECT count(*) FROM content_subject)||
-        ';7='||(SELECT count(*) FROM catalog_node)||';8='||(SELECT count(*) FROM catalog_name)||
-        ';9='||(SELECT count(*) FROM edition)||';10='||(SELECT count(*) FROM availability)||
-        ';11='||(SELECT count(*) FROM search_projection) WHERE key='table_counts';
-        UPDATE content_metadata SET value=CAST(6+(SELECT count(*) FROM locale)+
-        (SELECT count(*) FROM ui_message)+(SELECT count(*) FROM ui_argument)+
-        (SELECT count(*) FROM ui_translation)+(SELECT count(*) FROM content_subject)+
-        (SELECT count(*) FROM catalog_node)+(SELECT count(*) FROM catalog_name)+
-        (SELECT count(*) FROM edition)+(SELECT count(*) FROM availability)+
-        (SELECT count(*) FROM search_projection) AS TEXT) WHERE key='record_count';`
-    return search_test_execute_sql(
-        database, strings.clone_to_cstring(sql, context.temp_allocator))
-}
-
 // Require a malformed candidate to retain every active projection and query identity.
 content_test_reject_candidate :: proc(
     t: ^testing.T, service: ^Content_Service, suffix, mutation: string) {
-    fixture := search_test_database_create(suffix)
+    fixture := contentfixture.search_test_database_create(suffix)
     defer delete(fixture.directory, context.allocator)
     defer delete(fixture.path, context.allocator)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
-    testing.expect(t, content_test_mutate(&fixture, mutation))
+    testing.expect(t, contentfixture.content_test_mutate(&fixture, mutation))
     active := content_service_generation(service)
     baseline := active^.data
     records := active^.records
     text := strings.clone(string(active^.text_bytes), context.allocator)
     defer delete(text, context.allocator)
     testing.expect(t, !content_service_stage(
-        service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     testing.expect_value(t, content_service_generation(service), active)
     testing.expect_value(t, active^.data, baseline)
     testing.expect_value(t, active^.records, records)
@@ -148,13 +40,13 @@ content_test_reject_candidate :: proc(
 // Validate complete rollback rather than only preservation of the search connection.
 @(test)
 content_worker_rejects_malformed_ui_without_partial_publication :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("content-ui-active")
+    fixture := contentfixture.search_test_database_create("content-ui-active")
     defer delete(fixture.directory, context.allocator)
     defer delete(fixture.path, context.allocator)
     defer _ = os.remove_all(fixture.directory)
     service: Content_Service
     testing.expect(t, fixture.ok && content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     content_test_reject_candidate(t, &service, "content-missing-message",
         "DELETE FROM ui_translation WHERE message_key='ui.navigation.library'")
@@ -171,13 +63,13 @@ content_worker_rejects_malformed_ui_without_partial_publication :: proc(t: ^test
 // Edition/default and localized-name failures cannot replace any active content.
 @(test)
 content_worker_rejects_malformed_editions_and_names :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("content-edition-active")
+    fixture := contentfixture.search_test_database_create("content-edition-active")
     defer delete(fixture.directory, context.allocator)
     defer delete(fixture.path, context.allocator)
     defer _ = os.remove_all(fixture.directory)
     service: Content_Service
     testing.expect(t, fixture.ok && content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     content_test_reject_candidate(t, &service, "content-missing-default",
         "UPDATE availability SET is_default=0 WHERE animation_id='00000000-0000-0000-0000-000000000000'")
@@ -198,16 +90,16 @@ content_worker_rejects_malformed_editions_and_names :: proc(t: ^testing.T) {
 // Typed ordinal signatures are bounded and templates must match their declared names.
 @(test)
 content_worker_admits_and_rejects_typed_signatures :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("content-signature-active")
+    fixture := contentfixture.search_test_database_create("content-signature-active")
     defer delete(fixture.directory, context.allocator)
     defer delete(fixture.path, context.allocator)
     defer _ = os.remove_all(fixture.directory)
-    testing.expect(t, fixture.ok && content_test_mutate(&fixture,
+    testing.expect(t, fixture.ok && contentfixture.content_test_mutate(&fixture,
         "UPDATE ui_translation SET template='{count}, again {count}' "+
         "WHERE message_key='ui.library.status.match_count';"))
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
     testing.expect_value(t, generation^.data.argument_count, u16(17))
@@ -245,11 +137,11 @@ content_worker_rejects_search_only_database :: proc(t: ^testing.T) {
 // Newline serialization includes delimiters beyond the sixteen individual alias bounds.
 @(test)
 content_worker_preserves_exact_search_alias_bounds :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("content-alias-bound")
+    fixture := contentfixture.search_test_database_create("content-alias-bound")
     defer delete(fixture.directory, context.allocator)
     defer delete(fixture.path, context.allocator)
     defer _ = os.remove_all(fixture.directory)
-    testing.expect(t, fixture.ok && content_test_mutate(&fixture,
+    testing.expect(t, fixture.ok && contentfixture.content_test_mutate(&fixture,
         "WITH RECURSIVE sequence(value) AS (VALUES(0) UNION ALL "+
         "SELECT value+1 FROM sequence WHERE value<15) "+
         "UPDATE search_projection SET aliases=(SELECT group_concat(alias,char(10)) "+
@@ -257,7 +149,7 @@ content_worker_preserves_exact_search_alias_bounds :: proc(t: ^testing.T) {
         "WHERE projection_id=1;"))
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
     aliases, status := contentdata.content_generation_text(
@@ -274,11 +166,11 @@ content_worker_preserves_exact_search_alias_bounds :: proc(t: ^testing.T) {
 // Edition language is independent of the application locale and has ordinary bindings.
 @(test)
 content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
-    fixture := search_test_database_create("content-greek-edition")
+    fixture := contentfixture.search_test_database_create("content-greek-edition")
     defer delete(fixture.directory, context.allocator)
     defer delete(fixture.path, context.allocator)
     defer _ = os.remove_all(fixture.directory)
-    testing.expect(t, fixture.ok && content_test_mutate(&fixture,
+    testing.expect(t, fixture.ok && contentfixture.content_test_mutate(&fixture,
         "INSERT INTO edition VALUES ('greek','Ancient Greek','grc','Greek source');"+
         "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"+
         "UPDATE content_metadata SET value='1035' WHERE key='record_count';"+
@@ -286,7 +178,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
         "WHERE key='table_counts';"))
     service: Content_Service
     testing.expect(t, content_service_init(
-        &service, fixture.path, SEARCH_TEST_FINGERPRINT))
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
     testing.expect(t, generation != nil && generation^.data.complete)
@@ -297,8 +189,8 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
 // Both stable slots retire all content and packed storage after repeated transactions.
 @(test)
 content_service_retires_complete_candidate_storage :: proc(t: ^testing.T) {
-    active := search_test_database_create("content-retire-active")
-    candidate := search_test_database_create("content-retire-candidate")
+    active := contentfixture.search_test_database_create("content-retire-active")
+    candidate := contentfixture.search_test_database_create("content-retire-candidate")
     defer delete(active.directory, context.allocator)
     defer delete(active.path, context.allocator)
     defer delete(candidate.directory, context.allocator)
@@ -307,16 +199,17 @@ content_service_retires_complete_candidate_storage :: proc(t: ^testing.T) {
     defer _ = os.remove_all(candidate.directory)
     service: Content_Service
     testing.expect(t, active.ok && candidate.ok && content_service_init(
-        &service, active.path, SEARCH_TEST_FINGERPRINT))
+        &service, active.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
-    search_test_make_candidate(t, &candidate)
+    contentfixture.search_test_make_candidate(t, &candidate)
     content_test_complete_transaction(t, &service, &candidate)
     content_test_stable_slot_pressure(t, &service, &candidate)
 }
 
 // Repeating bounded reloads reuses the same owners without increasing arena high waters.
 content_test_stable_slot_pressure :: proc(
-    t: ^testing.T, service: ^Content_Service, candidate: ^Search_Test_Database) {
+    t: ^testing.T, service: ^Content_Service,
+    candidate: ^contentfixture.Search_Test_Database) {
     content_test_complete_transaction(t, service, candidate)
     first := service.active_generation
     second := service.staged_generation
@@ -337,11 +230,12 @@ content_test_stable_slot_pressure :: proc(
 
 // Compare the complete provisional publication and rollback before final retirement.
 content_test_complete_transaction :: proc(
-    t: ^testing.T, service: ^Content_Service, candidate: ^Search_Test_Database) {
+    t: ^testing.T, service: ^Content_Service,
+    candidate: ^contentfixture.Search_Test_Database) {
     active := content_service_generation(service)
     baseline := active^.data
     testing.expect(t, content_service_stage(
-        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+        service, candidate.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT))
     staged := content_service_staged_generation(service)
     testing.expect(t, staged != nil && staged^.data.complete && staged != active)
     testing.expect(t, content_service_commit(service))
@@ -353,7 +247,7 @@ content_test_complete_transaction :: proc(
     testing.expect_value(t, staged^.data, contentdata.Content_Records{})
     testing.expect_value(t, staged^.text_builder.count, 0)
     testing.expect(t, content_service_stage(
-        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+        service, candidate.path, contentfixture.SEARCH_TEST_CANDIDATE_FINGERPRINT))
     testing.expect(t, content_service_commit(service) &&
         content_service_finalize(service))
     retired := service.staged_generation

@@ -3,7 +3,7 @@ package terminalview
 
 import viewterminalmodel "model"
 import termhist "../../terminal/history"
-import termhiststore "../../terminal/history/store"
+import termhiststore "../../persistence/userdata/history"
 import historyruntime "../../terminal/history/runtime"
 import protocol "../../core/protocol"
 import "core:testing"

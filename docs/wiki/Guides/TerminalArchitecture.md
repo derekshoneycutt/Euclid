@@ -476,8 +476,10 @@ Start here:
 
 - [History runtime](../../../src/view/terminal/history_runtime.odin):
   scheduling, persistence visibility, recall, and shutdown.
-- [History store](../../../src/terminal/history/store/):
-  SQLite records, native condition search, keyset pages, and store tests.
+- [History store](../../../src/persistence/userdata/history/):
+  TEMP/durable SQLite records, native condition search adapters, keyset pages,
+  and store tests. SQL and native translation live together; the user-store root
+  remains responsible for creating and migrating the durable history schema.
 - [History explorer](../../../src/view/terminal/history_explorer.odin) and
   [async transport](../../../src/view/terminal/history_explorer_runtime.odin):
   isolated query editing, preview, cancellation, and recall without evaluation.

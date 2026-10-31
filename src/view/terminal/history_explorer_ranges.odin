@@ -1,7 +1,7 @@
 package terminalview
 
 import historyruntime "../../terminal/history/runtime"
-import termhiststore "../../terminal/history/store"
+import termhiststore "../../persistence/userdata/history"
 
 // Refetch accepted full sources under the same lease; mutation scratch is idle during search.
 history_runtime_collect_row_matches :: proc(history: ^historyruntime.History_Runtime) {

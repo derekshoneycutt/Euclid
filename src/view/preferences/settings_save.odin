@@ -2,7 +2,7 @@ package viewpreferences
 
 import taskpool "../../taskpool"
 import setting_model "../../settings"
-import user_data "../../userdata"
+import user_data "../../persistence/userdata"
 import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
 import log "core:log"

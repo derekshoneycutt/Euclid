@@ -5,7 +5,7 @@ import collections "../../collections"
 import bridgemodel "../../bridge/model"
 import testing "core:testing"
 import uilibrary "library"
-import userdata "../../userdata"
+import userdata "../../persistence/userdata"
 
 // A last-slot rename may commit before delete rejects; retry must not duplicate the rename.
 @(test)

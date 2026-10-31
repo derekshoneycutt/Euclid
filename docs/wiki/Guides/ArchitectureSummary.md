@@ -88,10 +88,10 @@ tables group code by the architectural question a contributor is likely to ask.
 
 | Area | Responsibility | Start in |
 | --- | --- | --- |
-| Content catalogue and search | Packaged catalogue admission, generations, search service | [`src/core/content/`](../../../src/core/content/), [`src/view/content/`](../../../src/view/content/) |
-| User preferences | Typed settings plus separate durable user-data storage | [`src/settings/`](../../../src/settings/), [`src/userdata/`](../../../src/userdata/) |
-| User collections | TLSF-owned dynamic records, collection-qualified membership, serialized Favorites and custom-head/membership mutations, a single typed Library editor, guarded deletion, star-adjacent checkbox popup, and a stable UUID-indexed projection with local patches and preserved stored groups; SQLite replay uses a separate owned `Set` | [`src/collections/`](../../../src/collections/), [`src/userdata/`](../../../src/userdata/), [`src/view/ui/animation/`](../../../src/view/ui/animation/), [`src/view/ui/library/`](../../../src/view/ui/library/), [`src/view/ui/overlay/`](../../../src/view/ui/overlay/) |
-| SQLite boundary | Native bindings and owned database/query policy | [`src/sqlite/`](../../../src/sqlite/) |
+| Content catalogue and search | Native models, persistence admission/search, and worker service | [`src/core/content/`](../../../src/core/content/), [`src/persistence/content/`](../../../src/persistence/content/), [`src/view/content/`](../../../src/view/content/) |
+| User preferences | Typed settings plus separate durable user-data storage | [`src/settings/`](../../../src/settings/), [`src/persistence/userdata/`](../../../src/persistence/userdata/) |
+| User collections | TLSF-owned dynamic records, collection-qualified membership, serialized Favorites and custom-head/membership mutations, a single typed Library editor, guarded deletion, star-adjacent checkbox popup, and a stable UUID-indexed projection with local patches and preserved stored groups; SQLite replay uses a separate owned `Set` | [`src/collections/`](../../../src/collections/), [`src/persistence/userdata/`](../../../src/persistence/userdata/), [`src/view/ui/animation/`](../../../src/view/ui/animation/), [`src/view/ui/library/`](../../../src/view/ui/library/), [`src/view/ui/overlay/`](../../../src/view/ui/overlay/) |
+| SQLite boundary | Schema-agnostic mechanics; concrete runtime SQL and native adaptation | [`src/sqlite/`](../../../src/sqlite/), [`src/persistence/`](../../../src/persistence/) |
 | Julia runtime policy | Sysimage host, actor runtime, animation and Terminal policy | [`src/julia/`](../../../src/julia/) |
 | Authored content | Animation modules and their content-facing helpers | [`src/content/`](../../../src/content/) |
 | Evidence and diagnostics | Typed behavioral evidence, scenarios, profiles, and operational logs | [`src/evidence/`](../../../src/evidence/), [`src/diagnostics/`](../../../src/diagnostics/) |
@@ -106,6 +106,12 @@ versioned stores transactionally, preserving existing settings, then creates gen
 collection and placement tables with 16-byte UUID identities and foreign-key enforcement.
 Settings and collection mutations share one worker-only transaction queue and one
 durability status in Settings.
+
+Runtime queries, bindings, and row decoding have two discoverable homes:
+content reading in `src/persistence/content/` and user data in
+`src/persistence/userdata/`, with specialized history storage beneath it.
+Feature coordinators retain scheduling, connection admission, and publication;
+the content-writing tool remains independent. There is no root persistence facade.
 
 ## Execution And Ownership Model
 
@@ -201,7 +207,7 @@ the authority for current behavior.
 | Change particles or dust-field behavior | [Particle System](ParticleSystem.md) | [`src/particles/`](../../../src/particles/) |
 | Trace glyph preparation and rendering | [Font Rasterization](FontRasterization.md) | [`src/view/font/`](../../../src/view/font/) |
 | Work on semantic access and platform adapters | [Accessibility](Accessibility.md) | [`src/accessibility/`](../../../src/accessibility/), [`src/view/native/accessibility/`](../../../src/view/native/accessibility/) |
-| Work on packaged content, user settings, or SQLite | [SQLite Architecture](Sqlite3.md) | [`src/sqlite/`](../../../src/sqlite/), [`src/view/content/`](../../../src/view/content/), [`src/userdata/`](../../../src/userdata/) |
+| Work on packaged content, user settings, or SQLite | [SQLite Architecture](Sqlite3.md) | [`src/sqlite/`](../../../src/sqlite/), [`src/view/content/`](../../../src/view/content/), [`src/persistence/userdata/`](../../../src/persistence/userdata/) |
 | Work on native tool visuals | [Tool Rendering](ToolRendering.md) | [`src/view/world/`](../../../src/view/world/) |
 | Author animation behavior | [Animations Style](AnimationsStyle.md) | [`src/content/`](../../../src/content/) |
 | Author or modify mathematical presentation | [LaTeX Support](LaTeXSupport.md) | [`src/dynview/`](../../../src/dynview/) |
@@ -331,7 +337,7 @@ Choose the owner first, then follow its focused guide and tests:
 | Julia bridge or animation policy | [`src/bridge/`](../../../src/bridge/), [`src/julia/`](../../../src/julia/) | [Julia Thread Architecture](JuliaThreadArchitecture.md) |
 | Authored animation | [`src/content/`](../../../src/content/) | [Animations Style](AnimationsStyle.md) |
 | Presentation parsing or rendering | [`src/dynview/`](../../../src/dynview/) | [LaTeX Support](LaTeXSupport.md), [Font Rasterization](FontRasterization.md) |
-| Content database or saved preferences | [`src/view/content/`](../../../src/view/content/), [`src/userdata/`](../../../src/userdata/) | [SQLite Architecture](Sqlite3.md) |
+| Content database or saved preferences | [`src/view/content/`](../../../src/view/content/), [`src/persistence/userdata/`](../../../src/persistence/userdata/) | [SQLite Architecture](Sqlite3.md) |
 
 For a new animation, add its Julia implementation under `src/content/`, follow the
 `animation_entry` and view-content contracts in [Animations Style](AnimationsStyle.md),

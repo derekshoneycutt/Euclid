@@ -1,7 +1,7 @@
 package terminalview
 
 import historyruntime "../../terminal/history/runtime"
-import termhiststore "../../terminal/history/store"
+import termhiststore "../../persistence/userdata/history"
 import protocol "../../core/protocol"
 import taskpool "../../taskpool"
 import log "core:log"
