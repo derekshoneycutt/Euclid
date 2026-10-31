@@ -373,6 +373,59 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Retire current ink before changing the completed composition."""
+function complete_ink(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_a_b_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_a_c_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_b_c_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.marker_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_a)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_b)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_c)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_h)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_k)
+end
+
+"""Establish the completed construction's straight edges directly."""
+function complete_lines(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_line(state_ptr, EdgeABStart, EdgeABEnd; penbrush=EdgeBrush,
+        pencolor=EdgeABColor, line_host_id=state.edge_a_b_host,
+        line_joint1_id=state.edge_a_b_joint1, line_joint2_id=state.edge_a_b_joint2)
+    EuclidAnimations.complete_line(state_ptr, EdgeACStart, EdgeACEnd; penbrush=EdgeBrush,
+        pencolor=EdgeACColor, line_host_id=state.edge_a_c_host,
+        line_joint1_id=state.edge_a_c_joint1, line_joint2_id=state.edge_a_c_joint2)
+    EuclidAnimations.complete_line(state_ptr, EdgeBCStart, EdgeBCEnd; penbrush=EdgeBrush,
+        pencolor=EdgeBCColor, line_host_id=state.edge_b_c_host,
+        line_joint1_id=state.edge_b_c_joint1, line_joint2_id=state.edge_b_c_joint2)
+end
+
+"""Expose final annotations and fills while hiding construction instruments."""
+function complete_labels(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.show_point(state_ptr, state.label_a)
+    OdinJuliaBridge.show_point(state_ptr, state.label_b)
+    OdinJuliaBridge.show_point(state_ptr, state.label_c)
+    OdinJuliaBridge.show_point(state_ptr, state.label_h)
+    OdinJuliaBridge.show_point(state_ptr, state.label_k)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+end
+
+
+
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    complete_ink(state_ptr, state)
+    complete_lines(state_ptr, state)
+    EuclidAnimations.complete_circle(state_ptr, PointA, MarkerStart, AngleTheta,
+        MarkerRadius; brush=MarkerBrush, color=MarkerColor,
+        marker_host_id=state.marker_host)
+    complete_labels(state_ptr, state)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -382,6 +435,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

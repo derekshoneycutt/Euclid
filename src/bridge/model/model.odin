@@ -16,8 +16,8 @@ import "core:encoding/uuid"
 import "core:mem"
 import vmem "core:mem/virtual"
 
-// SCENE_COMMAND_BATCH_CAPACITY bounds one transactional animation command batch.
-SCENE_COMMAND_BATCH_CAPACITY :: animationmodel.ANIMATION_VALUE_PENDING_WRITE_CAPACITY
+// Bound dense completed figures independently of immutable-state write capacity.
+SCENE_COMMAND_BATCH_CAPACITY :: 256
 
 // View snapshot storage is double-buffered and bounded independently of channel traffic.
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
@@ -181,6 +181,7 @@ Animation_Operation :: enum i32 {
     Tick = 2,
     Exit = 3,
     Presentation_Selection_Changed = 4,
+    Show_Completed = 5,
 }
 
 // Euclid_Julia_Animation_Interface retains one Julia animation entry and tree links.

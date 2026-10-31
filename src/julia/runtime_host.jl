@@ -57,6 +57,15 @@ struct NativeAnimationTickPayload
     slot_index::Int32
     reservation_generation::UInt64
     dt::Float32
+    operation::Int32
+end
+
+"""Construct the ordinary-tick payload used by existing host clients."""
+function NativeAnimationTickPayload(request_id, runtime_generation,
+    animation_generation, sequence, slot_index, reservation_generation, dt)
+    return NativeAnimationTickPayload(request_id, runtime_generation,
+        animation_generation, sequence, slot_index, reservation_generation, dt,
+        OdinJuliaBridge.ANIMATION_OPERATION_TICK)
 end
 
 """Primitive-only lifecycle request transferred directly from native storage."""
@@ -340,7 +349,8 @@ function animation_host_tick_with_actor!(
         payload.request_id, payload.runtime_generation,
         payload.animation_generation, animation_id, actor, payload.sequence,
         EuclidPolicy.AnimationTickSlotHandle(
-            payload.slot_index, payload.reservation_generation), payload.dt)
+            payload.slot_index, payload.reservation_generation), payload.dt,
+        payload.operation)
     outcome = EuclidHost.send_animation_supervisor_for_host(host.reactor, command)
     outcome === EuclidActorRuntime.SendAccepted ||
         error("animation supervisor mailbox invariant violated")

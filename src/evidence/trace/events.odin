@@ -92,6 +92,9 @@ Kind :: enum u16 {
     Animation_Tick_Rejected = 65,
     Animation_Cycle_Boundary = 66,
     Animation_Loaded = 67,
+    Animation_Completed_Accepted = 68,
+    Animation_Completed_Committed = 69,
+    Animation_Completed_Rejected = 70,
 
     // Scene transport (120-179).
     Scene_Batch_Published = 120,

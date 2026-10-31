@@ -930,6 +930,103 @@ formation_reveals_follow_only_accepted_animation_progress :: proc(t: ^testing.T)
     testing.expect_value(t, ps^.formation.reveal_count, 0)
 }
 
+// Paused construction settles admitted material without spending authored progress.
+@(test)
+formation_pause_settles_without_authored_time :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    formation_reset_generation(ps, 7)
+    testing.expect(t, formation_advance_progress(ps, 7, 3))
+    for kind in particlemodel.Formation_Target_Kind {
+        testing.expect(t, formation_start_reveal(ps, {
+            kind = kind,
+            owner_entity = 101 + u64(kind),
+            animation_generation = 7,
+            progress = 3,
+            duration = 1,
+        }))
+    }
+    formation_settle_paused(ps, 0.5)
+    testing.expect_value(t, ps^.formation.accepted_progress, f64(3))
+    testing.expect(t, ps^.formation.reveal_count > 0)
+    formation_settle_paused(ps, 2)
+    testing.expect_value(t, ps^.formation.reveal_count, 1)
+    testing.expect_value(t, ps^.formation.accepted_progress, f64(3))
+    testing.expect(t, formation_advance_progress(ps, 7, 3.25))
+    testing.expect_value(t, ps^.formation.reveal_count, 1)
+    testing.expect(t, formation_advance_progress(ps, 7, 5))
+    testing.expect_value(t, ps^.formation.reveal_count, 0)
+}
+
+// Paused sweeps settle only committed ink; resumed wedges keep their own formation age.
+@(test)
+formation_paused_sweep_resumes_without_receding_or_skipping_new_material :: proc(
+    t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world)
+    owner := shapemodel.shape_entity_pack({
+        slot = 1,
+        generation = 1,
+    })
+    testing.expect(t, formation_start_reveal(ps, {
+        kind = .Sweep,
+        owner_entity = owner,
+        progress = 0,
+        duration = 10,
+    }))
+    testing.expect(t, formation_advance_progress(ps, 0, 0.1))
+    sector: shapemodel.Shapes_Filled_Circle_Draw = {
+        source_index = 0,
+        source_generation = 1,
+        radius = 0.3,
+        sweep_theta = 1,
+    }
+    world^.draw_cache.item_count = 1
+    world^.draw_cache.items[0] = sector
+    testing.expect(t, formation_prepare_sweep_targets(ps, world, 1) > 0)
+    testing.expect(t, formation_sweep_fill(ps, owner, 1) < 1)
+    formation_settle_paused(ps, 1)
+    testing.expect_value(t, formation_sweep_fill(ps, owner, 1), f32(1))
+    testing.expect_value(t, ps^.formation.accepted_progress, f64(0.1))
+    testing.expect(t, formation_advance_progress(ps, 0, 0.2))
+    sector.sweep_theta = 1.1
+    world^.draw_cache.items[0] = sector
+    next_particle := ps^.formation.next_particle_slot
+    testing.expect(t, formation_prepare_sweep_targets(ps, world, 1) > 0)
+    testing.expect_value(t, formation_sweep_fill(ps, owner, 1.1), f32(1))
+    testing.expect_value(t, formation_sweep_fill(ps, owner, -1.1), f32(-1))
+    slot := formation_find_reveal(&ps^.formation, .Sweep, owner, 0)
+    elapsed := f32(1.2 / f64(ps^.formation.reveals[slot].duration))
+    testing.expect(t, ps^.formation.particles.birth[next_particle] >= elapsed)
+    formation_settle_paused(ps, 1)
+    testing.expect_value(t, formation_sweep_fill(ps, owner, 1.1), f32(1.1))
+}
+
+// Disabling removes even out-of-capacity slots and never resurrects them when enabled.
+@(test)
+particle_disable_clears_all_lifetimes_and_preserves_capacity :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    ps^.low_particles.alive[particlemodel.MAX_LOW_PARTICLES - 1] = true
+    ps^.particles.alive[0] = true
+    ps^.dust_tool_contact_count = 1
+    ps^.dust_region_push_count = 1
+    set_effects_enabled(ps, false)
+    testing.expect(t, ps^.effects_disabled)
+    testing.expect(t, !ps^.low_particles.alive[particlemodel.MAX_LOW_PARTICLES - 1])
+    testing.expect(t, !ps^.particles.alive[0])
+    testing.expect_value(t, ps^.dust_tool_contact_count, 0)
+    testing.expect_value(t, ps^.dust_region_push_count, 0)
+    testing.expect_value(t, ps^.use_max_dust_particles, 4)
+    spawn_dust_particle_index(ps, 0, {}, color.WHITE)
+    testing.expect(t, !ps^.low_particles.alive[0])
+    set_effects_enabled(ps, true)
+    testing.expect_value(t, count_live_low_particles(ps), 0)
+}
+
 // Verify formation slots reject pressure and stale handles without overwriting live slots.
 @(test)
 formation_particle_slots_are_bounded_and_generation_checked :: proc(t: ^testing.T) {

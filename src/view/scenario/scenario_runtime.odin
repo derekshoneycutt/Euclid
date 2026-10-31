@@ -34,6 +34,7 @@ import uilibrary "../ui/library"
 import uisettings "../ui/settings"
 import capturemodel "../capture/model"
 import geometry "../../core/geometry"
+import uianimation "../ui/animation"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -521,6 +522,37 @@ scenario_issue_simulation_policy_action :: proc(
     return true, true
 }
 
+// Route transport actions through the same admission path as pointer and keyboard input.
+scenario_issue_transport_action :: proc(
+    state: ^core.Euclid_General_State, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
+    playback := &state^.ui_runtime.playback
+    #partial switch command.kind {
+    case .Pause_Construction, .Resume_Construction:
+        paused := command.kind == .Pause_Construction
+        if playback^.construction_paused != paused {
+            uianimation.apply_animation_control_hit(state, {
+                toggle_pause_requested = true,
+            })
+        }
+    case .Show_Completed:
+        if !playback^.construction_paused || playback^.completed ||
+            playback^.completion_requested {
+            return true, false
+        }
+        uianimation.apply_animation_control_hit(state, {
+            cycle_speed_requested = true,
+        })
+        identity^ = {.Animation_Tick,
+            state^.julia_runtime_service^.animation_tick_sequence + 1,
+            state^.julia_runtime_service^.animation_generation}
+        return true, playback^.completion_requested
+    case:
+        return false, false
+    }
+    return true, true
+}
+
 // Route one scenario search action through the display-owned search model.
 scenario_issue_library_search_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -582,6 +614,10 @@ scenario_issue_display_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     state := runtime.state
+    if handled, accepted := scenario_issue_transport_action(state, command, identity);
+       handled {
+        return handled, accepted
+    }
     if handled, accepted := scenario_issue_favorites_action(runtime, command); handled {
         return handled, accepted
     }

@@ -52,6 +52,26 @@ function with_timing(state::AnimationState, phase::UInt8, timer::Float32)
         state.region_id, state.first_label_id, state.second_label_id, phase, timer)
 end
 
+"""Show the two full circles, their labels, and the final semantic region directly."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    ids = (state.first_circle_id, state.second_circle_id, state.region_id,
+        state.first_label_id, state.second_label_id)
+    for id in ids
+        OdinJuliaBridge.hide_point(state_ptr, id)
+    end
+    for id in (state.first_circle_id, state.second_circle_id)
+        OdinJuliaBridge.set_arc_geometry(state_ptr, id, CircleRadius, 0f0, FullSweep)
+    end
+    set_region_final_color(state_ptr, state.region_id)
+    for id in ids
+        OdinJuliaBridge.show_point(state_ptr, id)
+    end
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
 """Place the compass for one circle at an angular parameter and elevation."""
 function place_compass(state_ptr::Ptr{Cvoid}, center, parameter, elevation)
     pivot = Float32[center[1], center[2], elevation]
@@ -238,6 +258,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

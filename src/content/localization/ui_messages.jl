@@ -1,5 +1,44 @@
 const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1251), "ui.settings.particle_effects_help",
+            "Help for the application-wide particle preference.",
+            LocalizedContent.MessageArgument[]),
+        "Turning this off clears all particles and makes geometry and text immediately readable. Pause holds construction, not dust."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1252), "ui.settings.open_completed_help",
+            "Help for completed-first selection.",
+            LocalizedContent.MessageArgument[]),
+        "Applies to the next animation you select. Play disperses its completed figure and starts construction at your remembered speed."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1249),
+            "ui.settings.enable_particle_effects",
+            "Application-wide particle accessibility switch. Disabling clears dust and makes reveals immediate.",
+            LocalizedContent.MessageArgument[]),
+        "Enable particle effects"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1250),
+            "ui.settings.open_completed",
+            "Subsequent selections open completed and held; Play starts the construction.",
+            LocalizedContent.MessageArgument[]),
+        "Open animations at their completed figure"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1413), "ui.animation.show_completed",
+            "Paused fast-forward action.", LocalizedContent.MessageArgument[]),
+        "Show completed figure"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1414), "ui.animation.completed",
+            "Completed form is already held.", LocalizedContent.MessageArgument[]),
+        "Completed figure"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1415), "ui.animation.play_from_beginning",
+            "Play action when completed form is held.", LocalizedContent.MessageArgument[]),
+        "Play animation from beginning"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1416), "ui.animation.completion_failed",
+            "Failed completed-form publication; retained scene remains held.",
+            LocalizedContent.MessageArgument[]),
+        "Could not show completed figure"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1001), "ui.navigation.library",
             "Portrait and landscape accordion header.",
             LocalizedContent.MessageArgument[]),

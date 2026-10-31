@@ -286,6 +286,9 @@ function tick_rejection_reason(
     runtime::EuclidActorRuntime.ActorRuntime,
     request::TickAnimation)::AnimationFailureReason
     (!supervisor.ready || supervisor.stopping) && return AnimationNotReady
+    request.operation in (OdinJuliaBridge.ANIMATION_OPERATION_TICK,
+        OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED) ||
+        return AnimationProgramRejected
     reason = active_program_rejection_reason(
         supervisor, runtime, request.runtime_generation,
         request.animation_generation, request.program_actor)
@@ -397,7 +400,7 @@ function EuclidActorRuntime.receive!(
         AnimationRequestKey(request.request_id), request.request_id,
         request.runtime_generation,
         request.animation_generation, request.animation_id,
-        OdinJuliaBridge.ANIMATION_OPERATION_TICK, request.sequence,
+        request.operation, request.sequence,
         request.slot, request.dt)
     reason = send_program_command!(context, something(actor), command, request)
     if reason !== AnimationNoFailure
@@ -717,7 +720,8 @@ function EuclidActorRuntime.receive!(
     completed::AnimationProgramCompleted)::Nothing
     command = completed.command
     completed.actor == supervisor.active_program_actor || return nothing
-    if command.operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+    if command.operation in (OdinJuliaBridge.ANIMATION_OPERATION_TICK,
+        OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED)
         return complete_program_tick!(supervisor, context, completed)
     end
     command.operation ==
@@ -794,7 +798,8 @@ function EuclidActorRuntime.receive!(
     command isa AnimationProgramCommand || return nothing
     reason = failure.exception isa AnimationProgramRejectedError ?
         AnimationProgramRejected : AnimationProgramFailed
-    if command.operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+    if command.operation in (OdinJuliaBridge.ANIMATION_OPERATION_TICK,
+        OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED)
         return complete_failed_program_tick!(
             supervisor, context, command, failure, reason)
     end

@@ -428,6 +428,41 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Hold both corresponding lines and all six ordered pairs without replaying the passes."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    OdinJuliaBridge.hide_point(state_ptr, state.line_a.host)
+    OdinJuliaBridge.hide_point(state_ptr, state.line_prime.host)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_a_line)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_a_prime_line)
+    for handles in (state.points, state.prime_points, state.labels, state.prime_labels)
+        for handle in handles
+            OdinJuliaBridge.hide_point(state_ptr, handle)
+        end
+    end
+    EuclidAnimations.complete_line(state_ptr, LineAStart, LineAEnd;
+        penbrush=LineMaxBrush, pencolor=LineColor, line_host_id=state.line_a.host,
+        line_joint1_id=state.line_a.joint1, line_joint2_id=state.line_a.joint2)
+    EuclidAnimations.complete_line(state_ptr, LinePrimeStart, LinePrimeEnd;
+        penbrush=LineMaxBrush, pencolor=LineColor, line_host_id=state.line_prime.host,
+        line_joint1_id=state.line_prime.joint1, line_joint2_id=state.line_prime.joint2)
+    for index in eachindex(state.points)
+        EuclidAnimations.complete_point(state_ptr, UnprimedPointPositions[index],
+            PointMaxBrush, PointColors[index], state.points[index])
+        EuclidAnimations.complete_point(state_ptr, PrimedPointPositions[index],
+            PointMaxBrush, PointColors[index], state.prime_points[index])
+        OdinJuliaBridge.show_point(state_ptr, state.labels[index])
+        OdinJuliaBridge.show_point(state_ptr, state.prime_labels[index])
+    end
+    OdinJuliaBridge.show_point(state_ptr, state.label_a_line)
+    OdinJuliaBridge.show_point(state_ptr, state.label_a_prime_line)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -437,6 +472,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

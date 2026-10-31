@@ -40,6 +40,8 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"animation_tick_committed", .Animation_Tick_Committed},
     {"animation_cycle_boundary", .Animation_Cycle_Boundary},
     {"animation_loaded", .Animation_Loaded},
+    {"animation_completed", .Animation_Completed_Committed},
+    {"animation_completion_failed", .Animation_Completed_Rejected},
     {"terminal_session_ready", .Terminal_Session_Ready},
     {"terminal_raster_published", .Terminal_Raster_Published},
     {"terminal_live_highlight_published", .Terminal_Live_Highlight_Published},
@@ -119,6 +121,9 @@ Command_Kind :: enum u8 {
     Library_Placement,
     Assert_Favorites,
     Set_Arrival_Style,
+    Pause_Construction,
+    Resume_Construction,
+    Show_Completed,
 }
 
 // Payload-free action names accepted by the `do` scenario field.
@@ -129,6 +134,9 @@ ACTION_KINDS :: [?]Action_Kind_Entry {
     {"resume_simulation", .Resume_Simulation},
     {"pause_animation", .Pause_Animation},
     {"resume_animation", .Resume_Animation},
+    {"pause_construction", .Pause_Construction},
+    {"resume_construction", .Resume_Construction},
+    {"show_completed", .Show_Completed},
     {"kick_dust", .Kick_Dust},
     {"stop_gif", .Stop_Gif},
 }
@@ -855,7 +863,8 @@ runner_update_command :: proc(
          .Inject_Reload_Failure,
          .Type_Text, .Key,
          .Pause_Simulation, .Resume_Simulation,
-         .Pause_Animation, .Resume_Animation, .Emit_Dust,
+         .Pause_Animation, .Resume_Animation, .Pause_Construction,
+         .Resume_Construction, .Show_Completed, .Emit_Dust,
          .Contact_Dust, .Kick_Dust,
          .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
          .Set_Library_Search, .Apply_Library_Search_Suggestion,
@@ -923,7 +932,8 @@ command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
          .Key, .Set_View_Content, .Set_Library_Search,
          .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
         .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
-        .Favorite_Control, .Library_Placement, .Set_Arrival_Style, .Set_Setting:
+        .Favorite_Control, .Library_Placement, .Set_Arrival_Style, .Set_Setting,
+        .Pause_Construction, .Resume_Construction, .Show_Completed:
         return true
     case:
         return false
@@ -1254,7 +1264,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Inject_Reload_Failure,
          .Type_Text, .Type_Library_Name, .Key,
          .Pause_Simulation, .Resume_Simulation,
-         .Pause_Animation, .Resume_Animation,
+         .Pause_Animation, .Resume_Animation, .Pause_Construction,
+         .Resume_Construction, .Show_Completed,
          .Set_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
          .Wait_State, .Wait_Terminal_Contains, .Wait_Terminal_Explorer,
@@ -1485,6 +1496,11 @@ dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
                     particlemodel.DUST_SETTLED_SPEED_SQ)
     case "dust_airborne":
         return display.dust_airborne_count > 0
+    case "particle_effects_disabled":
+        return !display.settings_preferences.interface.enable_particle_effects &&
+            display.particle_count == 0 && display.dust_live_count == 0 &&
+            display.presentation_effects.live_count == 0 &&
+            !display.presentation_effects.arrival_active
     }
     return false
 }
@@ -1513,7 +1529,37 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
         return display.tooltip_visible
     case "tooltip_hidden":
         return !display.tooltip_visible
+    case "construction_paused":
+        return construction_pause_acknowledged(display)
+    case "construction_playing":
+        return construction_playing(display)
+    case "animation_completed":
+        return animation_completion_published(display)
+    case "animation_completion_failed":
+        return display.animation_completion_failed
+    case:
+        return subsystem_state_matches(name, display)
     }
+}
+
+// A construction pause is acknowledged only after the outstanding tick settles.
+construction_pause_acknowledged :: #force_inline proc(display: observe.Display) -> bool {
+    return display.construction_paused && !display.animation_tick_pending
+}
+
+// Ordinary construction playback excludes both paused and held completed figures.
+construction_playing :: #force_inline proc(display: observe.Display) -> bool {
+    return !display.construction_paused && !display.animation_completed
+}
+
+// Completion is observable only after its pending publication has resolved.
+animation_completion_published :: #force_inline proc(display: observe.Display) -> bool {
+    return display.animation_completed && !display.animation_completion_pending
+}
+
+// Delegate non-scalar predicates to their owning observation groups in stable order.
+subsystem_state_matches :: #force_inline proc(
+    name: string, display: observe.Display) -> bool {
     return runtime_state_matches(name, display) ||
         dust_state_matches(name, display) || terminal_state_matches(name, display) ||
         settings_state_matches(name, display) ||

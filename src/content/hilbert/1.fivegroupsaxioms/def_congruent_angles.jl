@@ -599,6 +599,69 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Retire current ink before changing the completed composition."""
+function complete_ink(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.ray_h_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.ray_k_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.marker1_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.ray_h_prime_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.ray_k_prime_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.marker2_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_o)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_h)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_k)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_o_prime)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_h_prime)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_k_prime)
+end
+
+"""Establish the completed construction's straight edges directly."""
+function complete_lines(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_line(state_ptr, RayHStart, RayHEnd; penbrush=RayBrush,
+        pencolor=RayHColor, line_host_id=state.ray_h_host,
+        line_joint1_id=state.ray_h_joint1, line_joint2_id=state.ray_h_joint2)
+    EuclidAnimations.complete_line(state_ptr, RayKStart, RayKEnd; penbrush=RayBrush,
+        pencolor=RayKColor, line_host_id=state.ray_k_host,
+        line_joint1_id=state.ray_k_joint1, line_joint2_id=state.ray_k_joint2)
+    EuclidAnimations.complete_line(state_ptr, RayHPrimeStart, RayHPrimeEnd;
+        penbrush=RayBrush, pencolor=RayHPrimeColor, line_host_id=state.ray_h_prime_host,
+        line_joint1_id=state.ray_h_prime_joint1, line_joint2_id=state.ray_h_prime_joint2)
+    EuclidAnimations.complete_line(state_ptr, RayKPrimeStart, RayKPrimeEnd;
+        penbrush=RayBrush, pencolor=RayKPrimeColor, line_host_id=state.ray_k_prime_host,
+        line_joint1_id=state.ray_k_prime_joint1, line_joint2_id=state.ray_k_prime_joint2)
+end
+
+"""Expose final annotations and fills while hiding construction instruments."""
+function complete_labels(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.show_point(state_ptr, state.label_o)
+    OdinJuliaBridge.show_point(state_ptr, state.label_h)
+    OdinJuliaBridge.show_point(state_ptr, state.label_k)
+    OdinJuliaBridge.show_point(state_ptr, state.label_o_prime)
+    OdinJuliaBridge.show_point(state_ptr, state.label_h_prime)
+    OdinJuliaBridge.show_point(state_ptr, state.label_k_prime)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+end
+
+
+
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    complete_ink(state_ptr, state)
+    complete_lines(state_ptr, state)
+    EuclidAnimations.complete_circle(state_ptr, VertexO, Marker1Start, AngleTheta,
+        MarkerRadius; brush=MarkerBrush, color=MarkerColor,
+        marker_host_id=state.marker1_host)
+    EuclidAnimations.complete_circle(state_ptr, VertexOPrime, Marker2Start, AngleTheta,
+        MarkerRadius; brush=MarkerBrush, color=MarkerColor,
+        marker_host_id=state.marker2_host)
+    complete_labels(state_ptr, state)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -608,6 +671,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

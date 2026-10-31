@@ -61,6 +61,7 @@ Animation_Tick_Slot :: struct {
     dt: f32,
     maintenance_dt: f32,
     accelerated: bool,
+    show_completed: bool,
     effective_progress: f64,
     submitted_at: time.Tick,
     query_snapshot: Animation_Query_Snapshot,

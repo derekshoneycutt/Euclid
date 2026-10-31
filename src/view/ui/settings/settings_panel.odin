@@ -45,6 +45,10 @@ Settings_View_Labels :: struct {
     simd: string,
     gpu_dust: string,
     reduce_motion: string,
+    enable_particle_effects: string,
+    open_completed: string,
+    particle_effects_help: string,
+    open_completed_help: string,
     increased_contrast: string,
     hover_focus: string,
     hover_focus_tooltip: string,
@@ -104,6 +108,8 @@ Settings_View_Rows :: struct {
     delete_history_y: f32,
     history_delete_status_y: f32,
     reduce_motion_y: f32,
+    enable_particle_effects_y: f32,
+    open_completed_y: f32,
     increased_contrast_y: f32,
     hover_focus_y: f32,
     show_magnifier_y: f32,
@@ -147,6 +153,8 @@ Settings_View_Preparation :: struct {
     simd: uiwidgets.Checkbox_Result,
     gpu_dust: uiwidgets.Checkbox_Result,
     reduce_motion: uiwidgets.Checkbox_Result,
+    enable_particle_effects: uiwidgets.Checkbox_Result,
+    open_completed: uiwidgets.Checkbox_Result,
     increased_contrast: uiwidgets.Checkbox_Result,
     hover_focus: uiwidgets.Checkbox_Result,
     show_magnifier: uiwidgets.Checkbox_Result,
@@ -368,7 +376,30 @@ settings_view_labels :: proc(
     labels.drawing_sound = viewmessages.shell_message(state, .Settings_Drawing_Sound)
     labels.simd = settings_simd_label(state, simd_available)
     labels.gpu_dust = settings_gpu_dust_label(state, gpu_available)
+    settings_accessibility_labels(state, &labels)
+    labels.control_size = viewmessages.shell_message(state, .Settings_Control_Size)
+    labels.control_size_tooltip =
+        viewmessages.shell_message(state, .Settings_Control_Size_Tooltip)
+    labels.text_size = viewmessages.shell_message(state, .Settings_Text_Size)
+    labels.animation_scale =
+        viewmessages.shell_message(state, .Settings_Animation_Scale)
+    labels.animation_scale_tooltip =
+        viewmessages.shell_message(state, .Settings_Animation_Scale_Tooltip)
+    labels.monochrome = viewmessages.shell_message(state, .Settings_Monochrome)
+    return labels
+}
+
+// Snapshot localized motion, contrast, and pointer accessibility labels and help.
+settings_accessibility_labels :: proc(
+    state: ^core.Euclid_General_State, labels: ^Settings_View_Labels) {
     labels.reduce_motion = viewmessages.shell_message(state, .Settings_Reduce_Motion)
+    labels.enable_particle_effects =
+        viewmessages.shell_message(state, .Settings_Enable_Particle_Effects)
+    labels.open_completed = viewmessages.shell_message(state, .Settings_Open_Completed)
+    labels.particle_effects_help =
+        viewmessages.shell_message(state, .Settings_Particle_Effects_Help)
+    labels.open_completed_help =
+        viewmessages.shell_message(state, .Settings_Open_Completed_Help)
     labels.increased_contrast =
         viewmessages.shell_message(state, .Settings_Increased_Contrast)
     labels.hover_focus = viewmessages.shell_message(state, .Settings_Hover_Focus)
@@ -382,16 +413,6 @@ settings_view_labels :: proc(
         viewmessages.shell_message(state, .Settings_Magnifier_Input_Lock)
     labels.magnifier_input_lock_tooltip =
         viewmessages.shell_message(state, .Settings_Magnifier_Input_Lock_Tooltip)
-    labels.control_size = viewmessages.shell_message(state, .Settings_Control_Size)
-    labels.control_size_tooltip =
-        viewmessages.shell_message(state, .Settings_Control_Size_Tooltip)
-    labels.text_size = viewmessages.shell_message(state, .Settings_Text_Size)
-    labels.animation_scale =
-        viewmessages.shell_message(state, .Settings_Animation_Scale)
-    labels.animation_scale_tooltip =
-        viewmessages.shell_message(state, .Settings_Animation_Scale_Tooltip)
-    labels.monochrome = viewmessages.shell_message(state, .Settings_Monochrome)
-    return labels
 }
 
 // Center the destructive label inside the prepared panel button, including its shake.
@@ -469,7 +490,8 @@ draw_encoded_slider_geometry :: proc(
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
-    checks: [12]uiwidgets.Checkbox_Result = {
+    checks: [14]uiwidgets.Checkbox_Result = {
+        prepared.enable_particle_effects, prepared.open_completed,
         prepared.reduce_motion, prepared.increased_contrast, prepared.hover_focus,
         prepared.show_magnifier, prepared.magnifier_input_lock,
         prepared.monochrome, prepared.gpu_dust,
@@ -515,7 +537,11 @@ draw_encoded_settings_geometry :: proc(
 draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
-    labels: [12]struct{label: string, y: f32} = {
+    labels: [14]struct{label: string, y: f32} = {
+        {viewmessages.shell_message(state, .Settings_Enable_Particle_Effects),
+            rows.enable_particle_effects_y},
+        {viewmessages.shell_message(state, .Settings_Open_Completed),
+            rows.open_completed_y},
         {viewmessages.shell_message(state, .Settings_Reduce_Motion),
             rows.reduce_motion_y},
         {viewmessages.shell_message(state, .Settings_Increased_Contrast),
@@ -915,7 +941,7 @@ settings_history_delete_button_params :: proc(
             role = .Button,
             states = states,
             region = .Accordion_Content,
-            traversal_order = 8,
+            traversal_order = 10,
             clip_bounds = geometry.Rectangle(ctx.panel),
             label = label,
             value = value,
@@ -956,7 +982,7 @@ settings_publish_history_delete_status :: proc(
         role = .Status,
         states = states,
         region = .Accordion_Content,
-        traversal_order = 9,
+        traversal_order = 11,
         bounds = {
             ctx.panel.x + theme.SETTINGS_PANEL_INSET,
             rows.history_delete_status_y,
@@ -1059,7 +1085,7 @@ settings_max_particles_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 9,
+        semantic_order = 11,
     }
 }
 
@@ -1085,7 +1111,7 @@ settings_animation_scale_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 7,
+        semantic_order = 9,
     }
 }
 
@@ -1111,7 +1137,7 @@ settings_control_size_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 5,
+        semantic_order = 7,
     }
 }
 
@@ -1137,7 +1163,7 @@ settings_text_size_params :: proc(
         font = ctx.font,
         font_resolver = ctx.font_resolver,
         semantic_domain = .Settings_Control,
-        semantic_order = 6,
+        semantic_order = 8,
     }
 }
 
@@ -1252,21 +1278,16 @@ settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_Stat
     layout^.cursor = placement.cursor_out
     rows^.reduce_motion_y = rect.y + layout^.cursor.offset
     layout^.cursor.offset += layout^.row_gap
+    rows^.enable_particle_effects_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
+    rows^.open_completed_y = rect.y + layout^.cursor.offset
+    layout^.cursor.offset += layout^.row_gap
     rows^.increased_contrast_y = rect.y + layout^.cursor.offset
     layout^.cursor.offset += layout^.row_gap
     rows^.hover_focus_y = rect.y + layout^.cursor.offset
     layout^.cursor.offset += layout^.row_gap
     settings_layout_magnifier_accessibility_rows(layout)
-    rows^.system_motion_y = -1
-    rows^.system_contrast_y = -1
-    if layout^.system_motion_notice {
-        rows^.system_motion_y = rect.y + layout^.cursor.offset
-        layout^.cursor.offset += layout^.row_gap
-    }
-    if layout^.system_contrast_notice {
-        rows^.system_contrast_y = rect.y + layout^.cursor.offset
-        layout^.cursor.offset += layout^.row_gap
-    }
+    settings_layout_accessibility_notices(layout)
     rows^.control_size_y = rect.y + layout^.cursor.offset
     placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
     layout^.cursor = placement.cursor_out
@@ -1276,6 +1297,21 @@ settings_layout_accessibility_section :: proc(layout: ^Settings_View_Layout_Stat
     rows^.animation_scale_y = rect.y + layout^.cursor.offset
     placement = settings_stack_row(rect, layout^.slider_height, layout^.cursor)
     layout^.cursor = placement.cursor_out
+}
+
+// Reserve only active platform-policy notices while retaining absent-row sentinels.
+settings_layout_accessibility_notices :: proc(layout: ^Settings_View_Layout_State) {
+    rows := &layout^.rows
+    rows^.system_motion_y = -1
+    rows^.system_contrast_y = -1
+    if layout^.system_motion_notice {
+        rows^.system_motion_y = layout^.stack_rect.y + layout^.cursor.offset
+        layout^.cursor.offset += layout^.row_gap
+    }
+    if layout^.system_contrast_notice {
+        rows^.system_contrast_y = layout^.stack_rect.y + layout^.cursor.offset
+        layout^.cursor.offset += layout^.row_gap
+    }
 }
 
 // Keep the lens modes and monochrome checkbox in one ordered Accessibility group.
@@ -1359,18 +1395,23 @@ update_settings_controls :: proc(
     settings_prepare_sliders(ctx, rows, interactive, &result)
     result.fps = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, ctx.labels.display_fps,
-        ctx.preferences.interface.display_fps, true, 11}),
+        ctx.preferences.interface.display_fps, true, 13}),
         ctx.press_owner, interactive)
     result.limit = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, ctx.labels.limit_fps,
-        ctx.preferences.rendering.limit_fps, true, 12}),
+        ctx.preferences.rendering.limit_fps, true, 14}),
         ctx.press_owner, interactive)
     result.sound = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
         4004, ctx.labels.drawing_sound,
-        ctx.preferences.drawing.sound_enabled, true, 13}),
+        ctx.preferences.drawing.sound_enabled, true, 15}),
         ctx.press_owner, interactive)
     prepare_settings_optional_controls(ctx, rows, interactive, &result)
-    settings_offer_hover_focus_tooltip(ctx, result.hover_focus, interactive)
+    settings_offer_checkbox_help(ctx, result.hover_focus, interactive,
+        SETTINGS_HOVER_FOCUS_CHECKBOX_ID, ctx.labels.hover_focus_tooltip)
+    settings_offer_checkbox_help(ctx, result.enable_particle_effects, interactive,
+        4013, ctx.labels.particle_effects_help)
+    settings_offer_checkbox_help(ctx, result.open_completed, interactive,
+        4014, ctx.labels.open_completed_help)
     settings_offer_magnifier_tooltip(ctx, result.show_magnifier, interactive)
     settings_offer_magnifier_input_lock_tooltip(
         ctx, result.magnifier_input_lock, interactive)
@@ -1416,20 +1457,34 @@ settings_prepare_sliders :: proc(
 prepare_settings_optional_controls :: proc(
     ctx: Settings_View_Context, rows: Settings_View_Rows,
     interactive: bool, result: ^Settings_View_Preparation) {
+    prepare_settings_rendering_capabilities(ctx, rows, interactive, result)
+    prepare_settings_accessibility_controls(ctx, rows, interactive, result)
+}
+
+// Prepare hardware-gated rendering toggles without overwriting saved capability intent.
+prepare_settings_rendering_capabilities :: proc(
+    ctx: Settings_View_Context, rows: Settings_View_Rows,
+    interactive: bool, result: ^Settings_View_Preparation) {
     simd_available := ctx.simd_available
     result.simd = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, ctx.labels.simd,
         ctx.preferences.rendering.simd,
-        simd_available, 14}), ctx.press_owner, interactive)
+        simd_available, 16}), ctx.press_owner, interactive)
     gpu_available := ctx.gpu_dust_available
     result.gpu_dust = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {rows.gpu_dust_y,
             4005, ctx.labels.gpu_dust,
             ctx.preferences.rendering.gpu_dust_instancing,
-            gpu_available, 10}),
+            gpu_available, 12}),
         ctx.press_owner, interactive)
     result.simd_available = simd_available
     result.gpu_available = gpu_available
+}
+
+// Prepare independent accessibility policies in their visual and semantic focus order.
+prepare_settings_accessibility_controls :: proc(
+    ctx: Settings_View_Context, rows: Settings_View_Rows,
+    interactive: bool, result: ^Settings_View_Preparation) {
     result.reduce_motion = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {
         rows.reduce_motion_y, 4006,
         ctx.labels.reduce_motion,
@@ -1439,18 +1494,28 @@ prepare_settings_optional_controls :: proc(
         settings_checkbox_params(ctx, {
             rows.increased_contrast_y, 4007,
             ctx.labels.increased_contrast,
-            ctx.preferences.interface.increased_contrast, true, 2,
+            ctx.preferences.interface.increased_contrast, true, 4,
+        }), ctx.press_owner, interactive)
+    result.enable_particle_effects = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.enable_particle_effects_y, 4013, ctx.labels.enable_particle_effects,
+            ctx.preferences.interface.enable_particle_effects, true, 2,
+        }), ctx.press_owner, interactive)
+    result.open_completed = uiwidgets.prepare_checkbox(
+        settings_checkbox_params(ctx, {
+            rows.open_completed_y, 4014, ctx.labels.open_completed,
+            ctx.preferences.animation.open_completed, true, 3,
         }), ctx.press_owner, interactive)
     result.hover_focus = uiwidgets.prepare_checkbox(settings_checkbox_params(ctx, {
         rows.hover_focus_y, SETTINGS_HOVER_FOCUS_CHECKBOX_ID,
         ctx.labels.hover_focus,
-        ctx.preferences.interface.hover_focus, true, 3,
+        ctx.preferences.interface.hover_focus, true, 5,
     }), ctx.press_owner, interactive)
     result.show_magnifier = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
             rows.show_magnifier_y, SETTINGS_SHOW_MAGNIFIER_CHECKBOX_ID,
             ctx.labels.show_magnifier,
-            ctx.preferences.interface.show_magnifier, true, 4,
+            ctx.preferences.interface.show_magnifier, true, 6,
         }), ctx.press_owner, interactive)
     result.magnifier_input_lock = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
@@ -1458,34 +1523,35 @@ prepare_settings_optional_controls :: proc(
             SETTINGS_MAGNIFIER_INPUT_LOCK_CHECKBOX_ID,
             ctx.labels.magnifier_input_lock,
             ctx.preferences.interface.magnifier_input_lock,
-            ctx.preferences.interface.show_magnifier, 5,
+            ctx.preferences.interface.show_magnifier, 7,
         }), ctx.press_owner, interactive)
     result.persist_history = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
             rows.persist_history_y, 4008,
             ctx.labels.persist_history,
-            ctx.preferences.terminal.persist_history, true, 7,
+            ctx.preferences.terminal.persist_history, true, 9,
         }), ctx.press_owner, interactive)
     result.monochrome = uiwidgets.prepare_checkbox(
         settings_checkbox_params(ctx, {
             rows.monochrome_y, 4009,
             ctx.labels.monochrome,
-            ctx.preferences.animation.monochrome, true, 6,
+            ctx.preferences.animation.monochrome, true, 8,
         }), ctx.press_owner, interactive)
 }
 
-// Offer localized hover-focus help through the shared keyboard and pointer tooltip path.
-settings_offer_hover_focus_tooltip :: proc(
+// Offer checkbox help through the shared keyboard and pointer tooltip path.
+settings_offer_checkbox_help :: proc(
     ctx: Settings_View_Context,
-    prepared: uiwidgets.Checkbox_Result, interactive: bool) {
+    prepared: uiwidgets.Checkbox_Result, interactive: bool,
+    control_id: int, text: string) {
     if !interactive {
         return
     }
     owner := uisemantics.semantic_control_id(
-        .Settings_Control, SETTINGS_HOVER_FOCUS_CHECKBOX_ID)
+        .Settings_Control, control_id)
     source := uioverlay.tooltip_control_source(
         &ctx.state^.ui_runtime.input, ctx.semantic_focus,
-        owner, SETTINGS_HOVER_FOCUS_CHECKBOX_ID)
+        owner, control_id)
     mouse: geometry.Vector2 = {
         ctx.mouse_input.mouse_position.x,
         ctx.mouse_input.mouse_position.y,
@@ -1504,7 +1570,7 @@ settings_offer_hover_focus_tooltip :: proc(
         source = source,
         anchor = prepared.control_geometry.bounds,
         prefer_above = true,
-        text = ctx.labels.hover_focus_tooltip,
+        text = text,
     })
 }
 
@@ -1565,7 +1631,7 @@ register_settings_scroll_semantics :: proc(
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
         actions = {.Focus, .Scroll, .Set_Value},
         region = .Accordion_Content,
-        traversal_order = 15,
+        traversal_order = 17,
         bounds = geometry.Rectangle(scroll.view_rect),
         clip_bounds = geometry.Rectangle(scroll.view_rect),
         numeric_range = {
@@ -1704,18 +1770,15 @@ apply_settings_primary_preparation :: proc(
 // Persist accessibility preferences changed by the prepared Settings frame.
 apply_settings_accessibility_preparation :: proc(
     state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
-    if prepared.animation_scale.changed {
-        settings_record_preference_edit(state, .Animation_Scale_Percent,
-            setting_model.integer_value(prepared.animation_scale.value))
+    if prepared.enable_particle_effects.toggled {
+        settings_record_preference_edit(state, .Interface_Enable_Particle_Effects,
+            setting_model.boolean_value(prepared.enable_particle_effects.checked_out))
     }
-    if prepared.control_size.changed {
-        settings_record_preference_edit(state, .Interface_Control_Size,
-            setting_model.integer_value(prepared.control_size.value))
+    if prepared.open_completed.toggled {
+        settings_record_preference_edit(state, .Animation_Open_Completed,
+            setting_model.boolean_value(prepared.open_completed.checked_out))
     }
-    if prepared.text_size.changed {
-        settings_record_preference_edit(state, .Interface_Text_Size,
-            setting_model.integer_value(prepared.text_size.value))
-    }
+    apply_settings_accessibility_sizes(state, prepared)
     if prepared.reduce_motion.toggled {
         settings_record_preference_edit(state, .Interface_Reduce_Motion,
             setting_model.boolean_value(prepared.reduce_motion.checked_out))
@@ -1732,6 +1795,23 @@ apply_settings_accessibility_preparation :: proc(
     if prepared.monochrome.toggled {
         settings_record_preference_edit(state, .Animation_Monochrome,
             setting_model.boolean_value(prepared.monochrome.checked_out))
+    }
+}
+
+// Persist the three independently prepared accessibility scale sliders.
+apply_settings_accessibility_sizes :: proc(
+    state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
+    if prepared.animation_scale.changed {
+        settings_record_preference_edit(state, .Animation_Scale_Percent,
+            setting_model.integer_value(prepared.animation_scale.value))
+    }
+    if prepared.control_size.changed {
+        settings_record_preference_edit(state, .Interface_Control_Size,
+            setting_model.integer_value(prepared.control_size.value))
+    }
+    if prepared.text_size.changed {
+        settings_record_preference_edit(state, .Interface_Text_Size,
+            setting_model.integer_value(prepared.text_size.value))
     }
 }
 
@@ -1849,7 +1929,8 @@ settings_control_edit_preparation :: proc(
         .Drawing_Sound_Enabled, .Rendering_Simd,
         .Rendering_Gpu_Dust_Instancing, .Persist_Terminal_History,
         .Animation_Monochrome, .Interface_Hover_Focus,
-        .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
+        .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock,
+        .Interface_Enable_Particle_Effects, .Animation_Open_Completed:
         return settings_boolean_control_edit_preparation(id, value)
     case:
         return {}, false
@@ -1863,6 +1944,16 @@ settings_boolean_control_edit_preparation :: proc(
     (Settings_View_Preparation, bool) {
     prepared: Settings_View_Preparation
     #partial switch id {
+    case .Interface_Enable_Particle_Effects:
+        prepared.enable_particle_effects = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
+    case .Animation_Open_Completed:
+        prepared.open_completed = {
+            toggled = true,
+            checked_out = value.boolean,
+        }
     case .Interface_Display_Fps:
         prepared.fps = {
             toggled = true,

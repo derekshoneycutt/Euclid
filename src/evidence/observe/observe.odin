@@ -100,6 +100,10 @@ Display :: struct {
     simulation_time: f32,
     simulation_paused: bool,
     animation_policy_paused: bool,
+    construction_paused: bool,
+    animation_completed: bool,
+    animation_completion_pending: bool,
+    animation_completion_failed: bool,
     animation_controls_hidden: bool,
     animation_playback_rate: animationmodel.Playback_Rate,
     animation_effective_rate: animationmodel.Playback_Rate,
@@ -353,27 +357,8 @@ observe_display_julia_service :: proc(
 // Copy display-owned interaction and layout state into an in-progress observation.
 observe_display_ui :: proc(
     source: ^Display_Source, result: ^Display) {
-    if source.ui_playback != nil {
-        result.simulation_paused = source.ui_playback.simulation_paused
-        result.animation_policy_paused =
-            source.ui_playback.animation_policy_paused
-        result.animation_controls_hidden = source.ui_playback.controls_hidden
-        result.animation_playback_rate = source.ui_playback.rate
-        result.animation_effective_rate = source.ui_playback.rate
-        if source.gif_capture_status != nil {
-            result.animation_effective_rate = capturemodel.gif_capture_playback_rate(
-                source.ui_playback.rate, source.gif_capture_status.gif_capture_phase,
-                source.gif_capture_status.save_gif_requested)
-        }
-    }
-    if source.ui_presentation != nil {
-        result.view_text_scroll_y = source.ui_presentation.text_scroll_y
-        result.view_text_scroll_max = source.ui_presentation.text_scroll_max
-    }
-    if source.ui_layout != nil {
-        result.vertical_split_x = source.ui_layout.vertical_split_x
-        result.horizontal_split_y = source.ui_layout.horizontal_split_y
-    }
+    observe_display_playback(source, result)
+    observe_display_layout(source, result)
     if source.ui_library != nil {
         search := &source.ui_library.search
         result.library_search_idle = search.worker_available &&
@@ -385,6 +370,39 @@ observe_display_ui :: proc(
     }
     if source.ui_tooltip != nil {
         result.tooltip_visible = source.ui_tooltip.visible
+    }
+}
+
+// Observe transport intent and the capture-adjusted rate without changing playback.
+observe_display_playback :: proc(source: ^Display_Source, result: ^Display) {
+    if source.ui_playback != nil {
+        result.simulation_paused = source.ui_playback.simulation_paused
+        result.construction_paused = source.ui_playback.construction_paused
+        result.animation_completed = source.ui_playback.completed
+        result.animation_completion_pending = source.ui_playback.completion_requested
+        result.animation_completion_failed = source.ui_playback.completion_failed
+        result.animation_policy_paused =
+            source.ui_playback.animation_policy_paused
+        result.animation_controls_hidden = source.ui_playback.controls_hidden
+        result.animation_playback_rate = source.ui_playback.rate
+        result.animation_effective_rate = source.ui_playback.rate
+        if source.gif_capture_status != nil {
+            result.animation_effective_rate = capturemodel.gif_capture_playback_rate(
+                source.ui_playback.rate, source.gif_capture_status.gif_capture_phase,
+                source.gif_capture_status.save_gif_requested)
+        }
+    }
+}
+
+// Copy pane scroll and split positions independently of optional transport storage.
+observe_display_layout :: proc(source: ^Display_Source, result: ^Display) {
+    if source.ui_presentation != nil {
+        result.view_text_scroll_y = source.ui_presentation.text_scroll_y
+        result.view_text_scroll_max = source.ui_presentation.text_scroll_max
+    }
+    if source.ui_layout != nil {
+        result.vertical_split_x = source.ui_layout.vertical_split_x
+        result.horizontal_split_y = source.ui_layout.horizontal_split_y
     }
 }
 

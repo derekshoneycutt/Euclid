@@ -31,6 +31,7 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
     link_error := bridge.init_julia_runtime_channels(service)
     testing.expect_value(t, link_error, runtime.Allocator_Error.None)
     state^.julia_runtime_service = service
+    state^.ui_runtime.preferences.values.interface.enable_particle_effects = true
     state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     state^.simulation_executor = new(core.Simulation_Executor, context.allocator)
     state^.julia_interface^.current_animation =
@@ -390,6 +391,65 @@ presentation_arrival_style_override_cancels_active_arrival :: proc(t: ^testing.T
     testing.expect(t, !effects.arrival_active)
     testing.expect_value(t, effects.departure_particle_count, 3)
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
+}
+
+// Completion resolves incoming text immediately without cancelling outgoing dust.
+@(test)
+presentation_completed_form_preserves_departure_dust :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    state^.ui_runtime.presentation.visible = true
+    viewport: geometry.Rectangle = {10, 20, 200, 120}
+    uidust.ui_dust_validate_context(&presentation^.dust, {
+        visible = true,
+        viewport = viewport,
+        visual_signature = 1,
+    })
+    testing.expect(t, uidust.ui_dust_emit(
+        &presentation^.dust, {30, 50}, {240, 160, 80, 255}, 255, 1))
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 53, .Falling_Ink)
+    state^.ui_runtime.playback.completed = true
+    presentation_effects_update(state, presentation, 0.016, {
+        scroll = {
+            view_rect = viewport,
+        },
+    }, 1)
+    testing.expect_value(t, presentation^.dust.particle_count, 1)
+    testing.expect(t, !presentation^.dust.incoming_active)
+    testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
+}
+
+// Particle disablement clears both text populations and re-enabling replays neither.
+@(test)
+presentation_particle_policy_clears_without_resurrection :: proc(t: ^testing.T) {
+    fixture := presentation_test_fixture_create(t)
+    defer presentation_test_fixture_destroy(fixture)
+    state, presentation := fixture.state, fixture.presentation
+    state^.ui_runtime.presentation.visible = true
+    viewport: geometry.Rectangle = {10, 20, 200, 120}
+    uidust.ui_dust_validate_context(&presentation^.dust, {
+        visible = true,
+        viewport = viewport,
+        visual_signature = 1,
+    })
+    testing.expect(t, uidust.ui_dust_emit(
+        &presentation^.dust, {30, 50}, {240, 160, 80, 255}, 255, 1))
+    uidust.ui_dust_begin_arrival(&presentation^.dust, 53, .Falling_Ink)
+    state^.ui_runtime.preferences.values.interface.enable_particle_effects = false
+    preparation: uipresentation.Presentation_Preparation = {
+        scroll = {
+            view_rect = viewport,
+        },
+    }
+    presentation_effects_update(state, presentation, 0.016, preparation, 1)
+    testing.expect_value(t, presentation^.dust.particle_count, 0)
+    testing.expect(t, !presentation^.dust.incoming_active)
+    testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
+    state^.ui_runtime.preferences.values.interface.enable_particle_effects = true
+    presentation_effects_update(state, presentation, 0.016, preparation, 1)
+    testing.expect_value(t, presentation^.dust.particle_count, 0)
+    testing.expect(t, !presentation^.dust.incoming_active)
 }
 
 // Verify selection and reset consume drawn ink once while runtime reload settles it.

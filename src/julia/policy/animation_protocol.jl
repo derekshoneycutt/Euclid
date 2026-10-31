@@ -86,6 +86,15 @@ struct TickAnimation
     sequence::UInt64
     slot::AnimationTickSlotHandle
     dt::Float32
+    operation::Int32
+end
+
+"""Construct an ordinary tick while keeping the legacy actor call surface stable."""
+function TickAnimation(request_id, runtime_generation, animation_generation,
+    animation_id, program_actor, sequence, slot, dt)
+    return TickAnimation(request_id, runtime_generation, animation_generation,
+        animation_id, program_actor, sequence, slot, dt,
+        OdinJuliaBridge.ANIMATION_OPERATION_TICK)
 end
 
 """Request orderly retirement of the active animation program."""

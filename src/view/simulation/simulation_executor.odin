@@ -108,6 +108,9 @@ update_particles_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^core.Simulation_Task_Data)payload
     consume_scenario_dust_requests(data)
+    if data^.state^.ui_runtime.playback.construction_paused {
+        particles.formation_settle_paused(&data^.state^.particle_system, data^.dt)
+    }
     particles.update_particles(&data^.state^.particle_system, data^.dt)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {

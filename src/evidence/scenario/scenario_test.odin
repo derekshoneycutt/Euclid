@@ -9,6 +9,37 @@ import settings "../../settings"
 
 import "core:testing"
 
+// Flat scalar dispatch preserves transport acknowledgement and subsystem fallback.
+@(test)
+scenario_test_scalar_state_dispatch :: proc(t: ^testing.T) {
+    display: observe.Display = {
+        construction_paused = true,
+        animation_tick_pending = true,
+    }
+    testing.expect(t, !state_matches("construction_paused", display))
+    testing.expect(t, !state_matches("construction_playing", display))
+    display.animation_tick_pending = false
+    testing.expect(t, state_matches("construction_paused", display))
+    display.animation_completed = true
+    display.animation_completion_pending = true
+    testing.expect(t, !state_matches("animation_completed", display))
+    display.animation_completion_pending = false
+    testing.expect(t, state_matches("animation_completed", display))
+    display.animation_completion_failed = true
+    testing.expect(t, state_matches("animation_completion_failed", display))
+    display.construction_paused = false
+    testing.expect(t, !state_matches("construction_playing", display))
+    display.animation_completed = false
+    testing.expect(t, state_matches("construction_playing", display))
+    testing.expect(t, state_matches("tooltip_hidden", display))
+    testing.expect(t, state_matches("gif_idle", display))
+    display.gif_capture_active = true
+    testing.expect(t, state_matches("gif_active", display))
+    testing.expect(t, !state_matches("gif_idle", display))
+    testing.expect(t, state_matches("presentation_effects_settled", display))
+    testing.expect(t, !state_matches("unknown_state", display))
+}
+
 // Playback predicates distinguish session choices from capture's effective rate.
 @(test)
 scenario_test_playback_state_predicates :: proc(t: ^testing.T) {
@@ -613,6 +644,14 @@ scenario_test_animation_idle_state :: proc(t: ^testing.T) {
     }))
 }
 
+// Transport actions yield before assertions consume their copied frame observations.
+@(test)
+scenario_construction_transport_yields_observation_frame :: proc(t: ^testing.T) {
+    testing.expect(t, command_kind_ends_frame(.Pause_Construction))
+    testing.expect(t, command_kind_ends_frame(.Resume_Construction))
+    testing.expect(t, command_kind_ends_frame(.Show_Completed))
+}
+
 // Verify dust predicates distinguish complete rest from local and airborne activity.
 @(test)
 scenario_test_dust_state_predicates :: proc(t: ^testing.T) {
@@ -622,6 +661,11 @@ scenario_test_dust_state_predicates :: proc(t: ^testing.T) {
         dust_peak_speed_sq = particlemodel.DUST_SETTLED_SPEED_SQ,
     }
     testing.expect(t, state_matches("dust_settled", settled))
+    testing.expect(t, !state_matches("particle_effects_disabled", settled))
+    testing.expect(t, state_matches("particle_effects_disabled", observe.Display{}))
+    enabled: observe.Display
+    enabled.settings_preferences.interface.enable_particle_effects = true
+    testing.expect(t, !state_matches("particle_effects_disabled", enabled))
     testing.expect(t, !state_matches("dust_active", settled))
     testing.expect(t, !state_matches("dust_settled", observe.Display{
         dust_live_count = 8,

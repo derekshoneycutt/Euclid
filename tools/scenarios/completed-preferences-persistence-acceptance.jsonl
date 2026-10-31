@@ -1,0 +1,11 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"interface.enable_particle_effects","value":false}}
+{"set_setting":{"key":"animation.open_completed","value":true}}
+{"wait_event":"settings_save_submitted","timeout_ms":10000}
+{"wait_event":"settings_save_committed","timeout_ms":10000}
+{"wait_state":"settings_saved","timeout_ms":10000}
+{"assert_state":"settings_worker_only"}
+{"assert_setting":{"key":"interface.enable_particle_effects","value":false}}
+{"assert_setting":{"key":"animation.open_completed","value":true}}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

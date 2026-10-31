@@ -3,6 +3,7 @@ package viewsimulation
 import audio "../../audio"
 import core "../../core"
 import shapes "../../shapes"
+import particles "../../particles"
 import julia "../../bridge"
 import simulationmodel "model"
 import viewcapture "../capture"
@@ -17,6 +18,8 @@ accumulate_and_update_systems :: proc(
     state: ^core.Euclid_General_State, frame_dt: f32,
     gif_extents: capturemodel.Gif_Capture_Extents) -> f32 {
     projection.recompute_iso_scale_precompute(&state^.iso_scale)
+    particles.set_effects_enabled(&state^.particle_system,
+        state^.ui_runtime.preferences.values.interface.enable_particle_effects)
 
     clamped_dt := frame_dt
     if clamped_dt > simulationmodel.MAX_FRAME_DT {
@@ -68,12 +71,7 @@ run_deterministic_fixed_step :: proc(
 
     state^.current_delta_time = dt
     julia.publish_available_animation_tick(state)
-    if state^.ui_runtime.playback.animation_policy_paused {
-        audio.set_drawing_activity(&state^.chalk_audio, false)
-    }
-    if !state^.ui_runtime.playback.animation_policy_paused {
-        julia.schedule_animation_tick(state, dt)
-    }
+    julia.schedule_animation_tick(state, dt)
     run_parallel_simulation_step(state^.simulation_executor, dt)
     state^.fixed_step += 1
     terminalservice.terminal_tick_record_step(

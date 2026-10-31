@@ -126,6 +126,16 @@ content_specification_tick_copy_and_errors :: proc(t: ^testing.T) {
     service^.active_content_specification = service^.pending_content_specification
     state^.animation_query_snapshot_target = snapshot
     output: contentdata.Animation_Content_Specification
+    testing.expect_value(t,
+        copy_animation_content_specification(state, {
+            animation_identity = {
+                15 = 1,
+            },
+            runtime_generation = 0,
+            animation_generation = 7,
+            operation = .Show_Completed,
+        }, &output), u32(0))
+    testing.expect_value(t, output, old)
     for _ in 0..<1000 {
         testing.expect_value(t,
             copy_animation_content_specification(state, {

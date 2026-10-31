@@ -131,6 +131,10 @@ Content_Message_Id :: enum u16 {
     Settings_Show_Magnifier_Tooltip = 1246,
     Settings_Magnifier_Input_Lock = 1247,
     Settings_Magnifier_Input_Lock_Tooltip = 1248,
+    Settings_Enable_Particle_Effects = 1249,
+    Settings_Open_Completed = 1250,
+    Settings_Particle_Effects_Help = 1251,
+    Settings_Open_Completed_Help = 1252,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -179,6 +183,10 @@ Content_Message_Id :: enum u16 {
     Animation_Speed_Double = 1410,
     Animation_Speed_Quadruple = 1411,
     Animation_Speed_Capture = 1412,
+    Animation_Show_Completed = 1413,
+    Animation_Completed = 1414,
+    Animation_Play_From_Beginning = 1415,
+    Animation_Completion_Failed = 1416,
 }
 
 // One native ID/key identity shared by admission and runtime lookup.
@@ -187,7 +195,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 169
+CONTENT_SHIPPED_MESSAGE_COUNT :: 177
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -310,6 +318,10 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1246, "ui.settings.show_magnifier.tooltip"},
     {1247, "ui.settings.magnifier_input_lock"},
     {1248, "ui.settings.magnifier_input_lock.tooltip"},
+    {1249, "ui.settings.enable_particle_effects"},
+    {1250, "ui.settings.open_completed"},
+    {1251, "ui.settings.particle_effects_help"},
+    {1252, "ui.settings.open_completed_help"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},
@@ -358,6 +370,10 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1410, "ui.animation.speed_double"},
     {1411, "ui.animation.speed_quadruple"},
     {1412, "ui.animation.speed_capture"},
+    {1413, "ui.animation.show_completed"},
+    {1414, "ui.animation.completed"},
+    {1415, "ui.animation.play_from_beginning"},
+    {1416, "ui.animation.completion_failed"},
 }
 
 // Explicit formatting failure; no error is a successful English fallback.

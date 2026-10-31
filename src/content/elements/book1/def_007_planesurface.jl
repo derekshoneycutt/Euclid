@@ -32,6 +32,7 @@ const ArcWaveHeight = 0.35f0
 
 """Complete immutable timing state for one plane-surface animation generation."""
 struct AnimationState
+    surface::UInt64
     phase::Float32
     timer::Float32
 end
@@ -46,7 +47,7 @@ const PhaseEndLift = 4f0
 
 """Return a plane-surface animation state with updated cycle timing."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
-    return AnimationState(phase, timer)
+    return AnimationState(state.surface, phase, timer)
 end
 
 """Get the view content for this animation"""
@@ -56,6 +57,7 @@ end
 
 """Reset the animation cycle timing to its initial phase."""
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.surface)
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
     status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
@@ -66,7 +68,11 @@ end
 
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
-    reset_cycle_state(state_ptr, AnimationState(PhaseDescend, 0f0))
+    surface = OdinJuliaBridge.create_new_square(state_ptr,
+        [0.1f0, 0.1f0, 0f0], [0.9f0, 0.1f0, 0f0],
+        [0.9f0, 0.9f0, 0f0], [0.1f0, 0.9f0, 0f0],
+        OdinJuliaBridge.BridgeColor(70, 130, 180, 90))
+    reset_cycle_state(state_ptr, AnimationState(surface.host_id, PhaseDescend, 0f0))
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
 
@@ -134,6 +140,18 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Hold the flat surface whose length and breadth the ordinary passes highlight."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    OdinJuliaBridge.hide_point(state_ptr, state.surface)
+    OdinJuliaBridge.show_point(state_ptr, state.surface)
+    EuclidAnimations.reveal_region(state_ptr, state.surface; duration=0f0)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -143,6 +161,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

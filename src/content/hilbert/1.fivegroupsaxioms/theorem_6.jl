@@ -694,6 +694,117 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Retire current ink before changing the completed composition."""
+function complete_ink(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.poly1_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.poly2_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.poly3_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.poly4_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.poly5_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.poly6_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_aid)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_bid)
+    OdinJuliaBridge.hide_point(state_ptr, state.segment_abhost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_aprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.inside1_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.inside2_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_bprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.outside1_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.outside2_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.outside3_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_aid)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_bid)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_aprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_bprime_id)
+end
+
+"""Establish the completed construction's point locations and ink."""
+function complete_points(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_point(state_ptr, PointA, PointMaxBrush, PointAColor,
+        state.point_aid)
+    EuclidAnimations.complete_point(state_ptr, PointB, PointMaxBrush, PointBColor,
+        state.point_bid)
+    EuclidAnimations.complete_point(state_ptr, PointAPrime, PointMaxBrush,
+        PointAPrimeColor, state.point_aprime_id)
+    EuclidAnimations.complete_point(state_ptr, PointBPrime, PointMaxBrush,
+        PointBPrimeColor, state.point_bprime_id)
+end
+
+"""Establish the six-sided boundary before adding the compared interior and exterior paths."""
+function complete_outline(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_line(state_ptr, PolygonV1, PolygonV2;
+        penbrush=LineMaxBrush, pencolor=OutlineColor, line_host_id=state.poly1_host_id,
+        line_joint1_id=state.poly1_joint1_id, line_joint2_id=state.poly1_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PolygonV2, PolygonV3;
+        penbrush=LineMaxBrush, pencolor=OutlineColor, line_host_id=state.poly2_host_id,
+        line_joint1_id=state.poly2_joint1_id, line_joint2_id=state.poly2_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PolygonV3, PolygonV4;
+        penbrush=LineMaxBrush, pencolor=OutlineColor, line_host_id=state.poly3_host_id,
+        line_joint1_id=state.poly3_joint1_id, line_joint2_id=state.poly3_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PolygonV4, PolygonV5;
+        penbrush=LineMaxBrush, pencolor=OutlineColor, line_host_id=state.poly4_host_id,
+        line_joint1_id=state.poly4_joint1_id, line_joint2_id=state.poly4_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PolygonV5, PolygonV6;
+        penbrush=LineMaxBrush, pencolor=OutlineColor, line_host_id=state.poly5_host_id,
+        line_joint1_id=state.poly5_joint1_id, line_joint2_id=state.poly5_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PolygonV6, PolygonV1;
+        penbrush=LineMaxBrush, pencolor=OutlineColor, line_host_id=state.poly6_host_id,
+        line_joint1_id=state.poly6_joint1_id, line_joint2_id=state.poly6_joint2_id)
+end
+
+"""Establish the polygon boundary and the straight and broken comparison paths."""
+function complete_lines(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    complete_outline(state_ptr, state)
+    EuclidAnimations.complete_line(state_ptr, PointB, PointA;
+        penbrush=LineMaxBrush, pencolor=SegmentABColor,
+        line_host_id=state.segment_abhost_id, line_joint1_id=state.segment_abjoint1_id,
+        line_joint2_id=state.segment_abjoint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointA, BrokenInsideMid;
+        penbrush=LineMaxBrush, pencolor=BrokenInsideColor,
+        line_host_id=state.inside1_host_id, line_joint1_id=state.inside1_joint1_id,
+        line_joint2_id=state.inside1_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, BrokenInsideMid, PointAPrime;
+        penbrush=LineMaxBrush, pencolor=BrokenInsideColor,
+        line_host_id=state.inside2_host_id, line_joint1_id=state.inside2_joint1_id,
+        line_joint2_id=state.inside2_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointB, BrokenOutsideMid1;
+        penbrush=LineMaxBrush, pencolor=BrokenOutsideColor,
+        line_host_id=state.outside1_host_id, line_joint1_id=state.outside1_joint1_id,
+        line_joint2_id=state.outside1_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, BrokenOutsideMid1, BrokenOutsideMid2;
+        penbrush=LineMaxBrush, pencolor=BrokenOutsideColor,
+        line_host_id=state.outside2_host_id, line_joint1_id=state.outside2_joint1_id,
+        line_joint2_id=state.outside2_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, BrokenOutsideMid2, PointBPrime;
+        penbrush=LineMaxBrush, pencolor=BrokenOutsideColor,
+        line_host_id=state.outside3_host_id, line_joint1_id=state.outside3_joint1_id,
+        line_joint2_id=state.outside3_joint2_id)
+end
+
+"""Expose final annotations and fills while hiding construction instruments."""
+function complete_labels(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.show_point(state_ptr, state.label_aid)
+    OdinJuliaBridge.show_point(state_ptr, state.label_bid)
+    OdinJuliaBridge.show_point(state_ptr, state.label_aprime_id)
+    OdinJuliaBridge.show_point(state_ptr, state.label_bprime_id)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+end
+
+
+
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    complete_ink(state_ptr, state)
+    complete_points(state_ptr, state)
+    complete_lines(state_ptr, state)
+    complete_labels(state_ptr, state)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -703,6 +814,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

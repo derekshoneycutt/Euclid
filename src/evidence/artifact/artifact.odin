@@ -232,9 +232,13 @@ artifact_colored_draw_state_json :: proc(state: observe.Display) -> string {
 artifact_playback_state_json :: proc(state: observe.Display) -> string {
     return fmt.tprintf(
         "\"simulation_paused\":%v,\"animation_policy_paused\":%v," +
+        "\"construction_paused\":%v,\"animation_completed\":%v," +
+        "\"animation_completion_pending\":%v,\"animation_completion_failed\":%v," +
         "\"animation_controls_hidden\":%v,\"animation_playback_rate\":%d," +
         "\"animation_effective_rate\":%d",
         state.simulation_paused, state.animation_policy_paused,
+        state.construction_paused, state.animation_completed,
+        state.animation_completion_pending, state.animation_completion_failed,
         state.animation_controls_hidden, state.animation_playback_rate,
         state.animation_effective_rate)
 }
@@ -342,8 +346,9 @@ artifact_settings_state_json :: proc(state: observe.Display) -> string {
         "\"simd\":%v,\"gpu_dust_instancing\":%v}}," +
         "\"drawing\":{{\"dust_limit\":%d,\"sound_enabled\":%v}}," +
         "\"interface\":{{\"display_fps\":%v,\"reduce_motion\":%v," +
-        "\"increased_contrast\":%v}}," +
-        "\"animation\":{{\"scale_percent\":%d,\"monochrome\":%v}}}},\"status\":%d," +
+        "\"increased_contrast\":%v,\"enable_particle_effects\":%v}}," +
+        "\"animation\":{{\"scale_percent\":%d,\"monochrome\":%v," +
+        "\"open_completed\":%v}}}},\"status\":%d," +
         "\"store_available\":%v,\"active\":%v,\"pending_count\":%d," +
         "\"commit_count\":%d,\"failure_count\":%d,\"owner_execution_count\":%d," +
         "\"window_width\":%d,\"window_height\":%d}}",
@@ -355,7 +360,9 @@ artifact_settings_state_json :: proc(state: observe.Display) -> string {
         preferences.drawing.sound_enabled, preferences.interface.display_fps,
         preferences.interface.reduce_motion,
         preferences.interface.increased_contrast,
+        preferences.interface.enable_particle_effects,
         preferences.animation.scale_percent, preferences.animation.monochrome,
+        preferences.animation.open_completed,
         state.settings_save_status,
         state.settings_store_available, state.settings_save_active,
         state.settings_pending_count, state.settings_save_commit_count,
@@ -400,6 +407,7 @@ artifact_encode_payload :: proc(
         destination[6] = payload.point.visible
         destination[7] = payload.point.reserved
     case .Animation_Tick_Accepted, .Animation_Tick_Rejected,
+         .Animation_Completed_Accepted, .Animation_Completed_Rejected,
          .Scene_Batch_Rejected, .Scene_Command_Rejected:
         artifact_put_u16(destination, 0, payload.request.status)
         artifact_put_u16(destination, 2, payload.request.reason)

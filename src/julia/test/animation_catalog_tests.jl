@@ -317,3 +317,56 @@ end
     @test_throws ArgumentError ensure_animation_loaded(
         dirname(@__DIR__), mismatch_catalog, mismatch_catalog[2].id)
 end
+
+"""Check lowered content for unresolved handles without invoking native bridge calls."""
+function completed_globals_resolve(expression)::Bool
+    expression isa GlobalRef && return isdefined(expression.mod, expression.name)
+    expression isa Expr || return true
+    return all(completed_globals_resolve, expression.args)
+end
+
+"""Reject a completion stage that directly calls itself instead of issuing scene work."""
+function completed_helper_is_nonrecursive(expression, owner::Module, name::Symbol)
+    if expression isa GlobalRef
+        return expression.mod !== owner || expression.name !== name
+    end
+    expression isa Expr || return true
+    return all(child -> completed_helper_is_nonrecursive(child, owner, name),
+        expression.args)
+end
+
+@testset "every catalog program authors a completed form" begin
+    generation = create_euclid_runtime_generation(ProductionContentRoot)
+    for descriptor in AnimationDescriptors
+        descriptor.implementation_path === nothing && continue
+        implementation = load_generation_animation(
+            generation, descriptor.id, descriptor.implementation_path)
+        owner = parentmodule(implementation.entry)
+        source = read(
+            joinpath(ProductionContentRoot, descriptor.implementation_path), String)
+        helper_names = [Symbol(match.captures[1]) for match in
+            eachmatch(r"(?m)^function (complete_[a-z_]+)\(", source)]
+        @test length(helper_names) == length(unique(helper_names))
+        for name in helper_names
+            helper = Base.invokelatest(getfield, owner, name)
+            state_type = Base.invokelatest(getfield, owner, :AnimationState)
+            lowered = Base.invokelatest(code_lowered, helper,
+                Tuple{Ptr{Cvoid},state_type})
+            @test all(code -> all(completed_globals_resolve, code.code), lowered)
+            @test all(code -> all(expression ->
+                completed_helper_is_nonrecursive(expression, owner, name),
+                code.code), lowered)
+        end
+        entry_code = Base.invokelatest(
+            code_lowered, implementation.entry, Tuple{Ptr{Cvoid},Int32,Float32})
+        @test all(code -> all(completed_globals_resolve, code.code), entry_code)
+        if Base.invokelatest(isdefined, owner, :show_completed)
+            handler = Base.invokelatest(getfield, owner, :show_completed)
+            @test Base.invokelatest(applicable, handler, C_NULL)
+            lowered = Base.invokelatest(code_lowered, handler, Tuple{Ptr{Cvoid}})
+            @test all(code -> all(completed_globals_resolve, code.code), lowered)
+        else
+            @test occursin("NullAnimation.show_completed(state_ptr)", source)
+        end
+    end
+end

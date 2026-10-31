@@ -28,6 +28,12 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect_value(t, setting_value(preferences, .Drawing_Dust_Limit).integer,
         particlemodel.MAX_LOW_PARTICLES)
     testing.expect(t, !setting_value(preferences, .Drawing_Sound_Enabled).boolean)
+}
+
+// Preserve opt-in accessibility and presentation policy defaults independently of rendering.
+@(test)
+accessibility_defaults_match_existing_behavior :: proc(t: ^testing.T) {
+    preferences := default_preferences()
     testing.expect(t, !setting_value(preferences, .Interface_Display_Fps).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Reduce_Motion).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Increased_Contrast).boolean)
@@ -43,6 +49,25 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
     testing.expect_value(t,
         setting_value(preferences, .Animation_Scale_Percent).integer, 100)
     testing.expect(t, !setting_value(preferences, .Animation_Monochrome).boolean)
+    testing.expect(t,
+        setting_value(preferences, .Interface_Enable_Particle_Effects).boolean)
+    testing.expect(t, !setting_value(preferences, .Animation_Open_Completed).boolean)
+}
+
+// Keep particle, reduced-motion, capacity and completed-first intent independent.
+@(test)
+completed_and_particle_preferences_are_independent :: proc(t: ^testing.T) {
+    preferences := default_preferences()
+    testing.expect(t, apply_setting_value(
+        &preferences, .Interface_Enable_Particle_Effects, boolean_value(false), .Saved))
+    testing.expect(t, apply_setting_value(
+        &preferences, .Animation_Open_Completed, boolean_value(true), .Saved))
+    testing.expect(t, !preferences.interface.enable_particle_effects)
+    testing.expect(t, preferences.animation.open_completed)
+    testing.expect(t, !preferences.interface.reduce_motion)
+    testing.expect_value(t,
+        preferences.drawing.dust_limit, particlemodel.MAX_LOW_PARTICLES)
+    testing.expect(t, preferences.rendering.gpu_dust_instancing)
 }
 
 // Keep the pointer magnifier opt-in and persist it as an interface preference.

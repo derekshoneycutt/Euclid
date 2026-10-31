@@ -507,6 +507,85 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Retire current ink before changing the completed composition."""
+function complete_ink(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_a)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_b)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_c)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_d)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_k)
+    OdinJuliaBridge.hide_point(state_ptr, state.line1_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.line2_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.line3_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.line4_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.line5_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_a)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_b)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_c)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_d)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_k)
+    OdinJuliaBridge.hide_point(state_ptr, state.shape_host)
+end
+
+"""Establish the completed construction's point locations and ink."""
+function complete_points(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_point(state_ptr, VertexA, PentagonMaxBrush, PointAColor,
+        state.point_a)
+    EuclidAnimations.complete_point(state_ptr, VertexB, PentagonMaxBrush, PointBColor,
+        state.point_b)
+    EuclidAnimations.complete_point(state_ptr, VertexC, PentagonMaxBrush, PointCColor,
+        state.point_c)
+    EuclidAnimations.complete_point(state_ptr, VertexD, PentagonMaxBrush, PointDColor,
+        state.point_d)
+    EuclidAnimations.complete_point(state_ptr, VertexK, PentagonMaxBrush, PointKColor,
+        state.point_k)
+end
+
+"""Establish the completed construction's straight edges directly."""
+function complete_lines(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_line(state_ptr, VertexA, VertexB;
+        penbrush=PentagonMaxBrush, pencolor=PentagonColor, line_host_id=state.line1_host,
+        line_joint1_id=state.line1_joint1, line_joint2_id=state.line1_joint2)
+    EuclidAnimations.complete_line(state_ptr, VertexB, VertexC;
+        penbrush=PentagonMaxBrush, pencolor=PentagonColor, line_host_id=state.line2_host,
+        line_joint1_id=state.line2_joint1, line_joint2_id=state.line2_joint2)
+    EuclidAnimations.complete_line(state_ptr, VertexC, VertexD;
+        penbrush=PentagonMaxBrush, pencolor=PentagonColor, line_host_id=state.line3_host,
+        line_joint1_id=state.line3_joint1, line_joint2_id=state.line3_joint2)
+    EuclidAnimations.complete_line(state_ptr, VertexD, VertexK;
+        penbrush=PentagonMaxBrush, pencolor=PentagonColor, line_host_id=state.line4_host,
+        line_joint1_id=state.line4_joint1, line_joint2_id=state.line4_joint2)
+    EuclidAnimations.complete_line(state_ptr, VertexK, VertexA;
+        penbrush=PentagonMaxBrush, pencolor=PentagonColor, line_host_id=state.line5_host,
+        line_joint1_id=state.line5_joint1, line_joint2_id=state.line5_joint2)
+end
+
+"""Expose final annotations and fills while hiding construction instruments."""
+function complete_labels(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.show_point(state_ptr, state.label_a)
+    OdinJuliaBridge.show_point(state_ptr, state.label_b)
+    OdinJuliaBridge.show_point(state_ptr, state.label_c)
+    OdinJuliaBridge.show_point(state_ptr, state.label_d)
+    OdinJuliaBridge.show_point(state_ptr, state.label_k)
+    OdinJuliaBridge.show_point(state_ptr, state.shape_host)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+end
+
+
+
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    complete_ink(state_ptr, state)
+    complete_points(state_ptr, state)
+    complete_lines(state_ptr, state)
+    complete_labels(state_ptr, state)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -516,6 +595,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

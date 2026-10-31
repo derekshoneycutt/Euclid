@@ -38,6 +38,39 @@ function activate_animation_for_test!(
     return only(EuclidActorRuntime.take_outgoing!(runtime))
 end
 
+@testset "completed form is a distinct sequenced operation" begin
+    calls = Tuple{Int32,Float32}[]
+    implementation = AnimationCatalog.AnimationImplementation(
+        ActorAnimationId, (_state, operation, dt) -> begin
+            push!(calls, (operation, dt))
+            true
+        end)
+    runtime = EuclidActorRuntime.ActorRuntime(
+        clock=EuclidActorRuntime.ManualClock(UInt64(0)))
+    supervisor_state = EuclidPolicy.AnimationSupervisor(UInt64(7), _ -> implementation)
+    supervisor = EuclidActorRuntime.spawn!(runtime, supervisor_state; mailbox_capacity=8)
+    EuclidActorRuntime.send!(runtime, supervisor, EuclidPolicy.StartAnimationSupervisor())
+    drain_animation_actors!(runtime)
+    EuclidActorRuntime.take_outgoing!(runtime)
+    activated = activate_animation_for_test!(runtime, supervisor,
+        EuclidPolicy.ActivateAnimation(
+            UInt64(10), UInt64(7), UInt64(3), ActorAnimationId, C_NULL))
+    @test activated.succeeded
+    actor = something(supervisor_state.active_program_actor)
+    completed = EuclidPolicy.TickAnimation(
+        UInt64(11), UInt64(7), UInt64(3), ActorAnimationId, actor,
+        UInt64(1), EuclidPolicy.AnimationTickSlotHandle(Int32(0), UInt64(1)),
+        0f0, OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED)
+    EuclidActorRuntime.send!(runtime, supervisor, completed)
+    drain_animation_actors!(runtime)
+    @test only(EuclidActorRuntime.take_outgoing!(runtime)).succeeded
+    @test calls[end] == (OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED, 0f0)
+    EuclidActorRuntime.send!(runtime, supervisor, completed)
+    drain_animation_actors!(runtime)
+    @test !only(EuclidActorRuntime.take_outgoing!(runtime)).succeeded
+    @test length(calls) == 2
+end
+
 @testset "checked-in animation fixture executes unchanged through actor" begin
     implementation = AnimationCatalog.ensure_animation_loaded(
         dirname(@__DIR__), test_catalog(), ActorAnimationId)

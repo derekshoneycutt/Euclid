@@ -110,6 +110,28 @@ events such as screenshot completion that do not match the initiating action's i
 | Capture or retain evidence | `screenshot`, `start_gif`, `checkpoint`, `allocation_checkpoint`, `assert_allocation_baseline` |
 | End a run safely | `assert_no_bad_frees`, `shutdown` |
 
+Construction transport has its own boundary: `{"do":"pause_construction"}` holds
+authored work, while `simulation_running` and native dust remain independent.
+Wait for `construction_paused` to acknowledge the final pending tick. Then
+`{"do":"show_completed","as":"figure"}` and a correlated
+`{"wait_event":"animation_completed","correlation":"figure"}` prove a distinct
+completed-form commit, not elapsed playback. `resume_construction` continues an
+ordinary pause or resets a completed form; await `animation_reset_committed` in
+the latter case. Full `pause_simulation` and policy `pause_animation` are separate.
+
+The [completed-figure acceptance](../../../tools/scenarios/completed-figure-acceptance.jsonl)
+checks transport, completed-first selection, and independent particle disablement.
+The [completed-figure lifecycle acceptance](../../../tools/scenarios/completed-figure-lifecycle-acceptance.jsonl)
+checks reload retention, selection-policy isolation, ordinary Resume, and captures
+representative null, surface, polygon, curve, reflection, and Hilbert figures.
+`particle_effects_disabled` requires disabled preference intent and empty world
+and presentation material. Do not use `dust_settled` for this: that predicate
+intentionally requires live grounded dust. Preference snapshots retain both
+`interface.enable_particle_effects` and `animation.open_completed`.
+The isolated [completed-preferences persistence acceptance](../../../tools/scenarios/completed-preferences-persistence-acceptance.jsonl)
+checks both committed database rows and their restored values in a new process,
+including the held completed figure on startup.
+
 Viewport and splitter requests take effect at a frame boundary; put them before the
 screenshot whose layout they are meant to exercise. A screenshot completes only after
 a presented frame has been captured, so wait for `capture_completed` before depending on

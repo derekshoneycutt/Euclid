@@ -12,6 +12,7 @@ import "../core"
 import "base:runtime"
 import "core:mem"
 import "core:testing"
+import "core:log"
 
 //   Allocate one generation-ready host state for copied value ABI tests.
 animation_value_test_state_create :: proc(
@@ -361,6 +362,143 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     for snapshot in service.view_snapshots {
         testing.expect_value(t, snapshot.state, bridgemodel.View_Snapshot_Slot_State.Free)
     }
+}
+
+// Dense figures fit one bounded atomic batch without expanding immutable-state writes.
+@(test)
+animation_completed_dense_scene_batch_preserves_atomic_capacity :: proc(t: ^testing.T) {
+    state := animation_value_test_state_create()
+    defer animation_value_test_state_destroy(state)
+    interface: bridgemodel.Euclid_Julia_Interface
+    state^.julia_interface = &interface
+    interface.current_animation = &interface.null_animation
+    entity := animation_value_test_entity(&state^.shape_world, {})
+    batch := new(Scene_Command_Batch, context.allocator)
+    defer free(batch)
+    batch^.animation = interface.current_animation
+    batch^.animation_generation = 1
+    batch^.tick_sequence = 1
+    batch^.command_count = SCENE_COMMAND_BATCH_CAPACITY
+    testing.expect(t, batch^.command_count >
+        animation_model.ANIMATION_VALUE_PENDING_WRITE_CAPACITY)
+    for &command, index in batch^.commands {
+        command = {
+            kind = .Set_Shape_Position,
+            entity = shapemodel.shape_entity_pack(entity),
+            position = {f32(index) / f32(SCENE_COMMAND_BATCH_CAPACITY), 0, 0},
+        }
+    }
+    testing.expect(t, commit_scene_command_batch(state, batch))
+    transform, found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
+    testing.expect(t, found)
+    testing.expect_value(t, transform.position.x,
+        f32(SCENE_COMMAND_BATCH_CAPACITY - 1) / f32(SCENE_COMMAND_BATCH_CAPACITY))
+}
+
+// Reject completion results after Play, reset, selection, generation or sequence changes.
+@(test)
+animation_completed_results_require_current_held_intent :: proc(t: ^testing.T) {
+    state := animation_value_test_state_create()
+    defer animation_value_test_state_destroy(state)
+    service := new(Julia_Runtime_Service, context.allocator)
+    defer free(service)
+    interface: bridgemodel.Euclid_Julia_Interface
+    other: bridgemodel.Euclid_Julia_Animation_Interface
+    state^.julia_interface = &interface
+    interface.current_animation = &interface.null_animation
+    interface.selected_animation = interface.current_animation
+    service^.animation_generation = 7
+    slot := &service^.animation_tick_slots[0]
+    slot^ = {
+        generation = 7,
+        sequence = 3,
+        animation = interface.current_animation,
+        show_completed = true,
+    }
+    playback := &state^.ui_runtime.playback
+    playback^.construction_paused = true
+    playback^.completion_requested = true
+    testing.expect(t, animation_tick_matches_current(state, service, slot))
+    playback^.completion_requested = false
+    testing.expect(t, !animation_tick_matches_current(state, service, slot))
+    playback^.completion_requested = true
+    interface.pending_animation_reset = true
+    testing.expect(t, !animation_tick_matches_current(state, service, slot))
+    interface.pending_animation_reset = false
+    interface.selected_animation = &other
+    testing.expect(t, !animation_tick_matches_current(state, service, slot))
+    interface.selected_animation = interface.current_animation
+    service^.animation_generation = 8
+    testing.expect(t, !animation_tick_matches_current(state, service, slot))
+    service^.animation_generation = 7
+    service^.animation_last_committed_sequence = 3
+    testing.expect(t, !animation_tick_matches_current(state, service, slot))
+}
+
+// Count expected publication diagnostics without using the failing test logger.
+animation_completion_test_log :: proc(
+    data: rawptr, level: log.Level, _: string, _: log.Options,
+    _ := #caller_location) {
+    if level == .Error {
+        (^int)(data)^ += 1
+    }
+}
+
+// Completion publication preserves authored time and failure leaves the held scene intact.
+@(test)
+animation_completed_publication_is_transactional_and_not_elapsed_time :: proc(
+    t: ^testing.T) {
+    errors := 0
+    previous_logger := context.logger
+    context.logger = {
+        procedure = animation_completion_test_log,
+        data = &errors,
+    }
+    defer context.logger = previous_logger
+    outcomes: [2]bool = {false, true}
+    for rejected in outcomes {
+        state := animation_value_test_state_create()
+        defer animation_value_test_state_destroy(state)
+        interface: bridgemodel.Euclid_Julia_Interface
+        service := new(Julia_Runtime_Service, context.allocator)
+        service^.bootstrap_allocator = context.allocator
+        testing.expect_value(t, init_julia_runtime_channels(service),
+            runtime.Allocator_Error.None)
+        defer destroy_julia_runtime_service(service)
+        state^.julia_interface = &interface
+        state^.julia_runtime_service = service
+        interface.current_animation = &interface.null_animation
+        interface.selected_animation = interface.current_animation
+        service^.animation_generation = 7
+        service^.animation_progress = 0.25
+        state^.ui_runtime.playback.construction_paused = true
+        state^.ui_runtime.playback.completion_requested = true
+        slot := &service^.animation_tick_slots[0]
+        slot^ = {
+            state = .Accepted,
+            generation = 7,
+            sequence = 1,
+            animation = interface.current_animation,
+            show_completed = true,
+            effective_progress = 0.25,
+            scene_batch = {
+                animation = interface.current_animation,
+                animation_generation = 7,
+                tick_sequence = 1,
+                animation_progress = 0.25,
+                overflowed = rejected,
+            },
+        }
+        committed := publish_available_animation_tick(state)
+        testing.expect_value(t, committed, !rejected)
+        testing.expect_value(t, service^.animation_progress, 0.25)
+        testing.expect_value(t, state^.ui_runtime.playback.completed, !rejected)
+        testing.expect_value(t, state^.ui_runtime.playback.completion_failed, rejected)
+        testing.expect(t, !state^.ui_runtime.playback.completion_requested)
+        testing.expect(t, state^.ui_runtime.playback.construction_paused)
+    }
+    testing.expect_value(t, errors, 1)
 }
 
 // Verify coalesced tick time is copied into its immutable publication candidate.

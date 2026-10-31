@@ -204,6 +204,7 @@ General features:
 - [X] Comprehensive mouse/keyboard focus system
 - [X] Improved input after full input system migration (IME, etc.)
 - [X] Fast-forward option
+- [X] Authored completed forms
 - [ ] Sqlite backend
   - [X] Initial creation and access
   - [X] Full-text search tables
@@ -251,6 +252,8 @@ General features:
   - [X] Opt-in mouse-hover keyboard focus for controls
   - [X] Interface/control size scaling support
   - [X] Mouse/cursor -following magnifier
+  - [X] Independent particle-effects switch
+  - [X] Open subsequent animations at their completed figure
   - [ ] Input caret handles (maybe; maybe v2... tbd)
   - [ ] Improved accessibility system
   - [ ] Additional accessibility support : Dynview
@@ -339,7 +342,6 @@ Core Features:
     evolutes and involutes, inversions, caustics
 - Limited lifetime line/arc segments--disintegrate after drawing
 - Optional completed checkboxes in tree
-- Animation slider
 - More LaTeX support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods

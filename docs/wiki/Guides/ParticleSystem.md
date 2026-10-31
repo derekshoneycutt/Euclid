@@ -80,7 +80,10 @@ effects.
 | Formation | Authored settling material | Above tools |
 
 Formation is the authored settling material for filled regions and labels. Julia
-requests a reveal, and it plays out only as the animation's accepted ticks advance.
+requests a reveal, and ordinary playback advances it on accepted authored ticks.
+Construction Pause permits already-admitted material to settle on native effect time
+without changing accepted authored progress, tools, or committed sweep frontiers.
+Resume retains that settled material; it does not restart the reveal.
 Material lands on the shape's real geometry or the label's glyph ink. Each piece
 follows one of two roles:
 
@@ -95,6 +98,14 @@ tools, back to front.
 Outgoing dust comes from what is actually visible: region triangles, label glyph ink,
 or line strokes. Hiding something mid-formation only sends away the part that has
 already appeared.
+
+Completed-form publication bypasses formation, wakes existing dust and queues the
+completed polygons' ordinary bounded footprint pushes. Hiding either form still uses
+the same sampled departure path. The saved `interface.enable_particle_effects` switch
+clears all particle slots, reveals, pending contacts and pushes immediately, preserving
+capacity and instancing intent. Producers reject new effects while disabled.
+Presentation dust uses the same policy and settles pending arrivals to readable text;
+re-enabling never replays cleared work.
 
 Tool trails borrow the same two roles. Pigment drops a short way onto the stroke and
 fades where it lands; leapers start small and white, hop off the stroke, and cool to its

@@ -475,6 +475,10 @@ presentation_materialize :: proc(
         if published && request.document != nil {
             if presentation_reduced_motion_enabled(state) {
                 uidust.ui_dust_settle(&runtime^.dust)
+            } else if state^.ui_runtime.playback.completed ||
+                state^.ui_runtime.playback.completion_requested ||
+                state^.ui_runtime.playback.completion_initial {
+                uidust.ui_dust_cancel_arrival(&runtime^.dust)
             } else {
                 uidust.ui_dust_begin_arrival(
                     &runtime^.dust, request.content.presentation_generation,
@@ -663,6 +667,11 @@ presentation_effects_update :: proc(
         panel := geometry.Rectangle(state^.ui_runtime.layout.ui_regions.text_rect)
         visual_presentation = uipresentation.prepare_presentation_visual(state, panel)
     }
+    if state^.ui_runtime.playback.completed ||
+        state^.ui_runtime.playback.completion_requested ||
+        state^.ui_runtime.playback.completion_initial {
+        uidust.ui_dust_cancel_arrival(&runtime^.dust)
+    }
     visible := state^.ui_runtime.presentation.visible &&
         !uiterminal.is_terminal_selected(state)
     viewport := geometry.Rectangle(visual_presentation.scroll.view_rect)
@@ -682,7 +691,8 @@ presentation_effects_update :: proc(
 presentation_reduced_motion_enabled :: #force_inline proc(
     state: ^core.Euclid_General_State) -> bool {
     return state != nil &&
-        (state^.ui_runtime.preferences.values.interface.reduce_motion ||
+        (!state^.ui_runtime.preferences.values.interface.enable_particle_effects ||
+         state^.ui_runtime.preferences.values.interface.reduce_motion ||
          state^.ui_runtime.platform_reduce_motion)
 }
 

@@ -12,6 +12,39 @@ import native "../native"
 import geometry "../../core/geometry"
 import theme "theme"
 
+// Paused FF never changes speed; playing after completion restarts instead of resuming.
+@(test)
+animation_completed_transport_retains_speed_and_independent_pauses :: proc(
+    t: ^testing.T) {
+    ji: bridgemodel.Euclid_Julia_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    state, store := animation_controls_test_state(t, &ji, &animation)
+    defer free(store, context.allocator)
+    defer destroy_shell_test_state(state)
+    playback := &state^.ui_runtime.playback
+    playback^.rate = .Quadruple
+    playback^.animation_policy_paused = true
+    uianimation.apply_animation_control_hit(state, {
+        toggle_pause_requested = true,
+    })
+    testing.expect(t, playback^.construction_paused)
+    testing.expect(t, !playback^.simulation_paused)
+    uianimation.apply_animation_control_hit(state, {
+        cycle_speed_requested = true,
+    })
+    testing.expect(t, playback^.completion_requested)
+    testing.expect_value(t, playback^.rate, animationmodel.Playback_Rate.Quadruple)
+    playback^.completion_requested = false
+    playback^.completed = true
+    uianimation.apply_animation_control_hit(state, {
+        toggle_pause_requested = true,
+    })
+    testing.expect(t, ji.pending_animation_reset)
+    testing.expect(t, !playback^.completed && !playback^.construction_paused)
+    testing.expect(t, playback^.animation_policy_paused)
+    testing.expect_value(t, playback^.rate, animationmodel.Playback_Rate.Quadruple)
+}
+
 // Transport cycling retains pause and selected speed through reset and every capture exit.
 @(test)
 animation_speed_cycles_without_resuming_and_capture_restores_choice :: proc(

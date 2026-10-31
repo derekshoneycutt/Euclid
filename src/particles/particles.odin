@@ -274,6 +274,9 @@ Hide_Burst_Options :: struct {
 // Emit plain pigment, white-hot pigment, and leapers at the tool tip on a fixed cadence.
 emit_trail_particles :: proc(
     ps: ^Particle_System, dt: f32, emission: Particle_Emission) {
+    if ps^.effects_disabled {
+        return
+    }
     ps.spawn_timer += dt
 
     for ps.spawn_timer >= SPAWN_INTERVAL {
@@ -524,6 +527,7 @@ formation_prepare_sweep_targets :: proc(
             reveal.sweep_speed = grown / f32(now - reveal.last_growth)
         }
         reveal.last_growth = now
+        reveal.growth_pause_elapsed = reveal.pause_elapsed
         scale := clamp(projected_scale, 0.25, 4)
         wanted := min(int(0.5 * sector.radius * sector.radius *
             abs(sector.sweep_theta) * scale * scale * FORMATION_REGION_DENSITY),
@@ -557,7 +561,8 @@ formation_add_sweep_particle :: proc(
     ps: ^Particle_System, reveal: ^Formation_Reveal_Record, reveal_index: int,
     sector: shapemodel.Shapes_Filled_Circle_Draw, index: int) -> bool {
     lifecycle := formation_lifecycle(.Sweep, reveal^.seed, index)
-    elapsed := f32((ps^.formation.accepted_progress - reveal^.start_progress) /
+    elapsed := f32((ps^.formation.accepted_progress - reveal^.start_progress +
+        reveal^.pause_elapsed) /
         f64(reveal^.duration))
     theta := sector.start_theta + reveal^.covered_sweep + (sector.sweep_theta -
         reveal^.covered_sweep) * formation_particle_unit(reveal^.seed, index, 10)
@@ -599,9 +604,10 @@ formation_sweep_fill :: proc(
         return sweep_theta
     }
     reveal := &state^.reveals[slot]
-    since := f32(state^.accepted_progress - reveal^.last_growth)
+    since := f32(state^.accepted_progress - reveal^.last_growth +
+        reveal^.pause_elapsed - reveal^.growth_pause_elapsed)
     behind := reveal^.sweep_speed * max(FORMATION_SWEEP_FILL_LAG - since, 0)
-    drawn := max(abs(reveal^.covered_sweep) - behind, 0)
+    drawn := max(abs(reveal^.covered_sweep) - behind, reveal^.settled_sweep)
     return math.sign(sweep_theta) * min(drawn, abs(sweep_theta))
 }
 
@@ -1030,8 +1036,8 @@ formation_reveal_opacity :: proc(
         return 1
     }
     reveal := &state^.reveals[slot]
-    progress := (state^.accepted_progress - reveal^.start_progress) /
-        f64(reveal^.duration)
+    progress := (state^.accepted_progress - reveal^.start_progress +
+        reveal^.pause_elapsed) / f64(reveal^.duration)
     return math.smoothstep(formation_kind_policy(kind).fill_start, 1,
         f32(math.clamp(progress, 0, 1)))
 }
@@ -1073,7 +1079,8 @@ formation_particle_visual :: proc(
         reveal^.slot_generation != particle.reveal_generation {
         return {}
     }
-    elapsed := f32((ps^.formation.accepted_progress - reveal^.start_progress) /
+    elapsed := f32((ps^.formation.accepted_progress - reveal^.start_progress +
+        reveal^.pause_elapsed) /
         f64(reveal^.duration))
     if elapsed < particle.birth {
         return {}
@@ -1671,6 +1678,7 @@ reset_dust_tool_contact_state :: proc(ps: ^Particle_System) {
 reset_particles :: proc(ps: ^Particle_System) {
     ps.next_index = 0
     ps.spawn_timer = 0
+    ps.dust_region_push_count = 0
     reset_dust_tool_contact_state(ps)
     ps.dust_floor_rest_count = 0
     dust_field_clear(&ps^.dust_field)
@@ -1680,7 +1688,7 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.dust_kinetic_measure = 0
     ps.dust_spawn_sequence = 0
     formation_reset_generation(ps, ps^.formation.animation_generation)
-    for i in 0..<ps^.use_max_dust_particles {
+    for i in 0..<len(ps^.low_particles.alive) {
         ps.low_particles[i].alive = false
         ps.low_particles[i].age = 0
         ps.dust_slot_spawn_sequences[i] = 0
@@ -1691,12 +1699,67 @@ reset_particles :: proc(ps: ^Particle_System) {
     }
 }
 
+// Apply display-owned effect policy after workers have joined; keep capacity intent.
+set_effects_enabled :: proc(ps: ^Particle_System, enabled: bool) {
+    if ps^.effects_disabled == !enabled {
+        return
+    }
+    ps^.effects_disabled = !enabled
+    if !enabled {
+        reset_particles(ps)
+    }
+}
+
+// Finish admitted material during construction pause without advancing authored time.
+formation_settle_paused :: proc(ps: ^Particle_System, dt: f32) {
+    for &reveal in ps^.formation.reveals {
+        if reveal.active {
+            reveal.pause_elapsed += f64(dt)
+            if reveal.kind == .Sweep {
+                reveal.settled_sweep = abs(formation_sweep_fill(
+                    ps, reveal.owner_entity, reveal.covered_sweep))
+            }
+        }
+    }
+    _ = formation_advance_progress(
+        ps, ps^.formation.animation_generation, ps^.formation.accepted_progress)
+}
+
+// Wake existing dust once; prepared completed polygons displace their floor footprints.
+begin_completed_arrival :: proc(ps: ^Particle_System) {
+    if ps^.effects_disabled {
+        return
+    }
+    kick_existing_dust(ps)
+    ps^.completed_arrival_pending = true
+    ps^.completed_arrival_cursor = 0
+}
+
+// Copy bounded polygon pushes after the new figure's draw cache is prepared.
+prepare_completed_arrival :: proc(
+    ps: ^Particle_System, cache: ^shapemodel.Shapes_Draw_Cache) {
+    if !ps^.completed_arrival_pending || ps^.effects_disabled {
+        return
+    }
+    for ps^.completed_arrival_cursor < cache^.item_count {
+        item := cache^.items[ps^.completed_arrival_cursor]
+        polygon, is_polygon := item.(shapemodel.Shapes_Polygon_Draw)
+        if is_polygon && !queue_dust_region_push(ps, cache, polygon) {
+            return
+        }
+        ps^.completed_arrival_cursor += 1
+    }
+    ps^.completed_arrival_pending = false
+}
+
 // Start a new animation generation and retire all formation-owned state.
 formation_reset_generation :: proc(ps: ^Particle_System, generation: u64) {
     if ps == nil {
         return
     }
     state := &ps^.formation
+    ps^.completed_arrival_pending = false
+    ps^.completed_arrival_cursor = 0
     for index in 0..<MAX_FORMATION_PARTICLES {
         state^.particles.alive[index] = false
     }
@@ -1727,8 +1790,12 @@ formation_advance_progress :: proc(
     state^.accepted_progress = progress
     for index in 0..<MAX_FORMATION_REVEALS {
         record := &state^.reveals[index]
+        visual_progress := progress
+        if record^.kind != .Sweep {
+            visual_progress += record^.pause_elapsed
+        }
         if record^.active &&
-            progress >= record^.start_progress + f64(record^.duration) {
+            visual_progress >= record^.start_progress + f64(record^.duration) {
             record^.active = false
             state^.reveal_count -= 1
         }
@@ -1742,6 +1809,9 @@ formation_start_reveal :: proc(
     ps: ^Particle_System, request: particlemodel.Formation_Reveal_Request) -> bool {
     if !formation_reveal_request_valid(ps, request) {
         return false
+    }
+    if ps^.effects_disabled {
+        return true
     }
     state := &ps^.formation
     slot := formation_find_reveal(
@@ -1934,7 +2004,7 @@ formation_reclaim_unowned_particles :: proc(ps: ^Particle_System) {
 // Notes:
 //   - Falls back to ring overwrite when all dust slots are alive.
 reserve_dead_low_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
-    if ps^.use_max_dust_particles < 1 {
+    if ps^.effects_disabled || ps^.use_max_dust_particles < 1 {
         return -1, false
     }
 
@@ -1956,6 +2026,9 @@ reserve_dead_low_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
 // Notes:
 //   - Always returns a slot by advancing next_index modulo MAX_PARTICLES.
 reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
+    if ps^.effects_disabled {
+        return -1, false
+    }
     index := ps.next_index % MAX_PARTICLES
     ps.next_index = (index + 1) % MAX_PARTICLES
     return index, true
@@ -2157,6 +2230,9 @@ spawn_dust_particle_index :: proc(
 spawn_dust_particle_index_with_generator :: proc(
     ps: ^Particle_System, i: int, origin: Vector3, col: Color,
     generator: rand.Generator) {
+    if ps^.effects_disabled {
+        return
+    }
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
     ps.low_particles[i].life = rand.float32_range(
@@ -2389,6 +2465,9 @@ can_queue_dust_tool_contacts :: proc(ps: ^Particle_System, count: int) -> bool {
 // Queue one ordered tool contact for replay by the particle worker.
 queue_dust_tool_contact :: proc(
     ps: ^Particle_System, contact: particlemodel.Dust_Tool_Contact) -> bool {
+    if ps != nil && ps^.effects_disabled {
+        return true
+    }
     if ps == nil || ps^.dust_tool_contact_count >= DUST_TOOL_CONTACT_CAP {
         if ps != nil {
             ps^.dust_tool_contact_overflow_count += 1
@@ -2435,6 +2514,9 @@ queue_dust_label_reveal_contact :: proc(
 queue_dust_region_push :: proc(
     ps: ^Particle_System, cache: ^shapemodel.Shapes_Draw_Cache,
     draw: shapemodel.Shapes_Polygon_Draw) -> bool {
+    if ps^.effects_disabled {
+        return true
+    }
     if ps^.dust_region_push_count >= particlemodel.DUST_REGION_PUSH_CAP {
         return false
     }

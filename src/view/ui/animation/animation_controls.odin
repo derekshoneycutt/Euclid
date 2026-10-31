@@ -405,10 +405,13 @@ prepare_animation_transport_controls :: proc(
     (uiwidgets.Icon_Button_Result, uiwidgets.Icon_Button_Result) {
     runtime := &state^.ui_runtime
     pause_icon :=
-        uiwidgets.Icon_Button_Id.Play if runtime^.playback.simulation_paused else .Pause
+        uiwidgets.Icon_Button_Id.Play if runtime^.playback.construction_paused else .Pause
     pause_label := viewmessages.shell_message(state, .Animation_Pause)
-    if runtime^.playback.simulation_paused {
+    if runtime^.playback.construction_paused {
         pause_label = viewmessages.shell_message(state, .Animation_Resume)
+    }
+    if runtime^.playback.completed {
+        pause_label = viewmessages.shell_message(state, .Animation_Play_From_Beginning)
     }
     refresh := prepare_animation_control_button(runtime,
         {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
@@ -416,7 +419,7 @@ prepare_animation_transport_controls :: proc(
         mouse_input, slots.panel)
     pause := prepare_animation_control_button(runtime,
         {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
-            runtime^.playback.simulation_paused, pause_label, 1},
+            runtime^.playback.construction_paused, pause_label, 1},
         mouse_input, slots.panel)
     return refresh, pause
 }
@@ -627,6 +630,13 @@ prepare_animation_speed_control :: proc(
     label := contentdata.Content_Message_Id.Animation_Speed_Normal
     if locked {
         label = .Animation_Speed_Capture
+    } else if state.ui_runtime.playback.completed {
+        label = .Animation_Completed
+    } else if state.ui_runtime.playback.construction_paused {
+        label = .Animation_Show_Completed
+        if state.ui_runtime.playback.completion_failed {
+            label = .Animation_Completion_Failed
+        }
     } else {
         switch state.ui_runtime.playback.rate {
         case .Normal:
@@ -639,7 +649,8 @@ prepare_animation_speed_control :: proc(
     result := prepare_animation_control_button(&state.ui_runtime, {
         ANIMATION_SPEED_BUTTON_ID, slots.speed, .None, false,
         viewmessages.shell_message(state, label), 2,
-    }, mouse_input, slots.panel, !locked)
+    }, mouse_input, slots.panel, !locked && !state.ui_runtime.playback.completed &&
+        !state.ui_runtime.playback.completion_requested)
     return result, locked
 }
 
@@ -650,21 +661,44 @@ apply_animation_control_hit :: proc(
     ui_runtime := &state^.ui_runtime
     if hit.refresh_requested {
         cancel_gif_capture_if_paused_mid_capture(state, ui_runtime)
-        ui_runtime^.playback.simulation_paused = false
+        ui_runtime^.playback.construction_paused = false
+        ui_runtime^.playback.completed = false
+        ui_runtime^.playback.completion_requested = false
+        ui_runtime^.playback.completion_failed = false
+        ui_runtime^.playback.completion_initial = false
         state^.julia_interface^.pending_animation_reset = true
     }
     if hit.toggle_pause_requested {
-        ui_runtime^.playback.simulation_paused = !ui_runtime^.playback.simulation_paused
+        if ui_runtime^.playback.completed || ui_runtime^.playback.completion_requested ||
+            ui_runtime^.playback.completion_initial {
+            state^.julia_interface^.pending_animation_reset = true
+            ui_runtime^.playback.completed = false
+            ui_runtime^.playback.completion_requested = false
+            ui_runtime^.playback.completion_initial = false
+        }
+        ui_runtime^.playback.construction_paused =
+            !ui_runtime^.playback.construction_paused
+        ui_runtime^.playback.completion_failed = false
     }
     if hit.cycle_speed_requested {
-        if capturemodel.gif_capture_locks_playback_rate(
-            state.gif_capture_status.gif_capture_phase,
-            state.gif_capture_status.save_gif_requested) {
-            log.warn("animation_speed_change_rejected_during_capture")
-        } else {
-            ui_runtime.playback.rate =
-                animationmodel.playback_rate_next(ui_runtime.playback.rate)
+        apply_animation_fast_forward(state)
+    }
+}
+
+// Cycle remembered speed during playback or request the held completed figure.
+apply_animation_fast_forward :: proc(state: ^core.Euclid_General_State) {
+    playback := &state^.ui_runtime.playback
+    if capturemodel.gif_capture_locks_playback_rate(
+        state.gif_capture_status.gif_capture_phase,
+        state.gif_capture_status.save_gif_requested) {
+        log.warn("animation_speed_change_rejected_during_capture")
+    } else if playback.construction_paused {
+        if !playback.completed {
+            playback.completion_requested = true
+            playback.completion_failed = false
         }
+    } else {
+        playback.rate = animationmodel.playback_rate_next(playback.rate)
     }
 }
 
@@ -672,7 +706,7 @@ apply_animation_control_hit :: proc(
 cancel_gif_capture_if_paused_mid_capture :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if !ui_runtime^.playback.simulation_paused {
+    if !ui_runtime^.playback.construction_paused {
         return
     }
     phase := state^.gif_capture_status.gif_capture_phase
@@ -881,10 +915,10 @@ draw_encoded_animation_transport :: proc(
             state^.ui_runtime.preferences.values.interface.control_size_percent))
     results: [2]uiwidgets.Icon_Button_Result = {prepared.refresh, prepared.pause}
     icons: [2]uiwidgets.Icon_Button_Id = {.Refresh,
-        state^.ui_runtime.playback.simulation_paused ? .Play : .Pause}
+        state^.ui_runtime.playback.construction_paused ? .Play : .Pause}
     slots: [2]geometry.Rectangle = {prepared.slots.refresh, prepared.slots.pause}
     for index in 0..<2 {
-        toggle_active := index == 1 && state^.ui_runtime.playback.simulation_paused
+        toggle_active := index == 1 && state^.ui_runtime.playback.construction_paused
         draw_color := draw_encoded_animation_control_backing(
             encoder, slots[index], results[index].hovered,
             results[index].pressed, toggle_active)
@@ -907,8 +941,29 @@ draw_encoded_animation_speed :: proc(
     rate := capturemodel.gif_capture_playback_rate(state.ui_runtime.playback.rate,
         state.gif_capture_status.gif_capture_phase,
         state.gif_capture_status.save_gif_requested)
-    draw_encoded_speed_glyph(encoder, prepared.speed.icon_drawn_rect, tint, rate,
-        prepared.slots.speed.width / theme.ANIMATION_CONTROL_BUTTON_SIZE)
+    scale := prepared.slots.speed.width / theme.ANIMATION_CONTROL_BUTTON_SIZE
+    if state.ui_runtime.playback.construction_paused {
+        draw_encoded_completed_glyph(
+            encoder, prepared.speed.icon_drawn_rect, tint, scale)
+    } else {
+        draw_encoded_speed_glyph(
+            encoder, prepared.speed.icon_drawn_rect, tint, rate, scale)
+    }
+}
+
+// Show fast-forward with an end stop while the control means completed form.
+draw_encoded_completed_glyph :: proc(
+    encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
+    tint: color.Color_RGBA8, scale: f32) {
+    for index in 0..<2 {
+        x := rect.x + rect.width*(0.08 + f32(index)*0.30)
+        _ = native.draw_encoder_triangle(encoder,
+            {x, rect.y + rect.height*0.20}, {x, rect.y + rect.height*0.78},
+            {x + rect.width*0.29, rect.y + rect.height*0.49}, tint)
+    }
+    _ = native.draw_encoder_line(encoder,
+        {rect.x + rect.width*0.85, rect.y + rect.height*0.20},
+        {rect.x + rect.width*0.85, rect.y + rect.height*0.78}, 2*scale, tint)
 }
 
 // Encode crossed-out fast-forward at normal speed, otherwise an inset circular rate badge.

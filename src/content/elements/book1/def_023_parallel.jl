@@ -205,6 +205,36 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    OdinJuliaBridge.hide_point(state_ptr, state.lines[1].host)
+    OdinJuliaBridge.hide_point(state_ptr, state.lines[2].host)
+    EuclidAnimations.complete_line(
+        state_ptr,
+        Line1Start,
+        Line1End;
+        penbrush=LineMaxBrush,
+        pencolor=Line1Color,
+        line_host_id=state.lines[1].host,
+        line_joint1_id=state.lines[1].joint1,
+        line_joint2_id=state.lines[1].joint2)
+    EuclidAnimations.complete_line(
+        state_ptr,
+        Line2Start,
+        Line2End;
+        penbrush=LineMaxBrush,
+        pencolor=Line2Color,
+        line_host_id=state.lines[2].host,
+        line_joint1_id=state.lines[2].joint1,
+        line_joint2_id=state.lines[2].joint2)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -214,6 +244,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

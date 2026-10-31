@@ -68,7 +68,8 @@ function animation_operation_is_supported(operation::Int32)::Bool
         OdinJuliaBridge.ANIMATION_OPERATION_ENTER,
         OdinJuliaBridge.ANIMATION_OPERATION_TICK,
         OdinJuliaBridge.ANIMATION_OPERATION_EXIT,
-        OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED)
+        OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED,
+        OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED)
 end
 
 """Validate active state and tick metadata before invoking program code."""
@@ -79,7 +80,8 @@ function validate_program_operation(
         program.active && throw(ArgumentError("animation already active"))
     command.operation != OdinJuliaBridge.ANIMATION_OPERATION_ENTER &&
         !program.active && throw(ArgumentError("animation is not active"))
-    if command.operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+    if command.operation in (OdinJuliaBridge.ANIMATION_OPERATION_TICK,
+        OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED)
         command.sequence > program.last_sequence ||
             throw(ArgumentError("stale animation tick sequence"))
         slot = command.slot
@@ -113,7 +115,8 @@ function EuclidActorRuntime.receive!(
     succeeded = program.invoke_entry(program.entry, program.state_ptr, command)
     succeeded || throw(AnimationProgramRejectedError(command.operation))
     program.active = command.operation != OdinJuliaBridge.ANIMATION_OPERATION_EXIT
-    command.operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK &&
+    command.operation in (OdinJuliaBridge.ANIMATION_OPERATION_TICK,
+        OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED) &&
         (program.last_sequence = command.sequence)
     EuclidActorRuntime.resolve_request!(
         context.runtime, command.request_key)

@@ -206,6 +206,7 @@ Formation_Reveal_Record :: struct {
     animation_generation: u64,
     slot_generation: u64,
     start_progress: f64,
+    pause_elapsed: f64,
     duration: f32,
     seed: u64,
     material_count: int,
@@ -214,6 +215,8 @@ Formation_Reveal_Record :: struct {
     // radians per second, and the accepted progress when it last grew.
     covered_sweep, sweep_speed: f32,
     last_growth: f64,
+    growth_pause_elapsed: f64,
+    settled_sweep: f32,
     // Region reveals: the outline has already pushed its ground dust aside.
     dust_pushed: bool,
     active: bool,
@@ -298,6 +301,9 @@ Formation_State :: struct {
 
 // Own bounded dust, tool-trail, and formation storage and deterministic random state.
 Particle_System :: struct {
+    effects_disabled: bool,
+    completed_arrival_pending: bool,
+    completed_arrival_cursor: int,
     low_particles: #soa[MAX_LOW_PARTICLES]Particle,
     low_particle_screens: [MAX_LOW_PARTICLES]geometry.Vector2,
     particles: #soa[MAX_PARTICLES]Trail_Particle,

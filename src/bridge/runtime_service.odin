@@ -11,6 +11,7 @@ import capturemodel "../view/capture/model"
 
 import "base:runtime"
 import audio "../audio"
+import particles "../particles"
 import "../core"
 import protocol "../core/protocol"
 import dyncore "../dynview/core"
@@ -125,6 +126,7 @@ Native_Animation_Tick_Payload :: struct {
     slot_index: i32,
     reservation_generation: u64,
     dt: f32,
+    operation: i32,
 }
 
 #assert(size_of(Native_Animation_Tick_Payload) == 56)
@@ -425,10 +427,28 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
         service^.animation_progress = slot^.effective_progress
         service.animation_last_commit_accelerated = slot.accelerated
     }
+    if slot^.show_completed && matches_current {
+        publish_animation_completion_state(state, slot, committed)
+    }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
     release_completed_animation_ticks(service)
     service^.animation_tick_pending = false
     return committed
+}
+
+// Resolve completion intent only for the current result and start its native arrival.
+publish_animation_completion_state :: proc(
+    state: ^core.Euclid_General_State, slot: ^Animation_Tick_Slot, committed: bool) {
+    playback := &state^.ui_runtime.playback
+    playback^.completion_requested = false
+    playback^.completed = committed
+    playback^.completion_failed = !committed
+    if committed {
+        playback^.completion_initial = false
+        particles.begin_completed_arrival(&state^.particle_system)
+    } else {
+        log.errorf("animation_completed_publication_failed request_id=%d", slot^.request_id)
+    }
 }
 
 //   Record the commit/reject bookkeeping and trace event for one completed tick.
@@ -443,10 +463,14 @@ record_animation_tick_outcome :: proc(
         service^.animation_last_latency_ms = latency_ms
         service^.animation_max_latency_ms =
             max(service^.animation_max_latency_ms, latency_ms)
+        kind := evidence_trace.Kind.Animation_Tick_Committed
+        if slot^.show_completed {
+            kind = .Animation_Completed_Committed
+        }
         _ = evidence_session.session_record(
             &state^.evidence_session, &state^.evidence_ring, {
                 lane = .Transport,
-                kind = .Animation_Tick_Committed,
+                kind = kind,
                 correlation_kind = .Animation_Tick,
                 correlation = slot^.sequence,
                 generation = service^.animation_generation,
@@ -456,10 +480,14 @@ record_animation_tick_outcome :: proc(
         return
     }
     service^.animation_ticks_stale += 1
+    kind := evidence_trace.Kind.Animation_Tick_Rejected
+    if slot^.show_completed {
+        kind = .Animation_Completed_Rejected
+    }
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
             lane = .Transport,
-            kind = .Animation_Tick_Rejected,
+            kind = kind,
             correlation_kind = .Animation_Tick,
             correlation = slot^.sequence,
             generation = service^.animation_generation,
@@ -509,7 +537,11 @@ animation_tick_matches_current :: proc(
     service: ^Julia_Runtime_Service,
     slot: ^Animation_Tick_Slot) -> bool {
 
-    return slot^.generation == service^.animation_generation &&
+    completion_current := !slot^.show_completed ||
+        (state^.ui_runtime.playback.completion_requested &&
+         state^.ui_runtime.playback.construction_paused)
+    return completion_current &&
+        slot^.generation == service^.animation_generation &&
         slot^.sequence > service^.animation_last_committed_sequence &&
         !state^.julia_interface^.pending_animation_reset &&
         slot^.animation == state^.julia_interface^.current_animation &&
@@ -4198,9 +4230,17 @@ julia_runtime_worker :: proc(data: rawptr) {
 animation_tick_request_evidence :: proc(
     service: ^Julia_Runtime_Service, decoded: Julia_Decoded_Control,
     event: ^Julia_Event) -> evidence_trace.Event {
+    kind := evidence_trace.Kind.Animation_Tick_Accepted if event.succeeded else
+        .Animation_Tick_Rejected
+    if decoded.slot_index >= 0 &&
+        decoded.slot_index < len(service^.animation_tick_slots) &&
+        service^.animation_tick_slots[decoded.slot_index].show_completed {
+        kind = .Animation_Completed_Accepted if event.succeeded else
+            .Animation_Completed_Rejected
+    }
     return {
         lane = .Transport,
-        kind = event.succeeded ? .Animation_Tick_Accepted : .Animation_Tick_Rejected,
+        kind = kind,
         correlation_kind = .Runtime_Request,
         correlation = decoded.request_id,
         generation = service.animation_generation,

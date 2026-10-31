@@ -555,18 +555,20 @@ animation_controls_apply_existing_actions :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     ji: bridgemodel.Euclid_Julia_Interface = {}
     state^.julia_interface = &ji
+    state^.ui_runtime.playback.construction_paused = true
     state^.ui_runtime.playback.simulation_paused = true
 
     uianimation.apply_animation_control_hit(state, {
         refresh_requested = true,
     })
-    testing.expect(t, !state^.ui_runtime.playback.simulation_paused)
+    testing.expect(t, !state^.ui_runtime.playback.construction_paused)
+    testing.expect(t, state^.ui_runtime.playback.simulation_paused)
     testing.expect(t, ji.pending_animation_reset)
 
     uianimation.apply_animation_control_hit(state, {
         toggle_pause_requested = true,
     })
-    testing.expect(t, state^.ui_runtime.playback.simulation_paused)
+    testing.expect(t, state^.ui_runtime.playback.construction_paused)
 }
 
 // Verify drawing sound is a normal default-off Settings row and sole user gate.

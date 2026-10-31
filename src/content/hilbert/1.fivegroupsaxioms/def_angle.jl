@@ -316,6 +316,37 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    OdinJuliaBridge.hide_point(state_ptr, state.point_o)
+    OdinJuliaBridge.hide_point(state_ptr, state.half_ray_h_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.half_ray_k_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.marker_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_o)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_h)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_k)
+    EuclidAnimations.complete_point(state_ptr, PointO, PointMaxBrush, PointOColor,
+        state.point_o)
+    EuclidAnimations.complete_line(state_ptr, HalfRayHStart, HalfRayHEnd;
+        penbrush=LineMaxBrush, pencolor=HalfRayHColor, line_host_id=state.half_ray_h_host,
+        line_joint1_id=state.half_ray_h_joint1, line_joint2_id=state.half_ray_h_joint2)
+    EuclidAnimations.complete_line(state_ptr, HalfRayKStart, HalfRayKEnd;
+        penbrush=LineMaxBrush, pencolor=HalfRayKColor, line_host_id=state.half_ray_k_host,
+        line_joint1_id=state.half_ray_k_joint1, line_joint2_id=state.half_ray_k_joint2)
+    EuclidAnimations.complete_circle(state_ptr, PointO, MarkerStart, AngleTheta,
+        MarkerRadius;
+        brush=MarkerBrush, color=MarkerColor, marker_host_id=state.marker_host)
+    OdinJuliaBridge.show_point(state_ptr, state.label_o)
+    OdinJuliaBridge.show_point(state_ptr, state.label_h)
+    OdinJuliaBridge.show_point(state_ptr, state.label_k)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -325,6 +356,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

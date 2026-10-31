@@ -162,6 +162,7 @@ prepare_formation_targets :: proc(
     ps: ^particlemodel.Particle_System, state: ^core.Euclid_General_State,
     encoder: ^native.Draw_Encoder) {
     scale := projection.viewport_scale_factor(state^.iso_scale)
+    particles.prepare_completed_arrival(ps, &state^.shape_world.draw_cache)
     _ = particles.formation_prepare_region_targets(
         ps, &state^.shape_world, scale)
     _ = particles.formation_prepare_sweep_targets(

@@ -34,9 +34,11 @@ Setting_Id :: enum u8 {
     Interface_Control_Size,
     Interface_Show_Magnifier,
     Interface_Magnifier_Input_Lock,
+    Interface_Enable_Particle_Effects,
+    Animation_Open_Completed,
 }
 
-SETTING_COUNT :: 22
+SETTING_COUNT :: 24
 Setting_Set :: bit_set[Setting_Id; u32]
 ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Window_Width,
@@ -61,6 +63,8 @@ ALL_SETTING_IDS :: [SETTING_COUNT]Setting_Id{
     .Interface_Control_Size,
     .Interface_Show_Magnifier,
     .Interface_Magnifier_Input_Lock,
+    .Interface_Enable_Particle_Effects,
+    .Animation_Open_Completed,
 }
 
 Window_Mode :: enum u8 {
@@ -124,6 +128,8 @@ SETTING_DEFINITIONS :: [SETTING_COUNT]Setting_Definition{
     {.Interface_Control_Size, "interface", "control_size_percent", .Integer},
     {.Interface_Show_Magnifier, "interface", "show_magnifier", .Boolean},
     {.Interface_Magnifier_Input_Lock, "interface", "magnifier_input_lock", .Boolean},
+    {.Interface_Enable_Particle_Effects, "interface", "enable_particle_effects", .Boolean},
+    {.Animation_Open_Completed, "animation", "open_completed", .Boolean},
 }
 
 Setting_Value :: struct {
@@ -153,6 +159,7 @@ Drawing_Preferences :: struct {
 }
 
 Interface_Preferences :: struct {
+    enable_particle_effects: bool,
     display_fps: bool,
     reduce_motion: bool,
     increased_contrast: bool,
@@ -168,6 +175,7 @@ Terminal_Preferences :: struct {
 }
 
 Animation_Preferences :: struct {
+    open_completed: bool,
     scale_percent: int,
     monochrome: bool,
 }
@@ -220,6 +228,7 @@ default_preferences :: proc() -> Preferences {
             sound_enabled = false,
         },
         interface = {
+            enable_particle_effects = true,
             display_fps = false,
             reduce_motion = false,
             increased_contrast = false,
@@ -292,7 +301,8 @@ valid_setting_id :: proc(id: Setting_Id) -> bool {
          .Interface_Text_Size, .Persist_Terminal_History,
          .Animation_Scale_Percent, .Animation_Monochrome,
          .Interface_Hover_Focus, .Interface_Control_Size,
-         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
+         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock,
+         .Interface_Enable_Particle_Effects, .Animation_Open_Completed:
         return true
     }
     return false
@@ -324,7 +334,8 @@ valid_setting_value :: proc(id: Setting_Id, value: Setting_Value) -> bool {
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
          .Interface_Increased_Contrast, .Persist_Terminal_History,
          .Animation_Monochrome, .Interface_Hover_Focus,
-         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
+         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock,
+         .Interface_Enable_Particle_Effects, .Animation_Open_Completed:
         return value.kind == .Boolean
     case .Drawing_Dust_Limit:
         return value.kind == .Integer && valid_dust_limit(i64(value.integer))
@@ -361,6 +372,10 @@ apply_boolean_preference :: proc(
         preferences^.interface.display_fps = value
     case .Interface_Reduce_Motion:
         preferences^.interface.reduce_motion = value
+    case .Interface_Enable_Particle_Effects:
+        preferences^.interface.enable_particle_effects = value
+    case .Animation_Open_Completed:
+        preferences^.animation.open_completed = value
     case .Interface_Increased_Contrast:
         preferences^.interface.increased_contrast = value
     case .Interface_Hover_Focus:
@@ -495,6 +510,10 @@ read_boolean_preference :: proc(
         return boolean_value(preferences.interface.display_fps)
     case .Interface_Reduce_Motion:
         return boolean_value(preferences.interface.reduce_motion)
+    case .Interface_Enable_Particle_Effects:
+        return boolean_value(preferences.interface.enable_particle_effects)
+    case .Animation_Open_Completed:
+        return boolean_value(preferences.animation.open_completed)
     case .Interface_Increased_Contrast:
         return boolean_value(preferences.interface.increased_contrast)
     case .Interface_Hover_Focus:
@@ -522,7 +541,8 @@ setting_value :: proc(preferences: Preferences, id: Setting_Id) -> Setting_Value
          .Drawing_Sound_Enabled, .Interface_Display_Fps, .Interface_Reduce_Motion,
          .Interface_Increased_Contrast, .Persist_Terminal_History,
          .Animation_Monochrome, .Interface_Hover_Focus,
-         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock:
+         .Interface_Show_Magnifier, .Interface_Magnifier_Input_Lock,
+         .Interface_Enable_Particle_Effects, .Animation_Open_Completed:
         return read_boolean_preference(preferences, id)
     case .Window_Mode:
         return window_mode_value(preferences.window.mode)

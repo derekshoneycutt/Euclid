@@ -118,7 +118,8 @@ run_gif_capture_frame :: proc(
         return
     }
     state^.gif_capture.recording_presentations += 1
-    if state^.ui_runtime.playback.simulation_paused {
+    if state^.ui_runtime.playback.simulation_paused ||
+        state^.ui_runtime.playback.construction_paused {
         state^.gif_capture.paused_presentations += 1
         return
     }
@@ -603,6 +604,7 @@ prepare_sdl_simulation_frame :: proc(
     native.sdl_chalk_audio_update(ctx.chalk_audio, &state^.chalk_audio,
         state^.user_drawing_sound_enabled,
         state^.ui_runtime.playback.simulation_paused ||
+            state^.ui_runtime.playback.construction_paused ||
             state^.ui_runtime.playback.animation_policy_paused,
         frame_dt)
     viewsimulation.run_parallel_frame_preparation_after_ui(state, alpha, compile_dynview)
@@ -616,6 +618,12 @@ encode_sdl_world_geometry :: proc(
         encoder, state^.ui_runtime.layout.ui_regions.world_rect)
     world.prepare_formation_targets(&state^.particle_system, state, encoder)
     world.draw_encoded_drawing_surface(state, encoder)
+    if state^.ui_runtime.playback.completion_initial {
+        world.encode_low_particles(&state^.particle_system, state, encoder,
+            ctx.draw_runtime^.dust_atlas.handle)
+        _ = native.draw_encoder_pop_scissor(encoder)
+        return
+    }
     world.draw_encoded_cached_basic_pass(state, encoder, false)
     world.encode_low_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)

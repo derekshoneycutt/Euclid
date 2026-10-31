@@ -1,0 +1,8 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_setting":{"key":"interface.enable_particle_effects","value":false}}
+{"assert_setting":{"key":"animation.open_completed","value":true}}
+{"assert_state":"particle_effects_disabled"}
+{"wait_event":"animation_completed","timeout_ms":10000}
+{"assert_state":"construction_paused"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

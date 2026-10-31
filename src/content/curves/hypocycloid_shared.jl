@@ -82,6 +82,17 @@ function clean(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.hide_compass(state_ptr)
 end
 
+"""Establish the full curve directly after dispersing its previous visible material."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    OdinJuliaBridge.hide_point(state_ptr, state.curve_id)
+    OdinJuliaBridge.set_trochoid_frontier(state_ptr, state.curve_id, FinishParameter)
+    OdinJuliaBridge.show_point(state_ptr, state.curve_id)
+    clean(state_ptr)
+    return true
+end
+
 """Advance one guide, compass, frontier, and particle drawing step."""
 function advance_draw_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
     timer::Float32, dt::Float32)
@@ -144,6 +155,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

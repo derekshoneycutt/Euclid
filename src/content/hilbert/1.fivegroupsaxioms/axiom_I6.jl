@@ -281,6 +281,32 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    OdinJuliaBridge.hide_point(state_ptr, state.point_a)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_b)
+    OdinJuliaBridge.hide_point(state_ptr, state.plane_host)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_alpha)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_beta)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_a)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_b)
+    EuclidAnimations.complete_point(state_ptr,
+        PointA, PointMaxBrush, PointAColor, state.point_a)
+    EuclidAnimations.complete_point(state_ptr,
+        PointB, PointMaxBrush, PointBColor, state.point_b)
+    OdinJuliaBridge.show_point(state_ptr, state.plane_host)
+    OdinJuliaBridge.show_point(state_ptr, state.label_alpha)
+    OdinJuliaBridge.show_point(state_ptr, state.label_beta)
+    OdinJuliaBridge.show_point(state_ptr, state.label_a)
+    OdinJuliaBridge.show_point(state_ptr, state.label_b)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -290,6 +316,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

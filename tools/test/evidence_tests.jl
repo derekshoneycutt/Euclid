@@ -59,6 +59,16 @@ end
         ["vertical", "horizontal"]
     @test "animation_cycle_boundary" in EuclidEvidence.scenario_schema().events
     @test "animation_tick_committed" in EuclidEvidence.scenario_schema().events
+    @test all(action -> action in EuclidEvidence.scenario_schema().actions,
+        ["pause_construction", "resume_construction", "show_completed"])
+    @test all(event -> event in EuclidEvidence.scenario_schema().events,
+        ["animation_completed", "animation_completion_failed"])
+    @test all(state -> state in EuclidEvidence.scenario_schema().states,
+        ["construction_paused", "construction_playing", "animation_completed",
+            "animation_completion_failed", "particle_effects_disabled"])
+    @test EuclidEvidence.EVENT_NAMES[UInt16(69)] == "animation_completed"
+    @test UInt16(68) in EuclidEvidence.REQUEST_EVENT_KINDS
+    @test UInt16(70) in EuclidEvidence.REQUEST_EVENT_KINDS
     @test "animation_loaded" in EuclidEvidence.scenario_schema().events
     @test "dynview_published" in EuclidEvidence.scenario_schema().events
     @test "presentation_cleared" in EuclidEvidence.scenario_schema().events

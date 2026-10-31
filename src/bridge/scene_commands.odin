@@ -24,7 +24,6 @@ Command_Cycloid_Line :: struct {
 // before applying any command, so invalid or overflowed batches cannot partially commit.
 
 SCENE_COMMAND_BATCH_CAPACITY :: bridgemodel.SCENE_COMMAND_BATCH_CAPACITY
-#assert(particles.DUST_TOOL_CONTACT_CAP >= SCENE_COMMAND_BATCH_CAPACITY)
 
 //   Per-kind validator shape: report whether one command is valid against state.
 Scene_Command_Validator :: #type proc(

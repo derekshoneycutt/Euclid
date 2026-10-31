@@ -44,6 +44,8 @@ const EVENT_NAMES = Dict{UInt16,String}(
     62 => "animation_selected", 63 => "animation_tick_accepted",
     64 => "animation_tick_committed", 65 => "animation_tick_rejected",
     66 => "animation_cycle_boundary", 67 => "animation_loaded",
+    68 => "animation_completed_accepted", 69 => "animation_completed",
+    70 => "animation_completion_failed",
     120 => "scene_batch_published",
     121 => "scene_batch_committed", 122 => "scene_batch_rejected",
     123 => "scene_command_rejected", 180 => "point_position_committed",
@@ -80,12 +82,13 @@ const EVENT_NAMES = Dict{UInt16,String}(
     562 => "settings_save_failed")
 
 const POINT_EVENT_KINDS = Set(UInt16[180, 181, 182])
-const REQUEST_EVENT_KINDS = Set(UInt16[65, 122, 123, 380, 381])
+const REQUEST_EVENT_KINDS = Set(UInt16[65, 68, 70, 122, 123, 380, 381])
 const HANDLE_EVENT_KINDS = Set(UInt16[421, 423])
 
 const SCENARIO_ACTIONS = [
     "reset_animation", "select_animation", "reload_runtime",
     "inject_reload_failure", "pause_simulation",
+    "pause_construction", "resume_construction", "show_completed",
     "resume_simulation", "set_view_scroll", "set_splitters", "screenshot",
     "set_library_search", "apply_library_search_suggestion",
     "clear_library_search", "favorite_control", "library_placement", "assert_favorites",
@@ -117,6 +120,7 @@ const SCENARIO_ACTION_PAYLOADS = (
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
     "animation_selected", "animation_tick_committed",
+    "animation_completed", "animation_completion_failed",
     "animation_cycle_boundary", "animation_loaded", "scene_batch_committed",
     "constraint_solve_completed", "presentation_cleared",
     "presentation_superseded", "dynview_published",
@@ -131,6 +135,8 @@ const SCENARIO_EVENTS = [
 const SCENARIO_STATES = [
     "runtime_ready", "runtime_idle", "animation_idle",
     "simulation_paused", "simulation_running", "dynview_enabled",
+    "construction_paused", "construction_playing",
+    "animation_completed", "animation_completion_failed", "particle_effects_disabled",
     "gif_active", "gif_idle", "library_search_idle",
     "library_search_has_matches", "settings_saved", "settings_saving",
     "tree_transitioning", "tree_settled",

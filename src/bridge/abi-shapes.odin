@@ -860,7 +860,7 @@ shape_emit_hide_departure :: proc(
     entity: shapemodel.Shape_Entity,
     style: shapemodel.Shape_Render_Style,
     kick_dust: bool, opacity: f32) -> bool {
-    if !(opacity > 0) {
+    if state^.particle_system.effects_disabled || !(opacity > 0) {
         return false
     }
     if shapemodel.shape_component_contains(
@@ -1149,7 +1149,8 @@ bridge_label_ink_world_position :: proc(
 // Emit one bulk clear from last-presented geometry and freshly copied label ink.
 emit_shape_world_clear_departures :: proc(
     state: ^core.Euclid_General_State) -> bool {
-    if state == nil || state^.particle_system.use_max_dust_particles < 1 {
+    if state == nil || state^.particle_system.effects_disabled ||
+        state^.particle_system.use_max_dust_particles < 1 {
         return false
     }
     particles.kick_existing_dust(&state^.particle_system)

@@ -23,6 +23,7 @@ import strings "core:strings"
 import time "core:time"
 import utf8 "core:unicode/utf8"
 import projection "../view/world/projection"
+import capturemodel "../view/capture/model"
 
 TERMINAL_ANIMATION_NAME :: "Terminal"
 ANIMATION_LOOKUP_INITIAL_RESERVE :: 512
@@ -152,7 +153,60 @@ schedule_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) {
             return
         }
     }
+    if state^.ui_runtime.playback.completion_requested {
+        _ = try_request_animation_completed(state)
+        return
+    }
+    if state^.ui_runtime.playback.construction_paused ||
+        state^.ui_runtime.playback.animation_policy_paused {
+        clear_animation_accumulated_time(state^.julia_runtime_service)
+        audio.set_drawing_activity(&state^.chalk_audio, false)
+        return
+    }
     _ = try_request_animation_tick(state, dt)
+}
+
+// Drop paused elapsed time without changing committed authored progress.
+clear_animation_accumulated_time :: proc(service: ^Julia_Runtime_Service) {
+    if service != nil {
+        service^.animation_accumulated_dt = 0
+        service^.animation_accumulated_authored_dt = 0
+        service^.animation_accumulated_accelerated = false
+    }
+}
+
+// Submit a distinct authored completion using the existing bounded scene-result slot.
+try_request_animation_completed :: proc(state: ^core.Euclid_General_State) -> bool {
+    service := state^.julia_runtime_service
+    if service == nil || service^.animation_tick_pending {
+        return false
+    }
+    if !state^.ui_runtime.playback.construction_paused ||
+        state^.julia_interface^.current_animation == nil ||
+        state^.julia_interface^.current_animation^.node_kind == .Terminal {
+        state^.ui_runtime.playback.completion_requested = false
+        state^.ui_runtime.playback.completion_failed = true
+        log.warn("animation_completion_rejected_invalid_transport")
+        return false
+    }
+    if capturemodel.gif_capture_locks_playback_rate(
+        state^.gif_capture_status.gif_capture_phase,
+        state^.gif_capture_status.save_gif_requested) {
+        state^.ui_runtime.playback.completion_requested = false
+        state^.ui_runtime.playback.completion_failed = true
+        log.warn("animation_completion_rejected_during_capture")
+        return false
+    }
+    index := reserve_animation_tick_slot(service)
+    if index < 0 {
+        return false
+    }
+    clear_animation_accumulated_time(service)
+    service^.animation_tick_sequence += 1
+    slot := &service^.animation_tick_slots[index]
+    fill_animation_tick_slot(state, slot, 0, 0, false)
+    slot^.show_completed = true
+    return submit_animation_tick_slot(service, slot, index, 0)
 }
 
 //   Run selection, reset, or reload only after asynchronous work is quiescent.
@@ -161,6 +215,10 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     if service == nil || service^.animation_tick_pending {
         return false
     }
+    selecting := state^.julia_interface^.selected_animation !=
+        state^.julia_interface^.current_animation
+    reopening_completed := !selecting && state^.ui_runtime.playback.completed &&
+        !state^.julia_interface^.pending_animation_reset
     service^.reload_state = .Quiescing
     if !invoke_animation_lifecycle_transaction(state) {
         if service^.reload_state == .Quiescing {
@@ -180,9 +238,27 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     service^.animation_progress = 0
     particles.formation_reset_generation(
         &state^.particle_system, service^.animation_generation)
+    restore_animation_completion_intent(state, selecting, reopening_completed)
     release_completed_animation_ticks(service)
     route_retained_display_view_content(service)
     return true
+}
+
+// Restore held completion after reload or apply completed-first to a new selection.
+restore_animation_completion_intent :: proc(
+    state: ^core.Euclid_General_State, selecting, reopening_completed: bool) {
+    playback := &state^.ui_runtime.playback
+    playback^.completed = false
+    playback^.completion_failed = false
+    playback^.completion_requested = reopening_completed ||
+        (selecting && state^.ui_runtime.preferences.values.animation.open_completed &&
+         state^.julia_interface^.current_animation^.node_kind != .Terminal)
+    playback^.completion_initial = playback^.completion_requested
+    if selecting {
+        playback^.construction_paused = playback^.completion_requested
+    } else if playback^.completion_requested {
+        playback^.construction_paused = true
+    }
 }
 
 //   Verify one typed request owns the pending lifecycle transaction incarnation.
@@ -458,7 +534,9 @@ generate_animation_tick :: proc(
     slot^.scene_batch.animation_progress = slot^.effective_progress
     defer end_scene_command_batch(state)
     defer state^.animation_query_snapshot_target = nil
-    call_global_euclid_loop(state, slot.maintenance_dt)
+    if !slot^.show_completed {
+        call_global_euclid_loop(state, slot.maintenance_dt)
+    }
     animation := slot^.animation
     callback_succeeded := animation == nil ||
         invoke_actor_animation_tick(service, host, request, slot, animation)
@@ -482,6 +560,8 @@ make_animation_tick_payload :: proc(
         slot_index = request.handle.index,
         reservation_generation = request.handle.reservation_generation,
         dt = slot^.dt,
+        operation = i32(bridgemodel.Animation_Operation.Show_Completed) if
+            slot^.show_completed else i32(bridgemodel.Animation_Operation.Tick),
     }
 }
 

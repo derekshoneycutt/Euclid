@@ -77,6 +77,9 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Magnifies a view of the completed frame near the pointer. It does not change hit targets.",
     "Lock magnifier to text input",
     "Shows the magnifier only at a visible focused text caret. It hides when no eligible input is focused.",
+    "Enable particle effects", "Open animations at their completed figure",
+    "Turning this off clears all particles and makes geometry and text immediately readable. Pause holds construction, not dust.",
+    "Applies to the next animation you select. Play disperses its completed figure and starts construction at your remembered speed.",
     "Output scale", "Capture every", "Playback timing", "Animation",
     "Recorded", "Use animation timing", "Use recorded timing", "Downsample", "Path",
     "Saved GIF path", "100%", "50%", "33%", "25%", "frame", "{count} frames",
@@ -92,6 +95,8 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Hide animation controls", "Show animation controls",
     "Playback speed: 1x. Change to 2x", "Playback speed: 2x. Change to 4x",
     "Playback speed: 4x. Change to 1x", "Playback speed: 1x. Locked during GIF capture",
+    "Show completed figure", "Completed figure", "Play animation from beginning",
+    "Could not show completed figure",
 }
 
 // Build a complete message fixture with a stable arena owner for consumer tests.

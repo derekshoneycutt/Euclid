@@ -650,6 +650,68 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Retire current ink before changing the completed composition."""
+function complete_ink(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.circle.host)
+    OdinJuliaBridge.hide_point(state_ptr, state.points[1])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[2])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[3])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[4])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[5])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[6])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[7])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[8])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[9])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[10])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[11])
+    OdinJuliaBridge.hide_point(state_ptr, state.points[12])
+end
+
+"""Establish the completed construction's point locations and ink."""
+function complete_points(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_point(state_ptr, Point1, PointMaxBrush, Point1Color,
+        state.points[1])
+    EuclidAnimations.complete_point(state_ptr, Point2, PointMaxBrush, Point2Color,
+        state.points[2])
+    EuclidAnimations.complete_point(state_ptr, Point3, PointMaxBrush, Point3Color,
+        state.points[3])
+    EuclidAnimations.complete_point(state_ptr, Point4, PointMaxBrush, Point4Color,
+        state.points[4])
+    EuclidAnimations.complete_point(state_ptr, Point5, PointMaxBrush, Point5Color,
+        state.points[5])
+    EuclidAnimations.complete_point(state_ptr, Point6, PointMaxBrush, Point6Color,
+        state.points[6])
+    EuclidAnimations.complete_point(state_ptr, Point7, PointMaxBrush, Point7Color,
+        state.points[7])
+    EuclidAnimations.complete_point(state_ptr, Point8, PointMaxBrush, Point8Color,
+        state.points[8])
+    EuclidAnimations.complete_point(state_ptr, Point9, PointMaxBrush, Point9Color,
+        state.points[9])
+    EuclidAnimations.complete_point(state_ptr, Point10, PointMaxBrush, Point10Color,
+        state.points[10])
+    EuclidAnimations.complete_point(state_ptr, Point11, PointMaxBrush, Point11Color,
+        state.points[11])
+    EuclidAnimations.complete_point(state_ptr, Point12, PointMaxBrush, Point12Color,
+        state.points[12])
+end
+
+
+
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    complete_ink(state_ptr, state)
+    complete_points(state_ptr, state)
+    EuclidAnimations.complete_circle(state_ptr, CenterPoint, CircleStartPoint,
+        CircleSweepTheta, Radius; brush=CircleBrush, color=CircleColor,
+        marker_host_id=state.circle.host)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -659,6 +721,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

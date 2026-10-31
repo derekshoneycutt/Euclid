@@ -53,7 +53,7 @@ increased_contrast_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T)
     node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
     testing.expect_value(t, node.id, id)
     testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Checkbox)
-    testing.expect_value(t, node.traversal_order, u32(2))
+    testing.expect_value(t, node.traversal_order, u32(4))
     testing.expect(t, .Enabled in node.states && .Checked in node.states)
     testing.expect(t, .Toggle in node.actions && .Focus in node.actions)
     testing.expect_value(t, node.clip_bounds, ctx.panel)
@@ -99,7 +99,7 @@ show_magnifier_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T) {
     snapshot := uisemantics.semantic_staging_snapshot(semantic)
     node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
     testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Checkbox)
-    testing.expect_value(t, node.traversal_order, u32(4))
+    testing.expect_value(t, node.traversal_order, u32(6))
     testing.expect(t, .Enabled in node.states && .Checked in node.states)
     testing.expect(t, .Toggle in node.actions && .Focus in node.actions)
     testing.expect_value(t, node.clip_bounds, ctx.panel)
@@ -173,7 +173,7 @@ persist_history_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T) {
     snapshot := uisemantics.semantic_staging_snapshot(semantic)
     node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
     testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Checkbox)
-    testing.expect_value(t, node.traversal_order, u32(7))
+    testing.expect_value(t, node.traversal_order, u32(9))
     testing.expect(t, .Enabled in node.states && .Checked in node.states)
     testing.expect(t, .Toggle in node.actions && .Focus in node.actions)
 }
@@ -213,7 +213,7 @@ monochrome_checkbox_registers_and_consumes_toggle :: proc(t: ^testing.T) {
     snapshot := uisemantics.semantic_staging_snapshot(semantic)
     node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
     testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Checkbox)
-    testing.expect_value(t, node.traversal_order, u32(6))
+    testing.expect_value(t, node.traversal_order, u32(8))
     testing.expect(t, .Toggle in node.actions && .Focus in node.actions)
 }
 
@@ -266,7 +266,7 @@ magnifier_input_lock_checkbox_requires_magnifier_and_consumes_toggle :: proc(
     testing.expect(t, prepared.magnifier_input_lock.checked_out)
     snapshot = uisemantics.semantic_staging_snapshot(semantic)
     node = snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
-    testing.expect_value(t, node.traversal_order, u32(5))
+    testing.expect_value(t, node.traversal_order, u32(7))
     testing.expect(t, .Enabled in node.states && .Checked in node.states)
 }
 
@@ -527,7 +527,9 @@ magnifier_input_lock_programmatic_edit_queues_persisted_value :: proc(
 @(test)
 increased_contrast_layout_and_platform_notices_are_independent :: proc(t: ^testing.T) {
     rows := settings_view_layout_rows({0, 0, 600, 700})
-    testing.expect_value(t, rows.increased_contrast_y - rows.reduce_motion_y,
+    testing.expect_value(t, rows.increased_contrast_y - rows.open_completed_y,
+        f32(theme.SETTINGS_TOGGLE_ROW_GAP))
+    testing.expect_value(t, rows.open_completed_y - rows.enable_particle_effects_y,
         f32(theme.SETTINGS_TOGGLE_ROW_GAP))
     baseline := settings_scroll_content_height(false, false)
     testing.expect_value(t, settings_scroll_content_height(false, true) - baseline,
@@ -761,7 +763,7 @@ animation_scale_slider_registers_discrete_accessible_range :: proc(t: ^testing.T
     snapshot := uisemantics.semantic_staging_snapshot(semantic)
     node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
     testing.expect_value(t, node.role, viewmodel.Ui_Node_Role.Slider)
-    testing.expect_value(t, node.traversal_order, u32(7))
+    testing.expect_value(t, node.traversal_order, u32(9))
     testing.expect_value(t, node.numeric_range.minimum, f64(50))
     testing.expect_value(t, node.numeric_range.maximum, f64(200))
     testing.expect_value(t, node.numeric_range.step, f64(5))

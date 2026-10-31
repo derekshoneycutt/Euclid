@@ -282,6 +282,34 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
+"""Show both complete circles and the resting triangle without changing entry-specific text."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    for line in state.lines
+        OdinJuliaBridge.hide_point(state_ptr, line.host)
+    end
+    for circle in state.circles
+        OdinJuliaBridge.hide_point(state_ptr, circle)
+    end
+    set_triangle_pose!(state_ptr, state, ReflectionStart)
+    for i in 1:3
+        OdinJuliaBridge.set_point_brush(state_ptr, state.lines[i].host, Brush)
+        OdinJuliaBridge.set_point_color(state_ptr, state.lines[i].host, SideColors[i])
+        OdinJuliaBridge.show_point(state_ptr, state.lines[i].host)
+    end
+    for i in 1:2
+        angle = i == 1 ? 7f0 * π / 4f0 : 3f0 * π / 4f0
+        OdinJuliaBridge.set_arc_geometry(state_ptr,
+            state.circles[i], Radius, angle, CircleSweep)
+        OdinJuliaBridge.set_point_brush(state_ptr, state.circles[i], Brush)
+        OdinJuliaBridge.show_point(state_ptr, state.circles[i])
+    end
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
 """Dispatch one bridge-stable lifecycle operation for the null animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -291,6 +319,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

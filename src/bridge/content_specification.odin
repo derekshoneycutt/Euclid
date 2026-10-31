@@ -48,7 +48,8 @@ animation_content_invocation_value :: proc(
         (^contentdata.Animation_Content_Specification, u64) {
     service := state^.julia_runtime_service
     if snapshot := state^.animation_query_snapshot_target; snapshot != nil {
-        if operation != .Tick && operation != .Presentation_Selection_Changed {
+        if operation != .Tick && operation != .Presentation_Selection_Changed &&
+            operation != .Show_Completed {
             return nil, 0
         }
         return &snapshot^.content_specification, snapshot^.animation_generation

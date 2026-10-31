@@ -307,6 +307,44 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    for side_index in eachindex(SideStarts)
+        OdinJuliaBridge.hide_point(state_ptr, state.lines[side_index].host)
+    end
+    for marker_index in eachindex(MarkerCenters)
+        OdinJuliaBridge.hide_point(state_ptr, state.markers[marker_index].host)
+    end
+    for side_index in eachindex(SideStarts)
+        EuclidAnimations.complete_line(
+            state_ptr,
+            SideStarts[side_index],
+            SideEnds[side_index];
+            penbrush=TriangleMaxBrush,
+            pencolor=SideColors[side_index],
+            line_host_id=state.lines[side_index].host,
+            line_joint1_id=state.lines[side_index].joint1,
+            line_joint2_id=state.lines[side_index].joint2)
+    end
+    for marker_index in eachindex(MarkerCenters)
+        EuclidAnimations.complete_circle(
+            state_ptr,
+            MarkerCenters[marker_index],
+            MarkerStarts[marker_index],
+            MarkerSweeps[marker_index],
+            MarkerRadius;
+            brush=MarkerBrush,
+            color=MarkerColors[marker_index],
+            marker_host_id=state.markers[marker_index].host)
+    end
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -316,6 +354,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

@@ -6,9 +6,10 @@
 {"key":"tab"}
 {"assert_focus":"animation_pause"}
 {"key":"space"}
-{"assert_state":"simulation_paused"}
-{"key":"space"}
+{"assert_state":"construction_paused"}
 {"assert_state":"simulation_running"}
+{"key":"space"}
+{"assert_state":"construction_playing"}
 {"key":"tab"}
 {"assert_focus":"animation_speed"}
 {"key":"tab"}

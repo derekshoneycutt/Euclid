@@ -189,6 +189,21 @@ before constraints can consume it. A result that finishes after a boundary waits
 later one; stale generations or sequences are rejected. Under overload, elapsed work is
 coalesced rather than growing an unbounded backlog.
 
+Transport construction Pause is distinct from policy suspension and full simulation
+freeze. Lifecycle servicing continues while construction ticks are held, and paused
+elapsed time is discarded rather than coalesced into Resume. A distinct
+`ANIMATION_OPERATION_SHOW_COMPLETED` operation reuses the bounded query/result slot,
+sequence checks and transactional scene publication, without advancing authored time
+or invoking the global tick loop. It has separate completion evidence, not an ordinary
+tick or watched-cycle event. Selection, reset and reload invalidate stale results.
+Completed-first withholds initial geometry/tools until publication; failure never
+falls back to autoplay.
+
+Scene batches reserve 256 commands so dense completed figures can publish atomically.
+The independent immutable-state write bound remains 64. Tool-contact admission retains
+its own 64-entry bound and is preflighted from the batch's actual contact-producing
+commands; increasing geometry capacity does not permit contact-queue overflow.
+
 This preserves a synchronous **commit contract** without making Julia execution
 synchronous with every frame. Rendering never calls Julia and never waits for a tick
 callback. It consumes canonical state after owner-controlled publication and joined

@@ -921,6 +921,11 @@ Ui_Rendering_Control_State :: struct {
 // Ui_Playback_Control_State retains display-owned pause controls.
 Ui_Playback_Control_State :: struct {
     simulation_paused: bool,
+    construction_paused: bool,
+    completed: bool,
+    completion_requested: bool,
+    completion_failed: bool,
+    completion_initial: bool,
     animation_policy_paused: bool,
     controls_hidden: bool,
     rate: animationmodel.Playback_Rate,

@@ -917,6 +917,124 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
 end
 
 
+"""Retire current ink before changing the completed composition."""
+function complete_ink(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_abhost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_bchost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_cdhost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_dahost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_aprime_bprime_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_bprime_cprime_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_cprime_dprime_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_dprime_aprime_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_pid)
+    OdinJuliaBridge.hide_point(state_ptr, state.point_pprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_aphost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_pchost_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_aprime_pprime_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.edge_pprime_cprime_host_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_aid)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_bid)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_cid)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_did)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_aprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_bprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_cprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_dprime_id)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_pid)
+    OdinJuliaBridge.hide_point(state_ptr, state.label_pprime_id)
+end
+
+"""Establish the unprimed quadrilateral and its auxiliary edges."""
+function complete_unprimed_edges(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_line(state_ptr, PointA, PointB; penbrush=EdgeBrush,
+        pencolor=ColorAB, line_host_id=state.edge_abhost_id,
+        line_joint1_id=state.edge_abjoint1_id, line_joint2_id=state.edge_abjoint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointB, PointC; penbrush=EdgeBrush,
+        pencolor=ColorBC, line_host_id=state.edge_bchost_id,
+        line_joint1_id=state.edge_bcjoint1_id, line_joint2_id=state.edge_bcjoint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointC, PointD; penbrush=EdgeBrush,
+        pencolor=ColorCD, line_host_id=state.edge_cdhost_id,
+        line_joint1_id=state.edge_cdjoint1_id, line_joint2_id=state.edge_cdjoint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointD, PointA; penbrush=EdgeBrush,
+        pencolor=ColorDA, line_host_id=state.edge_dahost_id,
+        line_joint1_id=state.edge_dajoint1_id, line_joint2_id=state.edge_dajoint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointA, PointP; penbrush=EdgeBrush,
+        pencolor=ColorAux, line_host_id=state.edge_aphost_id,
+        line_joint1_id=state.edge_apjoint1_id, line_joint2_id=state.edge_apjoint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointP, PointC; penbrush=EdgeBrush,
+        pencolor=ColorAux, line_host_id=state.edge_pchost_id,
+        line_joint1_id=state.edge_pcjoint1_id, line_joint2_id=state.edge_pcjoint2_id)
+end
+
+"""Establish the primed quadrilateral and its auxiliary edges."""
+function complete_primed_edges(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    EuclidAnimations.complete_line(state_ptr, PointAPrime, PointBPrime;
+        penbrush=EdgeBrush, pencolor=ColorAB,
+        line_host_id=state.edge_aprime_bprime_host_id,
+        line_joint1_id=state.edge_aprime_bprime_joint1_id,
+        line_joint2_id=state.edge_aprime_bprime_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointBPrime, PointCPrime;
+        penbrush=EdgeBrush, pencolor=ColorBC,
+        line_host_id=state.edge_bprime_cprime_host_id,
+        line_joint1_id=state.edge_bprime_cprime_joint1_id,
+        line_joint2_id=state.edge_bprime_cprime_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointCPrime, PointDPrime;
+        penbrush=EdgeBrush, pencolor=ColorCD,
+        line_host_id=state.edge_cprime_dprime_host_id,
+        line_joint1_id=state.edge_cprime_dprime_joint1_id,
+        line_joint2_id=state.edge_cprime_dprime_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointDPrime, PointAPrime;
+        penbrush=EdgeBrush, pencolor=ColorDA,
+        line_host_id=state.edge_dprime_aprime_host_id,
+        line_joint1_id=state.edge_dprime_aprime_joint1_id,
+        line_joint2_id=state.edge_dprime_aprime_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointAPrime, PointPPrime;
+        penbrush=EdgeBrush, pencolor=ColorAux,
+        line_host_id=state.edge_aprime_pprime_host_id,
+        line_joint1_id=state.edge_aprime_pprime_joint1_id,
+        line_joint2_id=state.edge_aprime_pprime_joint2_id)
+    EuclidAnimations.complete_line(state_ptr, PointPPrime, PointCPrime;
+        penbrush=EdgeBrush, pencolor=ColorAux,
+        line_host_id=state.edge_pprime_cprime_host_id,
+        line_joint1_id=state.edge_pprime_cprime_joint1_id,
+        line_joint2_id=state.edge_pprime_cprime_joint2_id)
+end
+
+"""Expose final annotations and fills while hiding construction instruments."""
+function complete_labels(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    OdinJuliaBridge.show_point(state_ptr, state.label_aid)
+    OdinJuliaBridge.show_point(state_ptr, state.label_bid)
+    OdinJuliaBridge.show_point(state_ptr, state.label_cid)
+    OdinJuliaBridge.show_point(state_ptr, state.label_did)
+    OdinJuliaBridge.show_point(state_ptr, state.label_aprime_id)
+    OdinJuliaBridge.show_point(state_ptr, state.label_bprime_id)
+    OdinJuliaBridge.show_point(state_ptr, state.label_cprime_id)
+    OdinJuliaBridge.show_point(state_ptr, state.label_dprime_id)
+    OdinJuliaBridge.show_point(state_ptr, state.label_pid)
+    OdinJuliaBridge.show_point(state_ptr, state.label_pprime_id)
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+end
+
+
+
+"""Establish the authored final composition without replaying construction history."""
+function show_completed(state_ptr::Ptr{Cvoid})::Bool
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+    complete_ink(state_ptr, state)
+    EuclidAnimations.complete_point(state_ptr, PointP, PointBrush, ColorPointP,
+        state.point_pid)
+    EuclidAnimations.complete_point(state_ptr, PointPPrime, PointBrush, ColorPointP,
+        state.point_pprime_id)
+    complete_unprimed_edges(state_ptr, state)
+    complete_primed_edges(state_ptr, state)
+    complete_labels(state_ptr, state)
+    return true
+end
+
+
 """Dispatch one bridge-stable lifecycle operation for this animation."""
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
@@ -926,6 +1044,8 @@ function animation_entry(
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
         OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_SHOW_COMPLETED
+        return show_completed(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT

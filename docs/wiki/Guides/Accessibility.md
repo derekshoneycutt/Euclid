@@ -40,6 +40,29 @@ several technical details and historical records for re-evaluation upon returnin
 part of the project. Accessibility is currently a massive work-in-progress for Euclid,
 and limitations in AccessKit complicate what we want to document at the current stage.
 
+## Construction Playback And Particles
+
+Pause/Resume holds authored construction while loose dust, independent presentation
+effects and already-admitted reveals continue. It does not advance tools, authored
+phases or curve frontiers. While paused, fast-forward offers **Show completed figure**
+with an end-stop badge instead of changing the remembered 1x/2x/4x speed. Play from the
+completed form disperses it and starts again. Restart always starts ordinary playback.
+
+Two independent saved Settings checkboxes control this behavior:
+
+- **Enable particle effects** (`interface.enable_particle_effects`, default on).
+  Turning it off immediately clears world and presentation particles and resolves
+  their reveals into readable ink. Capacity and GPU-instancing choices are retained.
+  Turning it back on permits future effects without replaying old ones.
+- **Open animations at their completed figure** (`animation.open_completed`, default
+  off). Applies to subsequent catalog selections, not the current construction or
+  Terminal. The initial incomplete geometry/tools are not presented while the
+  completed form is prepared. Play starts construction at the remembered speed.
+
+Reduced interface motion and drawing sound remain separate preferences. Pending
+completion is not success: the held scene remains until transactional publication;
+failure leaves it held with localized transport help and correlated diagnostics.
+
 ## Scope
 
 ### Included Surface

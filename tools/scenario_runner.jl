@@ -265,6 +265,27 @@ function run_settings_acceptance(binary::String)
     return records
 end
 
+"""Verify completed-first and particle policy through committed rows and a fresh process."""
+function run_completed_preferences_acceptance(binary::String)
+    root = fresh_artifact_path("completed-preferences")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    records = NamedTuple[]
+    for (name, source) in (
+        ("save", "completed-preferences-persistence-acceptance.jsonl"),
+        ("restore", "settings/completed-restore.jsonl"))
+        record = run_scenario_launch(binary, "completed-preferences-$name",
+            joinpath("tools", "scenarios", source),
+            joinpath(root, name), ["--user-db=$database"])
+        validate_settings_launch(record)
+        push!(records, record)
+    end
+    rows = settings_database_rows(database)
+    require_setting_row(rows, "interface", "enable_particle_effects", 0)
+    require_setting_row(rows, "animation", "open_completed", 1)
+    return records
+end
+
 """Require explicit startup persistence failure to exit nonzero without changing rows."""
 function validate_settings_persist_rejection(binary, database, root, environment)
     baseline = sha256(read(database))
@@ -497,6 +518,8 @@ function run_named_scenario(binary::String, name::String)
         return run_terminal_history_acceptance(binary)
     elseif name == "settings-persistence-acceptance"
         return run_settings_acceptance(binary)
+    elseif name == "completed-preferences-persistence-acceptance"
+        return run_completed_preferences_acceptance(binary)
     elseif name == "collections-favorites-acceptance"
         return run_favorites_acceptance(binary)
     elseif name == "empty-collections-acceptance"
