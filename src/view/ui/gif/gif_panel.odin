@@ -14,9 +14,8 @@ import input "../../input"
 import uiwidgets "../widgets"
 import theme "../theme"
 import uisemantics "../semantics"
-import uiaccordion "../layout/accordion"
 import uisettings "../settings"
-import uilibrary "../library"
+import sharinglayout "../layout/sharing"
 
 GIF_PATH_INPUT_BOX_ID :: 6205
 GIF_PATH_LABEL_WIDTH :: f32(42)
@@ -24,6 +23,15 @@ GIF_PATH_INPUT_HEIGHT :: f32(24)
 GIF_PATH_INPUT_TOP_OFFSET :: f32(30)
 GIF_STATUS_NODE_ID :: 6301
 GIF_STATUS_NOTE_NODE_ID :: 6302
+
+// Saved_Path_Input binds the retained text revision to its independent widget state.
+Saved_Path_Input :: struct {
+    state: ^viewmodel.Ui_Input_Box_State,
+    id: int,
+    revision: u64,
+    label: string,
+    order: u32,
+}
 
 //   Row y-positions for the GIF panel's two sliders.
 Gif_Slider_Rows :: struct {
@@ -111,7 +119,7 @@ gif_path_input_visible :: #force_inline proc(
 gif_path_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
     return gif_path_input_rect_for_panel(
-        uiaccordion.accordion_content_rect(&runtime^.layout, .Save_Gif),
+        sharinglayout.sharing_layout_for_runtime(runtime).gif_panel,
         runtime^.preferences.values.interface.text_size_percent,
         runtime^.preferences.values.interface.control_size_percent)
 }
@@ -222,8 +230,8 @@ draw_encoded_gif_status :: proc(
         text_percent :=
             state^.ui_runtime.preferences.values.interface.text_size_percent
         field := gif_path_input_rect_for_panel(
-            uiaccordion.accordion_content_rect(
-                &state^.ui_runtime.layout, .Save_Gif), text_percent,
+            sharinglayout.sharing_layout_for_runtime(&state.ui_runtime).gif_panel,
+            text_percent,
             state^.ui_runtime.preferences.values.interface.control_size_percent)
         viewtext.draw_encoded_label(&state^.font_cache, encoder,
             viewmessages.shell_message(state, .Gif_Saved_Path_Label), x,
@@ -237,6 +245,17 @@ draw_encoded_gif_status :: proc(
 gif_path_input_params :: proc(
     state: ^core.Euclid_General_State, rect: geometry.Rectangle,
     frame: input.Input_Frame, text: string) -> uiwidgets.Input_Box_Params {
+    return saved_path_input_params(state, rect, frame, text, {
+        &state.ui_runtime.gif_path_input, GIF_PATH_INPUT_BOX_ID,
+        state.gif_capture_status.last_gif_path_revision,
+        viewmessages.shell_message(state, .Gif_Saved_Path_Accessible), 15})
+}
+
+// Build one selectable, read-only published-path field with independent selection storage.
+saved_path_input_params :: proc(
+    state: ^core.Euclid_General_State, rect: geometry.Rectangle,
+    frame: input.Input_Frame, text: string,
+    path: Saved_Path_Input) -> uiwidgets.Input_Box_Params {
     runtime := &state^.ui_runtime
     focus := runtime^.input.interaction_frame.effective_focus
     target := runtime^.input.interaction_frame.pointer_target
@@ -250,24 +269,23 @@ gif_path_input_params :: proc(
     return {
         rect = rect,
         clip_rect = runtime^.layout.ui_regions.accordion_rect,
-        controls = uilibrary.tree_semantic_id(),
         descriptor = {
-            id = uisemantics.semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID),
+            id = uisemantics.semantic_control_id(.Gif_Control, path.id),
             region = .Accordion_Content,
-            traversal_order = 5,
-            label = viewmessages.shell_message(state, .Gif_Saved_Path_Accessible),
+            traversal_order = path.order,
+            label = path.label,
             text = text,
             mode = .Read_Only,
-            cursor_byte = runtime^.gif_path_input.cursor_byte,
-            anchor_byte = runtime^.gif_path_input.anchor_byte,
-            content_revision = state^.gif_capture_status.last_gif_path_revision,
+            cursor_byte = path.state.cursor_byte,
+            anchor_byte = path.state.anchor_byte,
+            content_revision = path.revision,
         },
         semantic_focus = runtime^.semantic_focus,
-        state = &runtime^.gif_path_input,
+        state = path.state,
         frame = frame,
-        focused = focus.kind == .Input_Box && focus.id == GIF_PATH_INPUT_BOX_ID,
+        focused = focus.kind == .Input_Box && focus.id == path.id,
         pointer_routed = target.focus.kind == .Input_Box &&
-            target.id == GIF_PATH_INPUT_BOX_ID,
+            target.id == path.id,
         control_scale = theme.ui_effective_control_scale(
             text_percent, runtime^.preferences.values.interface.control_size_percent),
         column_advance = advance,
@@ -392,7 +410,7 @@ gif_slider_params :: proc(
             ctx.ui_runtime^.preferences.values.interface.control_size_percent,
         font_resolver = ctx.resolver,
         semantic_domain = .Gif_Control,
-        semantic_order = u32(press_id - 6201),
+        semantic_order = u32(press_id - 6201) + 10,
     }
 }
 
@@ -430,7 +448,7 @@ gif_save_button_params :: proc(
             states = uiwidgets.button_semantic_states(
                 gif_capture_button_enabled(phase)),
             region = .Accordion_Content,
-            traversal_order = 4,
+            traversal_order = 14,
             clip_bounds = geometry.Rectangle(ctx.panel),
             label = gif_capture_button_label(ctx.state, phase),
         },
@@ -764,12 +782,12 @@ prepare_gif_timing_controls :: proc(
     result^.animation_timing = uiwidgets.prepare_text_button(gif_timing_button_params(
         ctx, {6203, viewmessages.shell_message(ctx.state, .Gif_Timing_Animation),
             viewmessages.shell_message(ctx.state, .Gif_Timing_Animation_Description),
-            2, animation_rect}),
+            12, animation_rect}),
         &ctx.ui_runtime.input.press_owner, interactive)
     result^.recorded_timing = uiwidgets.prepare_text_button(gif_timing_button_params(
         ctx, {6204, viewmessages.shell_message(ctx.state, .Gif_Timing_Recorded),
             viewmessages.shell_message(ctx.state, .Gif_Timing_Recorded_Description),
-            3, recorded_rect}),
+            13, recorded_rect}),
         &ctx.ui_runtime.input.press_owner, interactive)
     if result^.animation_timing.action.activated {
         ctx.gif_capture_status.gif_timing_mode = .Animation

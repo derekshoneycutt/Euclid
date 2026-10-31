@@ -192,6 +192,11 @@ Display :: struct {
     gif_capture_active: bool,
     gif_capture_phase: capturemodel.Gif_Capture_Phase,
     gif_captured_frames: int,
+    png_capture_phase: capturemodel.Png_Capture_Phase,
+    png_save_count: u64,
+    png_width: int,
+    png_height: int,
+    png_available: bool,
 
     // Library-search request completion and accepted-result state.
     library_search_idle: bool,
@@ -223,6 +228,7 @@ Display_Source :: struct {
     telemetry: ^telemetrymodel.Runtime,
     gif_capture: ^capturemodel.Gif_Capture_Session,
     gif_capture_status: ^capturemodel.Gif_Capture_Status,
+    png_capture_status: ^capturemodel.Png_Capture_Status,
     terminal: ^viewterminalmodel.Terminal_State,
     dynview: ^dynviewmodel.Dynview_System,
     shape_world: ^shapemodel.Shape_World,
@@ -408,6 +414,17 @@ observe_display_layout :: proc(source: ^Display_Source, result: ^Display) {
 
 // Copy independent capture policy and encoder state without requiring UI storage.
 observe_display_capture :: proc(source: ^Display_Source, result: ^Display) {
+    if source.png_capture_status != nil {
+        result.png_capture_phase = source.png_capture_status.phase
+        result.png_save_count = source.png_capture_status.path_revision
+        result.png_width = source.png_capture_status.width
+        result.png_height = source.png_capture_status.height
+        if source.gif_capture_status != nil {
+            result.png_available = capturemodel.png_capture_available(
+                source.png_capture_status,
+                capturemodel.gif_capture_view(source.gif_capture_status))
+        }
+    }
     if source.gif_capture_status != nil {
         result.gif_capture_phase = source.gif_capture_status.gif_capture_phase
         result.gif_captured_frames = source.gif_capture_status.gif_captured_frames

@@ -122,12 +122,20 @@ SDL_CAPTURE_COMPLETION_OPERATIONS :: Sdl_Capture_Completion_Operations{
     release_fence = sdl_capture_release_fence,
 }
 
+// Sdl_World_Capture owns optional targets for one frame's sealed world command prefix.
+Sdl_World_Capture :: struct {
+    requested: bool,
+    ready: bool,
+    targets: Sdl_Scene_Targets,
+}
+
 // Sdl_Platform owns display-thread native state for one window session.
 Sdl_Platform :: struct {
     window: ^sdl.Window,
     device: ^sdl.GPUDevice,
     scene_target: ^sdl.GPUTexture,
     multisample_target: ^sdl.GPUTexture,
+    world_capture: Sdl_World_Capture,
     default_cursor: ^sdl.Cursor,
     text_cursor: ^sdl.Cursor,
     resize_ew_cursor: ^sdl.Cursor,
@@ -208,6 +216,13 @@ SDL_WINDOWS_ACCESSIBILITY_OPERATIONS :: Sdl_Windows_Accessibility_Operations{
     hwnd = sdl_windows_native_hwnd,
     publish = sdl_windows_native_publish,
     show = sdl_windows_native_show,
+}
+
+// Retire operation-scoped PNG targets after readback or any failed frame submission.
+sdl_world_capture_release :: proc(platform: ^Sdl_Platform) {
+    sdl_scene_targets_release(platform.device, platform.world_capture.targets.scene,
+        platform.world_capture.targets.multisample)
+    platform.world_capture = {}
 }
 
 // sdl_scale_or_one normalizes failed SDL scale queries.

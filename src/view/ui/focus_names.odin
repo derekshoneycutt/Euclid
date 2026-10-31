@@ -5,6 +5,7 @@ import uisemantics "semantics"
 import uianimation "animation"
 import uilibrary "library"
 import uisettings "settings"
+import uisharing "sharing"
 
 // Scenario_Focus_Name maps stable test vocabulary to generation-free identity.
 Scenario_Focus_Name :: struct {
@@ -30,6 +31,11 @@ SCENARIO_FOCUS_NAMES :: [?]Scenario_Focus_Name{
         u64(viewmodel.Ui_Accordion_Section.Library) + 1},
     {"accordion_save_gif", .Accordion,
         u64(viewmodel.Ui_Accordion_Section.Save_Gif) + 1},
+    {"accordion_sharing", .Accordion,
+        u64(viewmodel.Ui_Accordion_Section.Save_Gif) + 1},
+    {"sharing_save_png", .Gif_Control, uisharing.PNG_SAVE_BUTTON_ID},
+    {"sharing_png_path", .Gif_Control, uisharing.PNG_PATH_INPUT_ID},
+    {"sharing_scroll", .Gif_Control, uisharing.SHARING_SCROLL_ID},
     {"accordion_settings", .Accordion,
         u64(viewmodel.Ui_Accordion_Section.Settings) + 1},
     {"library_search", .Library_Control, uilibrary.LIBRARY_SEARCH_INPUT_ID},

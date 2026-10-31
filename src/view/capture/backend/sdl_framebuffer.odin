@@ -44,8 +44,27 @@ sdl_framebuffer_load :: proc(user_data: rawptr) -> capturemodel.Framebuffer_Pixe
     if owner == nil || owner^.platform == nil || !owner^.storage.initialized {
         return {}
     }
-    width := owner^.platform^.scene_width
-    height := owner^.platform^.scene_height
+    return sdl_framebuffer_load_source(owner, owner.platform)
+}
+
+// Read the isolated animation source while borrowing the ordinary capture storage domain.
+sdl_framebuffer_load_world :: proc(
+    user_data: rawptr) -> capturemodel.Framebuffer_Pixels {
+    owner := cast(^Sdl_Framebuffer_Context)user_data
+    if owner == nil || owner.platform == nil || !owner.platform.world_capture.ready {
+        return {}
+    }
+    source := owner.platform^
+    source.scene_target = source.world_capture.targets.scene
+    return sdl_framebuffer_load_source(owner, &source)
+}
+
+// Download one explicit scene source into the active operation-owned arena.
+sdl_framebuffer_load_source :: proc(
+    owner: ^Sdl_Framebuffer_Context,
+    platform: ^native.Sdl_Platform) -> capturemodel.Framebuffer_Pixels {
+    width := platform.scene_width
+    height := platform.scene_height
     if width == 0 || height == 0 || u64(width) > u64(math.max(int)) / 4 {
         return {}
     }
@@ -54,12 +73,12 @@ sdl_framebuffer_load :: proc(user_data: rawptr) -> capturemodel.Framebuffer_Pixe
         return {}
     }
     byte_count := pitch_bytes * int(height)
-    pixels, allocation_error := sdl_framebuffer_allocate(user_data, byte_count)
+    pixels, allocation_error := sdl_framebuffer_allocate(rawptr(owner), byte_count)
     if allocation_error != nil {
         return {}
     }
     timing: native.Sdl_Capture_Timing
-    if !native.sdl_platform_read_scene_rgba8(owner^.platform, pixels, &timing) {
+    if !native.sdl_platform_read_scene_rgba8(platform, pixels, &timing) {
         return {}
     }
     owner^.readback_count += 1
@@ -111,6 +130,7 @@ sdl_framebuffer_operations :: proc(
         begin = sdl_framebuffer_begin,
         allocate = sdl_framebuffer_allocate,
         load = sdl_framebuffer_load,
+        load_world = sdl_framebuffer_load_world,
         unload = sdl_framebuffer_unload,
         reset = sdl_framebuffer_reset,
         export = sdl_framebuffer_export,

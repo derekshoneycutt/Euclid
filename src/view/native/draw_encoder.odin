@@ -310,6 +310,8 @@ Draw_Encoder :: struct {
     index_count: int,
     batch_count: int,
     command_count: int,
+    world_command_count: int,
+    batch_boundary: int,
     stroke_vertex_count: int,
     stroke_draw_count: int,
     dust_instance_count: int,
@@ -327,6 +329,12 @@ Draw_Encoder :: struct {
     scissors: [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
     scissor_count: int,
     statistics: Draw_Encoder_Statistics,
+}
+
+// Seal the prepared world prefix and prevent subsequent UI geometry extending its batches.
+draw_encoder_seal_world :: proc(encoder: ^Draw_Encoder) {
+    encoder.world_command_count = encoder.command_count
+    encoder.batch_boundary = encoder.command_count
 }
 
 // Install or remove the optional sink used by a single structured draw pass.
@@ -523,7 +531,8 @@ draw_encoder_prepare :: proc(
         encoder^.commands[encoder^.command_count - 1].kind == .Batch &&
         encoder^.commands[encoder^.command_count - 1].index ==
             u32(encoder^.batch_count - 1)
-    compatible := encoder^.batch_count > 0 && last_is_latest_batch &&
+    compatible := encoder^.command_count > encoder^.batch_boundary &&
+        encoder^.batch_count > 0 && last_is_latest_batch &&
         draw_encoder_batch_compatible(
             encoder^.batches[encoder^.batch_count - 1], state, scissor)
     needs_batch := !compatible

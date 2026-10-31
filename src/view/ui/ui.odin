@@ -13,7 +13,7 @@ import uisemantics "semantics"
 import uiwidgets "widgets"
 import uiaccordion "layout/accordion"
 import uisettings "settings"
-import uigif "gif"
+import uisharing "sharing"
 import uilibrary "library"
 import uipresentation "presentation"
 import uiterminal "terminal"
@@ -85,7 +85,7 @@ draw_encoded_accordion_child :: proc(
     case .Library:
         uilibrary.draw_encoded_tree_geometry(state, encoder, &controls^.tree)
     case .Save_Gif:
-        uigif.draw_encoded_gif_geometry(encoder, controls.gif)
+        uisharing.draw_encoded_sharing_geometry(encoder, controls.sharing)
     case .Settings:
         uisettings.draw_encoded_settings_geometry(encoder, controls.settings)
     }
@@ -187,8 +187,8 @@ draw_encoded_accordion_child_text :: proc(
             state, encoder, controls^.library_search)
         uilibrary.draw_encoded_tree_text(state, encoder, &controls^.tree)
     case .Save_Gif:
-        uigif.draw_encoded_gif_text(state, encoder,
-            content, controls^.gif)
+        uisharing.draw_encoded_sharing_text(state, encoder,
+            content, controls.sharing)
     case .Settings:
         uisettings.draw_encoded_settings_text(
             state, encoder, controls^.settings)

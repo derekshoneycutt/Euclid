@@ -87,7 +87,7 @@ accordion_sections_for_layout :: proc(
     state: ^core.Euclid_General_State) -> uiaccordion.Accordion_Section_Set {
     labels: [3]string = {
         viewmessages.shell_message(state, .Navigation_Library),
-        viewmessages.shell_message(state, .Gif_Save),
+        viewmessages.shell_message(state, .Navigation_Sharing),
         viewmessages.shell_message(state, .Navigation_Settings),
     }
     view_title := title

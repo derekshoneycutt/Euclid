@@ -29,6 +29,7 @@ observe_display_state :: proc(
         telemetry = &state.telemetry,
         gif_capture = &state.gif_capture,
         gif_capture_status = &state.gif_capture_status,
+        png_capture_status = &state.png_capture_status,
         terminal = &state.terminal,
         dynview = &state.dynview,
         shape_world = &state.shape_world,

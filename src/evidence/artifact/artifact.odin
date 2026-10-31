@@ -259,6 +259,7 @@ artifact_state_json :: proc(
         "\"view_text_scroll_y\":%g,\"view_text_scroll_max\":%g," +
         "\"vertical_split_x\":%g,\"horizontal_split_y\":%g," +
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
+        "\"png_save_count\":%d,\"png_width\":%d,\"png_height\":%d," +
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
         "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s,%s,%s}}\n",
         state.fixed_step, state.simulation_time, artifact_playback_state_json(state),
@@ -270,6 +271,7 @@ artifact_state_json :: proc(
         artifact_dust_state_json(state), state.dynview_enabled,
         state.view_text_scroll_y, state.view_text_scroll_max, state.vertical_split_x,
         state.horizontal_split_y, state.gif_capture_active, state.gif_captured_frames,
+        state.png_save_count, state.png_width, state.png_height,
         state.required_evidence_complete, state.trace.event_count,
         state.trace.pending_drops, artifact_julia_host_state_json(julia_host),
         artifact_colored_draw_state_json(state),

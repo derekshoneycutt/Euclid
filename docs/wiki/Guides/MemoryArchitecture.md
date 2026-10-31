@@ -644,7 +644,15 @@ owns a growing arena for transaction paths and native staged pixels. The encoder
 closes or aborts before the arena is reset; a completed transaction path remains
 valid while capture policy copies it into its fixed status buffer, then can be
 reclaimed at the next capture or unbind. Atomic publication leaves completed GIF
-files intact when their temporary path storage is reclaimed. [Audio](../../../src/view/native/sdl_audio.odin)
+files intact when their temporary path storage is reclaimed.
+
+One-shot PNG capture reuses the framebuffer owner's readback arena but owns separate
+operation-scoped GPU targets for the prepared world-command prefix. Targets are retired
+after synchronous readback or a failed submission; no PNG target or pixel allocation
+is retained by idle frames. PNG transaction paths live in operation scratch, and the
+complete successful path is copied into fixed display-owned status storage before
+scratch reset. PNG and GIF do not concurrently acquire capture storage.
+[Audio](../../../src/view/native/sdl_audio.odin)
 owns native stream resources on the display thread. These resources require
 their native lifecycle APIs; resetting an Odin arena is not their destructor.
 

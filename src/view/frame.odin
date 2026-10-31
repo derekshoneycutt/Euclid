@@ -8,6 +8,7 @@ import native "native"
 import viewcontent "content"
 import ui "ui"
 import core "../core"
+import "core:math"
 import geometry "../core/geometry"
 import dynview "../dynview"
 import julia "../bridge"
@@ -43,6 +44,7 @@ import uitheme "ui/theme"
 import termhist "../terminal/history"
 import uiwidgets "ui/widgets"
 import uigif "ui/gif"
+import uisharing "ui/sharing"
 import uisettings "ui/settings"
 import viewmagnifier "magnifier"
 
@@ -284,6 +286,7 @@ sdl_frame_composition_active :: proc(state: ^core.Euclid_General_State) -> bool 
     ui := &state^.ui_runtime
     return ui.library.search.input.preedit_active ||
         ui.library.entry_name.input.preedit_active || ui.gif_path_input.preedit_active ||
+        ui.png_path_input.preedit_active ||
         (state^.terminal.history != nil && state^.terminal.history.preedit_active)
 }
 
@@ -501,6 +504,9 @@ sdl_frame_retire_preedit :: proc(
     if target.kind != .Input_Box || target.id != uigif.GIF_PATH_INPUT_BOX_ID {
         uiwidgets.input_box_clear_preedit(&ui.gif_path_input)
     }
+    if target.kind != .Input_Box || target.id != uisharing.PNG_PATH_INPUT_ID {
+        uiwidgets.input_box_clear_preedit(&ui.png_path_input)
+    }
 }
 
 // sdl_frame_resolve_text_input_target selects an eligible focused edit surface.
@@ -689,6 +695,7 @@ encode_sdl_geometry_frame :: proc(
         &encoder, ctx.draw_runtime^.dust_ready)
     font.cache_ink_capture_begin(&state^.font_cache)
     encode_sdl_world_geometry(state, ctx, &encoder)
+    native.draw_encoder_seal_world(&encoder)
     viewtelemetry.collect_particle_counts(&state^.telemetry.particle_counts,
         native.sdl_time_ticks(), {
             dust = state^.particle_system.last_render_low,
@@ -706,11 +713,47 @@ encode_sdl_geometry_frame :: proc(
         lens_height = prepared^.magnifier.lens_rect.height,
         zoom = viewmagnifier.MAGNIFIER_ZOOM,
     }
-    result := native.sdl_platform_present_draw(
-        ctx.platform, ctx.draw_runtime, &encoder,
-        native.to_sdl_color(worldmodel.BACKGROUND_COLOR), magnifier)
+    result := present_sdl_geometry_with_capture(state, ctx, &encoder, magnifier)
     font.cache_frame_end(&state^.font_cache)
     return result
+}
+
+// Present visible geometry and fulfill PNG work before retiring its operation-scoped targets.
+present_sdl_geometry_with_capture :: proc(
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
+    encoder: ^native.Draw_Encoder,
+    magnifier: native.Sdl_Magnifier_Presentation) -> native.Sdl_Frame_Result {
+    ctx.platform.world_capture.requested =
+        state.png_capture_status.phase == .Pending &&
+        !capturemodel.gif_capture_locks_playback_rate(
+            state.gif_capture_status.gif_capture_phase,
+            state.gif_capture_status.save_gif_requested)
+    defer native.sdl_world_capture_release(ctx.platform)
+    result := native.sdl_platform_present_draw(
+        ctx.platform, ctx.draw_runtime, encoder,
+        native.to_sdl_color(worldmodel.BACKGROUND_COLOR), magnifier)
+    if result == .Presented {
+        finish_png_capture_frame(state, ctx)
+    } else if result == .Failed && state.png_capture_status.phase == .Pending {
+        state.png_capture_status.phase = .Error
+        log.error("png_capture_frame_failed")
+    }
+    return result
+}
+
+// Fulfill one request at the presented-frame boundary using current physical world bounds.
+finish_png_capture_frame :: proc(
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context) {
+    extents := frame_gif_capture_extents(state, ctx.platform)
+    width := max(1,
+        int(math.ceil(f64(state.ui_runtime.layout.ui_regions.world_rect.width) *
+            f64(extents.render_width) / f64(extents.screen_width))))
+    height := max(1,
+        int(math.ceil(f64(state.ui_runtime.layout.ui_regions.world_rect.height) *
+            f64(extents.render_height) / f64(extents.screen_height))))
+    viewcapture.png_capture_save(&state.png_capture_status,
+        capturemodel.gif_capture_view(&state.gif_capture_status),
+        width, height, ctx.framebuffer_operations)
 }
 
 // Run one SDL geometry frame while later visual capabilities remain dormant.

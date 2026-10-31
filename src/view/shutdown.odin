@@ -1,4 +1,5 @@
 package view
+import "core:log"
 
 import bridgemodel "../bridge/model"
 import font "font"
@@ -105,6 +106,10 @@ free_animations_state :: proc(state: ^core.Euclid_General_State) {
         return
     }
     viewcapture.gif_capture_destroy_session(&state^.gif_capture)
+    if state.png_capture_status.phase == .Pending {
+        state.png_capture_status.phase = .Error
+        log.warn("png_capture_cancelled_shutdown")
+    }
     terminalservice.terminal_graphics_runtime_destroy(state)
     terminalservice.shell_service_runtime_destroy(state)
     terminalview.terminal_destroy(&state^.terminal,

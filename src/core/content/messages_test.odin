@@ -97,6 +97,9 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Playback speed: 4x. Change to 1x", "Playback speed: 1x. Locked during GIF capture",
     "Show completed figure", "Completed figure", "Play animation from beginning",
     "Could not show completed figure",
+    "Sharing", "Save PNG", "Save the current animation frame.",
+    "Status: Idle", "Status: Saving", "Status: Saved",
+    "Could not save PNG.", "Available after GIF saving finishes.", "Saved PNG path",
 }
 
 // Build a complete message fixture with a stable arena owner for consumer tests.

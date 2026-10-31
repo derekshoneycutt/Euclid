@@ -8,6 +8,7 @@ Framebuffer_Capture_Operations :: struct {
     begin: proc(user_data: rawptr) -> bool,
     allocate: proc(user_data: rawptr, byte_count: int) -> ([]u8, runtime.Allocator_Error),
     load: proc(user_data: rawptr) -> Framebuffer_Pixels,
+    load_world: proc(user_data: rawptr) -> Framebuffer_Pixels,
     unload: proc(user_data: rawptr, capture: ^Framebuffer_Pixels),
     reset: proc(user_data: rawptr),
     export: proc(

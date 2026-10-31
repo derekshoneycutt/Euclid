@@ -13,6 +13,7 @@ import uiterminal "terminal"
 import uiaccordion "layout/accordion"
 import uisplitter "layout/splitter"
 import uigif "gif"
+import uisharing "sharing"
 import uilibrary "library"
 
 // Eligible world-overlay controls share one geometry admission fact.
@@ -188,34 +189,48 @@ ui_hover_target :: proc(
         capture_view.phase, controls.favorite, controls.membership)
 }
 
-// Resolve revealed accordion inputs before the surrounding panel background.
-ui_accordion_hover_target :: proc(
+// Resolve input targets within the revealed accordion content.
+ui_accordion_input_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State, mouse: geometry.Vector2,
     capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Interaction_Target {
-    child_visible := ui_accordion_pointer_is_revealed(
-        &runtime^.layout, runtime^.layout.active_accordion_section,
-        geometry.Vector2(mouse))
-    if child_visible &&
-       uigif.gif_path_input_visible(runtime, capture_view) &&
+    if uisharing.png_path_input_visible(runtime) &&
+       geometry.rectangle_contains(uisharing.png_path_input_rect(runtime), mouse) {
+        return viewmodel.ui_interaction_target(
+            .Control, .Input_Box, uisharing.PNG_PATH_INPUT_ID)
+    }
+    if uigif.gif_path_input_visible(runtime, capture_view) &&
        geometry.rectangle_contains(
         uigif.gif_path_input_rect(runtime), geometry.Vector2(mouse)) {
         return viewmodel.ui_interaction_target(
             .Control, .Input_Box, uigif.GIF_PATH_INPUT_BOX_ID)
     }
-    if child_visible &&
-       uilibrary.library_search_visible(runtime) &&
+    if uilibrary.library_search_visible(runtime) &&
        geometry.rectangle_contains(
             uilibrary.library_search_input_rect(runtime), geometry.Vector2(mouse)) {
         return viewmodel.ui_interaction_target(
             .Control, .Input_Box, uilibrary.LIBRARY_SEARCH_INPUT_ID)
     }
-    if child_visible && uilibrary.library_entry_name_visible(runtime) &&
+    if uilibrary.library_entry_name_visible(runtime) &&
         geometry.rectangle_contains(runtime^.library.entry_name.rect,
             geometry.Vector2(mouse)) &&
         geometry.rectangle_contains(runtime^.library.entry_name.clip_rect,
             geometry.Vector2(mouse)) {
         return viewmodel.ui_interaction_target(
             .Control, .Input_Box, uilibrary.TREE_ENTRY_NAME_INPUT_ID)
+    }
+    return {}
+}
+
+// Resolve revealed accordion inputs before the surrounding panel background.
+ui_accordion_hover_target :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, mouse: geometry.Vector2,
+    capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Interaction_Target {
+    if ui_accordion_pointer_is_revealed(
+        &runtime^.layout, runtime^.layout.active_accordion_section, mouse) {
+        target := ui_accordion_input_hover_target(runtime, mouse, capture_view)
+        if target.kind != .None {
+            return target
+        }
     }
     if geometry.rectangle_contains(
         geometry.Rectangle(runtime^.layout.ui_regions.accordion_rect), mouse) {
@@ -230,6 +245,10 @@ ui_route_logical_focus :: proc(
     input: Ui_Interaction_Route_Input,
     pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
     result := runtime^.input.interaction.logical_focus
+    if result.kind == .Input_Box && result.id == uisharing.PNG_PATH_INPUT_ID &&
+        !uisharing.png_path_input_visible(runtime) {
+        result = {}
+    }
     if result.kind == .Input_Box && result.id == uigif.GIF_PATH_INPUT_BOX_ID &&
         !uigif.gif_path_input_visible(runtime, input.capture_view) {
         result = {}
@@ -264,6 +283,8 @@ ui_valid_capture_owner :: proc(
     owner: viewmodel.Ui_Press_Owner_State,
     capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Press_Owner_State {
     if owner.kind != .Input_Box ||
+        owner.id == uisharing.PNG_PATH_INPUT_ID &&
+        uisharing.png_path_input_visible(runtime) ||
         owner.id == uigif.GIF_PATH_INPUT_BOX_ID &&
         uigif.gif_path_input_visible(runtime, capture_view) ||
         owner.id == uilibrary.LIBRARY_SEARCH_INPUT_ID &&

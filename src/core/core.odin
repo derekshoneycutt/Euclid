@@ -120,6 +120,7 @@ Euclid_General_State :: struct {
     message_labels: messagesmodel.Label_Cache,
     gif_capture: capturemodel.Gif_Capture_Session,
     gif_capture_status: capturemodel.Gif_Capture_Status,
+    png_capture_status: capturemodel.Png_Capture_Status,
     font_cache: fontmodel.Font_Cache,
     terminal: viewterminalmodel.Terminal_State,
     terminal_tick_publisher: viewterminalmodel.Terminal_Tick_Publisher,

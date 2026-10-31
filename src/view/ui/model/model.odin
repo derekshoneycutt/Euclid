@@ -959,10 +959,20 @@ Euclid_Ui_Runtime_State :: struct {
     platform_reduce_motion: bool,
     platform_increased_contrast: bool,
     gif_path_input: Ui_Input_Box_State,
+    png_path_input: Ui_Input_Box_State,
+    sharing: Ui_Sharing_State,
     tooltip: Ui_Tooltip_State,
     context_menu: Ui_Context_Menu_State,
     membership: Ui_Collection_Membership_State,
     semantic_focus: ^Ui_Semantic_Focus_State,
+}
+
+// Ui_Sharing_State retains only session interaction and the bounded published-path view.
+Ui_Sharing_State :: struct {
+    scroll_y: f32,
+    scroll_dragging: bool,
+    scroll_drag_off: f32,
+    png_path_available: bool,
 }
 
 // library_search_clear_results removes accepted topology and suggestion state.

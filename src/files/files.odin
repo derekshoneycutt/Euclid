@@ -19,6 +19,7 @@ ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 ASSET_PACKAGE_IDENTITY :: "assets.pkg.identity"
 ASSET_CACHE_SCHEMA_DIR :: "v4"
 GIF_OUTPUT_DIR_NAME :: "gifs"
+PNG_OUTPUT_DIR_NAME :: "pngs"
 SYSIMAGE_CACHE_DIR_NAME :: "sysimages"
 ASSET_MANIFEST_MAX_BYTES :: 4096
 
@@ -37,11 +38,20 @@ Asset_Root_Config :: struct {
     asset_root_override: string,
 }
 
-// Gif_Output_Transaction owns one reserved sibling temporary path until publication.
-Gif_Output_Transaction :: struct {
+// Image_Output_Format selects the filename extension and destination child directory.
+Image_Output_Format :: enum {
+    Gif,
+    Png,
+}
+
+// Image_Output_Transaction owns reserved paths until publication or explicit cleanup.
+Image_Output_Transaction :: struct {
     final_path: string,
     temporary_path: string,
 }
+
+// Gif_Output_Transaction preserves the streaming encoder's existing path contract.
+Gif_Output_Transaction :: Image_Output_Transaction
 
 
 Unpack_Targets :: struct {
@@ -582,14 +592,16 @@ destroy_asset_root_config :: proc(
 //   - output_dir: Joined output directory path when successful, otherwise "".
 //   - ok: true when join succeeded and directory exists/was created.
 resolve_writable_gif_output_dir :: proc(
-    base_dir: string, allocator := context.temp_allocator) -> (string, bool) {
+    base_dir: string, allocator := context.temp_allocator,
+    format := Image_Output_Format.Gif) -> (string, bool) {
 
     if len(base_dir) == 0 {
         return "", false
     }
 
+    folder := GIF_OUTPUT_DIR_NAME if format == .Gif else PNG_OUTPUT_DIR_NAME
     output_dir, output_err := filepath.join(
-        []string{base_dir, GIF_OUTPUT_DIR_NAME},
+        []string{base_dir, folder},
         allocator)
     if output_err != nil || !ensure_directory_exists(output_dir) {
         return "", false
@@ -607,7 +619,8 @@ resolve_writable_gif_output_dir :: proc(
 //   - output_dir: Writable path ending in GIF_OUTPUT_DIR_NAME when successful, otherwise "".
 //   - ok: true when a writable directory was resolved/created, otherwise false.
 resolve_writable_pictures_dir :: proc(
-    allocator := context.temp_allocator) -> (string, bool) {
+    allocator := context.temp_allocator,
+    format := Image_Output_Format.Gif) -> (string, bool) {
     pictures_dir, _ := os.user_pictures_dir(allocator)
     data_dir, _ := os.user_data_dir(allocator)
     cache_dir, _ := os.user_cache_dir(allocator)
@@ -615,7 +628,7 @@ resolve_writable_pictures_dir :: proc(
 
     candidate_dirs: []string = {pictures_dir, data_dir, cache_dir, temp_dir}
     for base_dir in candidate_dirs {
-        output_dir, ok := resolve_writable_gif_output_dir(base_dir, allocator)
+        output_dir, ok := resolve_writable_gif_output_dir(base_dir, allocator, format)
         if ok {
             return output_dir, true
         }
@@ -626,22 +639,37 @@ resolve_writable_pictures_dir :: proc(
 
 //   Generate the timestamped filename used for one GIF export.
 gif_output_filename :: proc() -> string {
+    return image_output_filename(.Gif)
+}
+
+// Generate one timestamped image filename in operation scratch.
+image_output_filename :: proc(format: Image_Output_Format) -> string {
     now := time.now()
     year := time.year(now)
     month := int(time.month(now))
     day := time.day(now)
     hour, minute, second, nanos := time.precise_clock(now)
     millis := nanos / 1_000_000
-    return fmt.tprintf("Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
-        year, month, day, hour, minute, second, millis)
+    extension := ".gif" if format == .Gif else ".png"
+    return fmt.tprintf("Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d%s",
+        year, month, day, hour, minute, second, millis, extension)
 }
 
 //   Reserve an empty sibling temporary file for one exact GIF output filename.
 reserve_gif_output_transaction_in_directory :: proc(
     output_dir, filename: string,
     allocator: mem.Allocator) -> (Gif_Output_Transaction, bool) {
+    return reserve_image_output_transaction_in_directory(
+        output_dir, filename, .Gif, allocator)
+}
+
+// Reserve format-checked final and exclusive temporary paths in caller-owned storage.
+reserve_image_output_transaction_in_directory :: proc(
+    output_dir, filename: string, format: Image_Output_Format,
+    allocator: mem.Allocator) -> (Image_Output_Transaction, bool) {
+    extension := ".gif" if format == .Gif else ".png"
     if len(output_dir) == 0 || len(filename) == 0 ||
-       filepath.base(filename) != filename || !strings.has_suffix(filename, ".gif") {
+       filepath.base(filename) != filename || !strings.has_suffix(filename, extension) {
         return {}, false
     }
 
@@ -652,7 +680,7 @@ reserve_gif_output_transaction_in_directory :: proc(
         return {}, false
     }
     temporary_path := fmt.aprintf(
-        "%s.partial.gif", final_path[:len(final_path) - len(".gif")],
+        "%s.partial%s", final_path[:len(final_path) - len(extension)], extension,
         allocator = allocator)
     temporary_file, open_error := os.open(
         temporary_path, {.Write, .Create, .Excl})
@@ -671,16 +699,24 @@ reserve_gif_output_transaction_in_directory :: proc(
 //   Reserve one generated GIF destination and its sibling temporary file.
 reserve_gif_output_transaction :: proc(
     allocator: mem.Allocator) -> (Gif_Output_Transaction, bool) {
-    output_dir, output_ok := resolve_writable_pictures_dir(context.temp_allocator)
+    return reserve_image_output_transaction(.Gif, allocator)
+}
+
+// Reserve an automatically named image destination using the ordinary location policy.
+reserve_image_output_transaction :: proc(
+    format: Image_Output_Format,
+    allocator: mem.Allocator) -> (Image_Output_Transaction, bool) {
+    output_dir, output_ok := resolve_writable_pictures_dir(
+        context.temp_allocator, format)
     if !output_ok {
         return {}, false
     }
-    return reserve_gif_output_transaction_in_directory(
-        output_dir, gif_output_filename(), allocator)
+    return reserve_image_output_transaction_in_directory(
+        output_dir, image_output_filename(format), format, allocator)
 }
 
-//   Atomically publish a completed temporary GIF at its reserved final path.
-publish_gif_output_transaction :: proc(transaction: ^Gif_Output_Transaction) -> bool {
+// Atomically publish a completed temporary image without knowingly replacing a file.
+publish_image_output_transaction :: proc(transaction: ^Image_Output_Transaction) -> bool {
     if transaction == nil || len(transaction.final_path) == 0 ||
        len(transaction.temporary_path) == 0 || os.exists(transaction.final_path) {
         return false
@@ -688,9 +724,21 @@ publish_gif_output_transaction :: proc(transaction: ^Gif_Output_Transaction) -> 
     return os.rename(transaction.temporary_path, transaction.final_path) == nil
 }
 
-//   Remove an unpublished temporary GIF and release transaction path storage.
+
+// Preserve the GIF publication entry point for the streaming backend.
+publish_gif_output_transaction :: proc(transaction: ^Gif_Output_Transaction) -> bool {
+    return publish_image_output_transaction(transaction)
+}
+
+// Preserve the GIF teardown entry point for the streaming backend.
 destroy_gif_output_transaction :: proc(
     transaction: ^Gif_Output_Transaction, allocator: mem.Allocator) {
+    destroy_image_output_transaction(transaction, allocator)
+}
+
+// Remove an unpublished image and release caller-owned transaction path storage.
+destroy_image_output_transaction :: proc(
+    transaction: ^Image_Output_Transaction, allocator: mem.Allocator) {
     if transaction == nil {
         return
     }

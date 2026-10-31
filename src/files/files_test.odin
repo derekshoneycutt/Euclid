@@ -5,6 +5,57 @@ import "core:os"
 import "core:path/filepath"
 import "core:testing"
 
+// Verify PNG transactions share reservation, collision protection and cleanup with GIF.
+@(test)
+png_output_transaction_preserves_complete_publication :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-png-transaction-test")
+    testing.expect(t, ready)
+    defer delete(sandbox, context.allocator)
+    defer os.remove_all(sandbox)
+    directory, resolved := resolve_writable_gif_output_dir(
+        sandbox, context.allocator, .Png)
+    testing.expect(t, resolved)
+    defer delete(directory, context.allocator)
+    testing.expect_value(t, filepath.base(directory), PNG_OUTPUT_DIR_NAME)
+    transaction, reserved := reserve_image_output_transaction_in_directory(
+        directory, "capture.png", .Png, context.allocator)
+    testing.expect(t, reserved)
+    defer destroy_image_output_transaction(&transaction, context.allocator)
+    _, duplicate := reserve_image_output_transaction_in_directory(
+        directory, "capture.png", .Png, context.allocator)
+    testing.expect(t, !duplicate)
+    _, wrong_format := reserve_image_output_transaction_in_directory(
+        directory, "capture.gif", .Png, context.allocator)
+    testing.expect(t, !wrong_format)
+    _, traversal := reserve_image_output_transaction_in_directory(
+        directory, "../capture.png", .Png, context.allocator)
+    testing.expect(t, !traversal)
+    testing.expect(t, !os.exists(transaction.final_path))
+    testing.expect(t, os.write_entire_file(
+        transaction.temporary_path, []u8{137, 80, 78, 71}) == nil)
+    testing.expect(t, publish_image_output_transaction(&transaction))
+    testing.expect(t, !publish_image_output_transaction(&transaction))
+    testing.expect(t, os.exists(transaction.final_path))
+}
+
+// Verify abort removes the temporary PNG and never creates a success-shaped final file.
+@(test)
+png_output_transaction_abort_retires_partial :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-png-abort-test")
+    testing.expect(t, ready)
+    defer delete(sandbox, context.allocator)
+    defer os.remove_all(sandbox)
+    transaction, reserved := reserve_image_output_transaction_in_directory(
+        sandbox, "capture.png", .Png, context.allocator)
+    testing.expect(t, reserved)
+    temporary := fmt.aprintf(
+        "%s", transaction.temporary_path, allocator = context.allocator)
+    defer delete(temporary, context.allocator)
+    destroy_image_output_transaction(&transaction, context.allocator)
+    testing.expect(t, !os.exists(temporary))
+    testing.expect_value(t, transaction, Image_Output_Transaction{})
+}
+
 //   Verify package identity sidecars require complete canonical digest fields.
 @(test)
 asset_package_sidecar_requires_canonical_identity :: proc(t: ^testing.T) {

@@ -17,6 +17,28 @@ Draw_Ink_Sample_Test_State :: struct {
     authored: bool,
 }
 
+// Verify even identical batch state cannot append UI indices to a sealed world prefix.
+@(test)
+draw_encoder_world_boundary_seals_compatible_batches :: proc(t: ^testing.T) {
+    vertices: [12]Draw_Vertex
+    indices: [18]u32
+    batches: [3]Draw_Batch
+    commands: [3]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {200, 200}))
+    testing.expect(t, draw_encoder_rectangle(&encoder, {0, 0, 10, 10}, {1, 2, 3, 255}))
+    draw_encoder_seal_world(&encoder)
+    testing.expect(t, draw_encoder_rectangle(&encoder, {0, 0, 10, 10}, {4, 5, 6, 255}))
+    testing.expect(t, draw_encoder_rectangle(&encoder, {0, 0, 10, 10}, {7, 8, 9, 255}))
+    testing.expect_value(t, encoder.world_command_count, 1)
+    testing.expect_value(t, encoder.command_count, 2)
+    testing.expect_value(t, encoder.batch_count, 2)
+    testing.expect_value(t, encoder.batches[0].index_count, u32(6))
+    testing.expect_value(t, encoder.batches[1].index_count, u32(12))
+}
+
 // Retain one emitted sample for draw-encoder contract assertions.
 draw_encoder_test_record_ink :: proc(
     user_data: rawptr, position: geometry.Vector2,

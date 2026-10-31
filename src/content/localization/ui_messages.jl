@@ -1,5 +1,41 @@
 const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1501), "ui.navigation.sharing",
+            "Sharing accordion heading.", LocalizedContent.MessageArgument[]),
+        "Sharing"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1502), "ui.png.save",
+            "PNG section heading and current-frame action.", LocalizedContent.MessageArgument[]),
+        "Save PNG"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1503), "ui.png.description",
+            "Current-frame PNG export explanation.", LocalizedContent.MessageArgument[]),
+        "Save the current animation frame."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1504), "ui.png.status.idle",
+            "PNG export idle feedback.", LocalizedContent.MessageArgument[]),
+        "Status: Idle"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1505), "ui.png.status.pending",
+            "PNG export pending feedback.", LocalizedContent.MessageArgument[]),
+        "Status: Saving"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1506), "ui.png.status.saved",
+            "PNG export successful feedback.", LocalizedContent.MessageArgument[]),
+        "Status: Saved"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1507), "ui.png.status.error",
+            "PNG export failure feedback.", LocalizedContent.MessageArgument[]),
+        "Could not save PNG."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1508), "ui.png.status.gif_active",
+            "PNG export unavailable during GIF saving.", LocalizedContent.MessageArgument[]),
+        "Available after GIF saving finishes."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1509), "ui.png.saved_path.accessible",
+            "Read-only last successful PNG path.", LocalizedContent.MessageArgument[]),
+        "Saved PNG path"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1251), "ui.settings.particle_effects_help",
             "Help for the application-wide particle preference.",
             LocalizedContent.MessageArgument[]),
@@ -45,7 +81,7 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
         "Library"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1002), "ui.gif.save",
-            "GIF section header and idle capture action.",
+            "GIF subsection heading and idle capture action.",
             LocalizedContent.MessageArgument[]),
         "Save GIF"),
     LocalizedContent.UiMessageSourceDeclaration(

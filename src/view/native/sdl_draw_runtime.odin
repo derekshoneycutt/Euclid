@@ -1,6 +1,7 @@
 package native
 
 import "core:mem"
+import "core:log"
 import "core:os"
 import vmem "core:mem/virtual"
 
@@ -1115,6 +1116,33 @@ sdl_draw_prepare_submission :: proc(
         submission.command_buffer, submission.clear_color)
 }
 
+// Replay prepared world commands into temporary targets without rerunning scene policy.
+// Targets match the scene extent so projection, scissors and MSAA remain identical.
+sdl_draw_record_world_capture :: proc(
+    platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
+    encoder: ^Draw_Encoder, submission: Sdl_Draw_Submission) {
+    capture := &platform.world_capture
+    if !capture.requested {
+        return
+    }
+    capture.targets = sdl_scene_targets_create(platform.device,
+        platform.scene_width, platform.scene_height, platform.sample_count)
+    if capture.targets.scene == nil {
+        log.error("png_capture_target_failed")
+        return
+    }
+    source := platform^
+    source.scene_target = capture.targets.scene
+    source.multisample_target = capture.targets.multisample
+    world := encoder^
+    world.command_count = encoder.world_command_count
+    capture.ready = sdl_draw_record_scene(&source, runtime, &world,
+        submission.command_buffer, submission.clear_color)
+    if !capture.ready {
+        log.error("png_capture_render_failed")
+    }
+}
+
 // sdl_draw_pipeline_binding_count counts ordered native state transitions.
 sdl_draw_pipeline_binding_count :: proc(encoder: ^Draw_Encoder) -> u32 {
     count: u32
@@ -1213,6 +1241,7 @@ sdl_draw_submit :: proc(
         sdl_draw_discard_texture_operations(runtime, platform^.device)
         return false
     }
+    sdl_draw_record_world_capture(platform, runtime, encoder, submission)
     if submission.magnifier.visible {
         if !sdl_draw_compose_magnifier(
             platform, runtime, submission.command_buffer,

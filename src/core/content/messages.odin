@@ -187,6 +187,15 @@ Content_Message_Id :: enum u16 {
     Animation_Completed = 1414,
     Animation_Play_From_Beginning = 1415,
     Animation_Completion_Failed = 1416,
+    Navigation_Sharing = 1501,
+    Png_Save = 1502,
+    Png_Description = 1503,
+    Png_Status_Idle = 1504,
+    Png_Status_Pending = 1505,
+    Png_Status_Saved = 1506,
+    Png_Status_Error = 1507,
+    Png_Status_Gif_Active = 1508,
+    Png_Saved_Path_Accessible = 1509,
 }
 
 // One native ID/key identity shared by admission and runtime lookup.
@@ -195,7 +204,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 177
+CONTENT_SHIPPED_MESSAGE_COUNT :: 186
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -374,6 +383,15 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1414, "ui.animation.completed"},
     {1415, "ui.animation.play_from_beginning"},
     {1416, "ui.animation.completion_failed"},
+    {1501, "ui.navigation.sharing"},
+    {1502, "ui.png.save"},
+    {1503, "ui.png.description"},
+    {1504, "ui.png.status.idle"},
+    {1505, "ui.png.status.pending"},
+    {1506, "ui.png.status.saved"},
+    {1507, "ui.png.status.error"},
+    {1508, "ui.png.status.gif_active"},
+    {1509, "ui.png.saved_path.accessible"},
 }
 
 // Explicit formatting failure; no error is a successful English fallback.

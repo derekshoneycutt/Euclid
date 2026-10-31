@@ -292,21 +292,21 @@ flowchart TB
     subgraph Landscape
         LWorld[World]
         LView[Presentation or Terminal]
-        LAccordion[Library, Save GIF, or Settings]
+        LAccordion[Library, Sharing, or Settings]
         LWorld --- LView
         LWorld --- LAccordion
         LView --- LAccordion
     end
     subgraph Portrait
         PWorld[World]
-        PAccordion[View, Library, Save GIF, or Settings]
+        PAccordion[View, Library, Sharing, or Settings]
         PWorld --> PAccordion
     end
 ```
 
 In landscape, the world and View share the left side while the accordion fills the right.
 In portrait, the world occupies the upper region and View becomes an accordion section
-alongside Library, Save GIF, and Settings. The application keeps separate layout intent
+alongside Library, Sharing, and Settings. The application keeps separate layout intent
 for the two modes; changing orientation need not destroy the other mode's split and
 section choice.
 
@@ -786,6 +786,29 @@ whose layout already followed text size must retain that minimum.
 
 ### Capture and the rendered frame
 
+The **Sharing** accordion contains bold **Save PNG** and **Save GIF** subsections,
+in that order. Both use the shared selectable, read-only saved-path textbox.
+The Sharing panel scrolls independently in short viewports, preserving scaled control
+geometry and semantic clipping.
+
+Save PNG queues one request for the next eligible presented frame without changing
+playback, including when paused or holding the completed figure. It saves only the
+animation/world area with its opaque background, at current physical-pixel resolution.
+PNG ignores GIF scale and cadence settings. Requested or active GIF work disables PNG.
+The last successful PNG path remains visible during later saves and failures.
+
+PNG uses the prepared frame's sealed world-command prefix, replayed into temporary
+native targets before CPU readback. This excludes controls and all UI overlays without
+hiding anything on screen or running simulation twice. Target sampling and transforms
+match the visible frame; crop edges round outward like the renderer's scissor edges.
+The magnifier is not included. Ordinary application screenshots and GIF capture retain
+their existing sources.
+
+PNG files use timestamped `Euclid_*.png` names under `pngs`, beside the existing `gifs`
+folder. Both formats try Pictures, user-data, cache, then temporary-directory locations.
+The file is encoded into a reserved sibling temporary path and published only after
+success; failures do not replace the displayed successful path.
+
 The GIF controls are ordinary UI; capture is not. The capture subsystem owns phase,
 timing, framebuffer acquisition, normalization, and encoding. The current GIF source is
 the world/view region, not the surrounding UI. The distinction is visible in the path:
@@ -806,6 +829,9 @@ Start at [`gif_panel.odin`](../../../src/view/ui/gif/gif_panel.odin) for the UI 
 are under [`src/view/capture/backend/`](../../../src/view/capture/backend/). Splitter
 changes can be locked while capture framing is active, so layout and capture must be
 considered together.
+
+[`sharing_panel.odin`](../../../src/view/ui/sharing/sharing_panel.odin) composes both
+sections; [`png.odin`](../../../src/view/capture/png.odin) owns one-shot PNG publication.
 
 ### Startup presentation
 

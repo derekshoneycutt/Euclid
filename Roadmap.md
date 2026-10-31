@@ -205,6 +205,7 @@ General features:
 - [X] Improved input after full input system migration (IME, etc.)
 - [X] Fast-forward option
 - [X] Authored completed forms
+- [X] PNG Saving
 - [ ] Sqlite backend
   - [X] Initial creation and access
   - [X] Full-text search tables

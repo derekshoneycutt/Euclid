@@ -1521,6 +1521,16 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
         return display.gif_capture_active
     case "gif_idle":
         return !display.gif_capture_active
+    case "png_saved":
+        return png_capture_saved(display)
+    case "png_saved_twice":
+        return png_capture_saved_twice(display)
+    case "png_idle":
+        return png_capture_idle(display)
+    case "png_available":
+        return display.png_available
+    case "png_unavailable":
+        return !display.png_available
     case "library_search_idle":
         return display.library_search_idle
     case "library_search_has_matches":
@@ -1540,6 +1550,21 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case:
         return subsystem_state_matches(name, display)
     }
+}
+
+// PNG success is observable only after publication completes.
+png_capture_saved :: #force_inline proc(display: observe.Display) -> bool {
+    return display.png_capture_phase == .Saved
+}
+
+// PNG work is idle when no current-frame request remains pending.
+png_capture_idle :: #force_inline proc(display: observe.Display) -> bool {
+    return display.png_capture_phase != .Pending
+}
+
+// Two PNG saves are acknowledged only after the latest publication succeeds.
+png_capture_saved_twice :: #force_inline proc(display: observe.Display) -> bool {
+    return display.png_capture_phase == .Saved && display.png_save_count >= 2
 }
 
 // A construction pause is acknowledged only after the outstanding tick settles.

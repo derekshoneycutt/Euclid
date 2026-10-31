@@ -15,6 +15,7 @@ import uianimation "animation"
 import uiaccordion "layout/accordion"
 import uisettings "settings"
 import uigif "gif"
+import uisharing "sharing"
 import uilibrary "library"
 import uipresentation "presentation"
 import uiregions "layout/regions"
@@ -26,7 +27,7 @@ Ui_Control_Preparation :: struct {
     animation_controls: uianimation.Animation_Control_Preparation,
     accordion: uiaccordion.Accordion_Preparation,
     settings: uisettings.Settings_View_Preparation,
-    gif: uigif.Gif_View_Preparation,
+    sharing: uisharing.Sharing_Preparation,
     tree: uilibrary.Tree_List_Preparation,
     library_search: uilibrary.Library_Search_Preparation,
 }
@@ -41,6 +42,7 @@ prepare_ui_static_interaction :: proc(
     state: ^core.Euclid_General_State,
     frame: input.Input_Frame,
     capture: viewmodel.Ui_Press_Owner_State) {
+    state.ui_runtime.sharing.png_path_available = state.png_capture_status.path_len > 0
     _ = ui_route_interaction_frame(&state^.ui_runtime, {
         frame = frame,
         terminal_present = uiterminal.is_terminal_selected(state),
@@ -112,7 +114,10 @@ prepare_active_accordion_controls :: proc(
         gif_frame := ui_input_box_keyboard_frame(
             state^.ui_runtime.input.interaction_frame.effective_focus,
             routed, frame, uigif.GIF_PATH_INPUT_BOX_ID)
-        result^.gif = uigif.prepare_gif_view(state, content, gif_frame)
+        sharing_frame := ui_input_box_keyboard_frame(
+            state.ui_runtime.input.interaction_frame.effective_focus,
+            gif_frame, frame, uisharing.PNG_PATH_INPUT_ID)
+        result.sharing = uisharing.prepare_sharing_view(state, content, sharing_frame)
     case .Settings:
         result^.settings = uisettings.prepare_settings_view(state, content, routed)
     }
@@ -339,7 +344,7 @@ prepare_outgoing_accordion_section :: proc(
     case .Settings:
         result^.settings = uisettings.prepare_settings_view(state, content, {}, false)
     case .Save_Gif:
-        result^.gif = uigif.prepare_gif_view(state, content, {}, false)
+        result.sharing = uisharing.prepare_sharing_view(state, content, {}, false)
     case .Library:
         result^.library_search =
             uilibrary.prepare_library_search_visual(state, content)
