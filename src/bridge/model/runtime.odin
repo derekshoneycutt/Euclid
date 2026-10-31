@@ -286,45 +286,61 @@ Communication_Link :: struct($T: typeid) {
     backing: []byte,
 }
 
-// Julia_Runtime_Service owns bridge backing, queues, slots, and lifecycle bookkeeping.
+// Julia_Runtime_Service owns bridge resources and coordinates worker, presentation,
+// request, reload, and animation state for the embedded Julia runtime.
 Julia_Runtime_Service :: struct {
+    // Service-lifetime allocation backing and evidence state.
     bootstrap_allocator: mem.Allocator,
     communication_storage: storage.Arena_Owner,
-    active_content_specification: contentmodel.Animation_Content_Specification,
-    pending_content_specification: contentmodel.Animation_Content_Specification,
+    asset_root_override: string,
+    profile: evidence_profile.State,
     evidence_ring: evidence_trace.Ring,
     evidence_session: ^evidence_session.Session,
-    profile: evidence_profile.State,
-    asset_root_override: string,
+
+    // Embedded runtime handles and worker lifecycle state.
     runtime_host: ^julialib.jl_value_t,
     worker: ^thread.Thread,
+    owner_thread_id: int,
+    lifecycle: Julia_Lifecycle_State,
+    runtime_generation: u64,
+
+    // Bounded worker transport and messages retained across handoffs.
     request_link: Communication_Link(Julia_Host_Ingress),
     event_link: Communication_Link(Julia_Host_Egress),
     pending_view_content: ^Julia_Host_Egress,
     display_egress_dispatch: Julia_Egress_Dispatch_Proc,
     display_egress_user_data: rawptr,
     display_pending_view_content: ^Julia_Host_Egress,
-    presentation_generation: u64,
-    presentation_animation_generation_override: u64,
-    presentation_animation_override: ^Euclid_Julia_Animation_Interface,
+
+    // Request identity, active work, and admission/failure diagnostics.
     next_request_id: u64,
-    owner_thread_id: int,
-    lifecycle: Julia_Lifecycle_State,
     active_request_id: u64,
     active_request_kind: Julia_Request_Kind,
     failed_request_count: u64,
     last_failed_request_id: u64,
     last_failed_request_kind: Julia_Request_Kind,
     request_saturation_count: u64,
+
+    // Transactional runtime-reload state and failure diagnostics.
     reload_state: Julia_Reload_State,
     reload_requested: bool,
     reload_failure_injection: Julia_Reload_Failure_Injection,
-    runtime_generation: u64,
     reload_failed_package_identity: [32]byte,
     reload_failed_package_identity_valid: bool,
+
+    // Active and staged content plus presentation override state.
+    active_content_specification: contentmodel.Animation_Content_Specification,
+    pending_content_specification: contentmodel.Animation_Content_Specification,
+    presentation_generation: u64,
+    presentation_animation_generation_override: u64,
+    presentation_animation_override: ^Euclid_Julia_Animation_Interface,
+
+    // Double-buffered view snapshots and their publication generation.
     view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
     view_snapshot_generation: u64,
     published_view_snapshot_index: int,
+
+    // Bounded animation work slots, accumulated timing, and outcome metrics.
     animation_tick_slots: [ANIMATION_TICK_SLOT_COUNT]Animation_Tick_Slot,
     animation_lifecycle_slot: Animation_Lifecycle_Slot,
     animation_generation: u64,

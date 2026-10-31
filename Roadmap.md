@@ -7,8 +7,6 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Search history / Autocomplete
-- Use history / Most viewed / Most recent
 - Custom notes on collection items
 - Export / Import by file
 - Ip-2-ip sharing protocol
@@ -17,6 +15,7 @@ there are some things that do need to start early.
 - Persisting terminals
 - Terminal animation recording
 - Terminal exercises
+- Animation builder
 - Accessibility completion work
 
 -----------------
@@ -215,15 +214,11 @@ General features:
   - [X] Localization tables
   - [X] Basic initial user settings structure
   - [X] Persistent REPL history
-  - [ ] Search history and auto-completion feature
-  - [ ] Animation view history
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
     - [X] Favorites/Collection organization
     - [X] Custom naming in collections
     - [X] Multiple custom collections
-    - [ ] Most viewed (dynamic; non-mutable)
-    - [ ] Most recent (dynamic; non-mutable)
     - [ ] Custom notes in collections
     - [ ] Sharing custom collections
       - [ ] Export/import files
@@ -242,9 +237,10 @@ General features:
   - [ ] Persisting Terminals (runtime-only, as children in the trees of Terminal
      that can be navigated away from and returned to with persisted internal state;
      exit cleans REPL state and removes from tree)
-  - [ ] Terminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
-     ... replay_recording!)
+  - [ ] Terminal animation recorder w/ playback & save (e.g. start_recording! ...
+     end_recording! ... replay_recording!)
   - [ ] REPL-focused exercises
+  - [ ] Animation builder
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support
   - [X] Reduced motion support
@@ -345,6 +341,10 @@ Core Features:
     evolutes and involutes, inversions, caustics
 - Limited lifetime line/arc segments--disintegrate after drawing
 - Optional completed checkboxes in tree
+- Search history and auto-completion feature
+- Animation view history
+- Most viewed (dynamic; non-mutable)
+- Most recent (dynamic; non-mutable)
 - More LaTeX support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
