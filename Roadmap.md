@@ -13,6 +13,7 @@ there are some things that do need to start early.
 - Export / Import by file
 - Ip-2-ip sharing protocol
 - Terminal drawing shape suite
+- Julia thread communications work
 - Persisting terminals
 - Terminal animation recording
 - Terminal exercises
@@ -269,6 +270,7 @@ Final tasks:
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Isolate SQLite persistence module
+  - [ ] Julia thread structure to support Odin-based animations
 - [ ] Render polishes
   - [X] Shader-based particle drawing
   - [X] PIC dust particle physics

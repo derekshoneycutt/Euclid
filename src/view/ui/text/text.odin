@@ -268,22 +268,29 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
         return
     }
     resolved := draw.resolved
-    if !native.draw_encoder_texture_quad(draw.encoder,
-        quad.destination, quad.uv, draw.color, {
+    scale, scale_valid := ui_text_resolved_raster_scale(draw)
+    if !scale_valid {
+        return
+    }
+    ui_text_draw_glyph_ink(draw.encoder, resolved, quad, draw.color, scale)
+}
+
+// ui_text_draw_glyph_ink shares coverage placement and ink-only visibility across glyph paths.
+ui_text_draw_glyph_ink :: proc(
+    encoder: ^native.Draw_Encoder, resolved: view_font.Resolved_Glyph,
+    quad: Resolved_Glyph_Quad, tint: color.Color_RGBA8, scale: f32) {
+    if !native.draw_encoder_texture_quad(encoder, quad.destination, quad.uv,
+        native.draw_encoder_glyph_color(encoder, quad.destination, tint), {
             texture = resolved.texture.handle,
             sampler = .Linear,
         }) {
         return
     }
-    scale, scale_valid := ui_text_resolved_raster_scale(draw)
-    if !scale_valid {
-        return
-    }
     for sample in resolved.coverage_samples {
-        native.draw_encoder_record_ink_sample(draw.encoder, {
+        native.draw_encoder_record_ink_sample(encoder, {
             quad.destination.x+(f32(sample.x)+0.5)*scale,
             quad.destination.y+(f32(sample.y)+0.5)*scale,
-        }, draw.color, sample.coverage)
+        }, tint, sample.coverage)
     }
 }
 

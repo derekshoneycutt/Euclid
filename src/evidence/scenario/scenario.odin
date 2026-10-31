@@ -1423,89 +1423,6 @@ event_kind :: proc(name: string) -> (trace.Kind, bool) {
 }
 
 //   Evaluate one stable scalar-state predicate.
-terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
-    switch name {
-    case "terminal_ready":
-        return display.terminal_ready
-    case "terminal_idle":
-        return display.terminal_idle
-    case "terminal_continuation":
-        return display.terminal_continuation
-    case "terminal_completion_ready":
-        return display.terminal_completion_ready
-    }
-    return false
-}
-
-//   Evaluate runtime and animation scalar-state predicates.
-runtime_state_matches :: proc(name: string, display: observe.Display) -> bool {
-    switch name {
-    case "runtime_ready":
-        return display.runtime_lifecycle == .Ready
-    case "runtime_idle":
-        return display.active_runtime_request_id == 0
-    // Presentation parsing is independently scheduled and does not extend animation work.
-    case "animation_idle":
-        return !display.animation_tick_pending ||
-            display.animation_tick_sequence == display.animation_last_committed_sequence
-    case "simulation_paused":
-        return display.simulation_paused
-    case "simulation_running":
-        return !display.simulation_paused
-    case "animation_paused":
-        return display.animation_policy_paused
-    }
-    return playback_state_matches(name, display)
-}
-
-// Evaluate retained overlay visibility and selected versus effective playback rates.
-playback_state_matches :: proc(name: string, display: observe.Display) -> bool {
-    switch name {
-    case "animation_controls_hidden":
-        return display.animation_controls_hidden
-    case "animation_controls_visible":
-        return !display.animation_controls_hidden
-    case "animation_speed_1x":
-        return display.animation_playback_rate == .Normal
-    case "animation_speed_2x":
-        return display.animation_playback_rate == .Double
-    case "animation_speed_4x":
-        return display.animation_playback_rate == .Quadruple
-    case "animation_effective_speed_1x":
-        return display.animation_effective_rate == .Normal
-    case "animation_effective_speed_2x":
-        return display.animation_effective_rate == .Double
-    case "animation_effective_speed_4x":
-        return display.animation_effective_rate == .Quadruple
-    }
-    return false
-}
-
-//   Evaluate dust lifecycle scalar-state predicates.
-dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
-    switch name {
-    case "dust_settled":
-        return display.dust_live_count > 0 && display.dust_airborne_count == 0 &&
-            display.dust_grounded_count == display.dust_live_count &&
-            display.dust_peak_speed_sq <=
-                particlemodel.DUST_SETTLED_SPEED_SQ
-    case "dust_active":
-        return display.dust_live_count > 0 &&
-            (display.dust_airborne_count > 0 ||
-                display.dust_peak_speed_sq >
-                    particlemodel.DUST_SETTLED_SPEED_SQ)
-    case "dust_airborne":
-        return display.dust_airborne_count > 0
-    case "particle_effects_disabled":
-        return !display.settings_preferences.interface.enable_particle_effects &&
-            display.particle_count == 0 && display.dust_live_count == 0 &&
-            display.presentation_effects.live_count == 0 &&
-            !display.presentation_effects.arrival_active
-    }
-    return false
-}
-
-//   Evaluate one stable scalar-state predicate.
 //
 // Parameters:
 //   - name: Public scenario state-predicate spelling.
@@ -1514,6 +1431,9 @@ dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
 // Returns:
 //   - True when the named predicate currently holds; false for unknown names.
 state_matches :: proc(name: string, display: observe.Display) -> bool {
+    // Keep to the flat switch style here:
+    //  Only pure boolean expressions; no equalities, inequalities, just raw
+    //  booleans or function calls. Use #force_inline for painfully obvious ones.
     switch name {
     case "dynview_enabled":
         return display.dynview_enabled
@@ -1547,9 +1467,147 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
         return animation_completion_published(display)
     case "animation_completion_failed":
         return display.animation_completion_failed
+    case "runtime_ready":
+        return runtime_ready(display)
+    case "runtime_idle":
+        return runtime_request_idle(display)
+    case "animation_idle":
+        return animation_ticks_idle(display)
+    case "simulation_paused":
+        return display.simulation_paused
+    case "simulation_running":
+        return !display.simulation_paused
+    case "animation_paused":
+        return display.animation_policy_paused
+    case "animation_controls_hidden":
+        return display.animation_controls_hidden
+    case "animation_controls_visible":
+        return !display.animation_controls_hidden
+    case "animation_speed_1x":
+        return animation_speed_normal(display)
+    case "animation_speed_2x":
+        return animation_speed_double(display)
+    case "animation_speed_4x":
+        return animation_speed_quadruple(display)
+    case "animation_effective_speed_1x":
+        return animation_effective_speed_normal(display)
+    case "animation_effective_speed_2x":
+        return animation_effective_speed_double(display)
+    case "animation_effective_speed_4x":
+        return animation_effective_speed_quadruple(display)
+    case "dust_settled":
+        return world_dust_settled(display)
+    case "dust_active":
+        return world_dust_active(display)
+    case "dust_airborne":
+        return world_dust_airborne(display)
+    case "particle_effects_disabled":
+        return particle_effects_retired(display)
+    case "terminal_ready":
+        return display.terminal_ready
+    case "terminal_idle":
+        return display.terminal_idle
+    case "terminal_continuation":
+        return display.terminal_continuation
+    case "terminal_completion_ready":
+        return display.terminal_completion_ready
+    case "settings_saved":
+        return settings_save_joined(display)
+    case "settings_saving":
+        return display.settings_save_active
+    case "settings_unavailable":
+        return settings_store_unavailable(display)
+    case "settings_failed":
+        return settings_save_failed(display)
+    case "settings_worker_only":
+        return settings_save_worker_only(display)
+    case "accordion_transitioning":
+        return display.accordion_transition_running
+    case "accordion_settled":
+        return !display.accordion_transition_running
+    case "tree_transitioning":
+        return tree_transitioning(display)
+    case "tree_settled":
+        return !tree_transitioning(display)
+    case "collection_delete_ready":
+        return display.collection_delete_ready
+    case "interface_reduced_motion":
+        return display.interface_reduce_motion
+    case "presentation_visible":
+        return display.presentation_visible
+    case "presentation_hidden":
+        return !display.presentation_visible
     case:
-        return subsystem_state_matches(name, display)
+        return presentation_effects_state_matches(name, display.presentation_effects)
     }
+}
+
+// Runtime readiness reflects the host's committed lifecycle.
+runtime_ready :: #force_inline proc(display: observe.Display) -> bool {
+    return display.runtime_lifecycle == .Ready
+}
+
+// Runtime request idleness requires no active host request.
+runtime_request_idle :: #force_inline proc(display: observe.Display) -> bool {
+    return display.active_runtime_request_id == 0
+}
+
+// Normal playback is the selected one-times session rate.
+animation_speed_normal :: #force_inline proc(display: observe.Display) -> bool {
+    return display.animation_playback_rate == .Normal
+}
+
+// Double playback is the selected two-times session rate.
+animation_speed_double :: #force_inline proc(display: observe.Display) -> bool {
+    return display.animation_playback_rate == .Double
+}
+
+// Quadruple playback is the selected four-times session rate.
+animation_speed_quadruple :: #force_inline proc(display: observe.Display) -> bool {
+    return display.animation_playback_rate == .Quadruple
+}
+
+// Effective normal playback reflects capture and completion policy, not selection.
+animation_effective_speed_normal :: #force_inline proc(
+    display: observe.Display) -> bool {
+    return display.animation_effective_rate == .Normal
+}
+
+// Effective double playback reflects the owner-resolved two-times rate.
+animation_effective_speed_double :: #force_inline proc(
+    display: observe.Display) -> bool {
+    return display.animation_effective_rate == .Double
+}
+
+// Effective quadruple playback reflects the owner-resolved four-times rate.
+animation_effective_speed_quadruple :: #force_inline proc(
+    display: observe.Display) -> bool {
+    return display.animation_effective_rate == .Quadruple
+}
+
+// Airborne dust has at least one live slot above the floor.
+world_dust_airborne :: #force_inline proc(display: observe.Display) -> bool {
+    return display.dust_airborne_count > 0
+}
+
+// Unavailable settings reflect a store that cannot accept durable writes.
+settings_store_unavailable :: #force_inline proc(display: observe.Display) -> bool {
+    return display.settings_save_status == .Unavailable
+}
+
+// Failed settings retain the owner's failed save outcome.
+settings_save_failed :: #force_inline proc(display: observe.Display) -> bool {
+    return display.settings_save_status == .Failed
+}
+
+// Worker-only saving excludes any recorded display-owner execution.
+settings_save_worker_only :: #force_inline proc(display: observe.Display) -> bool {
+    return display.settings_save_owner_execution_count == 0
+}
+
+// Tree motion remains active while any retained transition is running.
+tree_transitioning :: #force_inline proc(display: observe.Display) -> bool {
+    return display.tree_transition_count > 0
 }
 
 // PNG success is observable only after publication completes.
@@ -1582,104 +1640,184 @@ animation_completion_published :: #force_inline proc(display: observe.Display) -
     return display.animation_completed && !display.animation_completion_pending
 }
 
-// Delegate non-scalar predicates to their owning observation groups in stable order.
-subsystem_state_matches :: #force_inline proc(
-    name: string, display: observe.Display) -> bool {
-    return runtime_state_matches(name, display) ||
-        dust_state_matches(name, display) || terminal_state_matches(name, display) ||
-        settings_state_matches(name, display) ||
-        interface_state_matches(name, display) ||
-        presentation_effects_state_matches(name, display.presentation_effects)
+// Animation idleness excludes outstanding ticks, not independent presentation parsing.
+animation_ticks_idle :: #force_inline proc(display: observe.Display) -> bool {
+    return !display.animation_tick_pending ||
+        display.animation_tick_sequence == display.animation_last_committed_sequence
 }
 
-// Evaluate pane-local Dynview presentation dust and arrival predicates.
+// Settled dust requires live grounded material below the shared speed threshold.
+world_dust_settled :: #force_inline proc(display: observe.Display) -> bool {
+    return display.dust_live_count > 0 && display.dust_airborne_count == 0 &&
+        display.dust_grounded_count == display.dust_live_count &&
+        display.dust_peak_speed_sq <= particlemodel.DUST_SETTLED_SPEED_SQ
+}
+
+// Active dust requires live material with airborne slots or meaningful velocity.
+world_dust_active :: #force_inline proc(display: observe.Display) -> bool {
+    return display.dust_live_count > 0 &&
+        (display.dust_airborne_count > 0 ||
+            display.dust_peak_speed_sq > particlemodel.DUST_SETTLED_SPEED_SQ)
+}
+
+// Disabling particles is acknowledged only after world and UI material retire.
+particle_effects_retired :: #force_inline proc(display: observe.Display) -> bool {
+    return !display.settings_preferences.interface.enable_particle_effects &&
+        display.particle_count == 0 && display.dust_live_count == 0 &&
+        display.presentation_effects.live_count == 0 &&
+        !display.presentation_effects.arrival_active
+}
+
+// Saved preferences require a joined write and no pending replacement.
+settings_save_joined :: #force_inline proc(display: observe.Display) -> bool {
+    return display.settings_save_status == .Saved &&
+        !display.settings_save_active && display.settings_pending_count == 0
+}
+
+// Evaluate pane-local surface, material, and arrival predicates from effects-only observations.
 presentation_effects_state_matches :: proc(
     name: string, effects: observe.Presentation_Effects) -> bool {
-    dust_active := effects.departure_particle_count > 0
+    // Keep to the flat switch style here:
+    //  Only pure boolean expressions; no equalities, inequalities, just raw
+    //  booleans or function calls. Use #force_inline for painfully obvious ones.
     switch name {
     case "presentation_effects_active":
-        return dust_active || effects.arrival_active
+        return presentation_effects_active(effects)
     case "presentation_effects_settled":
-        return !dust_active && !effects.arrival_active
+        return !presentation_effects_active(effects)
     case "presentation_dust_active":
-        return dust_active
+        return presentation_dust_active(effects)
     case "presentation_arrival_active":
         return effects.arrival_active
     case "presentation_arrival_idle":
         return !effects.arrival_active
     case "presentation_arrival_particles":
-        return effects.arrival_particle_count > 0
-    }
-    return presentation_material_state_matches(name, effects)
-}
-
-// Evaluate live material populations and retained reclamation outcomes.
-presentation_material_state_matches :: proc(
-    name: string, effects: observe.Presentation_Effects) -> bool {
-    switch name {
+        return presentation_arrival_particles(effects)
+    case "presentation_surface_dynview":
+        return presentation_surface_dynview(effects)
+    case "presentation_surface_terminal":
+        return presentation_surface_terminal(effects)
+    case "presentation_surface_history":
+        return presentation_surface_history(effects)
     case "presentation_reclaimed":
-        return effects.reclaimed_count > 0
+        return presentation_material_reclaimed(effects)
+    case "presentation_formation_reclaimed":
+        return presentation_formation_reclaimed(effects)
     case "presentation_fresh":
-        return effects.fresh_count > 0
+        return presentation_material_fresh(effects)
     case "presentation_floor_dust":
-        return effects.resting_count > 0
+        return presentation_floor_dust(effects)
     case "presentation_evicted":
-        return effects.eviction_count > 0
+        return presentation_material_evicted(effects)
     case "presentation_cancelled":
-        return effects.arrival_cancelled_count > 0
+        return presentation_arrival_cancelled(effects)
     case "presentation_reclaim_mode":
-        return effects.transition == .Reclaim
+        return presentation_reclaim_mode(effects)
     case "presentation_pool_bounded":
-        return effects.live_count >= 0 &&
-            effects.live_count <= uidust.UI_DUST_TOTAL_PARTICLES
+        return presentation_pool_bounded(effects)
     case "presentation_arrival_completed":
-        return effects.arrival_completed_count > 0
+        return presentation_arrival_completed(effects)
     case "presentation_arrival_quick":
-        return effects.arrival_completed_count > 0 &&
-            effects.arrival_completed_duration <= 0.30
+        return presentation_arrival_quick(effects)
     }
     return false
 }
 
-// interface_state_matches evaluates logical visibility and display-owned motion policy.
-interface_state_matches :: proc(name: string, display: observe.Display) -> bool {
-    switch name {
-    case "accordion_transitioning":
-        return display.accordion_transition_running
-    case "accordion_settled":
-        return !display.accordion_transition_running
-    case "tree_transitioning":
-        return display.tree_transition_count > 0
-    case "tree_settled":
-        return display.tree_transition_count == 0
-    case "collection_delete_ready":
-        return display.collection_delete_ready
-    case "interface_reduced_motion":
-        return display.interface_reduce_motion
-    case "presentation_visible":
-        return display.presentation_visible
-    case "presentation_hidden":
-        return !display.presentation_visible
-    }
-    return false
+// Departing particles keep pane-local dust active.
+presentation_dust_active :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.departure_particle_count > 0
 }
 
-// Evaluate durability and joined worker-ownership predicates independently of runtime idle.
-settings_state_matches :: proc(name: string, display: observe.Display) -> bool {
-    switch name {
-    case "settings_saved":
-        return display.settings_save_status == .Saved &&
-            !display.settings_save_active && display.settings_pending_count == 0
-    case "settings_saving":
-        return display.settings_save_active
-    case "settings_unavailable":
-        return display.settings_save_status == .Unavailable
-    case "settings_failed":
-        return display.settings_save_status == .Failed
-    case "settings_worker_only":
-        return display.settings_save_owner_execution_count == 0
-    }
-    return false
+// Arrival particles distinguish ink formation from an ordinary fade.
+presentation_arrival_particles :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.arrival_particle_count > 0
+}
+
+// Dynview identity describes the prepared document surface.
+presentation_surface_dynview :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.surface == .Dynview
+}
+
+// Terminal identity describes the prepared interactive surface.
+presentation_surface_terminal :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.surface == .Terminal
+}
+
+// History identity describes the prepared explorer surface.
+presentation_surface_history :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.surface == .History
+}
+
+// Reclaimed material requires live slots transferred into arrival ownership.
+presentation_material_reclaimed :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.reclaimed_count > 0
+}
+
+// Formation reclaim retains the latest transfer outcome after particles retire.
+presentation_formation_reclaimed :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.formation_reclaimed > 0
+}
+
+// Fresh material identifies live arrival slots emitted for ink shortages.
+presentation_material_fresh :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.fresh_count > 0
+}
+
+// Floor dust requires live resting departure residue.
+presentation_floor_dust :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.resting_count > 0
+}
+
+// Eviction is observable after any bounded pool replacement.
+presentation_material_evicted :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.eviction_count > 0
+}
+
+// Cancellation retains evidence of an interrupted arrival.
+presentation_arrival_cancelled :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.arrival_cancelled_count > 0
+}
+
+// Reclaim mode selects reuse rather than independent material emission.
+presentation_reclaim_mode :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.transition == .Reclaim
+}
+
+// Completion requires a retained successful arrival endpoint.
+presentation_arrival_completed :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.arrival_completed_count > 0
+}
+
+// Either departing material or an incoming reveal keeps presentation effects active.
+presentation_effects_active :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.departure_particle_count > 0 || effects.arrival_active
+}
+
+// The live presentation population must remain within its fixed shared pool.
+presentation_pool_bounded :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.live_count >= 0 && effects.live_count <= uidust.UI_DUST_TOTAL_PARTICLES
+}
+
+// Quick arrival requires a recorded completion within the product handoff deadline.
+presentation_arrival_quick :: #force_inline proc(
+    effects: observe.Presentation_Effects) -> bool {
+    return effects.arrival_completed_count > 0 &&
+        effects.arrival_completed_duration <= 0.30
 }
 
 //   Return running before the deadline and fail at or after it.

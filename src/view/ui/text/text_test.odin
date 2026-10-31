@@ -28,6 +28,11 @@ Text_Ink_Capture_Test_State :: struct {
     coverage: u8,
 }
 
+// text_test_half_ink_alpha simulates an active ink handoff without fading sample provenance.
+text_test_half_ink_alpha :: proc(_: rawptr, _: geometry.Vector2) -> f32 {
+    return 0.5
+}
+
 // Shape a two-codepoint fixture with the same advances used by its cached glyphs.
 text_test_shape_label_ink :: proc(
     user_data: rawptr, _: view_font.Font_Key, _: string,
@@ -144,6 +149,7 @@ text_test_glyph_coverage_samples_follow_rendered_placement :: proc(
     native.draw_encoder_set_ink_sink(&encoder, {
         user_data = &capture,
         record = text_test_record_ink_sample,
+        alpha = text_test_half_ink_alpha,
     })
 
     ui_text_draw_resolved_glyph({
@@ -173,6 +179,7 @@ text_test_glyph_coverage_samples_follow_rendered_placement :: proc(
     testing.expect_value(t, capture.position, geometry.Vector2{12.75, 23.75})
     testing.expect_value(t, capture.color, tint)
     testing.expect_value(t, capture.coverage, u8(128))
+    testing.expect_value(t, vertices[0].color.a, u8(100))
 }
 
 // Verify copied label ink follows shaped Unicode columns and retains coverage.

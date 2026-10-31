@@ -13,6 +13,8 @@ import "core:log"
 import "core:os"
 import "core:path/filepath"
 
+Font_Ink_Surface :: fontmodel.Font_Ink_Surface
+
 // Maximum runes in either required startup seed policy.
 FONT_SEED_CODEPOINT_CAPACITY :: fontmodel.FONT_SEED_CODEPOINT_CAPACITY
 
@@ -2027,7 +2029,7 @@ cache_terminal_resolver :: proc(cache: ^Font_Cache) -> Font_Resolver {
     }
 }
 
-// Begin a bounded capture for the next structured presentation frame.
+// Allocate the cache-owned bounded surface ink buffers.
 cache_ink_capture_init :: proc(
     cache: ^Font_Cache, allocator: mem.Allocator) -> bool {
     if cache == nil || cache.visible_ink_samples != nil {
@@ -2062,7 +2064,7 @@ cache_ink_capture_destroy :: proc(
     cache.visible_ink_counts = {}
 }
 
-// Begin a bounded capture for the next structured presentation frame.
+// Begin a bounded capture for the next presentation surface frame.
 cache_ink_capture_begin :: proc(cache: ^Font_Cache) {
     if cache == nil {
         return
@@ -2076,12 +2078,14 @@ cache_ink_capture_begin :: proc(cache: ^Font_Cache) {
     cache.visible_ink_capture_drawn = false
 }
 
-// Record that the structured presentation drew this frame, even with no visible ink.
-cache_ink_capture_mark_drawn :: proc(cache: ^Font_Cache) {
+// Record the drawn surface even when its clipped content contains no ink.
+cache_ink_capture_mark_drawn :: proc(
+    cache: ^Font_Cache, surface: Font_Ink_Surface = .Dynview) {
     if cache == nil {
         return
     }
     cache.visible_ink_capture_drawn = true
+    cache.visible_ink_surfaces[cache.visible_ink_capture_index] = surface
 }
 
 // Retain a deterministic reservoir sample without borrowing draw or font storage.
@@ -2119,7 +2123,7 @@ cache_ink_capture_sample :: proc(
 }
 
 // Publish the staged samples only after the frame reaches the display.
-// Frames that drew no structured presentation keep the last drawn ink, so
+// Frames that drew no eligible presentation keep the last drawn ink, so
 // content released before a transition commits can still break into dust.
 cache_ink_capture_publish :: proc(cache: ^Font_Cache) {
     if cache == nil || !cache.visible_ink_capture_drawn {
@@ -2129,7 +2133,7 @@ cache_ink_capture_publish :: proc(cache: ^Font_Cache) {
     cache.visible_ink_publish_serial += 1
 }
 
-// Identify the latest published structured-ink frame. A larger value than one
+// Identify the latest published surface-ink frame. A larger value than one
 // recorded at content publication proves the samples belong to that content.
 cache_visible_ink_serial :: proc(cache: ^Font_Cache) -> u64 {
     if cache == nil {
@@ -2146,7 +2150,12 @@ cache_ink_capture_discard :: proc(cache: ^Font_Cache) {
     cache.visible_ink_counts[cache.visible_ink_active_index] = 0
 }
 
-// Borrow independent samples from the most recently presented Dynview frame.
+// Identify the surface whose ink last reached a successfully presented frame.
+cache_visible_ink_surface :: proc(cache: ^Font_Cache) -> Font_Ink_Surface {
+    return cache.visible_ink_surfaces[cache.visible_ink_active_index]
+}
+
+// Borrow independent samples from the most recently presented surface frame.
 cache_visible_ink_samples :: proc(cache: ^Font_Cache) -> []Font_Ink_Sample {
     if cache == nil || len(cache.visible_ink_samples) !=
         2*FONT_VISIBLE_INK_SAMPLE_CAPACITY {

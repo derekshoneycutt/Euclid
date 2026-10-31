@@ -570,7 +570,7 @@ prepare_sdl_layout_and_effects :: proc(
     layout_interaction := ui.prepare_and_finish_ui_layout(
         state, update.routed_frame, terminal_frame)
     update_sdl_presentation_effects(
-        state, ctx, update.frame_dt, layout_interaction.presentation)
+        state, ctx, update.frame_dt, layout_interaction.presentation, terminal_frame)
     return layout_interaction
 }
 
@@ -578,10 +578,14 @@ prepare_sdl_layout_and_effects :: proc(
 update_sdl_presentation_effects :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
     delta_seconds: f32,
-    presentation: uipresentation.Presentation_Preparation) {
+    presentation: uipresentation.Presentation_Preparation,
+    terminal: uiterminal.Terminal_Prepared_Frame) {
     viewpresentation.presentation_effects_update(
-        state, ctx.presentation, delta_seconds, presentation,
-        presentation_visual_signature(state, ctx.platform))
+        state, ctx.presentation, delta_seconds, {
+            presentation = presentation,
+            terminal = terminal,
+            visual_signature = presentation_visual_signature(state, ctx.platform),
+        })
 }
 
 // presentation_visual_signature invalidates effects after font or scale changes.

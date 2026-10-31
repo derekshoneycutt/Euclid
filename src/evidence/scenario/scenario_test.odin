@@ -9,7 +9,7 @@ import settings "../../settings"
 
 import "core:testing"
 
-// Flat scalar dispatch preserves transport acknowledgement and subsystem fallback.
+// Flat scalar dispatch preserves transport acknowledgement and effects-only dispatch.
 @(test)
 scenario_test_scalar_state_dispatch :: proc(t: ^testing.T) {
     display: observe.Display = {
@@ -38,6 +38,57 @@ scenario_test_scalar_state_dispatch :: proc(t: ^testing.T) {
     testing.expect(t, !state_matches("gif_idle", display))
     testing.expect(t, state_matches("presentation_effects_settled", display))
     testing.expect(t, !state_matches("unknown_state", display))
+}
+
+// Consolidated compound predicates preserve acknowledgement and exact dust thresholds.
+@(test)
+scenario_test_compound_state_dispatch_boundaries :: proc(t: ^testing.T) {
+    display: observe.Display
+    testing.expect(t, state_matches("animation_idle", display))
+    display.animation_tick_pending = true
+    display.animation_tick_sequence = 2
+    display.animation_last_committed_sequence = 1
+    testing.expect(t, !state_matches("animation_idle", display))
+    display.animation_last_committed_sequence = 2
+    testing.expect(t, state_matches("animation_idle", display))
+    testing.expect(t, !state_matches("dust_settled", display))
+    testing.expect(t, !state_matches("dust_active", display))
+    display.dust_live_count = 1
+    display.dust_grounded_count = 1
+    display.dust_peak_speed_sq = particlemodel.DUST_SETTLED_SPEED_SQ
+    testing.expect(t, state_matches("dust_settled", display))
+    testing.expect(t, !state_matches("dust_active", display))
+    display.dust_peak_speed_sq += 1
+    testing.expect(t, !state_matches("dust_settled", display))
+    testing.expect(t, state_matches("dust_active", display))
+    display.dust_peak_speed_sq = 0
+    display.dust_airborne_count = 1
+    testing.expect(t, !state_matches("dust_settled", display))
+    testing.expect(t, state_matches("dust_active", display))
+    testing.expect(t, state_matches("dust_airborne", display))
+}
+
+// Disabled effects and saved settings require all corresponding work to be retired.
+@(test)
+scenario_test_retirement_state_dispatch :: proc(t: ^testing.T) {
+    display: observe.Display = {
+        settings_save_status = .Saved,
+    }
+    testing.expect(t, state_matches("settings_saved", display))
+    display.settings_save_active = true
+    testing.expect(t, !state_matches("settings_saved", display))
+    display.settings_save_active = false
+    display.settings_pending_count = 1
+    testing.expect(t, !state_matches("settings_saved", display))
+    testing.expect(t, state_matches("particle_effects_disabled", display))
+    display.presentation_effects.arrival_active = true
+    testing.expect(t, !state_matches("particle_effects_disabled", display))
+    display.presentation_effects.arrival_active = false
+    display.presentation_effects.live_count = 1
+    testing.expect(t, !state_matches("particle_effects_disabled", display))
+    display.presentation_effects.live_count = 0
+    display.settings_preferences.interface.enable_particle_effects = true
+    testing.expect(t, !state_matches("particle_effects_disabled", display))
 }
 
 // Playback predicates distinguish session choices from capture's effective rate.
@@ -424,6 +475,27 @@ scenario_test_presentation_effect_predicates :: proc(t: ^testing.T) {
 
 // Reclamation predicates distinguish live material from retained completion facts.
 @(test)
+scenario_test_presentation_surface_predicates :: proc(t: ^testing.T) {
+    testing.expect(t, presentation_effects_state_matches(
+        "presentation_surface_dynview", {
+            surface = .Dynview,
+        }))
+    testing.expect(t, presentation_effects_state_matches(
+        "presentation_surface_terminal", {
+            surface = .Terminal,
+        }))
+    testing.expect(t, presentation_effects_state_matches(
+        "presentation_surface_history", {
+            surface = .History,
+        }))
+    testing.expect(t, !presentation_effects_state_matches(
+        "presentation_surface_history", {
+            surface = .Terminal,
+        }))
+}
+
+// Reclamation predicates distinguish live material from retained completion facts.
+@(test)
 scenario_test_reclamation_predicates :: proc(t: ^testing.T) {
     effects: observe.Presentation_Effects = {
         reclaimed_count = 2,
@@ -442,6 +514,9 @@ scenario_test_reclamation_predicates :: proc(t: ^testing.T) {
         "presentation_arrival_quick",
     }) {
         testing.expect(t, presentation_effects_state_matches(name, effects))
+        testing.expect(t, state_matches(name, {
+            presentation_effects = effects,
+        }))
     }
     effects.arrival_completed_duration = 0.31
     effects.live_count = 4097
@@ -455,6 +530,9 @@ scenario_test_reclamation_predicates :: proc(t: ^testing.T) {
     testing.expect(t, !presentation_effects_state_matches("presentation_reclaimed", {}))
     testing.expect(t,
         !presentation_effects_state_matches("presentation_arrival_completed", {}))
+    effects.live_count = -1
+    testing.expect(t, !presentation_effects_state_matches("presentation_pool_bounded", effects))
+    testing.expect(t, !presentation_effects_state_matches("unknown_state", effects))
 }
 
 // Verify view-content actions preserve exact source, MIME, alias, and empty content.

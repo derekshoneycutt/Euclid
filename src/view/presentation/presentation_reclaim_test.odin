@@ -39,10 +39,16 @@ presentation_reclaims_only_new_published_ink :: proc(t: ^testing.T) {
             view_rect = {0, 0, 200, 200},
         },
     }
-    presentation_effects_update(state, runtime, 0, frame, 1)
+    presentation_effects_update(state, runtime, 0, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect(t, runtime^.dust.incoming_awaiting_targets)
     presentation_test_publish_ink(state, {{80, 90}, {90, 100}})
-    presentation_effects_update(state, runtime, 0, frame, 1)
+    presentation_effects_update(state, runtime, 0, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect_value(t,
         runtime^.dust.particles.phase[0], uidust.Ui_Dust_Phase.Reclaimed_Arrival)
     testing.expect_value(t,
@@ -56,7 +62,10 @@ presentation_reclaims_only_new_published_ink :: proc(t: ^testing.T) {
     testing.expect_value(t, observed.formation_fresh, 1)
     testing.expect_value(t,
         len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 2)
-    presentation_effects_update(state, runtime, 0.30, frame, 1)
+    presentation_effects_update(state, runtime, 0.30, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect_value(t, runtime^.dust.arrival_count, 0)
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&runtime^.dust), f32(1))
 }
@@ -79,7 +88,10 @@ presentation_context_change_precedes_reclamation :: proc(t: ^testing.T) {
             view_rect = {0, 0, 100, 100},
         },
     }
-    presentation_effects_update(state, runtime, 0, frame, 1)
+    presentation_effects_update(state, runtime, 0, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect_value(t, runtime^.dust.live_count, 0)
     testing.expect(t, !runtime^.dust.incoming_active)
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&runtime^.dust), f32(1))
@@ -136,6 +148,9 @@ presentation_replacement_without_ink_preserves_forming_material :: proc(
             view_rect = geometry.Rectangle{0, 0, 200, 200},
         },
     }
-    presentation_effects_update(state, runtime, 0, frame, 1)
+    presentation_effects_update(state, runtime, 0, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect_value(t, runtime^.dust.live_count, 0)
 }

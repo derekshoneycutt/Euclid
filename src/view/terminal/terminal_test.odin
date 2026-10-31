@@ -60,10 +60,20 @@ terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
     batches: [1]native.Draw_Batch
     commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
+    ink: font.Font_Cache
+    coverage: [1]font.Font_Glyph_Coverage_Sample = {{2, 3, 128}}
+    testing.expect(t, font.cache_ink_capture_init(&ink, context.allocator))
+    defer font.cache_ink_capture_destroy(&ink, context.allocator)
     texture := rawptr(uintptr(1))
     testing.expect(t, native.draw_encoder_begin(&encoder,
         {vertices[:], indices[:], batches[:], commands[:], nil},
         {100, 100}, {100, 100}))
+    font.cache_ink_capture_begin(&ink)
+    native.draw_encoder_set_ink_sink(&encoder, {
+        user_data = &ink,
+        record = font.cache_ink_capture_sample,
+        glyphs_only = true,
+    })
 
     terminal_draw_shaped_glyph(
         &encoder,
@@ -85,6 +95,7 @@ terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
             raster_ascent = 18,
             canonical_pixel_height = 32,
             canonical_raster_ascent = 24,
+            coverage_samples = coverage[:],
         },
         {
             x_offset = 64,
@@ -93,12 +104,28 @@ terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
 
     testing.expect_value(t, encoder.batch_count, 1)
     testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
-    raster_scale := TERMINAL_FONT_SIZE/f32(24)
-    shaping_scale := TERMINAL_FONT_SIZE/f32(font.JULIA_MONO_FONT_SIZE)
     testing.expect_value(t, vertices[0].position.x,
         f32(15))
     testing.expect_value(t, vertices[0].position.y,
         f32(34))
+    font.cache_ink_capture_mark_drawn(&ink, .Terminal)
+    font.cache_ink_capture_publish(&ink)
+    terminal_test_expect_shaped_glyph_ink(t, &ink)
+}
+
+// Verify the shaped glyph's published coverage retains its snapped placement and foreground tint.
+terminal_test_expect_shaped_glyph_ink :: proc(t: ^testing.T, ink: ^font.Font_Cache) {
+    raster_scale := TERMINAL_FONT_SIZE/f32(24)
+    samples := font.cache_visible_ink_samples(ink)
+    testing.expect_value(t, len(samples), 1)
+    if len(samples) == 1 {
+        testing.expect_value(t, samples[0].coverage, u8(128))
+        testing.expect(t, !samples[0].authored)
+        testing.expect_value(t, samples[0].color, [4]u8{255, 255, 255, 255})
+        testing.expect_value(t, samples[0].position,
+            geometry.Vector2{f32(int(15 + 2.5*raster_scale)) + 0.5,
+                f32(int(34 + 3.5*raster_scale)) + 0.5})
+    }
 }
 
 // Return one high glyph ID for every bounded terminal shaping request.

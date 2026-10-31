@@ -262,6 +262,9 @@ terminal_draw_output_cursor :: proc(
     if !presentation.visible {
         return
     }
+    previous := layout.encoder^.ink_sink
+    native.draw_encoder_set_ink_sink(layout.encoder, {})
+    defer native.draw_encoder_set_ink_sink(layout.encoder, previous)
     column_width := layout.column_width
     position: geometry.Vector2 = {
         origin.x + f32(presentation.column) * column_width,
@@ -657,12 +660,54 @@ terminal_draw_content :: proc(
     origin := geometry.Vector2(draw.origin)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, origin, .Behind_Text)
+    exclusions: [termattachment.DEFAULT_PLACEMENT_CAPACITY]geometry.Rectangle
+    previous := draw.encoder^.ink_sink
+    excluded_count := terminal_foreground_raster_bounds(
+        term, draw.layout, origin, raster_renderer, exclusions[:])
+    draw.encoder^.ink_sink.excluded = exclusions[:excluded_count]
     terminal_draw_output_rows(term, font_resolver, draw)
+    draw.encoder^.ink_sink = previous
     terminal_draw_command_statuses(term, draw.layout, origin)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, origin, .In_Front_Of_Text)
     terminal_draw_foreground(
         term, font_resolver, draw.layout, origin)
+}
+
+// terminal_foreground_raster_bounds excludes glyph samples covered by foreground attachments.
+terminal_foreground_raster_bounds :: proc(
+    term: ^viewterminalmodel.Terminal_State, layout: Terminal_Draw_Layout,
+    origin: geometry.Vector2, renderer: termattachment.Raster_Renderer,
+    output: []geometry.Rectangle) -> int {
+    if renderer.draw == nil || layout.encoder^.ink_sink.record == nil {
+        return 0
+    }
+    placements:
+        [termattachment.DEFAULT_PLACEMENT_CAPACITY]termattachment.Placement_Metadata
+    count := terminal_collect_raster_placements(term, placements[:])
+    retained := 0
+    for placement in placements[:count] {
+        if !terminal_raster_in_layer(placement.geometry.z_index, .In_Front_Of_Text) {
+            continue
+        }
+        line, found := terminal_raster_line(term, placement.geometry.logical_row)
+        metrics, available := termattachment.attachment_metrics(
+            term.synchronized_output.attachments, placement.attachment_id)
+        if !found || !available {
+            continue
+        }
+        anchor: geometry.Vector2 = {
+            origin.x + f32(placement.geometry.column)*layout.column_width,
+            origin.y + f32(line)*layout.line_height,
+        }
+        resolved := terminal_raster_geometry(
+            placement, metrics, anchor, layout.column_width, layout.line_height)
+        if resolved.valid && retained < len(output) {
+            output[retained] = geometry.Rectangle(resolved.destination)
+            retained += 1
+        }
+    }
+    return retained
 }
 
 // Draw terminal overlays after the owning UI container closes its scissor region.
@@ -1030,6 +1075,9 @@ terminal_draw_prompt_preedit_selection :: proc(
     if end <= start {
         return
     }
+    previous := layout.encoder^.ink_sink
+    native.draw_encoder_set_ink_sink(layout.encoder, {})
+    defer native.draw_encoder_set_ink_sink(layout.encoder, previous)
     prefix_text := preedit[:start]
     selected_text := preedit[start:end]
     selection_x := position.x + terminal_text_column_width(
@@ -1762,11 +1810,14 @@ terminal_draw_shaped_glyph :: proc(
     if !quad.valid {
         return
     }
-    _ = native.draw_encoder_texture_quad(
-        encoder, quad.destination, quad.uv, color, {
-            texture = resolved.texture.handle,
-            sampler = .Linear,
-        })
+    scale := terminal_font_size(encoder^.ui_text_size_percent) /
+        f32(resolved.raster_pixel_height)
+    viewtext.ui_text_draw_glyph_ink(
+        encoder, resolved, {
+            destination = quad.destination,
+            uv = quad.uv,
+            valid = quad.valid,
+        }, color, scale)
 }
 
 // Prepare atlas and destination geometry for one terminal shaped glyph.
@@ -2246,6 +2297,9 @@ terminal_cell_foreground :: proc(
 terminal_draw_prompt_overlay :: proc(
     draw: Terminal_Text_Overlay_Draw, cursor_position: int,
     selection: Terminal_Line_Selection, terminal_focused: bool) {
+    previous := draw.encoder^.ink_sink
+    native.draw_encoder_set_ink_sink(draw.encoder, {})
+    defer native.draw_encoder_set_ink_sink(draw.encoder, previous)
     if selection.has_selection {
         terminal_draw_inverted_span(
             draw, selection, selection.right_edge_x)
@@ -2276,6 +2330,9 @@ terminal_draw_prompt_overlay :: proc(
 terminal_draw_inverted_span :: proc(
     draw: Terminal_Text_Overlay_Draw, span: Terminal_Line_Selection,
     right_edge_x: f32) {
+    previous := draw.encoder^.ink_sink
+    native.draw_encoder_set_ink_sink(draw.encoder, {})
+    defer native.draw_encoder_set_ink_sink(draw.encoder, previous)
     span_position: geometry.Vector2 = {
         draw.position.x + terminal_position_x(
             draw.font, draw.text, span.start,

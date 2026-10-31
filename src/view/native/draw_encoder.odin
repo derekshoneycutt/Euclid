@@ -283,6 +283,10 @@ Draw_Ink_Sink :: struct {
     // Sample provenance only; native rendering never transforms vertex colors.
     source_color: color.Color_RGBA8,
     authored: bool,
+    glyphs_only: bool,
+    excluded: []geometry.Rectangle,
+    visibility_data: rawptr,
+    alpha: proc(user_data: rawptr, position: geometry.Vector2) -> f32,
 }
 
 // Draw_Storage borrows fixed-capacity frame buffers from the display owner.
@@ -352,6 +356,11 @@ draw_encoder_record_ink_sample :: #force_inline proc(
     if encoder == nil || encoder^.ink_sink.record == nil || coverage == 0 {
         return
     }
+    for rect in encoder^.ink_sink.excluded {
+        if geometry.rectangle_contains(rect, position) {
+            return
+        }
+    }
     scissor := draw_encoder_physical_scissor(encoder)
     scale_x := f64(encoder^.physical_extent[0])/f64(encoder^.logical_extent.x)
     scale_y := f64(encoder^.physical_extent[1])/f64(encoder^.logical_extent.y)
@@ -376,6 +385,19 @@ draw_encoder_record_ink_sample :: #force_inline proc(
     encoder^.ink_sink.record(
         encoder^.ink_sink.user_data, snapped, source, coverage,
         encoder^.ink_sink.authored)
+}
+
+// draw_encoder_glyph_color applies ink-only arrival visibility without changing sampling tint.
+draw_encoder_glyph_color :: proc(
+    encoder: ^Draw_Encoder, rect: geometry.Rectangle,
+    tint: color.Color_RGBA8) -> color.Color_RGBA8 {
+    result := tint
+    if encoder != nil && encoder^.ink_sink.alpha != nil {
+        opacity := encoder^.ink_sink.alpha(encoder^.ink_sink.visibility_data,
+            {rect.x + rect.width/2, rect.y + rect.height/2})
+        result.a = u8(f32(result.a) * clamp(opacity, 0, 1))
+    }
+    return result
 }
 
 // draw_encoder_triangle_ink_count sizes one solid triangle's ink samples so thin
@@ -812,7 +834,7 @@ draw_encoder_commit :: proc(
     batch^.index_count += u32(len(relative_indices))
     encoder^.statistics.vertices = u32(encoder^.vertex_count)
     encoder^.statistics.indices = u32(encoder^.index_count)
-    if encoder^.ink_sink.record != nil {
+    if encoder^.ink_sink.record != nil && !encoder^.ink_sink.glyphs_only {
         for triangle in 0..<len(relative_indices)/3 {
             draw_encoder_record_triangle_ink(encoder,
                 positions[relative_indices[triangle*3]],

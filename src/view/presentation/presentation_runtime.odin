@@ -49,6 +49,18 @@ Presentation_Runtime :: struct {
     arrival_ink_serial: u64,
     // Debug-scenario arrival override; nil uses the fixed product style.
     arrival_style: Maybe(uidust.Ui_Dust_Arrival_Style),
+    surface: viewfont.Font_Ink_Surface,
+    surface_observed: bool,
+    surface_arrival: bool,
+    surface_switch_count: u64,
+    surface_context_pending: bool,
+}
+
+// Presentation_Effects_Frame borrows the display frame's prepared surfaces and geometry identity.
+Presentation_Effects_Frame :: struct {
+    presentation: uipresentation.Presentation_Preparation,
+    terminal: uiterminal.Terminal_Prepared_Frame,
+    visual_signature: u64,
 }
 
 // Presentation_Parse_Request retains one classified exact parse operation.
@@ -237,10 +249,10 @@ presentation_lifecycle_effects :: proc(
     same_runtime := runtime^.observed_runtime_generation == service^.runtime_generation
     runtime^.observed_runtime_generation = service^.runtime_generation
     runtime^.observed_animation_generation = service^.animation_generation
-    if same_runtime {
+    if same_runtime && presentation_document_effects_visible(state) {
         presentation_effects_begin_departure(
             state, runtime, service^.animation_generation)
-    } else {
+    } else if !same_runtime {
         presentation_effects_retire(state, runtime)
     }
 }
@@ -282,7 +294,7 @@ presentation_admit :: proc(
     if runtime^.suppress_next_departure {
         uidust.ui_dust_cancel_arrival(&runtime^.dust)
         runtime^.suppress_next_departure = false
-    } else {
+    } else if presentation_document_effects_visible(state) {
         presentation_effects_begin_departure(
             state, runtime, content.presentation_generation)
     }
@@ -473,23 +485,42 @@ presentation_materialize :: proc(
         published := bridge.publish_presentation_snapshot(
             state, runtime^.staging, request)
         if published && request.document != nil {
-            if presentation_reduced_motion_enabled(state) {
-                uidust.ui_dust_settle(&runtime^.dust)
-            } else if state^.ui_runtime.playback.completed ||
-                state^.ui_runtime.playback.completion_requested ||
-                state^.ui_runtime.playback.completion_initial {
-                uidust.ui_dust_cancel_arrival(&runtime^.dust)
-            } else {
-                uidust.ui_dust_begin_arrival(
-                    &runtime^.dust, request.content.presentation_generation,
-                    presentation_arrival_style(runtime))
-                runtime^.arrival_ink_serial =
-                    viewfont.cache_visible_ink_serial(&state^.font_cache)
-            }
+            presentation_document_arrival(
+                state, runtime, request.content.presentation_generation)
             presentation_record_semantic_published(state, request.content)
-        } else if published {
+        } else if published && !uiterminal.is_terminal_selected(state) &&
+            !runtime^.surface_arrival {
             uidust.ui_dust_cancel_arrival(&runtime^.dust)
         }
+    }
+}
+
+// presentation_document_effects_visible prevents hidden documents consuming another surface's ink.
+presentation_document_effects_visible :: proc(
+    state: ^core.Euclid_General_State) -> bool {
+    return !uiterminal.is_terminal_selected(state) &&
+        viewfont.cache_visible_ink_surface(&state^.font_cache) == .Dynview
+}
+
+// presentation_document_arrival preserves semantic publication independently of surface navigation.
+presentation_document_arrival :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
+    generation: u64) {
+    if uiterminal.is_terminal_selected(state) || runtime^.surface_arrival ||
+        (runtime^.surface_observed && runtime^.surface != .Dynview) {
+        return
+    }
+    if presentation_reduced_motion_enabled(state) {
+        uidust.ui_dust_settle(&runtime^.dust)
+    } else if state^.ui_runtime.playback.completed ||
+        state^.ui_runtime.playback.completion_requested ||
+        state^.ui_runtime.playback.completion_initial {
+        uidust.ui_dust_cancel_arrival(&runtime^.dust)
+    } else {
+        uidust.ui_dust_begin_arrival(
+            &runtime^.dust, generation, presentation_arrival_style(runtime))
+        runtime^.arrival_ink_serial =
+            viewfont.cache_visible_ink_serial(&state^.font_cache)
     }
 }
 
@@ -524,6 +555,8 @@ presentation_effects_observe :: proc(
     }
     dust := &runtime^.dust
     result: observe.Presentation_Effects = {
+        surface = runtime^.surface,
+        surface_switch_count = runtime^.surface_switch_count,
         arrival_selection = presentation_arrival_style(runtime),
         arrival_style = dust.incoming_style,
         arrival_active = dust.incoming_active,
@@ -623,7 +656,8 @@ presentation_effects_begin_formation :: proc(
     state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
     if !uidust.ui_dust_arrival_awaiting_targets(&runtime^.dust) ||
         viewfont.cache_visible_ink_serial(&state^.font_cache) ==
-            runtime^.arrival_ink_serial {
+            runtime^.arrival_ink_serial ||
+        viewfont.cache_visible_ink_surface(&state^.font_cache) != runtime^.surface {
         return
     }
     samples := viewfont.cache_visible_ink_samples(&state^.font_cache)
@@ -650,8 +684,7 @@ presentation_effects_begin_formation :: proc(
 // presentation_effects_update advances visual effects under the effective motion policy.
 presentation_effects_update :: proc(
     state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
-    delta_seconds: f32, presentation: uipresentation.Presentation_Preparation,
-    visual_signature: u64) {
+    delta_seconds: f32, frame: Presentation_Effects_Frame) {
     if state == nil || runtime == nil {
         return
     }
@@ -661,30 +694,103 @@ presentation_effects_update :: proc(
         presentation_effects_retire(state, runtime)
         return
     }
-    visual_presentation := presentation
-    if visual_presentation.scroll.view_rect.width <= 0 ||
-        visual_presentation.scroll.view_rect.height <= 0 {
-        panel := geometry.Rectangle(state^.ui_runtime.layout.ui_regions.text_rect)
-        visual_presentation = uipresentation.prepare_presentation_visual(state, panel)
-    }
-    if state^.ui_runtime.playback.completed ||
+    surface, visual := presentation_effects_context(
+        state, frame.presentation, frame.terminal, frame.visual_signature)
+    switched := presentation_effects_sync_surface(state, runtime, surface)
+    if surface == .Dynview && !runtime^.surface_arrival &&
+        (state^.ui_runtime.playback.completed ||
         state^.ui_runtime.playback.completion_requested ||
-        state^.ui_runtime.playback.completion_initial {
+        state^.ui_runtime.playback.completion_initial) {
         uidust.ui_dust_cancel_arrival(&runtime^.dust)
     }
-    visible := state^.ui_runtime.presentation.visible &&
-        !uiterminal.is_terminal_selected(state)
-    viewport := geometry.Rectangle(visual_presentation.scroll.view_rect)
-    uidust.ui_dust_validate_context(
-        &runtime^.dust, {
-            visible = visible,
-            reduced_motion = presentation_reduced_motion_enabled(state),
-            viewport = viewport,
-            scroll_y = presentation.scroll.scroll_y_out,
-            visual_signature = visual_signature,
-        })
+    presentation_effects_adopt_context(
+        runtime, &visual, switched, surface != .Dynview && !frame.terminal.available)
+    uidust.ui_dust_validate_context(&runtime^.dust, visual)
     presentation_effects_begin_formation(state, runtime)
     uidust.ui_dust_advance(&runtime^.dust, delta_seconds)
+    if !runtime^.dust.incoming_active {
+        runtime^.surface_arrival = false
+    }
+}
+
+// presentation_effects_adopt_context preserves source geometry until the destination is prepared.
+presentation_effects_adopt_context :: proc(
+    runtime: ^Presentation_Runtime, visual: ^uidust.Ui_Dust_Visual_Context,
+    switched: bool, pending: bool) {
+    adopt := switched
+    if pending {
+        visual.viewport = runtime^.dust.viewport
+        visual.scroll_y = runtime^.dust.scroll_y
+        runtime^.surface_context_pending = true
+    } else if runtime^.surface_context_pending {
+        adopt = true
+        runtime^.surface_context_pending = false
+    }
+    if adopt {
+        // Different surface padding and scroll origins are not a resize.
+        runtime^.dust.viewport = visual.viewport
+        runtime^.dust.scroll_y = visual.scroll_y
+    }
+}
+
+// presentation_effects_context uses the destination's prepared clip and scroll origin.
+presentation_effects_context :: proc(
+    state: ^core.Euclid_General_State,
+    presentation: uipresentation.Presentation_Preparation,
+    terminal: uiterminal.Terminal_Prepared_Frame,
+    signature: u64) -> (viewfont.Font_Ink_Surface, uidust.Ui_Dust_Visual_Context) {
+    visual := presentation
+    if !uiterminal.is_terminal_selected(state) &&
+        (visual.scroll.view_rect.width <= 0 || visual.scroll.view_rect.height <= 0) {
+        panel := geometry.Rectangle(state^.ui_runtime.layout.ui_regions.text_rect)
+        visual = uipresentation.prepare_presentation_visual(state, panel)
+    }
+    surface := viewfont.Font_Ink_Surface.Dynview
+    viewport := geometry.Rectangle(visual.scroll.view_rect)
+    scroll_y := visual.scroll.scroll_y_out
+    if uiterminal.is_terminal_selected(state) {
+        surface = .History if terminal.explorer_active else .Terminal
+        viewport = geometry.Rectangle(terminal.scroll.view_rect)
+        scroll_y = terminal.scroll.scroll_y_out
+        if terminal.explorer_active {
+            viewport = terminal.explorer.bounds
+            scroll_y = f32(state^.terminal.history_explorer.list_scroll_rows)
+        }
+    }
+    return surface, {
+        visible = state^.ui_runtime.presentation.visible,
+        reduced_motion = presentation_reduced_motion_enabled(state),
+        viewport = viewport,
+        scroll_y = scroll_y,
+        visual_signature = signature,
+    }
+}
+
+// presentation_effects_sync_surface starts one visual transfer without delaying input or services.
+presentation_effects_sync_surface :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
+    surface: viewfont.Font_Ink_Surface) -> bool {
+    if !runtime^.surface_observed {
+        runtime^.surface_observed = true
+        runtime^.surface = viewfont.cache_visible_ink_surface(&state^.font_cache)
+        if viewfont.cache_visible_ink_serial(&state^.font_cache) == 0 {
+            runtime^.surface = surface
+        }
+    }
+    if runtime^.surface == surface {
+        return false
+    }
+    serial := viewfont.cache_visible_ink_serial(&state^.font_cache)
+    presentation_effects_begin_departure(state, runtime, serial)
+    runtime^.surface = surface
+    runtime^.surface_switch_count += 1
+    runtime^.surface_arrival = true
+    if !presentation_reduced_motion_enabled(state) {
+        uidust.ui_dust_begin_arrival(
+            &runtime^.dust, serial, presentation_arrival_style(runtime))
+        runtime^.arrival_ink_serial = serial
+    }
+    return true
 }
 
 // presentation_reduced_motion_enabled combines the user and platform policies.

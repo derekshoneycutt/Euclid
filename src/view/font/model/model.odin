@@ -320,7 +320,14 @@ Font_Metadata_Budget :: struct {
     visible_ink_bytes: u64,
 }
 
-// Font_Ink_Sample is an owned logical-space sample from visible Dynview ink.
+// Font_Ink_Surface identifies the content that supplied a presented ink snapshot.
+Font_Ink_Surface :: enum u8 {
+    Dynview,
+    Terminal,
+    History,
+}
+
+// Font_Ink_Sample owns a logical-space coverage point without retaining glyph storage.
 Font_Ink_Sample :: struct {
     position: geometry.Vector2,
     color: [4]u8,
@@ -581,6 +588,7 @@ Font_Cache :: struct {
     visible_ink_seen_count: u64,
     visible_ink_random_state: u64,
     visible_ink_capture_drawn: bool,
-    // Counts presented frames whose structured ink was published.
+    visible_ink_surfaces: [2]Font_Ink_Surface,
+    // Counts presented frames whose eligible surface ink was published.
     visible_ink_publish_serial: u64,
 }

@@ -1824,7 +1824,28 @@ view_test_visible_ink_capture_reservoir_is_bounded_and_repeatable :: proc(
     testing.expect_value(t, len(cache_visible_ink_samples(&second)), 0)
 }
 
-// Verify frames without a structured presentation keep the last drawn ink until discard.
+// Verify unpublished frames retain both surface identity and ink, while blank presented frames replace them.
+@(test)
+view_test_visible_ink_surface_publication_is_transactional :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    testing.expect(t, cache_ink_capture_init(&cache, context.allocator))
+    defer cache_ink_capture_destroy(&cache, context.allocator)
+    cache_ink_capture_begin(&cache)
+    cache_ink_capture_sample(&cache, {4, 8}, {20, 40, 60, 255}, 255)
+    cache_ink_capture_mark_drawn(&cache, .Terminal)
+    cache_ink_capture_publish(&cache)
+    cache_ink_capture_begin(&cache)
+    cache_ink_capture_mark_drawn(&cache, .History)
+    testing.expect_value(t, cache_visible_ink_surface(&cache), Font_Ink_Surface.Terminal)
+    testing.expect_value(t, len(cache_visible_ink_samples(&cache)), 1)
+    testing.expect_value(t, cache_visible_ink_serial(&cache), u64(1))
+    cache_ink_capture_publish(&cache)
+    testing.expect_value(t, cache_visible_ink_surface(&cache), Font_Ink_Surface.History)
+    testing.expect_value(t, len(cache_visible_ink_samples(&cache)), 0)
+    testing.expect_value(t, cache_visible_ink_serial(&cache), u64(2))
+}
+
+// Verify frames without an eligible presentation keep the last drawn ink until discard.
 @(test)
 view_test_visible_ink_survives_undrawn_frames_until_discard :: proc(
     t: ^testing.T) {

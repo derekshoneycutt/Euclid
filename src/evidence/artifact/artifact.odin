@@ -281,13 +281,15 @@ artifact_state_json :: proc(
         artifact_presentation_effects_state_json(state.presentation_effects))
 }
 
-// Serialize pane-local Dynview dust counts and the selected and active arrival styles.
+// Serialize pane-local surface identity, dust counts, and arrival styles.
 artifact_presentation_effects_state_json :: proc(
     effects: observe.Presentation_Effects) -> string {
-    return fmt.tprintf("\"presentation_effects\":{{\"arrival_selection\":\"%v\"," +
+    return fmt.tprintf("\"presentation_effects\":{{\"surface\":\"%v\"," +
+        "\"surface_switch_count\":%d,\"arrival_selection\":\"%v\"," +
         "\"arrival_style\":\"%v\",\"arrival_active\":%v," +
         "\"arrival_awaiting_targets\":%v,\"arrival_particle_count\":%d," +
         "\"departure_particle_count\":%d,%s}}",
+        effects.surface, effects.surface_switch_count,
         effects.arrival_selection, effects.arrival_style, effects.arrival_active,
         effects.arrival_awaiting_targets, effects.arrival_particle_count,
         effects.departure_particle_count, artifact_reclamation_state_json(effects))

@@ -29,6 +29,17 @@ Presentation_Dust_Instance_Params :: struct {
     effective_contrast: bool,
 }
 
+// presentation_ink_alpha exposes only the currently revealed crisp glyph ink.
+presentation_ink_alpha :: proc(
+    user_data: rawptr, position: geometry.Vector2) -> f32 {
+    dust := cast(^uidust.Ui_Dust_System)user_data
+    if !uidust.ui_dust_reveal_active(dust) {
+        return uidust.ui_dust_incoming_alpha(dust)
+    }
+    visibility := uidust.ui_dust_crisp_visibility(dust)
+    return uidust.ui_dust_crisp_sample_alpha(&visibility, position)
+}
+
 // presentation_draw_effects reveals new content and renders pane-clipped dust.
 presentation_draw_effects :: proc(
     encoder: ^native.Draw_Encoder, viewport: geometry.Rectangle,
@@ -39,6 +50,18 @@ presentation_draw_effects :: proc(
     }
     presentation_draw_fade_mask(encoder, params.dust, viewport)
     presentation_draw_reveal_mask(encoder, params.dust, viewport)
+    presentation_draw_dust(encoder, params)
+    _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+// presentation_draw_dust_clipped overlays particles without masking non-ink Terminal content.
+presentation_draw_dust_clipped :: proc(
+    encoder: ^native.Draw_Encoder, viewport: geometry.Rectangle,
+    params: Presentation_Effects_Draw_Params) {
+    if encoder == nil || params.dust == nil || viewport.width <= 0 ||
+        viewport.height <= 0 || !native.draw_encoder_push_scissor(encoder, viewport) {
+        return
+    }
     presentation_draw_dust(encoder, params)
     _ = native.draw_encoder_pop_scissor(encoder)
 }

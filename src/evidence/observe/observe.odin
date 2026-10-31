@@ -15,6 +15,7 @@ import preferencesmodel "../../view/preferences/model"
 import viewmodel "../../view/ui/model"
 import capturemodel "../../view/capture/model"
 import animationmodel "../../core/animation"
+import fontmodel "../../view/font/model"
 
 // Package observe copies bounded Euclid facts at explicit ownership boundaries.
 //
@@ -38,13 +39,15 @@ Trace_State :: struct {
     next_sequence: u64,
 }
 
-// Pointer-free snapshot of pane-local Dynview presentation dust.
+// Pointer-free snapshot of pane-local Dynview, Terminal, and History dust.
 //
 // The presentation owner copies these scalars at a display-thread boundary; the
 // selection is the style the next accepted document arrives with, while
 // arrival_style reports the active, possibly degraded, arrival. Completion duration
 // is the logical effect endpoint, excluding a coarse frame's unused remainder.
 Presentation_Effects :: struct {
+    surface: fontmodel.Font_Ink_Surface,
+    surface_switch_count: u64,
     arrival_selection: uidust.Ui_Dust_Arrival_Style,
     arrival_style: uidust.Ui_Dust_Arrival_Style,
     arrival_active: bool,

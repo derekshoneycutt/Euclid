@@ -249,7 +249,10 @@ presentation_departure_survives_blank_frame_and_scroll_reset :: proc(
         },
     }
 
-    presentation_effects_update(state, presentation, 0.016, blank_frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = blank_frame,
+        visual_signature = 1,
+    })
 
     testing.expect_value(t, presentation^.dust.particle_count, 1)
     testing.expect(t, presentation^.dust.particles.pos_y[0] > 50)
@@ -257,13 +260,14 @@ presentation_departure_survives_blank_frame_and_scroll_reset :: proc(
 
 // Publish one drawn ink frame so the visible-ink serial advances.
 presentation_test_publish_ink :: proc(
-    state: ^core.Euclid_General_State, positions: []geometry.Vector2) {
+    state: ^core.Euclid_General_State, positions: []geometry.Vector2,
+    surface: viewfont.Font_Ink_Surface = .Dynview) {
     viewfont.cache_ink_capture_begin(&state^.font_cache)
     for position in positions {
         viewfont.cache_ink_capture_sample(
             &state^.font_cache, position, {80, 160, 240, 255}, 255)
     }
-    viewfont.cache_ink_capture_mark_drawn(&state^.font_cache)
+    viewfont.cache_ink_capture_mark_drawn(&state^.font_cache, surface)
     viewfont.cache_ink_capture_publish(&state^.font_cache)
 }
 
@@ -288,12 +292,18 @@ presentation_formation_targets_first_new_ink :: proc(t: ^testing.T) {
         },
     }
 
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect(t, uidust.ui_dust_arrival_awaiting_targets(&presentation^.dust))
     testing.expect_value(t, presentation^.dust.arrival_count, 0)
 
     presentation_test_publish_ink(state, {{30, 40}, {60, 70}})
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect(t, !uidust.ui_dust_arrival_awaiting_targets(&presentation^.dust))
     testing.expect_value(t, presentation^.dust.arrival_count, 2)
     testing.expect_value(t, presentation^.dust.particles.target_x[0], f32(30))
@@ -322,10 +332,16 @@ presentation_formation_draws_in_first_new_ink :: proc(t: ^testing.T) {
         },
     }
 
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(0))
     presentation_test_publish_ink(state, {{30, 20}, {90, 20}, {40, 80}})
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
 
     testing.expect(t, uidust.ui_dust_reveal_active(&presentation^.dust))
     testing.expect_value(t, presentation^.dust.reveal_row_count, 2)
@@ -355,7 +371,10 @@ presentation_formation_without_ink_uses_fade :: proc(t: ^testing.T) {
         },
     }
 
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
 
     testing.expect_value(t, presentation^.dust.incoming_style,
         uidust.Ui_Dust_Arrival_Style.Fade)
@@ -411,10 +430,13 @@ presentation_completed_form_preserves_departure_dust :: proc(t: ^testing.T) {
     uidust.ui_dust_begin_arrival(&presentation^.dust, 53, .Falling_Ink)
     state^.ui_runtime.playback.completed = true
     presentation_effects_update(state, presentation, 0.016, {
-        scroll = {
-            view_rect = viewport,
+        presentation = {
+            scroll = {
+                view_rect = viewport,
+            },
         },
-    }, 1)
+        visual_signature = 1,
+    })
     testing.expect_value(t, presentation^.dust.particle_count, 1)
     testing.expect(t, !presentation^.dust.incoming_active)
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
@@ -442,12 +464,18 @@ presentation_particle_policy_clears_without_resurrection :: proc(t: ^testing.T) 
             view_rect = viewport,
         },
     }
-    presentation_effects_update(state, presentation, 0.016, preparation, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = preparation,
+        visual_signature = 1,
+    })
     testing.expect_value(t, presentation^.dust.particle_count, 0)
     testing.expect(t, !presentation^.dust.incoming_active)
     testing.expect_value(t, uidust.ui_dust_incoming_alpha(&presentation^.dust), f32(1))
     state^.ui_runtime.preferences.values.interface.enable_particle_effects = true
-    presentation_effects_update(state, presentation, 0.016, preparation, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = preparation,
+        visual_signature = 1,
+    })
     testing.expect_value(t, presentation^.dust.particle_count, 0)
     testing.expect(t, !presentation^.dust.incoming_active)
 }
@@ -512,7 +540,10 @@ presentation_pending_reset_preserves_ink_and_effects :: proc(t: ^testing.T) {
     }
     state^.julia_interface^.pending_animation_reset = true
 
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
 
     testing.expect_value(t, presentation^.dust.particle_count, 1)
     testing.expect(t, presentation^.dust.particles.pos_y[0] > 50)
@@ -521,7 +552,10 @@ presentation_pending_reset_preserves_ink_and_effects :: proc(t: ^testing.T) {
         len(viewfont.cache_visible_ink_samples(&state^.font_cache)), 1)
     testing.expect(t, !presentation^.suppress_next_departure)
     fixture.service^.reload_state = .Quiescing
-    presentation_effects_update(state, presentation, 0.016, frame, 1)
+    presentation_effects_update(state, presentation, 0.016, {
+        presentation = frame,
+        visual_signature = 1,
+    })
     testing.expect_value(t, presentation^.dust.particle_count, 0)
     testing.expect(t, !presentation^.dust.incoming_active)
     testing.expect_value(t,

@@ -17,6 +17,7 @@ import uisharing "sharing"
 import uilibrary "library"
 import uipresentation "presentation"
 import uiterminal "terminal"
+import font "../font"
 
 // draw_encoded_panel_geometry encodes visible composition backgrounds without text.
 draw_encoded_panel_geometry :: proc(
@@ -247,12 +248,7 @@ draw_encoded_view_content :: proc(
     }
     _ = native.draw_encoder_push_scissor(encoder, clip)
     if uiterminal.is_terminal_selected(state) {
-        prepared := terminal
-        if !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
-            prepared = uiterminal.terminal_prepare_visual(
-                state, uiterminal.terminal_content_panel(panel))
-        }
-        uiterminal.terminal_draw_encoded(state, encoder, prepared)
+        draw_encoded_terminal_content(state, encoder, terminal, panel, effects)
     } else {
         prepared := presentation
         if !prepared.active ||
@@ -266,4 +262,39 @@ draw_encoded_view_content :: proc(
         }
     }
     _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+// draw_encoded_terminal_content reveals sampled glyphs while keeping non-ink Terminal content immediate.
+draw_encoded_terminal_content :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    terminal: uiterminal.Terminal_Prepared_Frame, panel: geometry.Rectangle,
+    effects: uipresentation.Presentation_Effects_Draw_Params) {
+    visible := uipresentation.ui_presentation_is_visible(&state^.ui_runtime.presentation)
+    prepared := terminal
+    if !visible {
+        prepared = uiterminal.terminal_prepare_visual(
+            state, uiterminal.terminal_content_panel(panel))
+    }
+    previous := encoder^.ink_sink
+    sink: native.Draw_Ink_Sink = {
+        user_data = &state^.font_cache,
+        record = font.cache_ink_capture_sample,
+        glyphs_only = true,
+    }
+    if effects.dust != nil && visible {
+        sink.visibility_data = effects.dust
+        sink.alpha = uipresentation.presentation_ink_alpha
+    }
+    native.draw_encoder_set_ink_sink(encoder, sink)
+    uiterminal.terminal_draw_encoded(state, encoder, prepared)
+    native.draw_encoder_set_ink_sink(encoder, previous)
+    if visible {
+        viewport := geometry.Rectangle(prepared.scroll.view_rect)
+        if prepared.explorer_active {
+            viewport = prepared.explorer.bounds
+        } else if !prepared.available && effects.dust != nil {
+            viewport = effects.dust^.viewport
+        }
+        uipresentation.presentation_draw_dust_clipped(encoder, viewport, effects)
+    }
 }

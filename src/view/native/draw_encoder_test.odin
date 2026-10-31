@@ -17,6 +17,35 @@ Draw_Ink_Sample_Test_State :: struct {
     authored: bool,
 }
 
+// Verify glyph-only capture ignores rectangles and samples hidden by foreground attachments.
+@(test)
+draw_encoder_glyph_sink_excludes_non_ink_and_occlusion :: proc(t: ^testing.T) {
+    vertices: [4]Draw_Vertex
+    indices: [6]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    state: Draw_Ink_Sample_Test_State
+    excluded: [1]geometry.Rectangle = {{10, 10, 10, 10}}
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    draw_encoder_set_ink_sink(&encoder, {
+        user_data = &state,
+        record = draw_encoder_test_record_ink,
+        glyphs_only = true,
+        excluded = excluded[:],
+    })
+    testing.expect(t, draw_encoder_rectangle(&encoder, {0, 0, 50, 50}, color.WHITE))
+    testing.expect_value(t, state.count, 0)
+    draw_encoder_record_ink_sample(&encoder, {12, 12}, color.WHITE, 255)
+    testing.expect_value(t, state.count, 0)
+    draw_encoder_record_ink_sample(&encoder, {25, 25}, color.WHITE, 128)
+    testing.expect_value(t, state.count, 1)
+    testing.expect_value(t, state.coverage, u8(128))
+    testing.expect(t, !state.authored)
+}
+
 // Verify even identical batch state cannot append UI indices to a sealed world prefix.
 @(test)
 draw_encoder_world_boundary_seals_compatible_batches :: proc(t: ^testing.T) {

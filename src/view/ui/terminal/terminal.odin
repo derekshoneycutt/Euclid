@@ -431,6 +431,11 @@ terminal_draw_encoded :: proc(
     if encoder == nil || !term.initialized || !prepared.available {
         return
     }
+    surface: font.Font_Ink_Surface = .Terminal
+    if prepared.explorer_active {
+        surface = .History
+    }
+    font.cache_ink_capture_mark_drawn(&state^.font_cache, surface)
     if prepared.explorer_active {
         terminal_draw_explorer(state, encoder, prepared)
         return
