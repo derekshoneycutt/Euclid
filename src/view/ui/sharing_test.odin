@@ -11,6 +11,35 @@ import uiwidgets "widgets"
 import uisemantics "semantics"
 import viewmessages "../messages"
 import geometry "../../core/geometry"
+import theme "theme"
+
+// Keep section spacing uniform and both save actions on the standard button metrics.
+@(test)
+sharing_sections_use_consistent_control_spacing :: proc(t: ^testing.T) {
+    percents := [?]int{100, 150, 200}
+    for text_percent in percents {
+        for control_percent in percents {
+            layout := sharinglayout.sharing_layout(
+                {0, 0, 320, 600}, text_percent, control_percent, 0)
+            inset := theme.ui_control_size_metric(
+                theme.SETTINGS_PANEL_INSET, control_percent)
+            header := theme.ui_control_size_metric(
+                theme.SETTINGS_HEADER_TOP_OFFSET, control_percent)
+            rows := uigif.gif_view_layout_rows({
+                layout.gif_panel.x + inset, layout.gif_panel.y + header,
+                layout.gif_panel.width - inset * 2, layout.gif_panel.height},
+                text_percent, control_percent)
+            testing.expect_value(t, layout.button.height,
+                uigif.gif_save_button_height(text_percent, control_percent))
+            testing.expect_value(t, layout.status_y - layout.button.y,
+                uigif.gif_save_button_segment_size(text_percent, control_percent))
+            testing.expect_value(t, rows.sliders.downsample_y - layout.gif_heading_y,
+                layout.description_y - layout.png_heading_y)
+            testing.expect_value(t, rows.sliders.downsample_y,
+                layout.gif_panel.y + header)
+        }
+    }
+}
 
 // Verify Sharing uses distinct navigation prose while preserving the GIF action label.
 @(test)

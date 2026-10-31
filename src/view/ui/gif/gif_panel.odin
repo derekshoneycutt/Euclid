@@ -745,9 +745,6 @@ gif_view_layout_rows :: proc(
     text_size_percent := theme.TEXT_SIZE_DEFAULT_PERCENT,
     control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> Gif_View_Rows {
     stack_cursor := uilayout.stack_panel_cursor_zero()
-    scale := theme.ui_effective_control_scale(
-        text_size_percent, control_size_percent)
-    stack_cursor.offset = theme.SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE * scale
     downsample_row := gif_stack_row(
         stack_rect,
         gif_slider_row_segment_size(text_size_percent, control_size_percent),

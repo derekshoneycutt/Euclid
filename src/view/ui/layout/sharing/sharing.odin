@@ -27,21 +27,27 @@ sharing_layout :: proc(
     width := max(f32(0), panel.width - inset * 2 -
         theme.ui_control_size_metric(theme.SCROLLBAR_WIDTH, control_percent))
     y := panel.y + inset - scroll_y
-    button_height := max(font + gap * 2,
-        theme.ui_control_size_metric(32, control_percent))
-    path_height := max(font + gap, theme.ui_control_size_metric(24, control_percent))
+    button_height := theme.ui_panel_button_height(text_percent, control_percent)
+    path_height := button_height
+    status_gap := theme.ui_control_scaled_metric(
+        theme.SETTINGS_PANEL_INSET * 0.75, text_percent, control_percent)
+    header_offset := theme.ui_control_size_metric(
+        theme.SETTINGS_HEADER_TOP_OFFSET, control_percent)
     label_width := theme.ui_scaled_metric(42, text_percent)
-    gif_y := y + row * 4 + button_height + path_height + gap
+    status_y := y + row * 2 + button_height + status_gap
+    path_y := status_y + row
+    gif_y := path_y + path_height + row
     return {
         png_heading_y = y,
         description_y = y + row,
         button = {panel.x + inset, y + row * 2, width, button_height},
-        status_y = y + row * 2 + button_height + gap,
+        status_y = status_y,
         path = {panel.x + inset + label_width,
-            y + row * 3 + button_height + gap,
+            path_y,
             max(f32(0), width - label_width), path_height},
         gif_heading_y = gif_y,
-        gif_panel = {panel.x, gif_y + row, width + inset * 2, panel.height},
+        gif_panel = {panel.x, gif_y + row - header_offset,
+            width + inset * 2, panel.height},
     }
 }
 
