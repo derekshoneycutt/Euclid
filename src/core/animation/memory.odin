@@ -6,6 +6,7 @@ import "base:runtime"
 import "core:mem"
 
 ANIMATION_MEMORY_ARENA_RESERVATION :: uint(mem.Megabyte)
+ANIMATION_NOTE_BUFFER_CAPACITY :: 4096
 
 // Report shared animation-memory lifecycle outcomes.
 Animation_Memory_Status :: enum {
@@ -18,6 +19,7 @@ Animation_Memory_Status :: enum {
 // Own generation-scoped storage shared by native animation subsystems.
 Animation_Memory :: struct {
     arena_owner: storage.Arena_Owner,
+    note_buffer: []u8,
     generation: u64,
     initialized: bool,
 }
@@ -55,9 +57,27 @@ animation_memory_begin_generation :: proc(
     if generation == 0 {
         return .Invalid_Argument
     }
+    memory.note_buffer = nil
     storage.arena_owner_reset(&memory.arena_owner)
     memory.generation = generation
     return .Ok
+}
+
+//   Reuse one active-generation buffer for placement-scoped collection notes.
+animation_memory_note_buffer :: proc(memory: ^Animation_Memory) -> ([]u8, bool) {
+    if memory == nil || !memory.initialized || memory.generation == 0 {
+        return nil, false
+    }
+    if len(memory.note_buffer) == ANIMATION_NOTE_BUFFER_CAPACITY {
+        return memory.note_buffer, true
+    }
+    allocator := animation_memory_allocator(memory)
+    bytes, allocation_error := make([]u8, ANIMATION_NOTE_BUFFER_CAPACITY, allocator)
+    if allocation_error != nil {
+        return nil, false
+    }
+    memory.note_buffer = bytes
+    return bytes, true
 }
 
 //   Release shared animation storage after all borrowers are quiescent.
@@ -66,6 +86,7 @@ animation_memory_destroy :: proc(memory: ^Animation_Memory) {
         return
     }
     storage.arena_owner_destroy(&memory.arena_owner)
+    memory.note_buffer = nil
     memory.generation = 0
     memory.initialized = false
 }

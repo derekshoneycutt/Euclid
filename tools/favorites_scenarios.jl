@@ -232,6 +232,99 @@ function run_collection_membership_acceptance(binary::String)
     return records
 end
 
+"""Inspect placement-qualified note rows independently of the application process."""
+function collection_note_database_rows(database::String)
+    sql = "SELECT hex(note.collection_id) AS collection," *
+        "hex(note.entry_id) AS placement,hex(entry.animation_id) AS animation," *
+        "note.note_text,note.notes_on_top,collection.collection_order " *
+        "FROM user_collection_note AS note " *
+        "JOIN user_collection_entry AS entry " *
+        "ON entry.collection_id=note.collection_id AND entry.entry_id=note.entry_id " *
+        "JOIN user_collection AS collection " *
+        "ON collection.collection_id=note.collection_id " *
+        "ORDER BY collection.collection_order"
+    return favorites_fixture_sql(database, sql)
+end
+
+"""Wait for the retained note failure checkpoint, then remove the SQLite fault."""
+function collection_note_recovery_launch(binary, root, database)
+    diagnostics = joinpath(root, "note-recovery.log")
+    task = @async favorites_launch(binary, root, database, "note-recovery",
+        joinpath("tools", "scenarios", "collection-notes", "recovery.jsonl");
+        arguments=["--diagnostics=$diagnostics"])
+    deadline = time() + 30
+    observed = false
+    while !istaskdone(task) && time() < deadline
+        if isfile(diagnostics) &&
+            occursin("collection_note_failure_observed", read(diagnostics, String))
+            observed = true
+            break
+        end
+        sleep(0.01)
+    end
+    if !observed
+        fetch(task)
+        error("Collection-note recovery did not retain its failed draft")
+    end
+    favorites_fixture_sql(database, "DROP TRIGGER collection_note_acceptance_failure")
+    return fetch(task)
+end
+
+"""Require two independent note rows with exact authored text and reading order."""
+function require_authored_collection_notes(database::String)
+    rows = collection_note_database_rows(database)
+    length(rows) == 2 || error("Collection notes did not persist both placements")
+    rows[1]["animation"] == rows[2]["animation"] ||
+        error("Notes do not cover two placements of the same animation")
+    rows[1]["note_text"] == "\\textbf{First placement}\n\nRemember \$x_1^2\$ and the construction." &&
+        rows[1]["notes_on_top"] == 1 ||
+        error("First placement note or reading order was not committed")
+    rows[2]["note_text"] == "\\textbf{Second placement}\n\nIndependent placement text: \$\$\\frac{a}{b}.\$\$" &&
+        rows[2]["notes_on_top"] == 0 ||
+        error("Second placement note or reading order was not committed")
+    return rows
+end
+
+"""Require recovery to update only the failed placement's durable note."""
+function require_recovered_collection_notes(database::String, baseline)
+    recovered = collection_note_database_rows(database)
+    length(recovered) == 2 || error("Note recovery changed placement count")
+    recovered[1]["note_text"] == "Recovered draft is durable." ||
+        error("A later note edit did not recover the failed save")
+    recovered[2] == baseline[2] || error("Recovery changed the other placement's note")
+    return recovered
+end
+
+"""Exercise placement-scoped authoring, readback, failure retention, retry and shutdown."""
+function run_collection_notes_acceptance(binary::String)
+    root = fresh_artifact_path("collection-notes")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    records = [favorites_launch(binary, root, database, "create",
+        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+    push!(records, favorites_launch(binary, root, database, "membership",
+        joinpath("tools", "scenarios", "collection-membership-acceptance.jsonl")))
+    push!(records, favorites_launch(binary, root, database, "author",
+        joinpath("tools", "scenarios", "collection-notes-acceptance.jsonl")))
+    rows = require_authored_collection_notes(database)
+    push!(records, favorites_launch(binary, root, database, "restore",
+        joinpath("tools", "scenarios", "collection-notes", "restore.jsonl")))
+    collection_note_database_rows(database) == rows ||
+        error("Independent note readback changed durable rows")
+
+    favorites_fixture_sql(database,
+        "CREATE TRIGGER collection_note_acceptance_failure " *
+        "BEFORE INSERT ON user_collection_note " *
+        "BEGIN SELECT RAISE(ABORT,'collection note acceptance fault'); END")
+    push!(records, collection_note_recovery_launch(binary, root, database))
+    recovered = require_recovered_collection_notes(database, rows)
+    push!(records, favorites_launch(binary, root, database, "recovered-restore",
+        joinpath("tools", "scenarios", "collection-notes", "restore.jsonl")))
+    collection_note_database_rows(database) == recovered ||
+        error("Restart did not restore recovered placement notes")
+    return records
+end
+
 """Require a precise durable permutation without recreating any animation placement."""
 function require_favorites_reorder(rows, baseline, permutation)
     length(rows) == length(baseline) == length(permutation) ||

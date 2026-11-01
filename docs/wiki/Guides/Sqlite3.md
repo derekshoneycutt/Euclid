@@ -258,6 +258,12 @@ erDiagram
         blob animation_id
         text custom_name
     }
+    USER_COLLECTION_NOTE {
+        blob collection_id PK
+        blob entry_id PK
+        text note_text
+        integer notes_on_top
+    }
     USER_TERMINAL_HISTORY {
         integer entry_id PK
         text source
@@ -344,6 +350,21 @@ including placements inside stored groups.
 Membership uses the same replay and complete-snapshot transaction path as other edits.
 Schema v2 is updated in place for disposable development databases; there is no
 migration or reset fallback.
+
+### Collection Notes
+
+`user_collection_note` stores at most 4096 UTF-8 bytes and the placement's reading
+order, keyed by `(collection_id, entry_id)`. Reads and writes validate the active
+user-owned animation placement on the serialized worker connection. Notes are not
+embedded in the replay `Set`: collection snapshot replacement can temporarily remove
+placements, so orphan notes are deleted only against the final committed topology.
+An empty note keeps its row and reading-order value durable, but contributes no heading
+or section while reading.
+
+The display owns a single active-generation note buffer. Debounced immutable snapshots
+join the ordinary Settings save queue; reset/reload and workspace retirement wait for a
+covering commit without blocking the display thread. Shutdown performs the existing
+bounded drain and exits unsuccessfully if the final note revision remains dirty.
 
 ### Replay Ownership
 

@@ -462,6 +462,9 @@ store_apply_collection_snapshot :: proc(
         failure = store_insert_collection_entry(
             &store^.insert_collection_entry, &snapshot.entries[index])
     }
+    if store_sqlite_error_is_clear(failure) {
+        failure = store_execute_prepared(&store^.delete_orphan_collection_notes)
+    }
     return failure
 }
 

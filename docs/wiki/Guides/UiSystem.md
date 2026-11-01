@@ -184,6 +184,48 @@ assuming its local ID equals the portable input ID. Input boxes whose routing ID
 remapped, such as Library collection/placement names, supply `text_input_id` explicitly
 so addressed commit and preedit events reach the same editor.
 
+### Placement-Scoped Collection Notes
+
+Eligible user-collection animation placements expose **Edit notes** in their Library
+drawer. The Presentation surface switches to a split workspace with the unchanged
+predefined material above a shared multiline input; its internal splitter is independent
+of the pane splitters. The note editor uses animation-generation-owned bounded storage
+and the ordinary routed focus, IME, and semantic-input paths.
+
+In reading mode, nonempty notes use the supported LaTeX grammar and compose before or
+after the animation's presentation in one Dynview document flow. Notes remain available
+alone when no animation text is supplied. Both bodies share the same stationary viewport,
+scrollbar, semantic selection/copy path, and presentation transitions. There is no
+app-generated heading, separator line, or separate reading frame; users can author their
+own headings. Empty notes add no content or spacer.
+
+Native presentation composition parses the bodies independently. Animation plain text
+remains literal; rejected TeX renders literally without hiding a valid neighboring body.
+Placement changes, loaded notes, note revisions, reading order, and animation events
+invalidate the composition without requiring another Julia presentation event.
+Switching placements loads by both collection and placement identity, including when
+two placements refer to the same animation.
+
+Authoring retains the original-only upper pane, shared multiline source editor, and
+Done action. **Notes on top** sits below the multiline input beside **Done Editing**,
+not in the Library drawer, and remains keyboard accessible. Narrow panes place these
+footer controls on separate rows to keep them usable. Their pointer captures belong
+to Presentation, including checkbox-label hits, and survive Library clipping until
+release; portrait View clipping still cancels releases outside the revealed pane.
+Its borders use normal control
+paint; only hovering or dragging exposes
+the narrow internal splitter accent. Accessible editor identification does not require
+a visible heading. The `presentation_idle` scenario predicate waits for presentation
+publication and readable display state, independently of note saving.
+
+Text and reading-order edits are debounced and committed as immutable worker snapshots.
+Done, placement changes, animation reset/reload, deletion, and shutdown preserve the
+active draft until the required save joins successfully; failed ordinary transitions
+leave the editor and generation active. See
+[`collection_note.odin`](../../../src/view/ui/library/collection_note.odin),
+[`text_panel.odin`](../../../src/view/ui/presentation/text_panel.odin), and
+[`Sqlite3.md`](Sqlite3.md) for the UI and storage ownership details.
+
 This division is useful when extending the UI: add common control mechanics to the
 widget layer when multiple callers can share them; keep feature policy in the owning
 panel. The Library tree is a notable specialization: it uses treeview primitives, but

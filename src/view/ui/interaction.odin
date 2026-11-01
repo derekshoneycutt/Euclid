@@ -59,6 +59,10 @@ ui_capture_target :: proc(
     if !capture.active {
         return {}
     }
+    if uipresentation.ui_presentation_owns_capture(capture) &&
+        (capture.kind == .Text_Button || capture.kind == .Checkbox) {
+        return viewmodel.ui_interaction_target(.Control, .Presentation, capture.id)
+    }
     switch capture.kind {
     case .Splitter:
         return viewmodel.ui_interaction_target(.Splitter, id = capture.id)
@@ -175,6 +179,10 @@ ui_hover_target :: proc(
         (runtime^.layout.current_layout_mode != .Portrait ||
             ui_accordion_pointer_is_revealed(
                 &runtime^.layout, .View, geometry.Vector2(mouse))) {
+        note_target := ui_note_hover_target(runtime, geometry.Vector2(mouse))
+        if note_target.kind != .None {
+            return note_target
+        }
         target := ui_presentation_target(
             geometry.Vector2(mouse), regions, terminal_present)
         if target.kind != .None {
@@ -187,6 +195,36 @@ ui_hover_target :: proc(
     }
     return ui_world_hover_target(runtime, geometry.Vector2(mouse),
         capture_view.phase, controls.favorite, controls.membership)
+}
+
+// Resolve the editor and splitter before the presentation backing under them.
+ui_note_hover_target :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    mouse: geometry.Vector2) -> viewmodel.Ui_Interaction_Target {
+    note := &runtime^.library.collection_note
+    if note^.status != .Ready || !note^.editing {
+        return {}
+    }
+    if note^.generation > 0 && geometry.rectangle_contains(note^.splitter_rect, mouse) {
+        return viewmodel.ui_interaction_target(
+            .Splitter, id = viewmodel.PRESENTATION_NOTE_SPLITTER_ID)
+    }
+    if geometry.rectangle_contains(note^.editor_clip_rect, mouse) {
+        if geometry.rectangle_contains(note^.done_rect, mouse) {
+            return viewmodel.ui_interaction_target(
+                .Control, .Presentation, viewmodel.LIBRARY_COLLECTION_NOTE_DONE_ID)
+        }
+        if geometry.rectangle_contains(note^.order_rect, mouse) {
+            return viewmodel.ui_interaction_target(
+                .Control, .Presentation, viewmodel.LIBRARY_COLLECTION_NOTE_ORDER_ID)
+        }
+    }
+    if geometry.rectangle_contains(note^.editor_rect, mouse) &&
+        geometry.rectangle_contains(note^.editor_clip_rect, mouse) {
+        return viewmodel.ui_interaction_target(
+            .Control, .Input_Box, viewmodel.LIBRARY_COLLECTION_NOTE_INPUT_ID)
+    }
+    return {}
 }
 
 // Resolve input targets within the revealed accordion content.
@@ -262,6 +300,9 @@ ui_route_logical_focus :: proc(
         !uilibrary.library_entry_name_visible(runtime) {
         result = {}
     }
+    if !ui_note_focus_is_valid(runtime, result) {
+        result = {}
+    }
     terminal_present := input.terminal_present
     visible := uipresentation.ui_presentation_is_visible(&runtime^.presentation)
     if terminal_present && visible && !runtime^.input.interaction.terminal_was_present {
@@ -277,6 +318,19 @@ ui_route_logical_focus :: proc(
     return result
 }
 
+// Retain note focus only while its editable presentation control is visible.
+ui_note_focus_is_valid :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    focus: viewmodel.Ui_Focus_Target) -> bool {
+    if focus.kind != .Input_Box ||
+       focus.id != viewmodel.LIBRARY_COLLECTION_NOTE_INPUT_ID {
+        return true
+    }
+    note := &runtime^.library.collection_note
+    return note^.status == .Ready && note^.editing &&
+        uipresentation.ui_presentation_is_visible(&runtime^.presentation)
+}
+
 // ui_valid_capture_owner releases input-box capture after its control disappears.
 ui_valid_capture_owner :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
@@ -290,7 +344,12 @@ ui_valid_capture_owner :: proc(
         owner.id == uilibrary.LIBRARY_SEARCH_INPUT_ID &&
         uilibrary.library_search_visible(runtime) ||
         owner.id == uilibrary.TREE_ENTRY_NAME_INPUT_ID &&
-        uilibrary.library_entry_name_visible(runtime) {
+        uilibrary.library_entry_name_visible(runtime) ||
+        owner.id == viewmodel.LIBRARY_COLLECTION_NOTE_INPUT_ID &&
+        runtime^.library.collection_note.status == .Ready &&
+        runtime^.library.collection_note.editing &&
+        runtime^.library.collection_note.editor_rect.width > 0 &&
+        uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
         return owner
     }
     runtime^.input.press_owner = {}

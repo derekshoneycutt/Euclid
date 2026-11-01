@@ -20,6 +20,11 @@ LIBRARY_SEARCH_QUERY_BYTE_CAPACITY :: 512
 
 LIBRARY_SEARCH_RESULT_CAPACITY :: 64
 
+LIBRARY_COLLECTION_NOTE_INPUT_ID :: 6421
+LIBRARY_COLLECTION_NOTE_DONE_ID :: 6422
+LIBRARY_COLLECTION_NOTE_ORDER_ID :: 6423
+PRESENTATION_NOTE_SPLITTER_ID :: 6423
+
 UI_TREE_NODE_CAPACITY :: 512
 TREE_COLLECTIONS_ROOT_ID :: uuid.Identifier{
     0x45, 0x55, 0x43, 0x4c, 0x49, 0x44, 0x00, 0x00,
@@ -530,6 +535,9 @@ Ui_Input_Box_State :: struct {
     preedit_replace_end: int,
     preedit_content_revision: u64,
     scroll_x: f32,
+    scroll_y: f32,
+    preferred_column: int,
+    preferred_column_valid: bool,
     content_revision: u64,
     dragging: bool,
     fixed_selection: bool,
@@ -686,13 +694,16 @@ Ui_Tree_Actions_Layout :: struct {
     drawer_rect: geometry.Rectangle,
     move_up_rect: geometry.Rectangle,
     move_down_rect: geometry.Rectangle,
+    notes_rect: geometry.Rectangle,
     delete_rect: geometry.Rectangle,
     delete_enabled: bool,
     move_up_enabled: bool,
     move_down_enabled: bool,
+    notes_eligible: bool,
     toggle_id: int,
     move_up_id: int,
     move_down_id: int,
+    notes_id: int,
     delete_id: int,
 }
 
@@ -846,12 +857,49 @@ Ui_Library_Entry_Name_Draft :: struct {
     admission_failed: bool,
 }
 
+Ui_Collection_Note_Status :: enum u8 {
+    Idle,
+    Loading,
+    Ready,
+    Failed,
+}
+
+// Ui_Library_Collection_Note retains placement-qualified note interaction state.
+Ui_Library_Collection_Note :: struct {
+    identity: collections.Placement_Identity,
+    animation_id: uuid.Identifier,
+    generation: u64,
+    request_id: u64,
+    text_length: int,
+    input: Ui_Input_Box_State,
+    editor_rect: geometry.Rectangle,
+    editor_clip_rect: geometry.Rectangle,
+    splitter_rect: geometry.Rectangle,
+    done_rect: geometry.Rectangle,
+    order_rect: geometry.Rectangle,
+    split_ratio: f32,
+    splitter_hovered: bool,
+    revision: u64,
+    saved_revision: u64,
+    debounce_remaining_seconds: f64,
+    status: Ui_Collection_Note_Status,
+    notes_on_top: bool,
+    pending_selection_entry_id: uuid.Identifier,
+    pending_selection_revision: u64,
+    editing: bool,
+    edit_requested: bool,
+    dirty: bool,
+    save_failed: bool,
+    leave_editing_after_save: bool,
+}
+
 // Ui_Library_State composes bounded Library state under one owner.
 Ui_Library_State :: struct {
     tree: Ui_Library_Tree_State,
     motion: Ui_Tree_Motion,
     actions: Ui_Library_Actions_State,
     entry_name: Ui_Library_Entry_Name_Draft,
+    collection_note: Ui_Library_Collection_Note,
     search: Library_Search_State,
 }
 

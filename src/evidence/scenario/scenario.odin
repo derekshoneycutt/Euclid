@@ -81,6 +81,7 @@ Command_Kind :: enum u8 {
     Inject_Reload_Failure,
     Type_Text,
     Type_Library_Name,
+    Type_Collection_Note,
     Key,
     Pause_Simulation,
     Resume_Simulation,
@@ -339,6 +340,7 @@ Raw_Command :: struct {
     inject_reload_failure: string,
     type_text: string `json:"type"`,
     type_library_name: string,
+    type_collection_note: string,
     screenshot: string,
     start_gif: string,
     set_arrival_style: string,
@@ -872,6 +874,7 @@ runner_update_command :: proc(
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown, .Set_Setting,
          .Favorite_Control, .Library_Placement, .Type_Library_Name,
+         .Type_Collection_Note,
          .Set_Arrival_Style:
         return runner_issue_action(runner, command, frame.actions)
     }
@@ -929,6 +932,7 @@ command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
          .Wait_Terminal_History_Idle, .Wait_Terminal_Explorer,
          .Confirm_Terminal_History_Delete,
          .Type_Text, .Type_Library_Name,
+         .Type_Collection_Note,
          .Key, .Set_View_Content, .Set_Library_Search,
          .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
         .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
@@ -1016,6 +1020,8 @@ raw_typing_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected := raw_text_command_select(raw.type_text, .Type_Text, command)
     selected += raw_text_command_select(
         raw.type_library_name, .Type_Library_Name, command)
+    selected += raw_text_command_select(
+        raw.type_collection_note, .Type_Collection_Note, command)
     return selected
 }
 
@@ -1262,7 +1268,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
-         .Type_Text, .Type_Library_Name, .Key,
+         .Type_Text, .Type_Library_Name, .Type_Collection_Note, .Key,
          .Pause_Simulation, .Resume_Simulation,
          .Pause_Animation, .Resume_Animation, .Pause_Construction,
          .Resume_Construction, .Show_Completed,
@@ -1531,6 +1537,18 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
         return !tree_transitioning(display)
     case "collection_delete_ready":
         return display.collection_delete_ready
+    case "collection_note_ready":
+        return display.collection_note_ready
+    case "collection_note_editing":
+        return display.collection_note_editing
+    case "collection_note_dirty":
+        return display.collection_note_dirty
+    case "collection_note_clean":
+        return collection_note_is_clean(display)
+    case "collection_note_order_top":
+        return display.collection_note_notes_on_top
+    case "collection_note_order_bottom":
+        return collection_note_is_ordered_on_bottom(display)
     case "interface_reduced_motion":
         return display.interface_reduce_motion
     case "presentation_visible":
@@ -1540,6 +1558,20 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case:
         return presentation_effects_state_matches(name, display.presentation_effects)
     }
+}
+
+// A clean active note is ready, out of edit mode, and fully durable.
+collection_note_is_clean :: #force_inline proc(
+    display: observe.Display) -> bool {
+    return display.collection_note_ready &&
+        !display.collection_note_editing && !display.collection_note_dirty
+}
+
+// Bottom order is authoritative only for a ready note owner.
+collection_note_is_ordered_on_bottom :: #force_inline proc(
+    display: observe.Display) -> bool {
+    return display.collection_note_ready &&
+        !display.collection_note_notes_on_top
 }
 
 // Runtime readiness reflects the host's committed lifecycle.
@@ -1683,6 +1715,8 @@ presentation_effects_state_matches :: proc(
     switch name {
     case "presentation_effects_active":
         return presentation_effects_active(effects)
+    case "presentation_idle":
+        return !effects.publication_pending
     case "presentation_effects_settled":
         return !presentation_effects_active(effects)
     case "presentation_dust_active":

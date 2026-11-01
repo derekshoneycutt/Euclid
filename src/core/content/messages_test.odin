@@ -49,7 +49,8 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Matching animations: {count} or more", "Actions for {name}", "Move Up", "Move Down",
     "Unicode completion: {symbol}. Press Right Arrow to insert; Escape to dismiss.",
     "Library name", "Create collection", "New Collection",
-    "Delete collection", "Confirm delete",
+    "Delete collection", "Confirm delete", "Edit notes", "Done editing",
+    "Notes on top", "Collection notes: {name}", "Loading notes...", "Notes unavailable",
     "Display FPS", "Limit FPS",
     "Enable Drawing Sound", "Use SIMD Projection", "Use SIMD Projection (Unavailable)",
     "GPU Dust Instancing", "GPU Dust Instancing (Unavailable)", "Maximum Dust particles",
@@ -152,7 +153,7 @@ content_message_test_signature :: proc(
     #partial switch id {
     case .Library_Suggestion_Action:
         return "query", .Text
-    case .Library_Actions_For:
+    case .Library_Actions_For, .Library_Collection_Notes_Heading:
         return "name", .Text
     case .Library_Unicode_Completion:
         return "symbol", .Text
@@ -187,8 +188,13 @@ content_message_test_expected :: proc(
             "Unicode completion: {symbol}. Press Right Arrow to insert; Escape to dismiss." {
             return "Unicode completion: Elements. Press Right Arrow to insert; Escape to dismiss."
         }
-        return "Actions for Elements" if template == "Actions for {name}" else
-            "Use suggested search: Elements"
+        if template == "Actions for {name}" {
+            return "Actions for Elements"
+        }
+        if template == "Collection notes: {name}" {
+            return "Collection notes: Elements"
+        }
+        return "Use suggested search: Elements"
     case .Uint32, .Int64:
         // Baseline templates each contain one named count placeholder.
         for index in 0..<len(template) {

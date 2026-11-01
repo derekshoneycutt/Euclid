@@ -10,6 +10,7 @@ import "core:strings"
 
 USER_SETTING_SCHEMA_SQL :: #load("sql/user_setting.sql", string)
 USER_COLLECTION_SCHEMA_SQL :: #load("sql/user_collection_schema.sql", string)
+USER_COLLECTION_NOTE_SCHEMA_SQL :: #load("sql/user_collection_note_schema.sql", string)
 USER_TERMINAL_HISTORY_SCHEMA_SQL :: #load("history/sql/user_terminal_history.sql", string)
 
 // Open or safely admit one database at an explicit durable path.
@@ -82,10 +83,13 @@ store_can_open :: proc(store: ^Store) -> bool {
         store^.read_setting.handle == nil && store^.upsert_setting.handle == nil &&
         store^.delete_setting.handle == nil && store^.read_collections.handle == nil &&
         store^.read_collection_entries.handle == nil &&
+        store^.read_collection_note.handle == nil &&
         store^.insert_collection.handle == nil &&
         store^.insert_collection_entry.handle == nil &&
         store^.delete_collection_entries.handle == nil &&
         store^.delete_collections.handle == nil &&
+        store^.upsert_collection_note.handle == nil &&
+        store^.delete_orphan_collection_notes.handle == nil &&
         !store^.collection_replay_workspace.initialized
 }
 
@@ -433,9 +437,10 @@ store_initialize_schema :: proc(
 
 // Create the settings, collection, and optional terminal-history tables in order.
 store_create_schema_tables :: proc(store: ^Store) -> sqlite.Error {
-    statements: [3]string = {
+    statements: [4]string = {
         USER_SETTING_SCHEMA_SQL,
         USER_COLLECTION_SCHEMA_SQL,
+        USER_COLLECTION_NOTE_SCHEMA_SQL,
         USER_TERMINAL_HISTORY_SCHEMA_SQL,
     }
     for sql in statements {
@@ -468,6 +473,12 @@ store_migrate_v1_to_v2 :: proc(
             &store^.connection,
             strings.clone_to_cstring(
                 USER_TERMINAL_HISTORY_SCHEMA_SQL, context.temp_allocator))
+    }
+    if store_sqlite_error_is_clear(failure) {
+        failure = sqlite.connection_exec(
+            &store^.connection,
+            strings.clone_to_cstring(
+                USER_COLLECTION_NOTE_SCHEMA_SQL, context.temp_allocator))
     }
     if store_sqlite_error_is_clear(failure) && fail_after_schema {
         failure = store_exec(store, "CREATE TABLE user_setting(value INTEGER)")
@@ -517,6 +528,9 @@ store_close :: proc(store: ^Store) -> Store_Error {
     }
     failure: Store_Error
     store_finalize_owned(store, &store^.delete_collections, &failure)
+    store_finalize_owned(store, &store^.delete_orphan_collection_notes, &failure)
+    store_finalize_owned(store, &store^.upsert_collection_note, &failure)
+    store_finalize_owned(store, &store^.read_collection_note, &failure)
     store_finalize_owned(store, &store^.delete_collection_entries, &failure)
     store_finalize_owned(store, &store^.insert_collection_entry, &failure)
     store_finalize_owned(store, &store^.insert_collection, &failure)

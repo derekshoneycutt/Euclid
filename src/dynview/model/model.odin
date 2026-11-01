@@ -6,7 +6,7 @@ import color "../../core/color"
 import storage "../../core/storage"
 
 DYNVIEW_MAX_COMMANDS :: 1024
-DYNVIEW_MAX_TEXT_BYTES :: presentation_model.PRESENTATION_MAX_SOURCE_BYTES
+DYNVIEW_MAX_TEXT_BYTES :: presentation_model.PRESENTATION_MAX_COMPOSED_SOURCE_BYTES
 FONT_SHAPED_GLYPH_CAPACITY :: fontmodel.FONT_SHAPED_GLYPH_CAPACITY
 DYNVIEW_MAX_LAYOUT_LINES :: 4096
 DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
@@ -571,6 +571,7 @@ Dynview_Document :: struct {
     inline_count: int,
     display_row_start: int,
     display_row_count: int,
+    separated_body: bool,
 }
 
 // Identify the document-level policy for one technical display environment.

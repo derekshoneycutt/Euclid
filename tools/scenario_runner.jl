@@ -517,24 +517,21 @@ end
 
 """Dispatch acceptance workflows explicitly, otherwise launch one ordinary scenario."""
 function run_named_scenario(binary::String, name::String)
-    if name == "terminal-history-explorer-acceptance"
-        return run_terminal_history_explorer_acceptance(binary)
-    elseif name == "terminal-history-persistence-acceptance"
-        return run_terminal_history_acceptance(binary)
-    elseif name == "settings-persistence-acceptance"
-        return run_settings_acceptance(binary)
-    elseif name == "completed-preferences-persistence-acceptance"
-        return run_completed_preferences_acceptance(binary)
-    elseif name == "collections-favorites-acceptance"
-        return run_favorites_acceptance(binary)
-    elseif name == "empty-collections-acceptance"
-        return run_empty_collections_acceptance(binary)
-    elseif name == "collection-heads-acceptance"
-        return run_collection_heads_acceptance(binary)
-    elseif name == "collection-delete-acceptance"
-        return run_collection_delete_acceptance(binary)
-    elseif name == "collection-membership-acceptance"
-        return run_collection_membership_acceptance(binary)
+    workflows = (
+        "terminal-history-explorer-acceptance" =>
+            run_terminal_history_explorer_acceptance,
+        "terminal-history-persistence-acceptance" => run_terminal_history_acceptance,
+        "settings-persistence-acceptance" => run_settings_acceptance,
+        "completed-preferences-persistence-acceptance" =>
+            run_completed_preferences_acceptance,
+        "collections-favorites-acceptance" => run_favorites_acceptance,
+        "empty-collections-acceptance" => run_empty_collections_acceptance,
+        "collection-heads-acceptance" => run_collection_heads_acceptance,
+        "collection-delete-acceptance" => run_collection_delete_acceptance,
+        "collection-membership-acceptance" => run_collection_membership_acceptance,
+        "collection-notes-acceptance" => run_collection_notes_acceptance)
+    for (workflow_name, launch) in workflows
+        name == workflow_name && return launch(binary)
     end
     return [run_scenario(binary, name)]
 end

@@ -46,6 +46,7 @@ Trace_State :: struct {
 // arrival_style reports the active, possibly degraded, arrival. Completion duration
 // is the logical effect endpoint, excluding a coarse frame's unused remainder.
 Presentation_Effects :: struct {
+    publication_pending: bool,
     surface: fontmodel.Font_Ink_Surface,
     surface_switch_count: u64,
     arrival_selection: uidust.Ui_Dust_Arrival_Style,
@@ -93,6 +94,10 @@ Display :: struct {
     tree_transition_count: int,
     tree_visual_height: f32,
     tree_scroll_y: f32,
+    collection_note_ready: bool,
+    collection_note_editing: bool,
+    collection_note_dirty: bool,
+    collection_note_notes_on_top: bool,
     collection_delete_armed: bool,
     collection_delete_ready: bool,
     interface_reduce_motion: bool,
@@ -501,6 +506,17 @@ observe_display_tree :: proc(
     }
     result^.tree_scroll_y = library^.tree.scroll_y
     result^.tree_visual_height = library^.motion.visual_height
+    note := library^.collection_note
+    note_owns_selection := note.identity.entry_id ==
+        library^.tree.selected_item_id
+    result^.collection_note_ready = note_owns_selection &&
+        note.status == .Ready
+    result^.collection_note_editing =
+        result^.collection_note_ready && note.editing
+    result^.collection_note_dirty =
+        result^.collection_note_ready && note.dirty
+    result^.collection_note_notes_on_top =
+        result^.collection_note_ready && note.notes_on_top
     if library^.actions.reorder.active {
         result^.tree_transition_count += 1
     }

@@ -175,6 +175,146 @@ input_box_edit_keyboard_preserves_utf8_boundaries :: proc(t: ^testing.T) {
     testing.expect_value(t, state.cursor_byte, 1)
 }
 
+// Verify multiline insertion normalizes clipboard line endings without partial edits.
+@(test)
+input_box_multiline_insert_and_clipboard_normalize_lines :: proc(t: ^testing.T) {
+    buffer: [24]u8
+    copy(buffer[:], "ab")
+    text_length := 2
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 1,
+        anchor_byte = 1,
+    }
+    enter: input.Input_Event = {
+        kind = .Press,
+        key = .Enter,
+    }
+    update := input_box_apply_edit_keyboard(&state, {buffer[:], &text_length},
+        input_box_test_frame([]input.Input_Event{enter}), {
+            layout = {
+                multiline = true,
+            },
+        })
+    testing.expect(t, update.changed)
+    testing.expect_value(t, string(buffer[:text_length]), "a\nb")
+    testing.expect_value(t, state.cursor_byte, 2)
+
+    paste_buffer: [24]u8
+    paste_length := 0
+    state.cursor_byte = 0
+    state.anchor_byte = 0
+    paste: input.Input_Event = {
+        kind = .Press,
+        key = .V,
+        modifiers = {.Control},
+    }
+    update = input_box_apply_edit_keyboard(&state,
+        {paste_buffer[:], &paste_length},
+        input_box_test_frame([]input.Input_Event{paste}),
+        {
+            clipboard_text = "first\r\nsecond\rthird",
+            layout = {
+                multiline = true,
+            },
+        })
+    testing.expect(t, update.changed)
+    testing.expect_value(t, string(paste_buffer[:paste_length]),
+        "first\nsecond\nthird")
+}
+
+// Verify multiline Home/End and vertical movement preserve grapheme-safe columns.
+@(test)
+input_box_multiline_navigation_tracks_hard_lines :: proc(t: ^testing.T) {
+    text := "a\nbc"
+    buffer: [16]u8
+    copy(buffer[:], text)
+    text_length := len(text)
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = len(text),
+        anchor_byte = len(text),
+    }
+    up: input.Input_Event = {
+        kind = .Press,
+        key = .Up,
+    }
+    down: input.Input_Event = {
+        kind = .Press,
+        key = .Down,
+        modifiers = {.Shift},
+    }
+    events: [2]input.Input_Event = {up, down}
+    _ = input_box_apply_edit_keyboard(&state, {buffer[:], &text_length},
+        input_box_test_frame(events[:]), {
+            layout = {
+                multiline = true,
+            },
+        })
+    testing.expect_value(t, state.anchor_byte, 1)
+    testing.expect_value(t, state.cursor_byte, len(text))
+
+    state.cursor_byte = len(text)
+    home: input.Input_Event = {
+        kind = .Press,
+        key = .Home,
+    }
+    end: input.Input_Event = {
+        kind = .Press,
+        key = .End,
+    }
+    _ = input_box_apply_edit_keyboard(&state, {buffer[:], &text_length},
+        input_box_test_frame([]input.Input_Event{home}), {
+            layout = {
+                multiline = true,
+            },
+        })
+    testing.expect_value(t, state.cursor_byte, 2)
+    _ = input_box_apply_edit_keyboard(&state, {buffer[:], &text_length},
+        input_box_test_frame([]input.Input_Event{end}), {
+            layout = {
+                multiline = true,
+            },
+        })
+    testing.expect_value(t, state.cursor_byte, len(text))
+}
+
+// Verify note-capacity rejection preserves both text and caret.
+@(test)
+input_box_multiline_capacity_rejects_enter_atomically :: proc(t: ^testing.T) {
+    buffer: [4]u8
+    copy(buffer[:], "note")
+    text_length := 4
+    state: viewmodel.Ui_Input_Box_State = {
+        cursor_byte = 2,
+        anchor_byte = 2,
+    }
+    enter: input.Input_Event = {
+        kind = .Press,
+        key = .Enter,
+    }
+    update := input_box_apply_edit_keyboard(&state, {buffer[:], &text_length},
+        input_box_test_frame([]input.Input_Event{enter}), {
+            layout = {
+                multiline = true,
+            },
+        })
+    testing.expect(t, update.edit_rejected)
+    testing.expect(t, !update.changed)
+    testing.expect_value(t, string(buffer[:text_length]), "note")
+    testing.expect_value(t, state.cursor_byte, 2)
+    testing.expect_value(t, state.anchor_byte, 2)
+}
+
+// Verify wrapped display coordinates map consistently between bytes and visual rows.
+@(test)
+input_box_multiline_wrapping_maps_visual_positions :: proc(t: ^testing.T) {
+    text := "abcdef\nxy"
+    position := input_box_visual_position(text, 4, 3)
+    testing.expect_value(t, position.row, 1)
+    testing.expect_value(t, position.column, 1)
+    testing.expect_value(t, input_box_visual_boundary(text, 1, 2, 3), 5)
+    testing.expect_value(t, input_box_visual_row_count(text, 3), 3)
+}
+
 // Verify preedit remains transient and whole commits replace the captured selection.
 @(test)
 input_box_ime_preedit_and_commit_are_atomic :: proc(t: ^testing.T) {
@@ -318,7 +458,9 @@ input_box_edit_keyboard_reports_cut_paste_and_submit :: proc(t: ^testing.T) {
         },
     }
     update := input_box_apply_edit_keyboard(&state,
-        {buffer[:], &text_length}, input_box_test_frame(events[:]), "ééé")
+        {buffer[:], &text_length}, input_box_test_frame(events[:]), {
+            clipboard_text = "ééé",
+        })
     testing.expect(t, update.copy_requested && update.changed)
     testing.expect_value(t, update.copy_start, 1)
     testing.expect_value(t, update.copy_end, 3)
@@ -1097,7 +1239,9 @@ input_box_triple_click_supports_cut_paste :: proc(t: ^testing.T) {
         },
     }
     update := input_box_apply_edit_keyboard(&state, {buffer[:], &length},
-        input_box_test_frame(events[:]), "replacement")
+        input_box_test_frame(events[:]), {
+            clipboard_text = "replacement",
+        })
     testing.expect(t, update.changed && update.copy_requested)
     testing.expect_value(t, string(update.copied_bytes[:update.copied_length]), "αβ end")
     testing.expect_value(t, string(buffer[:length]), "replacement")

@@ -15,6 +15,7 @@ import log "core:log"
 import uuid "core:encoding/uuid"
 
 TREE_ACTION_CONTROL_ID_BASE :: -100000
+TREE_ACTION_CONTROL_ID_STRIDE :: 6
 TREE_ENTRY_NAME_INPUT_ID :: 6411
 TREE_ACTION_DRAWER_PADDING :: f32(4)
 TREE_ACTION_BUTTON_GAP :: f32(4)
@@ -27,6 +28,24 @@ Tree_Action_Toggle_Style :: struct {
     open: bool,
     selected: bool,
     create: bool,
+}
+
+// tree_actions_notes_eligible admits only animation placements in user collections.
+tree_actions_notes_eligible :: proc(
+    set: ^collections.Set, item: ^viewmodel.Ui_Tree_Item) -> bool {
+    if set == nil || item == nil || item^.kind != .Placement {
+        return false
+    }
+    identity, identity_error := collections.placement_identity_for_entry(
+        set, item^.key)
+    if identity_error != .None {
+        return false
+    }
+    placement, placement_error := collections.placement_resolve(set, identity)
+    collection_index := collections.find_collection(set, identity.collection_id)
+    return placement_error == .None && placement.kind == .Animation &&
+        collection_index >= 0 &&
+        set^.collections[collection_index].role == .User
 }
 
 // Apply action hits in owner order and retire frame-borrowed pointers before topology refresh.
@@ -42,6 +61,9 @@ tree_actions_apply_hit :: proc(
         _ = tree_actions_move(params, hit.actions_move_id, hit.actions_move_direction)
         tree_actions_refresh_projection(params)
     }
+    if hit.actions_notes_id != (uuid.Identifier{}) {
+        tree_actions_note_activate(params.general_state, hit.actions_notes_id)
+    }
     tree_actions_reconcile(params)
     if hit.actions_delete_id != (uuid.Identifier{}) {
         _ = tree_collection_delete(params, hit.actions_delete_id,
@@ -52,6 +74,50 @@ tree_actions_apply_hit :: proc(
         tree_actions_refresh_projection(params)
     }
     return result
+}
+
+// tree_actions_note_activate starts or flushes the selected placement's editor.
+tree_actions_note_activate :: proc(
+    state: ^core.Euclid_General_State, entry_id: uuid.Identifier) {
+    if state == nil {
+        return
+    }
+    note := &state^.ui_runtime.library.collection_note
+    if note^.identity.entry_id != entry_id || !note^.editing {
+        _ = library_collection_note_begin_editing(state, entry_id)
+        return
+    }
+    _ = library_collection_note_done(state)
+}
+
+// tree_actions_note_owner_matches qualifies active note state by placement and generation.
+tree_actions_note_owner_matches :: proc(
+    state: ^core.Euclid_General_State, item: ^viewmodel.Ui_Tree_Item) -> bool {
+    if state == nil || item == nil {
+        return false
+    }
+    note := state^.ui_runtime.library.collection_note
+    identity, failure := collections.placement_identity_for_entry(
+        &state^.preferences_runtime.collections_state, item^.key)
+    return failure == .None && note.status != .Idle &&
+        note.generation == state^.animation_memory.generation &&
+        note.identity.collection_id == identity.collection_id &&
+        note.identity.entry_id == identity.entry_id &&
+        note.identity.parent_entry_id == identity.parent_entry_id
+}
+
+// tree_actions_note_button_label selects loading, failure, or edit-mode wording.
+tree_actions_note_button_label :: proc(
+    state: ^core.Euclid_General_State,
+    status: viewmodel.Ui_Collection_Note_Status, editing: bool) -> string {
+    if status == .Loading || status == .Idle {
+        return viewmessages.shell_message(state, .Library_Notes_Loading)
+    }
+    if status == .Failed {
+        return viewmessages.shell_message(state, .Library_Notes_Unavailable)
+    }
+    return viewmessages.shell_message(state,
+        .Library_Done_Editing if editing else .Library_Edit_Notes)
 }
 
 // tree_actions_cancel_context_capture releases only action-widget press ownership.
@@ -193,14 +259,20 @@ tree_actions_reconcile :: proc(params: Tree_List_Params) {
 
 // tree_actions_full_height chooses one bounded button arrangement for this pane width.
 tree_actions_full_height :: proc(
-    panel_width: f32, depth: int, scale := f32(1)) -> f32 {
+    panel_width: f32, depth: int, scale := f32(1),
+    include_notes := false) -> f32 {
     label_x := (f32(depth) * theme.TREE_INDENT +
         theme.TREE_ROW_LABEL_OFFSET_X) * scale
     available := max(panel_width - label_x - TREE_ACTION_DRAWER_PADDING * scale, 0)
     if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH * scale {
-        return TREE_ACTION_DRAWER_MIN_HEIGHT * scale
+        rows := 1 if !include_notes else 2
+        return (TREE_ACTION_BUTTON_HEIGHT * f32(rows) +
+            TREE_ACTION_BUTTON_GAP * f32(rows - 1) +
+            TREE_ACTION_DRAWER_PADDING * 2) * scale
     }
-    return (TREE_ACTION_BUTTON_HEIGHT * 2 + TREE_ACTION_BUTTON_GAP +
+    rows := 2 if !include_notes else 3
+    return (TREE_ACTION_BUTTON_HEIGHT * f32(rows) +
+        TREE_ACTION_BUTTON_GAP * f32(rows - 1) +
         TREE_ACTION_DRAWER_PADDING * 2) * scale
 }
 
@@ -225,7 +297,8 @@ tree_actions_sample :: proc(
     target := TREE_ACTION_DRAWER_MIN_HEIGHT * scale
     if item^.kind == .Placement || item^.kind == .Collection {
         target = tree_actions_full_height(
-            ctx.panel.width, tree_item_depth(ctx.projection, item), scale)
+            ctx.panel.width, tree_item_depth(ctx.projection, item), scale,
+            tree_actions_notes_eligible(ctx.collections, item))
         if item^.kind == .Collection {
             target += (TREE_ACTION_BUTTON_HEIGHT + TREE_ACTION_BUTTON_GAP) * scale
         }
@@ -233,24 +306,28 @@ tree_actions_sample :: proc(
     if !motion^.open {
         target = 0
     }
-    if !motion^.running {
-        motion^.height = target
-    } else {
-        ease := uiaccordion.interface_motion_ease(
-            motion^.start_seconds, ctx.now_seconds)
-        motion^.height = clamp(motion^.start_height +
-            (target - motion^.start_height) * ease, 0, max(target, motion^.start_height))
-        if ctx.now_seconds >=
-            motion^.start_seconds + uiaccordion.INTERFACE_TRANSITION_SECONDS {
-            motion^.height = target
-            motion^.running = false
-        }
-    }
+    tree_actions_sample_motion(motion, target, ctx.now_seconds)
     if !motion^.open && !motion^.running && motion^.height <= 0 {
         motion^ = {}
         return 0
     }
     return motion^.height
+}
+
+// Sample a disclosure transition while retaining its starting and target extents.
+tree_actions_sample_motion :: proc(
+    motion: ^viewmodel.Ui_Tree_Actions_Motion, target: f32, now_seconds: f64) {
+    if !motion^.running {
+        motion^.height = target
+        return
+    }
+    ease := uiaccordion.interface_motion_ease(motion^.start_seconds, now_seconds)
+    motion^.height = clamp(motion^.start_height +
+        (target - motion^.start_height) * ease, 0, max(target, motion^.start_height))
+    if now_seconds >= motion^.start_seconds + uiaccordion.INTERFACE_TRANSITION_SECONDS {
+        motion^.height = target
+        motion^.running = false
+    }
 }
 
 // tree_item_depth resolves one bounded item's indentation from its projection chain.
@@ -359,7 +436,6 @@ tree_actions_layout_buttons :: proc(
     layout: ^viewmodel.Ui_Tree_Actions_Layout) {
     scale := layout^.toggle_rect.width / TREE_ACTION_TOGGLE_WIDTH
     padding := TREE_ACTION_DRAWER_PADDING * scale
-    button_gap := TREE_ACTION_BUTTON_GAP * scale
     button_height := TREE_ACTION_BUTTON_HEIGHT * scale
     available := max(layout^.drawer_rect.width - layout^.label_clip.x - padding, 0)
     inner: geometry.Rectangle = {
@@ -367,6 +443,31 @@ tree_actions_layout_buttons :: proc(
         layout^.drawer_rect.y + padding,
         max(available - padding * 2, 0),
         button_height}
+    tree_actions_layout_move_rectangles(layout, inner, available, scale)
+    layout^.move_up_enabled = tree_actions_neighbor_exists(
+        set, item^.key, .Up)
+    layout^.move_down_enabled = tree_actions_neighbor_exists(
+        set, item^.key, .Down)
+    item_index := tree_projection_find(projection, item^.key)
+    layout^.move_up_id = tree_actions_control_id(item_index, 1)
+    layout^.move_down_id = tree_actions_control_id(item_index, 2)
+    layout^.notes_eligible = tree_actions_notes_eligible(set, item)
+    if layout^.notes_eligible {
+        tree_actions_layout_note_buttons(projection, item, layout, inner, available)
+    }
+    if item^.kind == .Collection {
+        _, failure := collections.collection_edit_index(set, item.key)
+        layout.delete_enabled = failure == .None
+        tree_collection_delete_layout(layout, inner, item_index, scale)
+    }
+}
+
+// Arrange sibling move buttons horizontally or vertically for the available width.
+tree_actions_layout_move_rectangles :: proc(
+    layout: ^viewmodel.Ui_Tree_Actions_Layout,
+    inner: geometry.Rectangle, available, scale: f32) {
+    button_gap := TREE_ACTION_BUTTON_GAP * scale
+    button_height := TREE_ACTION_BUTTON_HEIGHT * scale
     if available >= TREE_ACTION_HORIZONTAL_MIN_WIDTH * scale {
         width := (inner.width - button_gap) * 0.5
         layout^.move_up_rect = {inner.x, inner.y, width, inner.height}
@@ -378,19 +479,25 @@ tree_actions_layout_buttons :: proc(
             inner.y + button_height + button_gap,
             inner.width, button_height}
     }
-    layout^.move_up_enabled = tree_actions_neighbor_exists(
-        set, item^.key, .Up)
-    layout^.move_down_enabled = tree_actions_neighbor_exists(
-        set, item^.key, .Down)
-    item_index := tree_projection_find(
-        projection, item^.key)
-    layout^.move_up_id = tree_actions_control_id(item_index, 1)
-    layout^.move_down_id = tree_actions_control_id(item_index, 2)
-    if item^.kind == .Collection {
-        _, failure := collections.collection_edit_index(set, item.key)
-        layout.delete_enabled = failure == .None
-        tree_collection_delete_layout(layout, inner, item_index, scale)
+}
+
+// Place the note authoring action in the drawer's responsive row arrangement.
+tree_actions_layout_note_buttons :: proc(
+    projection: ^viewmodel.Ui_Tree_Projection,
+    item: ^viewmodel.Ui_Tree_Item,
+    layout: ^viewmodel.Ui_Tree_Actions_Layout,
+    inner: geometry.Rectangle,
+    available: f32) {
+    scale := layout^.toggle_rect.width / TREE_ACTION_TOGGLE_WIDTH
+    button_gap := TREE_ACTION_BUTTON_GAP * scale
+    button_height := TREE_ACTION_BUTTON_HEIGHT * scale
+    item_index := tree_projection_find(projection, item^.key)
+    layout^.notes_id = tree_actions_control_id(item_index, 4)
+    notes_row := inner.y + button_height + button_gap
+    if available < TREE_ACTION_HORIZONTAL_MIN_WIDTH * scale {
+        notes_row = inner.y + (button_height + button_gap) * 2
     }
+    layout^.notes_rect = {inner.x, notes_row, inner.width, button_height}
 }
 
 // tree_actions_neighbor_exists derives disabled state from the authoritative sibling model.
@@ -414,14 +521,14 @@ tree_actions_neighbor_exists :: proc(
 
 // tree_actions_control_id assigns each current projection slot a distinct gesture identity.
 tree_actions_control_id :: #force_inline proc(index, action: int) -> int {
-    return TREE_ACTION_CONTROL_ID_BASE - index * 4 - action
+    return TREE_ACTION_CONTROL_ID_BASE - index * TREE_ACTION_CONTROL_ID_STRIDE - action
 }
 
 // tree_actions_control_id_owned identifies the bounded ID band reserved for this drawer.
 tree_actions_control_id_owned :: #force_inline proc(id: int) -> bool {
     return id <= TREE_ACTION_CONTROL_ID_BASE &&
         id >= TREE_ACTION_CONTROL_ID_BASE -
-            viewmodel.UI_TREE_NODE_CAPACITY * 4 - 3
+            viewmodel.UI_TREE_NODE_CAPACITY * TREE_ACTION_CONTROL_ID_STRIDE - 5
 }
 
 // tree_actions_label_clip returns the reserved-name area in screen coordinates.
@@ -490,7 +597,34 @@ tree_actions_prepare_controls :: proc(
     }
     if row^.item^.kind == .Placement || row^.item^.kind == .Collection {
         tree_actions_prepare_move_buttons(params, row, prepared, ctx, hit)
+        if row^.actions.notes_eligible {
+            tree_actions_prepare_note_controls(params, row, prepared, ctx, hit)
+        }
         tree_collection_delete_prepare(params, row, prepared, ctx, hit)
+    }
+}
+
+// Prepare placement-specific note actions without borrowing note text into the tree.
+tree_actions_prepare_note_controls :: proc(
+    params: Tree_List_Params, row: ^viewmodel.Ui_Tree_Prepared_Row,
+    prepared: ^Tree_List_Preparation, ctx: Tree_Walk_Context, hit: ^Tree_Hit) {
+    if params.general_state == nil {
+        return
+    }
+    clip := tree_actions_screen_clip(row^, ctx.panel, ctx.scroll_y)
+    if clip.width <= 0 || clip.height <= 0 {
+        return
+    }
+    note := &params.ui_runtime^.library.collection_note
+    current := tree_actions_note_owner_matches(params.general_state, row^.item)
+    ready := current && note.status == .Ready
+    available := ready || current && note.status == .Failed && !note.dirty
+    button := tree_actions_screen_rect(row^.actions.notes_rect, ctx.panel, ctx.scroll_y)
+    prepared^.actions_notes = uiwidgets.update_text_button(tree_actions_button_params(
+        params, row^.actions.notes_id, {button, clip}, available, ctx.allow_clicks),
+        &params.ui_runtime^.input.press_owner)
+    if prepared^.actions_notes.clicked {
+        hit^.actions_notes_id = row^.item^.key
     }
 }
 
@@ -561,7 +695,7 @@ tree_actions_cancel_closed_capture :: proc(
     owner := runtime^.input.press_owner
     if owner.active && owner.kind == .Text_Button &&
         (owner.id == layout.move_up_id || owner.id == layout.move_down_id ||
-            owner.id == layout.delete_id) {
+            owner.id == layout.notes_id || owner.id == layout.delete_id) {
         runtime^.input.press_owner = {}
     }
 }
@@ -573,7 +707,7 @@ tree_actions_cancel_clipped_capture :: proc(
     owner := runtime^.input.press_owner
     if owner.active && owner.kind == .Text_Button &&
         (owner.id == layout.move_up_id || owner.id == layout.move_down_id ||
-            owner.id == layout.delete_id) &&
+            owner.id == layout.notes_id || owner.id == layout.delete_id) &&
         (clip.width <= 0 || clip.height <= 0) {
         runtime^.input.press_owner = {}
     }
@@ -611,7 +745,8 @@ tree_actions_capture_matches :: #force_inline proc(
     owner: viewmodel.Ui_Press_Owner_State,
     layout: viewmodel.Ui_Tree_Actions_Layout) -> bool {
     return owner.id == layout.toggle_id || owner.id == layout.move_up_id ||
-        owner.id == layout.move_down_id || owner.id == layout.delete_id
+        owner.id == layout.move_down_id || owner.id == layout.notes_id ||
+        owner.id == layout.delete_id
 }
 
 // tree_actions_capture_visible admits only the clipped rectangle owning a gesture.
@@ -632,7 +767,9 @@ tree_actions_capture_visible :: proc(
     clip := tree_actions_screen_clip(row, panel, scroll_y)
     button := row.actions.move_up_rect if owner.id == row.actions.move_up_id else
         row.actions.move_down_rect
-    if owner.id == row.actions.delete_id {
+    if owner.id == row.actions.notes_id {
+        button = row.actions.notes_rect
+    } else if owner.id == row.actions.delete_id {
         button = row.actions.delete_rect
     }
     bounds := tree_actions_screen_rect(button, panel, scroll_y)
@@ -747,9 +884,28 @@ draw_tree_actions_drawer_surfaces :: proc(
             tree_actions_screen_rect(
                 row.actions.move_down_rect, ctx.panel, ctx.scroll_y),
             ctx.actions_down, row.actions.move_down_enabled)
+        if row.actions.notes_eligible {
+            draw_tree_actions_note_surfaces(ctx, row)
+        }
     }
     tree_collection_delete_draw(ctx, row)
     _ = native.draw_encoder_pop_scissor(ctx.encoder)
+}
+
+// Encode note-mode emphasis and the prepared reading-order checkbox.
+draw_tree_actions_note_surfaces :: proc(
+    ctx: Encoded_Tree_Walk_Context, row: viewmodel.Ui_Tree_Prepared_Row) {
+    note := ctx.state^.ui_runtime.library.collection_note
+    editing := tree_actions_note_owner_matches(ctx.state, row.item) &&
+        note.status == .Ready && note.editing
+    notes_rect := tree_actions_screen_rect(
+        row.actions.notes_rect, ctx.panel, ctx.scroll_y)
+    draw_tree_actions_button_surface(ctx.encoder, notes_rect, ctx.actions_notes, true)
+    if editing {
+        _ = native.draw_encoder_rectangle_outline(
+            ctx.encoder, notes_rect, 1,
+            theme.draw_color(ctx.encoder, .Control_Border))
+    }
 }
 
 // draw_tree_actions_toggle contrasts the row action with its selected or open backing.
@@ -820,6 +976,10 @@ draw_encoded_tree_actions_text :: proc(
         {tree_actions_screen_rect(row.actions.move_down_rect, panel, scroll_y), clip},
         viewmessages.shell_message(state, .Library_Move_Down),
         row.actions.move_down_enabled)
+    if row.actions.notes_eligible {
+        draw_tree_actions_note_labels(
+            state, encoder, row, panel, scroll_y)
+    }
     if row.item^.kind == .Collection {
         draw_tree_actions_button_label(state, encoder,
             {tree_actions_screen_rect(row.actions.delete_rect, panel, scroll_y), clip},
@@ -828,6 +988,24 @@ draw_encoded_tree_actions_text :: proc(
             row.actions.delete_enabled)
     }
     _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+// Draw the placement-specific note authoring label.
+draw_tree_actions_note_labels :: proc(
+    state: ^core.Euclid_General_State,
+    encoder: ^native.Draw_Encoder,
+    row: viewmodel.Ui_Tree_Prepared_Row,
+    panel: geometry.Rectangle,
+    scroll_y: f32) {
+    clip := tree_actions_screen_clip(row, panel, scroll_y)
+    note := state^.ui_runtime.library.collection_note
+    current := tree_actions_note_owner_matches(state, row.item)
+    ready := current && note.status == .Ready
+    draw_tree_actions_button_label(state, encoder,
+        {tree_actions_screen_rect(row.actions.notes_rect, panel, scroll_y), clip},
+        tree_actions_note_button_label(
+            state, note.status if current else .Loading, ready && note.editing),
+        ready)
 }
 
 // draw_tree_actions_button_label centers one bounded label and dims disabled actions.

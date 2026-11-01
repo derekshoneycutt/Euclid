@@ -156,8 +156,9 @@ library_entry_name_test_complete_unicode_name :: proc(
     testing.expect(t, uiwidgets.input_box_unicode_enabled(input_params))
     draft := &state^.ui_runtime.library.entry_name
     prepared := uiwidgets.input_box_apply_edit_keyboard(
-        input_params.state, input_params.edit_target, input_params.frame,
-        "", input_params.edit_policy)
+        input_params.state, input_params.edit_target, input_params.frame, {
+            policy = input_params.edit_policy,
+        })
     copy(expected[:prefix_length], prefill[:prefix_length])
     copy(expected[prefix_length:], "α")
     expected_length := prefix_length + len("α")
@@ -192,8 +193,9 @@ library_entry_name_unicode_completion_saves_within_byte_limit :: proc(t: ^testin
             events = enter[:],
         })
     prepared := uiwidgets.input_box_apply_edit_keyboard(
-        input_params.state, input_params.edit_target, input_params.frame,
-        "", input_params.edit_policy)
+        input_params.state, input_params.edit_target, input_params.frame, {
+            policy = input_params.edit_policy,
+        })
     testing.expect(t, prepared.submit_requested)
     testing.expect(t, uilibrary.library_entry_name_flush(state, selected))
     entry_index := collections.find_entry(params.collections, selected)

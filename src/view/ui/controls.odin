@@ -279,6 +279,10 @@ ui_retain_library_entry_name_focus :: proc(
 ui_accordion_child_owns_capture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
     owner := runtime^.input.press_owner
+    if uipresentation.ui_presentation_owns_capture(owner) {
+        return runtime^.layout.current_layout_mode == .Portrait &&
+            runtime^.layout.active_accordion_section == .View
+    }
     #partial switch owner.kind {
     case .List_Item, .Input_Box, .Checkbox, .Slider:
         return true
@@ -292,9 +296,7 @@ ui_accordion_child_owns_capture :: proc(
             return true
         }
     }
-    return runtime^.layout.current_layout_mode == .Portrait &&
-        runtime^.layout.active_accordion_section == .View &&
-        uipresentation.ui_presentation_owns_capture(owner)
+    return false
 }
 
 // ui_clip_accordion_child_frame cancels released captures without activating hidden content.
@@ -442,11 +444,12 @@ prepare_ui_layout_interaction :: proc(
     }
     state^.ui_runtime.terminal.semantic_focus_initialized = false
     routed := state^.ui_runtime.input.interaction_frame.presentation
+    note_pointer := ui_note_pointer_is_routed(&state^.ui_runtime, frame)
     presentation_frame := input.input_frame_filter_pointer(frame,
-        routed.pointer ? input.Input_Pointer_Fields{
+        routed.pointer || note_pointer ? input.Input_Pointer_Fields{
             .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels, .Wheel} :
             input.Input_Pointer_Fields{.Screen_Position})
-    if !routed.wheel {
+    if !routed.wheel && !note_pointer {
         presentation_frame.mouse_wheel_delta = 0
     }
     if state^.ui_runtime.layout.current_layout_mode == .Portrait {
@@ -458,4 +461,18 @@ prepare_ui_layout_interaction :: proc(
             state^.ui_runtime.layout.ui_regions.text_rect, presentation_frame,
             routed.keyboard),
     }
+}
+
+// Keep note editing and splitter gestures routed while their display owner captures.
+ui_note_pointer_is_routed :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    frame: input.Input_Frame) -> bool {
+    note := &runtime^.library.collection_note
+    mouse := uiwidgets.input_frame_mouse_position(frame)
+    note_capture := runtime^.input.press_owner.active &&
+        uipresentation.ui_presentation_owns_capture(runtime^.input.press_owner)
+    return note^.status == .Ready && note^.editing &&
+        (geometry.rectangle_contains(note^.editor_clip_rect, mouse) ||
+         geometry.rectangle_contains(note^.splitter_rect, mouse) ||
+         note_capture)
 }

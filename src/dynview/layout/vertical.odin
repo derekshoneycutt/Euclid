@@ -88,22 +88,18 @@ document_blocks_share_list_item :: #force_inline proc(
         previous.item_ordinal == current.item_ordinal
 }
 
-// Report whether one source block begins a semantic document.
-document_block_starts_document :: #force_inline proc(
-    documents: []dynviewmodel.Dynview_Document,
-    block_index: int) -> bool {
-    for document in documents {
-        if document.block_start == block_index {
-            return true
-        }
-    }
-    return false
-}
-
 // Identify blocks that begin a fresh spacing context with no prior glue.
 document_block_starts_spacing_group :: #force_inline proc(
     documents: []dynviewmodel.Dynview_Document, block_index: int) -> bool {
-    return block_index == 0 || document_block_starts_document(documents, block_index)
+    if block_index == 0 {
+        return true
+    }
+    for document in documents {
+        if document.block_start == block_index {
+            return !document.separated_body
+        }
+    }
+    return false
 }
 
 // Resolve collapsed vertical glue before one block from adjacent block kinds.

@@ -746,6 +746,68 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
 
 }
 
+// Footer and label hits route to Presentation and cannot be cancelled by Library clipping.
+@(test)
+ui_note_footer_routes_pointer_and_retains_release :: proc(t: ^testing.T) {
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
+    runtime.library.collection_note.status = .Ready
+    runtime.library.collection_note.editing = true
+    widths: [2]f32 = {240, 800}
+    scales: [2]int = {100, 200}
+    for width in widths {
+        for scale in scales {
+            layout := uipresentation.presentation_note_edit_layout(
+                {20, 40, width, 520}, 0.5, scale)
+            note := &runtime.library.collection_note
+            note^.editor_rect = layout.editor_panel
+            note^.editor_clip_rect = layout.editor_clip
+            note^.done_rect = layout.done_rect
+            note^.order_rect = layout.order_rect
+            note^.order_rect.width = min(
+                note^.order_rect.width+theme.ui_scaled_metric(120, scale),
+                layout.editor_clip.x+layout.editor_clip.width-note^.order_rect.x)
+            ui_test_note_footer_release(t, &runtime, .Text_Button,
+                viewmodel.LIBRARY_COLLECTION_NOTE_DONE_ID, note^.done_rect)
+            ui_test_note_footer_release(t, &runtime, .Checkbox,
+                viewmodel.LIBRARY_COLLECTION_NOTE_ORDER_ID, note^.order_rect)
+        }
+    }
+}
+
+// Exercise the pre-layout clipping phase that previously discarded footer releases.
+ui_test_note_footer_release :: proc(
+    t: ^testing.T, runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    kind: viewmodel.Ui_Press_Owner_Kind, id: int, rect: geometry.Rectangle) {
+    frame: input.Input_Frame = {
+        mouse_position = {rect.x+rect.width-1, rect.y+rect.height*0.5},
+        mouse_released = {.Left},
+    }
+    target := ui_note_hover_target(runtime, uiwidgets.input_frame_mouse_position(frame))
+    testing.expect_value(t, target.id, id)
+    testing.expect_value(t, target.focus.kind, viewmodel.Ui_Focus_Kind.Presentation)
+    runtime^.input.press_owner = {
+        active = true,
+        kind = kind,
+        id = id,
+    }
+    capture := ui_capture_target(runtime^.input.press_owner)
+    testing.expect_value(t, capture.focus.kind, viewmodel.Ui_Focus_Kind.Presentation)
+    testing.expect(t, ui_note_pointer_is_routed(runtime, frame))
+    _ = ui_clip_accordion_child_frame(runtime, frame)
+    testing.expect(t, runtime^.input.press_owner.active)
+    testing.expect(t, !ui_accordion_child_owns_capture(runtime))
+    runtime^.layout.current_layout_mode = .Portrait
+    runtime^.layout.active_accordion_section = .View
+    testing.expect(t, ui_accordion_child_owns_capture(runtime))
+    runtime^.layout.current_layout_mode = .Landscape
+    runtime^.input.press_owner = {}
+}
+
 // Verify pause and Favorites controls route only when the latter is eligible.
 @(test)
 ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
@@ -2155,13 +2217,17 @@ library_search_suggestion_key_requires_collapsed_end_caret :: proc(t: ^testing.T
     result := uiwidgets.input_box_apply_edit_keyboard(
         &search.input, target, {
             events = right[:],
-        }, "", policy)
+        }, {
+            policy = policy,
+        })
     testing.expect(t, result.suggestion_accepted)
     search.input.anchor_byte = 1
     result = uiwidgets.input_box_apply_edit_keyboard(
         &search.input, target, {
             events = right[:],
-        }, "", policy)
+        }, {
+            policy = policy,
+        })
     testing.expect(t, !result.suggestion_accepted)
     search.input.anchor_byte = search.input.cursor_byte
     tab: [1]input.Input_Event = {{
@@ -2171,7 +2237,9 @@ library_search_suggestion_key_requires_collapsed_end_caret :: proc(t: ^testing.T
     result = uiwidgets.input_box_apply_edit_keyboard(
         &search.input, target, {
             events = tab[:],
-        }, "", policy)
+        }, {
+            policy = policy,
+        })
     testing.expect(t, !result.suggestion_accepted)
 }
 

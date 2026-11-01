@@ -193,6 +193,28 @@ scenario_library_name_text_is_bounded :: proc(t: ^testing.T) {
     }
 }
 
+// Verify collection-note typing preserves its own bounded focused-input action.
+@(test)
+scenario_collection_note_text_is_bounded :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"type_collection_note\":\"First line\\nSecond line α\"}\n",
+        &program), Parse_Error.None)
+    testing.expect_value(t, program.count, 1)
+    testing.expect_value(t, program.commands[0].kind,
+        Command_Kind.Type_Collection_Note)
+    testing.expect_value(t,
+        text_string(&program.commands[0].text), "First line\nSecond line α")
+    invalid := [?]string{
+        "{\"type_collection_note\":\"\"}",
+        "{\"type_collection_note\":\"note\",\"shutdown\":true}",
+        "{\"type\":\"terminal text\",\"type_collection_note\":\"note\"}",
+    }
+    for source in invalid {
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
 // Verify transition predicates distinguish concurrent motion from settled tree geometry.
 @(test)
 scenario_tree_motion_predicates :: proc(t: ^testing.T) {
@@ -203,6 +225,28 @@ scenario_tree_motion_predicates :: proc(t: ^testing.T) {
     }
     testing.expect(t, state_matches("tree_transitioning", display))
     testing.expect(t, !state_matches("tree_settled", display))
+}
+
+// Verify note predicates require a ready owner for the selected placement.
+@(test)
+scenario_collection_note_predicates :: proc(t: ^testing.T) {
+    display: observe.Display = {
+        collection_note_ready = true,
+        collection_note_editing = true,
+        collection_note_dirty = true,
+        collection_note_notes_on_top = true,
+    }
+    testing.expect(t, state_matches("collection_note_ready", display))
+    testing.expect(t, state_matches("collection_note_editing", display))
+    testing.expect(t, state_matches("collection_note_dirty", display))
+    testing.expect(t, state_matches("collection_note_order_top", display))
+    testing.expect(t, !state_matches("collection_note_order_bottom", display))
+    testing.expect(t, !state_matches("collection_note_clean", display))
+    display.collection_note_editing = false
+    display.collection_note_dirty = false
+    display.collection_note_notes_on_top = false
+    testing.expect(t, state_matches("collection_note_clean", display))
+    testing.expect(t, state_matches("collection_note_order_bottom", display))
 }
 
 // Verify exact typed settings payloads reject unknown keys, wrong types and extra actions.

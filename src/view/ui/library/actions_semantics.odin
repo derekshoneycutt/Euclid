@@ -15,6 +15,7 @@ import theme "../theme"
 TREE_ACTION_TOGGLE :: u64(1)
 TREE_ACTION_UP :: u64(2)
 TREE_ACTION_DOWN :: u64(3)
+TREE_ACTION_NOTES :: u64(4)
 TREE_ACTION_DRAWER :: u64(8)
 TREE_ENTRY_NAME_INPUT :: u64(5)
 TREE_ENTRY_NAME_TEXT_RUN :: u64(6)
@@ -81,21 +82,16 @@ tree_actions_repair_move_focus :: proc(
 tree_actions_command_item :: proc(
     params: Tree_List_Params,
     target: viewmodel.Ui_Node_Id) -> ^viewmodel.Ui_Tree_Item {
-    if target.domain != .Library_Action || !tree_actions_known_action(target.local_id) ||
-        target.generation != params.ji^.content_generation ||
-        params.general_state != nil &&
-            params.ui_runtime^.layout.active_accordion_section != .Library {
+    item := tree_actions_command_item_base(params, target)
+    if item == nil {
         return nil
     }
-    index := tree_projection_find(
-        &params.ui_runtime^.library.tree.projection, target.stable_id)
-    if index == TREE_NO_ITEM {
+    if target.local_id == TREE_ACTION_NOTES &&
+        !tree_actions_notes_eligible(params.collections, item) {
         return nil
     }
-    item := params.ui_runtime^.library.tree.projection.items[index]
-    if item^.kind == .Collections && target.local_id != TREE_COLLECTION_CREATE ||
-        item^.kind != .Collections && target.local_id == TREE_COLLECTION_CREATE ||
-        target.local_id == TREE_COLLECTION_DELETE && item^.kind != .Collection {
+    if target.local_id == TREE_ACTION_NOTES &&
+        !tree_actions_note_ready_matches(params, item) {
         return nil
     }
     if !tree_actions_eligible(
@@ -114,14 +110,56 @@ tree_actions_command_item :: proc(
     return item
 }
 
+// Validate the stable action identity and its placement-kind relationship.
+tree_actions_command_item_base :: proc(
+    params: Tree_List_Params,
+    target: viewmodel.Ui_Node_Id) -> ^viewmodel.Ui_Tree_Item {
+    if target.domain != .Library_Action || !tree_actions_known_action(target.local_id) ||
+        target.generation != params.ji^.content_generation ||
+        params.general_state != nil &&
+            params.ui_runtime^.layout.active_accordion_section != .Library {
+        return nil
+    }
+    index := tree_projection_find(
+        &params.ui_runtime^.library.tree.projection, target.stable_id)
+    if index == TREE_NO_ITEM {
+        return nil
+    }
+    item := params.ui_runtime^.library.tree.projection.items[index]
+    if item^.kind == .Collections && target.local_id != TREE_COLLECTION_CREATE ||
+        item^.kind != .Collections && target.local_id == TREE_COLLECTION_CREATE ||
+        target.local_id == TREE_COLLECTION_DELETE && item^.kind != .Collection {
+        return nil
+    }
+    return item
+}
+
 // Keep the public Library action vocabulary explicit, including destructive controls.
 tree_actions_known_action :: proc(action: u64) -> bool {
     switch action {
     case TREE_ACTION_TOGGLE, TREE_ACTION_UP, TREE_ACTION_DOWN,
+        TREE_ACTION_NOTES,
         TREE_ENTRY_NAME_INPUT, TREE_COLLECTION_DELETE, TREE_COLLECTION_CREATE:
         return true
     }
     return false
+}
+
+// tree_actions_note_ready_matches accepts only the loaded owner for this live generation.
+tree_actions_note_ready_matches :: proc(
+    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) -> bool {
+    if params.general_state == nil || !tree_actions_notes_eligible(
+        params.collections, item) {
+        return false
+    }
+    note := params.general_state^.ui_runtime.library.collection_note
+    identity, failure := collections.placement_identity_for_entry(
+        params.collections, item^.key)
+    return failure == .None && note.status == .Ready &&
+        note.generation == params.general_state^.animation_memory.generation &&
+        note.identity.collection_id == identity.collection_id &&
+        note.identity.entry_id == identity.entry_id &&
+        note.identity.parent_entry_id == identity.parent_entry_id
 }
 
 // tree_actions_apply_command converges keyboard and native intents with owned mutations.
@@ -159,6 +197,8 @@ tree_actions_dispatch_command :: proc(
         command.kind == .Expand && !motion^.open ||
         command.kind == .Collapse && motion^.open) {
         tree_actions_toggle(params, item^.key)
+    } else if action == TREE_ACTION_NOTES && command.kind == .Activate {
+        tree_actions_note_activate(params.general_state, item^.key)
     } else if action != TREE_ACTION_TOGGLE &&
         action != TREE_ENTRY_NAME_INPUT && command.kind == .Activate {
         direction := collections.Move_Direction.Up if action == TREE_ACTION_UP else .Down
@@ -208,6 +248,11 @@ tree_actions_command_visible :: proc(
     if action == TREE_ACTION_UP || action == TREE_ACTION_DOWN {
         return tree_actions_move_command_visible(params, row, action)
     }
+    if action == TREE_ACTION_NOTES {
+        if !row.actions.notes_eligible {
+            return false
+        }
+    }
     bounds := tree_actions_screen_rect(
         tree_actions_content_bounds(row^, action), params.list_panel, params.scroll_y^)
     row_geometry := tree_row_screen_geometry(row^, params.list_panel, params.scroll_y^)
@@ -229,6 +274,8 @@ tree_actions_content_bounds :: proc(
         return row.actions.move_up_rect
     case TREE_ACTION_DOWN:
         return row.actions.move_down_rect
+    case TREE_ACTION_NOTES:
+        return row.actions.notes_rect
     case TREE_COLLECTION_DELETE:
         return row.actions.delete_rect
     }
@@ -308,9 +355,37 @@ tree_actions_prepare_focus :: proc(params: Tree_List_Params) {
         }
         if target.local_id == TREE_COLLECTION_DELETE {
             tree_collection_delete_prepare_focus(params, target)
+        } else if target.local_id == TREE_ACTION_NOTES {
+            tree_actions_prepare_note_focus(params, target)
         } else {
             tree_actions_prepare_move_focus(params, target)
         }
+    }
+}
+
+// Expand and retain enough drawer extent when focus enters either note control.
+tree_actions_prepare_note_focus :: proc(
+    params: Tree_List_Params, target: viewmodel.Ui_Node_Id) {
+    runtime := params.ui_runtime
+    motion := &runtime^.library.actions.drawer
+    index := tree_projection_find(
+        &runtime^.library.tree.projection, target.stable_id)
+    if index == TREE_NO_ITEM {
+        return
+    }
+    if !motion^.open || motion^.entry_id != target.stable_id {
+        tree_actions_focus_toggle(params, target.stable_id)
+        return
+    }
+    if runtime^.library.actions.reveal_pending {
+        item := runtime^.library.tree.projection.items[index]
+        scale := theme.ui_tree_row_height(
+            runtime^.preferences.values.interface.text_size_percent,
+            runtime^.preferences.values.interface.control_size_percent) /
+            f32(theme.TREE_ROW_HEIGHT)
+        motion^.height = tree_actions_full_height(params.list_panel.width,
+            tree_item_depth(&runtime^.library.tree.projection, item), scale, true)
+        motion^.running = false
     }
 }
 
@@ -491,7 +566,40 @@ tree_actions_publish_moves :: proc(
         {tree_actions_screen_rect(row.actions.move_down_rect, panel, scroll_y), clip},
         row.actions.move_down_enabled,
         viewmessages.shell_message(params.general_state, .Library_Move_Down))
+    if row.actions.notes_eligible {
+        tree_actions_publish_note_controls(params, row, panel, scroll_y, clip)
+    }
     tree_collection_delete_publish(params, row, panel, scroll_y)
+}
+
+// Publish the placement-qualified authoring control.
+tree_actions_publish_note_controls :: proc(
+    params: Tree_List_Params, row: viewmodel.Ui_Tree_Prepared_Row,
+    panel: geometry.Rectangle, scroll_y: f32, clip: geometry.Rectangle) {
+    if params.general_state == nil {
+        return
+    }
+    note := params.general_state^.ui_runtime.library.collection_note
+    ready := tree_actions_note_ready_matches(params, row.item)
+    editing := ready && note.editing
+    button_bounds := tree_actions_screen_rect(row.actions.notes_rect, panel, scroll_y)
+    _ = uisemantics.semantic_register_control(params.ui_runtime^.semantic_focus, {
+        id = tree_actions_semantic_id(params, row.item^.key, TREE_ACTION_NOTES),
+        parent = tree_actions_semantic_id(
+            params, row.item^.key, TREE_ACTION_DRAWER),
+        role = .Button,
+        states = tree_actions_control_states(button_bounds, clip, ready),
+        actions = {.Focus, .Activate} if ready else {},
+        region = .Accordion_Content,
+        traversal_order = 8,
+        bounds = button_bounds,
+        clip_bounds = clip,
+        label = tree_actions_note_button_label(
+            params.general_state,
+            note.status if tree_actions_note_owner_matches(
+                params.general_state, row.item) else .Loading,
+            editing),
+    })
 }
 
 // tree_actions_publish registers controls once, after final topology and geometry settle.
@@ -531,6 +639,8 @@ tree_actions_pointer_focus :: proc(
         action = TREE_ACTION_UP
     } else if owner.id == row.actions.move_down_id {
         action = TREE_ACTION_DOWN
+    } else if owner.id == row.actions.notes_id {
+        action = TREE_ACTION_NOTES
     } else if owner.id == row.actions.delete_id {
         action = TREE_COLLECTION_DELETE
     }
@@ -558,7 +668,9 @@ tree_actions_draw_focus :: proc(
         }
         bounds = row.actions.move_up_rect if action == TREE_ACTION_UP else
             row.actions.move_down_rect
-        if action == TREE_COLLECTION_DELETE {
+        if action == TREE_ACTION_NOTES {
+            bounds = row.actions.notes_rect
+        } else if action == TREE_COLLECTION_DELETE {
             bounds = row.actions.delete_rect
         }
         clip = tree_actions_screen_clip(row, panel, scroll_y)

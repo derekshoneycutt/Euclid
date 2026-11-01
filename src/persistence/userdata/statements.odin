@@ -12,6 +12,9 @@ INSERT_COLLECTION_SQL :: #load("sql/insert_collection.sql", string)
 INSERT_COLLECTION_ENTRY_SQL :: #load("sql/insert_collection_entry.sql", string)
 DELETE_COLLECTION_ENTRIES_SQL :: #load("sql/delete_collection_entries.sql", string)
 DELETE_COLLECTIONS_SQL :: #load("sql/delete_collections.sql", string)
+READ_COLLECTION_NOTE_SQL :: #load("sql/read_collection_note.sql", string)
+UPSERT_COLLECTION_NOTE_SQL :: #load("sql/upsert_collection_note.sql", string)
+DELETE_ORPHAN_COLLECTION_NOTES_SQL :: #load("sql/delete_orphan_collection_notes.sql", string)
 
 // Prepare only the known-key statements needed by admitted stores.
 store_prepare_statements :: proc(
@@ -30,6 +33,11 @@ store_prepare_statements :: proc(
     if !store_error_is_clear(failure) {
         return failure
     }
+    failure = store_prepare_statement(
+        store, &store^.read_collection_note, READ_COLLECTION_NOTE_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
     if read_only {
         return {}
     }
@@ -37,7 +45,23 @@ store_prepare_statements :: proc(
     if !store_error_is_clear(failure) {
         return failure
     }
-    return store_prepare_collection_write_statements(store)
+    failure = store_prepare_collection_write_statements(store)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_prepare_note_write_statements(store)
+}
+
+// Prepare placement-note writes and orphan cleanup for the writable connection.
+store_prepare_note_write_statements :: proc(store: ^Store) -> Store_Error {
+    failure := store_prepare_statement(
+        store, &store^.upsert_collection_note, UPSERT_COLLECTION_NOTE_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_prepare_statement(
+        store, &store^.delete_orphan_collection_notes,
+        DELETE_ORPHAN_COLLECTION_NOTES_SQL)
 }
 
 // Prepare the settings mutation statements for one writable connection.
@@ -122,4 +146,3 @@ store_finalize_owned :: proc(
         }
     }
 }
-

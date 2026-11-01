@@ -283,6 +283,24 @@ scenario_issue_library_name_text :: proc(
     return scenario_inject_text_events(runtime, text)
 }
 
+// Inject note text only while its placement-qualified editor owns keyboard focus.
+scenario_issue_collection_note_text :: proc(
+    runtime: ^Scenario_Runtime, text: string) -> bool {
+    if runtime == nil || runtime.state == nil || runtime.input_runtime == nil {
+        return false
+    }
+    ui := &runtime.state^.ui_runtime
+    note := &ui^.library.collection_note
+    focus := ui^.input.interaction_frame.effective_focus
+    if note^.status != .Ready || !note^.editing ||
+        focus.kind != .Input_Box ||
+        focus.id != viewmodel.LIBRARY_COLLECTION_NOTE_INPUT_ID {
+        log.error("scenario_collection_note_text_rejected_focus")
+        return false
+    }
+    return scenario_inject_text_events(runtime, text)
+}
+
 // Convert one bounded UTF-8 payload to ordinary next-frame text events.
 scenario_inject_text_events :: proc(
     runtime: ^Scenario_Runtime, text: string) -> bool {
@@ -926,6 +944,8 @@ scenario_issue_input_action :: proc(
         return true, scenario_issue_terminal_text(runtime, text)
     case .Type_Library_Name:
         return true, scenario_issue_library_name_text(runtime, text)
+    case .Type_Collection_Note:
+        return true, scenario_issue_collection_note_text(runtime, text)
     case .Key:
         return true, scenario_issue_key(runtime, command)
     case:

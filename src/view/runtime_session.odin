@@ -798,29 +798,18 @@ shutdown_shared_user_data :: proc(
     if state == nil || pool == nil {
         return
     }
-    viewuserdata.connection_admission_begin_drain(&state^.user_data_admission)
+    shutdown_shared_user_data_prepare(state, close_history)
     history := &state^.terminal_history_runtime
-    if close_history {
-        terminalview.history_runtime_begin_shutdown(history)
-    } else {
-        terminalview.history_runtime_retire_reads(history)
-    }
     for {
-        settings_ready := viewpreferences.settings_save_ready(state)
-        history_ready := terminalview.history_runtime_has_work(history)
-        settings_done := viewpreferences.settings_save_shutdown_step(
-            state, pool, history_ready)
-        history_done := false
-        if close_history {
-            history_done = terminalview.history_runtime_shutdown_step(
-                history, &state^.user_data_admission, pool, settings_ready)
-        } else {
-            terminalview.history_runtime_service(
-                history, &state^.user_data_admission, pool, settings_ready, true)
-            history_done = !terminalview.history_runtime_has_pending_tasks(history)
-        }
+        settings_done, history_done :=
+            shutdown_shared_user_data_step(state, pool, close_history)
         shutdown_shared_user_data_validate(state)
         if settings_done && history_done {
+            if close_history &&
+                state^.ui_runtime.library.collection_note.dirty {
+                fmt.eprintln("Collection notes could not be saved before shutdown.")
+                runtime.exit(1)
+            }
             return
         }
         // A joined borrower can release the peer's turn without leaving active work.
@@ -828,6 +817,46 @@ shutdown_shared_user_data :: proc(
             taskpool.task_pool_wait_for_progress(pool)
         }
     }
+}
+
+// Drain note, settings, and history ownership before the shutdown join loop.
+shutdown_shared_user_data_prepare :: proc(
+    state: ^core.Euclid_General_State, close_history: bool) {
+    if close_history {
+        note := &state^.ui_runtime.library.collection_note
+        if note^.dirty {
+            note^.leave_editing_after_save = true
+            note^.debounce_remaining_seconds = 0
+            _ = viewpreferences.settings_save_collection_note_flush(state)
+        }
+    }
+    viewuserdata.connection_admission_begin_drain(&state^.user_data_admission)
+    history := &state^.terminal_history_runtime
+    if close_history {
+        terminalview.history_runtime_begin_shutdown(history)
+    } else {
+        terminalview.history_runtime_retire_reads(history)
+    }
+}
+
+// Advance each eligible SQLite borrower once and report their settled states.
+shutdown_shared_user_data_step :: proc(
+    state: ^core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool,
+    close_history: bool) -> (bool, bool) {
+    settings_ready := viewpreferences.settings_save_ready(state)
+    history := &state^.terminal_history_runtime
+    history_ready := terminalview.history_runtime_has_work(history)
+    settings_done := viewpreferences.settings_save_shutdown_step(
+        state, pool, history_ready)
+    if close_history {
+        history_done := terminalview.history_runtime_shutdown_step(
+            history, &state^.user_data_admission, pool, settings_ready)
+        return settings_done, history_done
+    }
+    terminalview.history_runtime_service(
+        history, &state^.user_data_admission, pool, settings_ready, true)
+    return settings_done, !terminalview.history_runtime_has_pending_tasks(history)
 }
 
 // Refuse teardown if a stale task handle leaves SQLite ownership unresolved.

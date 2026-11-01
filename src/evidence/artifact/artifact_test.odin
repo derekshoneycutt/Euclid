@@ -107,16 +107,31 @@ artifact_tree_state_preserves_json_contract :: proc(t: ^testing.T) {
         tree_transition_count = 2,
         tree_visual_height = 130.5,
         tree_scroll_y = 10.25,
+        collection_note_ready = true,
+        collection_note_editing = true,
+        collection_note_dirty = true,
+        collection_note_notes_on_top = true,
     }
     text := artifact_state_json(state, {}, {})
     decoded: struct {
-        tree: struct {transition_count: int, visual_height: f32, scroll_y: f32},
+        tree: struct {
+            transition_count: int,
+            visual_height: f32,
+            scroll_y: f32,
+            collection_note: struct {
+                ready, editing, dirty, notes_on_top: bool,
+            },
+        },
     }
     testing.expect(t, json.unmarshal_string(
         text, &decoded, allocator = context.allocator) == nil)
     testing.expect_value(t, decoded.tree.transition_count, 2)
     testing.expect_value(t, decoded.tree.visual_height, f32(130.5))
     testing.expect_value(t, decoded.tree.scroll_y, f32(10.25))
+    testing.expect(t, decoded.tree.collection_note.ready)
+    testing.expect(t, decoded.tree.collection_note.editing)
+    testing.expect(t, decoded.tree.collection_note.dirty)
+    testing.expect(t, decoded.tree.collection_note.notes_on_top)
 }
 
 // Host JSON remains valid and keeps lifecycle and trace facts at the snapshot root.

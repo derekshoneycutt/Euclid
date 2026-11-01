@@ -50,6 +50,7 @@ Input_Box_Params :: struct {
     resolver: view_font.Font_Resolver,
     edit_target: Input_Box_Edit_Target,
     edit_policy: Input_Box_Edit_Policy,
+    multiline: bool,
 }
 
 // Input_Box_Update reports the selected copy range produced by one update.
@@ -76,6 +77,41 @@ Input_Box_Edit_Target :: struct {
 Input_Box_Edit_Range :: struct {
     first: int,
     last: int,
+}
+
+// Input_Box_Text_Layout supplies the visual-row policy shared by caret navigation.
+Input_Box_Text_Layout :: struct {
+    multiline: bool,
+    line_columns: int,
+}
+
+// Input_Box_Edit_Options borrows clipboard text for one frame's edit dispatch.
+Input_Box_Edit_Options :: struct {
+    clipboard_text: string,
+    policy: Input_Box_Edit_Policy,
+    layout: Input_Box_Text_Layout,
+}
+
+// Input_Box_Replacement borrows replacement bytes for one atomic range admission.
+Input_Box_Replacement :: struct {
+    range: Input_Box_Edit_Range,
+    text: string,
+    multiline: bool,
+}
+
+// Input_Box_Visual_Line borrows one wrapped row and its intersected byte selection.
+Input_Box_Visual_Line :: struct {
+    text: string,
+    start: int,
+    selection: Input_Box_Edit_Range,
+}
+
+// Input_Box_Visual_Position maps a grapheme boundary to one wrapped display row.
+Input_Box_Visual_Position :: struct {
+    row: int,
+    column: int,
+    line_start: int,
+    line_end: int,
 }
 
 // Input_Box_Result carries prepared interaction and clipped draw geometry.
@@ -132,6 +168,30 @@ input_box_column_boundary :: proc(text: string, column: int) -> int {
     return coretext.text_grapheme_boundary_for_column(text, column)
 }
 
+// input_box_multiline_columns derives a bounded visual wrap width from prepared geometry.
+input_box_multiline_columns :: #force_inline proc(params: Input_Box_Params) -> int {
+    if params.column_advance <= 0 {
+        return 1
+    }
+    inset := input_box_text_inset(params)
+    return max(1, int(max(0, params.rect.width - inset * 2) /
+        params.column_advance))
+}
+
+// input_box_visual_row_count counts wrapped rows without allocating a line index.
+input_box_visual_row_count :: proc(text: string, columns: int) -> int {
+    count, start := 0, 0
+    for {
+        end, next := input_box_visual_line_range(text, start, columns)
+        count += 1
+        if end == len(text) {
+            return count
+        }
+        start = next
+    }
+    return count
+}
+
 // input_box_reconcile_content resets interaction to newly published borrowed text.
 input_box_reconcile_content :: proc(
     state: ^viewmodel.Ui_Input_Box_State, text: string, revision: u64) -> bool {
@@ -156,10 +216,24 @@ input_box_reconcile_content :: proc(
 // input_box_move_cursor applies one read-only navigation key and selection policy.
 input_box_move_cursor :: proc(
     state: ^viewmodel.Ui_Input_Box_State, text: string,
-    key: input.Input_Key, extend: bool) {
+    key: input.Input_Key, extend: bool, layout: Input_Box_Text_Layout = {}) {
+    if key == .Up || key == .Down {
+        if !layout.multiline {
+            return
+        }
+        destination := input_box_vertical_destination(
+            state, text, state^.cursor_byte, key, layout.line_columns)
+        input_box_commit_cursor(state, destination, extend)
+        return
+    }
     destination := state^.cursor_byte
     selection_start := min(state^.anchor_byte, state^.cursor_byte)
     selection_end := max(state^.anchor_byte, state^.cursor_byte)
+    line_start, line_end := input_box_line_bounds(text, destination)
+    position := input_box_visual_position(text, destination, layout.line_columns)
+    if layout.multiline && layout.line_columns > 0 {
+        line_start, line_end = position.line_start, position.line_end
+    }
     #partial switch key {
     case .Left:
         destination = selection_start if !extend && selection_start != selection_end else
@@ -168,16 +242,147 @@ input_box_move_cursor :: proc(
         destination = selection_end if !extend && selection_start != selection_end else
             input_box_next_boundary(text, destination)
     case .Home:
-        destination = 0
+        destination = line_start if layout.multiline else 0
     case .End:
-        destination = len(text)
+        destination = line_end if layout.multiline else len(text)
     case:
         return
     }
+    state^.preferred_column_valid = false
+    input_box_commit_cursor(state, destination, extend)
+}
+
+// Commit a navigation destination while preserving an extended selection anchor.
+input_box_commit_cursor :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, destination: int, extend: bool) {
     if !extend {
         state^.anchor_byte = destination
     }
     state^.cursor_byte = destination
+}
+
+// Move between multiline rows while retaining the user's preferred cell column.
+input_box_vertical_destination :: proc(
+    state: ^viewmodel.Ui_Input_Box_State,
+    text: string,
+    destination: int,
+    key: input.Input_Key,
+    line_columns: int) -> int {
+    line_start, line_end := input_box_line_bounds(text, destination)
+    position := input_box_visual_position(text, destination, line_columns)
+    if !state^.preferred_column_valid {
+        state^.preferred_column = position.column if line_columns > 0 else
+            input_box_byte_column(text[line_start:destination],
+                destination - line_start)
+        state^.preferred_column_valid = true
+    }
+    if line_columns > 0 {
+        target_row := position.row - 1 if key == .Up else position.row + 1
+        return input_box_visual_boundary(
+            text, target_row, state^.preferred_column, line_columns)
+    }
+    return input_box_vertical_boundary(
+        text, line_start, line_end, state^.preferred_column,
+        key == .Up)
+}
+
+// input_box_visual_line_range wraps one hard line at the available cell count.
+input_box_visual_line_range :: proc(
+    text: string, start, columns: int) -> (int, int) {
+    cursor, count := start, 0
+    limit := max(columns, 1)
+    for cursor < len(text) && text[cursor] != '\n' && count < limit {
+        cursor = input_box_next_boundary(text, cursor)
+        count += 1
+    }
+    if cursor < len(text) && text[cursor] == '\n' {
+        return cursor, cursor + 1
+    }
+    return cursor, cursor
+}
+
+// input_box_visual_position resolves the wrapped row and cell of a text boundary.
+input_box_visual_position :: proc(
+    text: string, offset, columns: int) -> Input_Box_Visual_Position {
+    boundary := input_box_clamp_boundary(text, offset)
+    start, row := 0, 0
+    for {
+        end, next := input_box_visual_line_range(text, start, columns)
+        if boundary <= end || end == len(text) {
+            return {
+                row = row,
+                column = input_box_byte_column(text[start:boundary],
+                    boundary - start),
+                line_start = start,
+                line_end = end,
+            }
+        }
+        start = next
+        row += 1
+    }
+    return {}
+}
+
+// input_box_visual_boundary maps a wrapped display row and cell back to UTF-8 bytes.
+input_box_visual_boundary :: proc(
+    text: string, target_row, column, columns: int) -> int {
+    if target_row < 0 {
+        return 0
+    }
+    start, row := 0, 0
+    for {
+        end, next := input_box_visual_line_range(text, start, columns)
+        if row == target_row {
+            return start + input_box_column_boundary(text[start:end], column)
+        }
+        if end == len(text) {
+            return len(text)
+        }
+        start = next
+        row += 1
+    }
+    return len(text)
+}
+
+// input_box_line_bounds returns the hard-line range containing one grapheme boundary.
+input_box_line_bounds :: proc(text: string, offset: int) -> (int, int) {
+    boundary := input_box_clamp_boundary(text, offset)
+    first, last := boundary, boundary
+    for first > 0 && text[first - 1] != '\n' {
+        first -= 1
+    }
+    for last < len(text) && text[last] != '\n' {
+        last += 1
+    }
+    return first, last
+}
+
+// input_box_vertical_boundary retains a display column while moving between hard lines.
+input_box_vertical_boundary :: proc(
+    text: string, line_start, line_end, column: int, up: bool) -> int {
+    target_start, target_end := line_start, line_end
+    if up {
+        if line_start == 0 {
+            return line_start + input_box_column_boundary(
+                text[line_start:line_end], column)
+        }
+        target_end = line_start - 1
+        target_start = target_end
+        for target_start > 0 && text[target_start - 1] != '\n' {
+            target_start -= 1
+        }
+    } else {
+        if line_end == len(text) {
+            return line_end
+        }
+        target_start = line_end + 1
+        target_end = target_start
+        for target_end < len(text) && text[target_end] != '\n' {
+            target_end += 1
+        }
+    }
+    return target_start + input_box_column_boundary(
+        text[target_start:target_end], column)
 }
 
 // input_box_apply_keyboard updates read-only navigation and reports copy intent.
@@ -208,11 +413,12 @@ input_box_apply_keyboard :: proc(
     return result
 }
 
-// input_box_replace_range admits one complete single-line UTF-8 edit atomically.
+// input_box_replace_range admits a complete UTF-8 replacement under its line policy.
 input_box_replace_range :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    range: Input_Box_Edit_Range, replacement: string,
-    result: ^Input_Box_Update = nil) -> bool {
+    edit: Input_Box_Replacement, result: ^Input_Box_Update = nil) -> bool {
+    range := edit.range
+    replacement := edit.text
     if state == nil || target.length == nil {
         return false
     }
@@ -224,7 +430,7 @@ input_box_replace_range :: proc(
     }
     text_length := target.length^
     text := string(target.bytes[:text_length])
-    if !input_box_edit_is_admissible(text, range, replacement) {
+    if !input_box_edit_is_admissible(text, range, replacement, edit.multiline) {
         if result != nil {
             result^.edit_rejected = true
         }
@@ -243,12 +449,24 @@ input_box_replace_range :: proc(
 
 // input_box_edit_is_admissible validates source, range, UTF-8, and field policy.
 input_box_edit_is_admissible :: proc(
-    text: string, range: Input_Box_Edit_Range, replacement: string) -> bool {
+    text: string, range: Input_Box_Edit_Range, replacement: string,
+    multiline := false) -> bool {
     return utf8.valid_string(text) && utf8.valid_string(replacement) &&
         range.first >= 0 && range.last >= range.first && range.last <= len(text) &&
         input_box_clamp_boundary(text, range.first) == range.first &&
         input_box_clamp_boundary(text, range.last) == range.last &&
-        !input_box_edit_contains_line_break(replacement)
+        (multiline && input_box_multiline_bytes_are_valid(replacement) ||
+         !multiline && !input_box_edit_contains_line_break(replacement))
+}
+
+// input_box_multiline_bytes_are_valid rejects non-normalized line breaks and NUL.
+input_box_multiline_bytes_are_valid :: proc(text: string) -> bool {
+    for codepoint in text {
+        if codepoint == '\r' || codepoint == 0 {
+            return false
+        }
+    }
+    return true
 }
 
 // input_box_commit_replacement applies one admitted bounded edit and updates selection.
@@ -285,7 +503,8 @@ input_box_edit_contains_line_break :: proc(text: string) -> bool {
 // input_box_replace_selection replaces the selected grapheme range atomically.
 input_box_replace_selection :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    replacement: string, result: ^Input_Box_Update = nil) -> bool {
+    replacement: string, result: ^Input_Box_Update = nil,
+    multiline := false) -> bool {
     if target.length == nil || state == nil {
         return false
     }
@@ -298,9 +517,10 @@ input_box_replace_selection :: proc(
     first := min(state^.anchor_byte, state^.cursor_byte)
     last := max(state^.anchor_byte, state^.cursor_byte)
     return input_box_replace_range(state, target, {
-        first = first,
-        last = last,
-    }, replacement, result)
+        range = {first, last},
+        text = replacement,
+        multiline = multiline,
+    }, result)
 }
 
 // input_box_delete_selection removes a selection or one adjacent grapheme.
@@ -325,9 +545,8 @@ input_box_delete_selection :: proc(
         }
     }
     return input_box_replace_range(state, target, {
-        first = first,
-        last = last,
-    }, "", result)
+        range = {first, last},
+    }, result)
 }
 
 // input_box_capture_selection copies the current selected bytes into an update.
@@ -346,8 +565,8 @@ input_box_capture_selection :: proc(
 // input_box_apply_edit_control handles one supported control-key edit chord.
 input_box_apply_edit_control :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    event: input.Input_Event, clipboard_text: string,
-    result: ^Input_Box_Update) -> bool {
+    event: input.Input_Event, result: ^Input_Box_Update,
+    options: Input_Box_Edit_Options) -> bool {
     if event.key == .A {
         state^.anchor_byte = 0
         state^.cursor_byte = target.length^
@@ -358,8 +577,20 @@ input_box_apply_edit_control :: proc(
                 state, target, false, result) || result^.changed
         }
     } else if event.key == .V {
+        replacement := options.clipboard_text
+        normalized: [4096]u8
+        if options.layout.multiline {
+            normalized_replacement, valid := input_box_normalize_line_endings(
+                options.clipboard_text, normalized[:])
+            if !valid {
+                result^.edit_rejected = true
+                return true
+            }
+            replacement = normalized_replacement
+        }
         result^.changed = input_box_replace_selection(
-            state, target, clipboard_text, result) || result^.changed
+            state, target, replacement, result, options.layout.multiline) ||
+            result^.changed
     } else {
         return false
     }
@@ -369,12 +600,20 @@ input_box_apply_edit_control :: proc(
 // input_box_apply_edit_event applies one text or keyboard event to bounded storage.
 input_box_apply_edit_event :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    event: input.Input_Event, clipboard_text: string,
-    result: ^Input_Box_Update) {
+    event: input.Input_Event, result: ^Input_Box_Update,
+    options: Input_Box_Edit_Options) {
+    multiline := options.layout.multiline
     if event.kind == .Text {
-        encoded, count := utf8.encode_rune(event.codepoint)
+        if multiline && event.codepoint == 0 {
+            result^.edit_rejected = true
+            return
+        }
+        codepoint := '\n' if multiline && event.codepoint == '\r' else
+            event.codepoint
+        encoded, count := utf8.encode_rune(codepoint)
         result^.changed = input_box_replace_selection(
-            state, target, string(encoded[:count]), result) || result^.changed
+            state, target, string(encoded[:count]), result,
+            multiline) || result^.changed
         return
     }
     if event.kind == .Text_Preedit {
@@ -386,26 +625,37 @@ input_box_apply_edit_event :: proc(
         return
     }
     if event.kind == .Text_Commit {
-        input_box_apply_commit_event(state, target, event, result)
+        input_box_apply_commit_event(state, target, event, result, multiline)
         return
     }
     if event.kind != .Press && event.kind != .Repeat {
         return
     }
-    input_box_apply_key_edit(
-        state, target, event, clipboard_text, result)
+    input_box_apply_key_edit(state, target, event, result, options)
 }
 
 // input_box_apply_commit_event replaces the active selection atomically.
 input_box_apply_commit_event :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    event: input.Input_Event, result: ^Input_Box_Update) {
+    event: input.Input_Event, result: ^Input_Box_Update,
+    multiline: bool) {
     if int(event.text_length) > len(event.text) {
         result^.edit_rejected = true
         return
     }
     payload := event
     replacement := input.input_event_text_payload(&payload)
+    normalized: [4096]u8
+    if multiline {
+        normalized_replacement, valid := input_box_normalize_line_endings(
+            replacement, normalized[:])
+        if !valid {
+            result^.edit_rejected = true
+            input_box_clear_preedit(state)
+            return
+        }
+        replacement = normalized_replacement
+    }
     range: Input_Box_Edit_Range = {
         first = min(state^.anchor_byte, state^.cursor_byte),
         last = max(state^.anchor_byte, state^.cursor_byte),
@@ -419,18 +669,21 @@ input_box_apply_commit_event :: proc(
         range = {state^.preedit_replace_start, state^.preedit_replace_end}
     }
     input_box_clear_preedit(state)
-    result^.changed = input_box_replace_range(
-        state, target, range, replacement, result) || result^.changed
+    result^.changed = input_box_replace_range(state, target, {
+        range = range,
+        text = replacement,
+        multiline = multiline,
+    }, result) || result^.changed
 }
 
 // input_box_apply_key_edit applies one ordinary editable keyboard event.
 input_box_apply_key_edit :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    event: input.Input_Event, clipboard_text: string,
-    result: ^Input_Box_Update) {
+    event: input.Input_Event, result: ^Input_Box_Update,
+    options: Input_Box_Edit_Options) {
     control := .Control in event.modifiers
     if control && input_box_apply_edit_control(
-        state, target, event, clipboard_text, result) {
+        state, target, event, result, options) {
         return
     }
     if control {
@@ -440,14 +693,43 @@ input_box_apply_key_edit :: proc(
         result^.changed = input_box_delete_selection(
             state, target, event.key == .Backspace, result) || result^.changed
     } else if event.key == .Enter {
-        result^.submit_requested = true
+        if options.layout.multiline {
+            result^.changed = input_box_replace_selection(
+                state, target, "\n", result, true) || result^.changed
+        } else {
+            result^.submit_requested = true
+        }
     } else if event.key == .Tab {
         result^.tab_requested = true
     } else {
         text := string(target.bytes[:target.length^])
         input_box_move_cursor(
-            state, text, event.key, .Shift in event.modifiers)
+            state, text, event.key, .Shift in event.modifiers, options.layout)
     }
+}
+
+// input_box_normalize_line_endings converts CR and CRLF to LF in bounded storage.
+input_box_normalize_line_endings :: proc(
+    source: string, destination: []u8) -> (string, bool) {
+    written := 0
+    for index := 0; index < len(source); index += 1 {
+        value := source[index]
+        if value == '\r' {
+            if index + 1 < len(source) && source[index + 1] == '\n' {
+                index += 1
+            }
+            value = '\n'
+        }
+        if value == 0 {
+            return "", false
+        }
+        if written >= len(destination) {
+            return "", false
+        }
+        destination[written] = value
+        written += 1
+    }
+    return string(destination[:written]), true
 }
 
 // input_box_clear_preedit discards composition without changing committed text.
@@ -513,8 +795,8 @@ input_box_update_preedit :: proc(
 // input_box_apply_edit_keyboard mutates caller-owned text from one ordered frame.
 input_box_apply_edit_keyboard :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    frame: input.Input_Frame, clipboard_text: string = "",
-    policy: Input_Box_Edit_Policy = {}) -> Input_Box_Update {
+    frame: input.Input_Frame,
+    options: Input_Box_Edit_Options = {}) -> Input_Box_Update {
     result: Input_Box_Update
     if state == nil || target.length == nil {
         return result
@@ -524,11 +806,11 @@ input_box_apply_edit_keyboard :: proc(
         if input.input_event_composition_owns_key(event, &composing) {
             continue
         }
-        if input_box_apply_completion_event(state, target, event, policy, &result) {
+        if input_box_apply_completion_event(
+            state, target, event, options.policy, &result) {
             continue
         }
-        input_box_apply_edit_event(
-            state, target, event, clipboard_text, &result)
+        input_box_apply_edit_event(state, target, event, &result, options)
     }
     return result
 }
@@ -558,6 +840,23 @@ input_box_apply_focused_input :: proc(
     policy := params.edit_policy
     policy.unicode_completion = input_box_unicode_enabled(params)
     filtered_events: [input.INPUT_EVENT_CAPACITY]input.Input_Event
+    routed_frame := params.frame
+    routed_frame.events = input_box_routed_text_events(params, filtered_events[:])
+    update := input_box_apply_edit_keyboard(
+        params.state, params.edit_target, routed_frame, {
+            clipboard_text = clipboard_text,
+            policy = policy,
+            layout = {params.multiline, input_box_multiline_columns(params)},
+        })
+    resolved^.descriptor.text = string(
+        params.edit_target.bytes[:params.edit_target.length^])
+    return update
+}
+
+// Filter text deliveries to this input box using caller-owned frame scratch.
+input_box_routed_text_events :: proc(
+    params: Input_Box_Params,
+    filtered_events: []input.Input_Event) -> []input.Input_Event {
     filtered_count := 0
     target_id := params.text_input_id if params.text_input_id != 0 else
         int(params.descriptor.id.local_id)
@@ -574,13 +873,7 @@ input_box_apply_focused_input :: proc(
         filtered_events[filtered_count] = event
         filtered_count += 1
     }
-    routed_frame := params.frame
-    routed_frame.events = filtered_events[:filtered_count]
-    update := input_box_apply_edit_keyboard(
-        params.state, params.edit_target, routed_frame, clipboard_text, policy)
-    resolved^.descriptor.text = string(
-        params.edit_target.bytes[:params.edit_target.length^])
-    return update
+    return filtered_events[:filtered_count]
 }
 
 // input_box_copy_focused_selection publishes one bounded copy result.
@@ -638,12 +931,14 @@ input_box_apply_semantic_text :: proc(
             replacement := string(command.payload[:command.payload_length])
             if command.kind == .Replace_Text {
                 changed = input_box_replace_range(params.state, params.edit_target, {
-                    first = 0,
-                    last = len(text),
-                }, replacement, update) || changed
+                    range = {0, len(text)},
+                    text = replacement,
+                    multiline = params.multiline,
+                }, update) || changed
             } else {
                 changed = input_box_replace_selection(
-                    params.state, params.edit_target, replacement, update) || changed
+                        params.state, params.edit_target, replacement, update,
+                        params.multiline) || changed
             }
         }
     }
@@ -654,6 +949,10 @@ input_box_apply_semantic_text :: proc(
 
 // input_box_hit_boundary maps one screen x coordinate to a borrowed-text boundary.
 input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
+    if params.multiline {
+        return input_box_multiline_hit_boundary(
+            params, x, params.frame.mouse_position.y)
+    }
     if params.column_advance <= 0 {
         return 0
     }
@@ -661,6 +960,22 @@ input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
         params.state^.scroll_x
     column := int(max(f32(0), local_x) / params.column_advance + 0.5)
     return input_box_column_boundary(params.descriptor.text, column)
+}
+
+// input_box_multiline_hit_boundary maps one pointer sample to a wrapped text boundary.
+input_box_multiline_hit_boundary :: proc(
+    params: Input_Box_Params, x, y: f32) -> int {
+    inner_y := params.rect.y + input_box_text_inset(params)
+    line_height := max(params.font_size, f32(1))
+    row := max(0, int((y - inner_y) / line_height + params.state^.scroll_y))
+    inset := input_box_text_inset(params)
+    column := 0
+    if params.column_advance > 0 {
+        column = int(max(0, x - params.rect.x - inset) /
+            params.column_advance + 0.5)
+    }
+    return input_box_visual_boundary(
+        params.descriptor.text, row, column, input_box_multiline_columns(params))
 }
 
 // input_box_run_kind classifies a codepoint into a word, space, or punctuation run.
@@ -717,6 +1032,11 @@ input_box_begin_selection :: proc(params: Input_Box_Params) {
         state^.anchor_byte = 0
         state^.cursor_byte = len(params.descriptor.text)
     } else if clicks == 2 {
+        if params.multiline {
+            input_box_select_run(params.state, params.descriptor.text,
+                input_box_hit_boundary(params, params.frame.mouse_position.x))
+            return
+        }
         local_x := params.frame.mouse_position.x - params.rect.x -
             input_box_text_inset(params) + state^.scroll_x
         column := 0
@@ -766,6 +1086,10 @@ input_box_update_pointer :: proc(
 // input_box_reveal_cursor clamps horizontal scrolling around the active caret.
 input_box_reveal_cursor :: proc(
     params: Input_Box_Params, align_end: bool) {
+    if params.multiline {
+        input_box_reveal_multiline_cursor(params)
+        return
+    }
     inset := input_box_text_inset(params)
     visible_width := max(f32(0), params.rect.width - inset * 2)
     text := params.descriptor.text
@@ -785,6 +1109,44 @@ input_box_reveal_cursor :: proc(
         params.state^.scroll_x = cursor_x - visible_width + 1
     }
     params.state^.scroll_x = clamp(params.state^.scroll_x, 0, maximum)
+}
+
+// input_box_reveal_multiline_cursor keeps the active visual row inside the editor.
+input_box_reveal_multiline_cursor :: proc(params: Input_Box_Params) {
+    columns := input_box_multiline_columns(params)
+    position := input_box_visual_position(
+        params.descriptor.text, params.state^.cursor_byte, columns)
+    line_height := max(params.font_size, f32(1))
+    visible_rows := max(1, int((params.rect.height -
+        input_box_text_inset(params) * 2) / line_height))
+    maximum := input_box_multiline_scroll_max(params, visible_rows, columns)
+    if f32(position.row) < params.state^.scroll_y {
+        params.state^.scroll_y = f32(position.row)
+    } else if position.row >= int(params.state^.scroll_y) + visible_rows {
+        params.state^.scroll_y = f32(position.row - visible_rows + 1)
+    }
+    params.state^.scroll_y = clamp(params.state^.scroll_y, 0, f32(maximum))
+}
+
+// input_box_multiline_scroll_max bounds scrolling to the prepared text extent.
+input_box_multiline_scroll_max :: proc(
+    params: Input_Box_Params, visible_rows, columns: int) -> int {
+    return max(0, input_box_visual_row_count(
+        params.descriptor.text, columns) - visible_rows)
+}
+
+// input_box_frame_moves_caret identifies keyboard events that need caret reveal.
+input_box_frame_moves_caret :: proc(frame: input.Input_Frame) -> bool {
+    for event in frame.events {
+        if event.kind != .Press && event.kind != .Repeat {
+            continue
+        }
+        if event.key == .Left || event.key == .Right || event.key == .Up ||
+            event.key == .Down || event.key == .Home || event.key == .End {
+            return true
+        }
+    }
+    return false
 }
 
 // input_box_prepare applies routed edits and publishes current text and draw geometry.
@@ -811,17 +1173,43 @@ input_box_prepare :: proc(
         input_box_copy_focused_selection(resolved, &focused_update)
         input_box_merge_focused_update(&update, focused_update)
     }
-    input_box_reveal_cursor(resolved, changed)
+    input_box_update_multiline_scroll(params, hovered)
+    if !params.multiline || update.changed || semantic_changed ||
+        input_box_frame_moves_caret(params.frame) {
+        input_box_reveal_cursor(resolved, changed)
+    }
+    return input_box_prepare_result(resolved, owner, hovered, update, semantic_changed)
+}
+
+// Publish geometry, edit feedback, and final semantics from the resolved text state.
+input_box_prepare_result :: proc(
+    resolved: Input_Box_Params, owner: ^viewmodel.Ui_Press_Owner_State,
+    hovered: bool, update: Input_Box_Update,
+    semantic_changed: bool) -> Input_Box_Result {
     result := input_box_draw_result(resolved, hovered)
     result.changed = update.changed || semantic_changed
     result.edit_rejected = update.edit_rejected
     result.submit_requested = update.submit_requested
     result.tab_requested = update.tab_requested
     result.suggestion_accepted = update.suggestion_accepted
-    if !params.defer_semantics {
+    if !resolved.defer_semantics {
         input_box_publish_semantics(resolved, owner, &result)
     }
     return result
+}
+
+// Clamp wheel scrolling to the bounded visual rows without changing the caret.
+input_box_update_multiline_scroll :: proc(params: Input_Box_Params, hovered: bool) {
+    if !params.multiline || !hovered || params.frame.mouse_wheel_delta == 0 {
+        return
+    }
+    visible_rows := max(1, int((params.rect.height -
+        input_box_text_inset(params) * 2) / max(params.font_size, f32(1))))
+    params.state^.scroll_y = max(0, params.state^.scroll_y -
+        params.frame.mouse_wheel_delta * 3)
+    params.state^.scroll_y = min(params.state^.scroll_y,
+        f32(input_box_multiline_scroll_max(params,
+            visible_rows, input_box_multiline_columns(params))))
 }
 
 // input_box_publish_prepared_semantics publishes a control after its parent nodes exist.
@@ -849,6 +1237,10 @@ input_box_draw_result :: proc(
     inset := input_box_text_inset(params)
     inner.x += inset
     inner.width = max(f32(0), inner.width - inset * 2)
+    if params.multiline {
+        inner.y += inset
+        inner.height = max(0, inner.height - inset * 2)
+    }
     candidate: Unicode_Completion
     if input_box_unicode_enabled(params) {
         candidate = input_box_unicode_candidate(params.state, params.descriptor.text)
@@ -889,6 +1281,9 @@ input_box_text_geometry :: proc(
     start_x := f32(min(cursor, anchor)) * params.column_advance
     width := f32(abs(cursor - anchor)) * params.column_advance
     font_size := theme.TREE_FONT_SIZE if params.font_size <= 0 else params.font_size
+    if params.multiline {
+        return input_box_multiline_text_geometry(params, inner, descriptor, font_size)
+    }
     text_y := params.rect.y + (params.rect.height - font_size) * 0.5
     return {
         control = {params.rect, params.clip_rect},
@@ -906,6 +1301,34 @@ input_box_text_geometry :: proc(
         },
         cursor_column = cursor,
         anchor_column = anchor,
+    }
+}
+
+// input_box_multiline_text_geometry projects the active caret and same-line selection.
+input_box_multiline_text_geometry :: proc(
+    params: Input_Box_Params, inner: geometry.Rectangle,
+    descriptor: viewmodel.Ui_Editable_Text_Descriptor,
+    line_height: f32) -> viewmodel.Ui_Editable_Text_Geometry {
+    columns := input_box_multiline_columns(params)
+    cursor := input_box_visual_position(
+        descriptor.text, descriptor.cursor_byte, columns)
+    anchor := input_box_visual_position(
+        descriptor.text, descriptor.anchor_byte, columns)
+    x := inner.x + f32(cursor.column) * params.column_advance
+    y := inner.y + (f32(cursor.row) - params.state^.scroll_y) * line_height
+    selection: geometry.Rectangle
+    if cursor.row == anchor.row {
+        start_column := min(cursor.column, anchor.column)
+        end_column := max(cursor.column, anchor.column)
+        selection = {inner.x + f32(start_column) * params.column_advance, y,
+            f32(end_column - start_column) * params.column_advance, line_height}
+    }
+    return {
+        control = {params.rect, params.clip_rect},
+        caret = {x, y, 1, line_height},
+        selection = selection,
+        cursor_column = cursor.column,
+        anchor_column = anchor.column,
     }
 }
 
@@ -983,7 +1406,7 @@ draw_encoded_input_box :: proc(
         encoder, prepared.control_geometry.bounds,
         f32(1) if params.control_scale <= 0 else params.control_scale, border)
     _ = native.draw_encoder_push_scissor(encoder, prepared.inner)
-    if prepared.selection.width > 0 {
+    if !params.multiline && prepared.selection.width > 0 {
         _ = native.draw_encoder_rectangle(
             encoder, prepared.selection,
             theme.draw_color(encoder, .Selection_Background))
@@ -1034,6 +1457,11 @@ input_box_preedit_x :: proc(
     source := params.descriptor.text
     start := input_box_clamp_boundary(source, state^.preedit_replace_start)
     end := input_box_clamp_boundary(source, state^.preedit_replace_end)
+    if params.multiline {
+        position := input_box_visual_position(
+            source, start, input_box_multiline_columns(params))
+        return prepared.inner.x + f32(position.column) * params.column_advance
+    }
     x := prepared.text_x + f32(input_box_byte_column(source, start)) *
         params.column_advance
     replacement_width := f32(input_box_byte_column(source, end) -
@@ -1090,6 +1518,10 @@ input_box_draw_preedit_selection :: proc(
 draw_encoded_input_box_text :: proc(
     encoder: ^native.Draw_Encoder,
     params: Input_Box_Params, prepared: Input_Box_Result) {
+    if params.multiline {
+        draw_encoded_input_box_multiline_text(encoder, params, prepared)
+        return
+    }
     request: viewtext.Shaped_Text_Draw = {
         encoder = encoder,
         resolver = params.resolver,
@@ -1122,6 +1554,84 @@ draw_encoded_input_box_text :: proc(
     }
 }
 
+// draw_encoded_input_box_multiline_text renders wrapped rows and selection in place.
+draw_encoded_input_box_multiline_text :: proc(
+    encoder: ^native.Draw_Encoder, params: Input_Box_Params,
+    prepared: Input_Box_Result) {
+    text := params.descriptor.text
+    selection_start := min(params.state^.anchor_byte, params.state^.cursor_byte)
+    selection_end := max(params.state^.anchor_byte, params.state^.cursor_byte)
+    columns := input_box_multiline_columns(params)
+    line_height := max(params.font_size, f32(1))
+    start, row := 0, 0
+    for {
+        end, next := input_box_visual_line_range(text, start, columns)
+        y := prepared.inner.y + (f32(row) - params.state^.scroll_y) * line_height
+        if y >= prepared.inner.y + prepared.inner.height {
+            break
+        }
+        if y + line_height > prepared.inner.y {
+            draw_encoded_input_box_multiline_line(
+                encoder, params, {
+                    text = text[start:end],
+                    start = start,
+                    selection = {max(start, selection_start), min(end, selection_end)},
+                },
+                {prepared.inner.x, y, prepared.inner.width, line_height})
+        }
+        if end == len(text) {
+            break
+        }
+        start = next
+        row += 1
+    }
+}
+
+// draw_encoded_input_box_multiline_line paints one clipped visual row and selection.
+draw_encoded_input_box_multiline_line :: proc(
+    encoder: ^native.Draw_Encoder, params: Input_Box_Params,
+    row: Input_Box_Visual_Line,
+    bounds: geometry.Rectangle) {
+    line := row.text
+    start := row.start
+    selected_start := row.selection.first
+    selected_end := row.selection.last
+    if selected_end > selected_start {
+        first_column := input_box_byte_column(
+            line, selected_start - start)
+        last_column := input_box_byte_column(line, selected_end - start)
+        selection_rect: geometry.Rectangle = {bounds.x +
+            f32(first_column) * params.column_advance, bounds.y,
+            f32(last_column - first_column) * params.column_advance, bounds.height}
+        _ = native.draw_encoder_rectangle(
+            encoder, selection_rect, theme.draw_color(encoder, .Selection_Background))
+    }
+    _ = viewtext.ui_text_shaped({
+        encoder = encoder,
+        resolver = params.resolver,
+        key = .Regular,
+        text = line,
+        position = {bounds.x, bounds.y},
+        color = theme.draw_color(encoder, .Text),
+        font = viewtext.ui_text_font(params.font,
+            encoder^.ui_text_size_percent if encoder != nil else 100),
+    })
+    if selected_end > selected_start {
+        first_column := input_box_byte_column(line, selected_start - start)
+        selected_text := line[selected_start - start:selected_end - start]
+        _ = viewtext.ui_text_shaped({
+            encoder = encoder,
+            resolver = params.resolver,
+            key = .Regular,
+            text = selected_text,
+            position = {bounds.x + f32(first_column) * params.column_advance,
+                bounds.y},
+            color = theme.draw_color(encoder, .Selection_Text),
+            font = viewtext.ui_text_font(params.font,
+                encoder^.ui_text_size_percent if encoder != nil else 100),
+        })
+    }
+}
 // draw_encoded_input_box_caret contrasts each caret fragment with its selected or plain backing.
 draw_encoded_input_box_caret :: proc(
     encoder: ^native.Draw_Encoder, prepared: Input_Box_Result) {

@@ -75,6 +75,7 @@ draw_encoded_prepared_tree :: proc(
         actions_toggle = prepared^.actions_toggle,
         actions_up = prepared^.actions_up,
         actions_down = prepared^.actions_down,
+        actions_notes = prepared^.actions_notes,
         actions_delete = prepared^.actions_delete,
         scroll_y = prepared^.scroll.scroll_y_out,
         visibility = visibility,

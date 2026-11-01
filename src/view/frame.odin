@@ -287,6 +287,7 @@ sdl_frame_composition_active :: proc(state: ^core.Euclid_General_State) -> bool 
     return ui.library.search.input.preedit_active ||
         ui.library.entry_name.input.preedit_active || ui.gif_path_input.preedit_active ||
         ui.png_path_input.preedit_active ||
+        ui.library.collection_note.input.preedit_active ||
         (state^.terminal.history != nil && state^.terminal.history.preedit_active)
 }
 
@@ -408,6 +409,7 @@ prepare_sdl_frame_owners :: proc(
         state, update.routed_frame, update.ui_geometry.splitters,
         &prepared^.controls)
     uilibrary.library_entry_name_service(state, update.frame_dt)
+    uilibrary.library_collection_note_service(state, update.frame_dt)
     if state^.simulation_executor != nil {
         service_frame_user_data(state)
     }
@@ -506,6 +508,10 @@ sdl_frame_retire_preedit :: proc(
     }
     if target.kind != .Input_Box || target.id != uisharing.PNG_PATH_INPUT_ID {
         uiwidgets.input_box_clear_preedit(&ui.png_path_input)
+    }
+    if target.kind != .Input_Box ||
+        target.id != viewmodel.LIBRARY_COLLECTION_NOTE_INPUT_ID {
+        uiwidgets.input_box_clear_preedit(&ui.library.collection_note.input)
     }
 }
 

@@ -461,6 +461,38 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "Confirm delete"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1121), "ui.library.edit_notes",
+            "Enter authoring mode for the selected user-collection animation placement.",
+            LocalizedContent.MessageArgument[]),
+        "Edit notes"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1122), "ui.library.done_editing",
+            "Leave note authoring only after the current revision is durable.",
+            LocalizedContent.MessageArgument[]),
+        "Done editing"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1123), "ui.library.notes_on_top",
+            "Show collection notes before the predefined presentation when reading.",
+            LocalizedContent.MessageArgument[]),
+        "Notes on top"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1124),
+            "ui.library.collection_notes_heading",
+            "Heading for the note editor, identified by collection and placement.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("name", LocalizedContent.TextArgument)]),
+        "Collection notes: {name}"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1125), "ui.library.notes_loading",
+            "Visible while the selected placement's note is loading.",
+            LocalizedContent.MessageArgument[]),
+        "Loading notes..."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1126), "ui.library.notes_unavailable",
+            "Visible when a placement note could not be loaded.",
+            LocalizedContent.MessageArgument[]),
+        "Notes unavailable"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1219), "ui.settings.reduce_motion",
             "Interface-only reduced motion checkbox; system requests also apply.",
             LocalizedContent.MessageArgument[]),

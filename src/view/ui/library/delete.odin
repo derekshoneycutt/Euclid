@@ -74,6 +74,12 @@ tree_collection_delete_submit :: proc(
     if !library_entry_name_flush(params.general_state, id) {
         return false
     }
+    note := &params.general_state^.ui_runtime.library.collection_note
+    if note^.identity.collection_id == id && note^.dirty {
+        _ = library_collection_note_done(params.general_state)
+        log.warn("library_collection_delete_waiting_for_note_save")
+        return false
+    }
     mutation, failure := collections.make_collection_delete_mutation(
         params.collections, id)
     if failure != .None {

@@ -90,7 +90,7 @@ tables group code by the architectural question a contributor is likely to ask.
 | --- | --- | --- |
 | Content catalogue and search | Native models, persistence admission/search, and worker service | [`src/core/content/`](../../../src/core/content/), [`src/persistence/content/`](../../../src/persistence/content/), [`src/view/content/`](../../../src/view/content/) |
 | User preferences | Typed settings plus separate durable user-data storage | [`src/settings/`](../../../src/settings/), [`src/persistence/userdata/`](../../../src/persistence/userdata/) |
-| User collections | TLSF-owned dynamic records, collection-qualified membership, serialized Favorites and custom-head/membership mutations, a single typed Library editor, guarded deletion, star-adjacent checkbox popup, and a stable UUID-indexed projection with local patches and preserved stored groups; SQLite replay uses a separate owned `Set` | [`src/collections/`](../../../src/collections/), [`src/persistence/userdata/`](../../../src/persistence/userdata/), [`src/view/ui/animation/`](../../../src/view/ui/animation/), [`src/view/ui/library/`](../../../src/view/ui/library/), [`src/view/ui/overlay/`](../../../src/view/ui/overlay/) |
+| User collections | TLSF-owned dynamic records, collection-qualified membership and notes, serialized mutations, guarded deletion, stable UUID-indexed projection, and placement-scoped note authoring/reading; SQLite replay uses a separate owned `Set`, while only the active note text occupies animation memory | [`src/collections/`](../../../src/collections/), [`src/persistence/userdata/`](../../../src/persistence/userdata/), [`src/view/ui/animation/`](../../../src/view/ui/animation/), [`src/view/ui/library/`](../../../src/view/ui/library/), [`src/view/ui/presentation/`](../../../src/view/ui/presentation/), [`src/view/ui/overlay/`](../../../src/view/ui/overlay/) |
 | SQLite boundary | Schema-agnostic mechanics; concrete runtime SQL and native adaptation | [`src/sqlite/`](../../../src/sqlite/), [`src/persistence/`](../../../src/persistence/) |
 | Julia runtime policy | Sysimage host, actor runtime, animation and Terminal policy | [`src/julia/`](../../../src/julia/) |
 | Authored content | Animation modules and their content-facing helpers | [`src/content/`](../../../src/content/) |
@@ -106,6 +106,13 @@ versioned stores transactionally, preserving existing settings, then creates gen
 collection and placement tables with 16-byte UUID identities and foreign-key enforcement.
 Settings and collection mutations share one worker-only transaction queue and one
 durability status in Settings.
+Collection notes are keyed by both collection and placement UUID in SQLite. Their
+bounded UTF-8 working text lives in the active animation generation; asynchronous save
+barriers keep that generation alive through reset, reload, destructive edits, and
+shutdown. In reading mode the native presentation owner parses notes as a separate
+LaTeX body and assembles it with animation content into one Dynview snapshot. The latest
+producer source is retained independently, so note-only publication and note changes do
+not require Julia to resend content or borrow display-owned collection state.
 
 Runtime queries, bindings, and row decoding have two discoverable homes:
 content reading in `src/persistence/content/` and user data in

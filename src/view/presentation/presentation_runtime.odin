@@ -54,6 +54,7 @@ Presentation_Runtime :: struct {
     surface_arrival: bool,
     surface_switch_count: u64,
     surface_context_pending: bool,
+    composition: Presentation_Composition,
 }
 
 // Presentation_Effects_Frame borrows the display frame's prepared surfaces and geometry identity.
@@ -152,6 +153,7 @@ destroy_presentation_runtime :: proc(runtime: ^Presentation_Runtime) {
     assert(!runtime^.active.submitted)
     assert(runtime^.active.message == nil)
     assert(runtime^.pending == nil)
+    assert(!runtime^.composition.work.submitted)
     free(runtime^.staging)
     free(runtime^.active.result)
     free(runtime)
@@ -160,9 +162,12 @@ destroy_presentation_runtime :: proc(runtime: ^Presentation_Runtime) {
 //   Derive the parser key while retaining exact envelope bytes separately.
 presentation_parse_key :: proc(
     content: presentation_model.Presented_Text,
-    generation: u64) -> Presentation_Parse_Request {
+    generation: u64, document_body := false) -> Presentation_Parse_Request {
     source := bridge.presentation_literal_source(content)
     mode := bridge.presentation_source_mode(content.mime, source)
+    if document_body && mode == .Math {
+        mode = .Document
+    }
     parse_mode := dynparse.Tex_Source_Mode.Document
     root_style := dynparse.Tex_Math_Root_Style.Display
     parse_source := source
@@ -200,11 +205,13 @@ service_presentation_runtime :: proc(
         return
     }
     service := state^.julia_runtime_service
+    runtime^.state = state
     presentation_sync_lifecycle(state, runtime)
     _ = bridge.drain_julia_egress(service)
     terminalservice.terminal_tick_publish(state)
     presentation_poll_active(state, runtime)
     presentation_start_pending(state, runtime)
+    presentation_service_composition(state, runtime)
 }
 
 //   Cancel stale work and clear visible content after an accepted lifecycle transition.
@@ -222,6 +229,7 @@ presentation_sync_lifecycle :: proc(
         return
     }
     presentation_lifecycle_effects(state, runtime)
+    presentation_composition_retire(state, runtime)
     bridge.release_published_view_snapshot(state, service)
     superseded := runtime^.newest_generation != 0
     preserve_pending := presentation_pending_matches_current(state, runtime)
@@ -291,6 +299,7 @@ presentation_admit :: proc(
     }
     superseded := runtime^.newest_generation != 0
     runtime^.newest_generation = content.presentation_generation
+    presentation_composition_accept(runtime, content)
     if runtime^.suppress_next_departure {
         uidust.ui_dust_cancel_arrival(&runtime^.dust)
         runtime^.suppress_next_departure = false
@@ -482,6 +491,15 @@ presentation_materialize :: proc(
     runtime: ^Presentation_Runtime,
     request: bridge.Presentation_Snapshot_Request) {
     if presentation_content_is_current(state, runtime, request.content) {
+        if !runtime^.composition.producer_present {
+            presentation_composition_accept(runtime, request.content)
+        }
+        runtime^.composition.producer_ready = true
+        if presentation_composition_note_text(state) != "" {
+            runtime^.composition.semantic_event_pending = request.document != nil
+            runtime^.composition.dirty = true
+            return
+        }
         published := bridge.publish_presentation_snapshot(
             state, runtime^.staging, request)
         if published && request.document != nil {
@@ -555,6 +573,7 @@ presentation_effects_observe :: proc(
     }
     dust := &runtime^.dust
     result: observe.Presentation_Effects = {
+        publication_pending = presentation_composition_is_pending(runtime),
         surface = runtime^.surface,
         surface_switch_count = runtime^.surface_switch_count,
         arrival_selection = presentation_arrival_style(runtime),
@@ -863,6 +882,7 @@ quiesce_presentation_runtime :: proc(
         return
     }
     service := state^.julia_runtime_service
+    presentation_composition_quiesce(state, runtime)
     if runtime^.active.submitted {
         presentation_cancel_active(state, runtime)
         _, joined := taskpool.task_pool_wait(

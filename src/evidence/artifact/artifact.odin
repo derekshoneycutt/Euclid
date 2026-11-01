@@ -284,12 +284,12 @@ artifact_state_json :: proc(
 // Serialize pane-local surface identity, dust counts, and arrival styles.
 artifact_presentation_effects_state_json :: proc(
     effects: observe.Presentation_Effects) -> string {
-    return fmt.tprintf("\"presentation_effects\":{{\"surface\":\"%v\"," +
+    return fmt.tprintf("\"presentation_effects\":{{\"publication_pending\":%v,\"surface\":\"%v\"," +
         "\"surface_switch_count\":%d,\"arrival_selection\":\"%v\"," +
         "\"arrival_style\":\"%v\",\"arrival_active\":%v," +
         "\"arrival_awaiting_targets\":%v,\"arrival_particle_count\":%d," +
         "\"departure_particle_count\":%d,%s}}",
-        effects.surface, effects.surface_switch_count,
+        effects.publication_pending, effects.surface, effects.surface_switch_count,
         effects.arrival_selection, effects.arrival_style, effects.arrival_active,
         effects.arrival_awaiting_targets, effects.arrival_particle_count,
         effects.departure_particle_count, artifact_reclamation_state_json(effects))
@@ -315,9 +315,13 @@ artifact_reclamation_state_json :: proc(effects: observe.Presentation_Effects) -
 artifact_tree_state_json :: proc(state: observe.Display) -> string {
     return fmt.tprintf("\"tree\":{{\"transition_count\":%d," +
         "\"visual_height\":%g,\"scroll_y\":%g," +
-        "\"collection_delete_armed\":%v,\"collection_delete_ready\":%v}}",
+        "\"collection_delete_armed\":%v,\"collection_delete_ready\":%v," +
+        "\"collection_note\":{{\"ready\":%v,\"editing\":%v,\"dirty\":%v," +
+        "\"notes_on_top\":%v}}}}",
         state.tree_transition_count, state.tree_visual_height, state.tree_scroll_y,
-        state.collection_delete_armed, state.collection_delete_ready)
+        state.collection_delete_armed, state.collection_delete_ready,
+        state.collection_note_ready, state.collection_note_editing,
+        state.collection_note_dirty, state.collection_note_notes_on_top)
 }
 
 // Serialize synchronized host lifecycle and trace health without changing top-level keys.

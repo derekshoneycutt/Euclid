@@ -36,6 +36,7 @@ Dynview_Selection_Update :: struct {
     content: Dynview_Selection_Content,
     view: Dynview_Selection_View,
     frame: input.Input_Frame,
+    selection_id: int,
 }
 
 // Group selection geometry with either its fill color or a synchronous fragment renderer.
@@ -285,8 +286,8 @@ dynview_selection_hit_boundary :: proc(
 
 // Return whether the shared press owner belongs to Dynview selection.
 dynview_selection_owns_press :: #force_inline proc(
-    owner: ^viewmodel.Ui_Press_Owner_State) -> bool {
-    return owner^.active && owner^.kind == .Dynview_Selection
+    owner: ^viewmodel.Ui_Press_Owner_State, id: int) -> bool {
+    return owner^.active && owner^.kind == .Dynview_Selection && owner^.id == id
 }
 
 // Advance mouse selection while respecting shared panel press ownership.
@@ -296,6 +297,7 @@ dynview_selection_update_mouse :: proc(
     runtime, selection := update.runtime, update.selection
     owner, content := update.press_owner, update.content
     view, frame := update.view, update.frame
+    selection_id := 1001 if update.selection_id == 0 else update.selection_id
     point: geometry.Vector2 = {frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed && !owner^.active && content.unit_count > 0 &&
         geometry.rectangle_contains(view.panel, point) {
@@ -305,10 +307,10 @@ dynview_selection_update_mouse :: proc(
         owner^ = {
             active = true,
             kind = .Dynview_Selection,
-            id = 1001,
+            id = selection_id,
         }
     }
-    if !dynview_selection_owns_press(owner) {
+    if !dynview_selection_owns_press(owner, selection_id) {
         return
     }
     selection^.head = dynview_selection_hit_boundary(runtime, content, view, point)

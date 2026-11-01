@@ -5,6 +5,18 @@ import user_data "../../../persistence/userdata"
 import taskpool "../../../taskpool"
 import collections "../../../collections"
 
+Settings_Save_Task_Kind :: enum u8 {
+    User_Data_Batch,
+    Collection_Note_Read,
+    Collection_Note_Write,
+}
+
+Collection_Note_Request_Kind :: enum u8 {
+    None,
+    Read,
+    Write,
+}
+
 // Settings_Save_Status is the shared user-data durability state of local edits.
 Settings_Save_Status :: enum u8 {
     Saved,
@@ -16,11 +28,21 @@ Settings_Save_Status :: enum u8 {
 
 // Settings_Save_Task_Payload is immutable from submit until its handle is joined.
 Settings_Save_Task_Payload :: struct {
+    kind: Settings_Save_Task_Kind,
     store: ^user_data.Store,
     changes: settings.Change_Set,
     mutations: [collections.MUTATION_CAPACITY]collections.Mutation,
     mutation_count: int,
     user_data_revision: u64,
+    note_identity: collections.Placement_Identity,
+    note_request_id: u64,
+    note_generation: u64,
+    note_revision: u64,
+    note_text: [user_data.COLLECTION_NOTE_MAX_BYTES]u8,
+    note_text_length: int,
+    note_notes_on_top: bool,
+    note_read_result: user_data.Collection_Note_Read_Result,
+    note_failure: user_data.Store_Error,
     result: user_data.Commit_Result,
     owner_thread_id: int,
     worker_thread_id: int,
@@ -37,6 +59,15 @@ Settings_Save_Runtime :: struct {
     user_data_failure_revision: u64,
     user_data_failure: user_data.Store_Error,
     user_data_failure_unresolved: bool,
+    note_request_kind: Collection_Note_Request_Kind,
+    note_identity: collections.Placement_Identity,
+    note_request_id: u64,
+    note_generation: u64,
+    note_revision: u64,
+    note_text_length: int,
+    note_notes_on_top: bool,
+    note_failure_revision: u64,
+    note_failure_unresolved: bool,
     settings_store: ^user_data.Store,
     settings_failure_count: int,
     settings_retry_frames: int,

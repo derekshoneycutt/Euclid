@@ -4,6 +4,7 @@ package view
 import preferencesmodel "preferences/model"
 import app_core "../core"
 import protocol "../core/protocol"
+import animation_model "../core/animation"
 import setting_model "../settings"
 import taskpool "../taskpool"
 import user_data "../persistence/userdata"
@@ -185,6 +186,39 @@ settings_save_test_wait_terminal :: proc(
     return false
 }
 
+// Wait for one collection-note worker to publish its active placement result.
+settings_save_test_wait_note_ready :: proc(
+    state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool) -> bool {
+    deadline := time.tick_since({}) + 5 * time.Second
+    for time.tick_since({}) < deadline {
+        viewpreferences.settings_save_service(state, pool)
+        if !state^.preferences_runtime.settings_save_active &&
+            state^.ui_runtime.library.collection_note.status ==
+                .Ready {
+            return true
+        }
+        thread.yield()
+    }
+    return false
+}
+
+// Wait for a note write to join and resolve the shared Settings save state.
+settings_save_test_wait_note_saved :: proc(
+    state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool) -> bool {
+    deadline := time.tick_since({}) + 5 * time.Second
+    for time.tick_since({}) < deadline {
+        viewpreferences.settings_save_service(state, pool)
+        if !state^.preferences_runtime.settings_save_active &&
+            state^.ui_runtime.preferences.save_status == .Saved {
+            return true
+        }
+        thread.yield()
+    }
+    return false
+}
+
 // Assert the final dust limit was committed before its store is closed.
 settings_save_test_expect_dust_limit :: proc(
     t: ^testing.T, store: ^user_data.Store) {
@@ -216,6 +250,94 @@ settings_save_test_expect_dirty_entry_name :: proc(
     testing.expect_value(t, draft^.revision, revision)
     testing.expect_value(t,
         state^.preferences_runtime.collections_state.entries[0].custom_name_length, 0)
+}
+
+// Verify note reads and immutable note writes use the joined shared worker path.
+@(test)
+settings_save_round_trips_collection_note_on_worker :: proc(t: ^testing.T) {
+    path := settings_save_test_path(t)
+    defer settings_save_test_path_destroy(path)
+    testing.expect(t, path.valid)
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    defer user_data.store_close(&store)
+    pool: taskpool.Task_Pool
+    testing.expect(t, taskpool.task_pool_init(&pool, 1, 3))
+    defer taskpool.task_pool_destroy(&pool)
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    identity := settings_save_test_initialize_note_owner(t, &store, state)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    settings_save_test_round_trip_note(t, &store, &pool, state, identity)
+}
+
+// Initialize one user placement and its generation-owned note buffer.
+settings_save_test_initialize_note_owner :: proc(
+    t: ^testing.T,
+    store: ^user_data.Store,
+    state: ^app_core.Euclid_General_State) -> collections.Placement_Identity {
+    state^.preferences_runtime.settings_store = store
+    testing.expect(t,
+        collections.initialize(&state^.preferences_runtime.collections_state))
+    name: [5]u8 = {'L', 'e', 's', 's', 'n'}
+    testing.expect_value(t, collections.append_collection(
+        &state^.preferences_runtime.collections_state, {
+            id = settings_save_test_id(10),
+            role = .User,
+            name = name[:],
+            name_length = len(name),
+            order = 1,
+        }), collections.Policy_Error.None)
+    testing.expect_value(t, collections.append_entry(
+        &state^.preferences_runtime.collections_state, {
+            id = settings_save_test_id(11),
+            collection_id = settings_save_test_id(10),
+            kind = .Animation,
+            animation_id = settings_save_test_id(12),
+        }), collections.Policy_Error.None)
+    testing.expect_value(t, user_data.store_replace_collections(
+        store, &state^.preferences_runtime.collections_state).kind,
+        user_data.Store_Error_Kind.None)
+    testing.expect(t, animation_model.animation_memory_init(&state^.animation_memory))
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &state^.animation_memory, 1), animation_model.Animation_Memory_Status.Ok)
+    identity, identity_error := collections.placement_identity_for_entry(
+        &state^.preferences_runtime.collections_state, settings_save_test_id(11))
+    testing.expect_value(t, identity_error, collections.Policy_Error.None)
+    return identity
+}
+
+// Load, persist, and read back a note through the bounded shared worker.
+settings_save_test_round_trip_note :: proc(
+    t: ^testing.T,
+    store: ^user_data.Store,
+    pool: ^taskpool.Task_Pool,
+    state: ^app_core.Euclid_General_State,
+    identity: collections.Placement_Identity) {
+    testing.expect(t, viewpreferences.settings_save_collection_note_load(
+        state, identity, true))
+    viewpreferences.settings_save_service(state, pool)
+    testing.expect(t, settings_save_test_wait_note_ready(state, pool))
+    buffer, available := animation_model.animation_memory_note_buffer(
+        &state^.animation_memory)
+    testing.expect(t, available)
+    expected := "Look for the invariant."
+    copy(buffer[:len(expected)], transmute([]u8)expected)
+    note := &state^.ui_runtime.library.collection_note
+    note^.text_length = len(expected)
+    note^.notes_on_top = true
+    testing.expect(t, viewpreferences.settings_save_collection_note_edit(state))
+    note^.debounce_remaining_seconds = 0
+    testing.expect(t, viewpreferences.settings_save_collection_note_queue_write(state))
+    viewpreferences.settings_save_service(state, pool)
+    testing.expect(t, settings_save_test_wait_note_saved(state, pool))
+    read_buffer: [user_data.COLLECTION_NOTE_MAX_BYTES]u8
+    result, read_error := user_data.store_read_collection_note(
+        store, identity, read_buffer[:])
+    testing.expect_value(t, read_error.kind, user_data.Store_Error_Kind.None)
+    testing.expect(t, result.found && result.notes_on_top)
+    testing.expect_value(t, string(read_buffer[:result.text_length]), expected)
 }
 
 // Prepare a named pending save before orderly display shutdown.
@@ -1208,4 +1330,72 @@ library_entry_name_removed_owner_is_retired :: proc(t: ^testing.T) {
     testing.expect(t, !state^.ui_runtime.library.entry_name.active)
     testing.expect_value(t,
         state^.preferences_runtime.collections_state.entry_count, 0)
+}
+
+// A generation transition queues a dirty note but retains its borrowed workspace.
+@(test)
+collection_note_retirement_waits_for_durable_revision :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    state^.ui_runtime.library.collection_note = {
+        status = .Ready,
+        editing = true,
+        dirty = true,
+        revision = 3,
+    }
+    note := &state^.ui_runtime.library.collection_note
+    testing.expect(t, !uilibrary.library_collection_note_prepare_retirement(state))
+    testing.expect(t, note^.dirty && note^.editing)
+    testing.expect(t, note^.leave_editing_after_save)
+    testing.expect_value(t,
+        state^.preferences_runtime.note_request_kind,
+        preferencesmodel.Collection_Note_Request_Kind.Write)
+}
+
+// A failed note revision blocks generation retirement without discarding its draft.
+@(test)
+collection_note_retirement_failure_retains_editor :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    state^.ui_runtime.library.collection_note = {
+        status = .Ready,
+        editing = true,
+        dirty = true,
+        save_failed = true,
+        revision = 2,
+    }
+    note := &state^.ui_runtime.library.collection_note
+    testing.expect(t, !uilibrary.library_collection_note_prepare_retirement(state))
+    testing.expect(t, note^.dirty && note^.editing && note^.save_failed)
+}
+
+// Destructive collection mutations cannot bypass an active dirty placement note.
+@(test)
+collection_note_blocks_owner_deletion_until_durable :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    collection_id := settings_save_test_id(70)
+    state^.ui_runtime.library.collection_note = {
+        identity = {
+            collection_id = collection_id,
+        },
+        status = .Ready,
+        dirty = true,
+    }
+    mutation: collections.Mutation = {
+        kind = .Delete_Collection,
+        collection_id = collection_id,
+    }
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, mutation),
+        collections.Mutation_Error.Policy)
+}
+
+// An older failed snapshot cannot cover a newer revision typed during its save.
+@(test)
+collection_note_older_failure_preserves_newer_retry :: proc(t: ^testing.T) {
+    testing.expect(t,
+        !viewpreferences.settings_save_note_failure_covers_current_revision(2, 1))
+    testing.expect(t,
+        viewpreferences.settings_save_note_failure_covers_current_revision(1, 1))
 }

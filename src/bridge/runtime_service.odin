@@ -247,6 +247,13 @@ Presentation_Snapshot_Request :: struct {
     source: string,
     mode: Presentation_Source_Mode,
     document: ^dyncore.Dynview_Document,
+    bodies: []Presentation_Snapshot_Body,
+}
+
+// One independently interpreted body in a native reading composition.
+Presentation_Snapshot_Body :: struct {
+    source: string,
+    document: ^dyncore.Dynview_Document,
 }
 
 Julia_Lifecycle_State :: bridgemodel.Julia_Lifecycle_State
@@ -727,6 +734,23 @@ stage_presentation_content :: proc(
     staging: ^dynviewmodel.Dynview_System,
     request: Presentation_Snapshot_Request,
     block_id: i32) -> i32 {
+    if len(request.bodies) > 0 {
+        for body in request.bodies {
+            document_start := staging^.compile_cache.document_count
+            status := dynview_native_replay_document(
+                staging, body.document, dyncore.DYNVIEW_STYLE_OUTPUT) if
+                body.document != nil else
+                dynview_native_import_literal_document(staging, body.source)
+            if status != BRIDGE_STATUS_OK {
+                return status
+            }
+            for &document in staging^.compile_cache.documents[
+                document_start:staging^.compile_cache.document_count] {
+                document.separated_body = document_start > 0
+            }
+        }
+        return BRIDGE_STATUS_OK
+    }
     if request.document != nil && request.mode == .Math {
         return dynview_native_import_math(
             staging, request.document, dynview_native_document_styles(

@@ -832,6 +832,16 @@ rules are defined by the [native value store](../../../src/core/animation/value_
 
 ## Temporary Storage And Joined Work
 
+The native presentation owner retains the latest producer bytes separately from
+published snapshot storage and returned Julia envelopes. Collection-note composition
+copies at most two ordered body inputs into a bounded immutable worker workspace before
+submitting parsing to the shared pool. Its parser outputs live through join; only the
+display owner commits them to the animation-generation document store and copies their
+semantics into a snapshot slot. Editor mutations never reach a running parser through
+borrowed note-buffer pointers. Composition work is cancelled and joined before its
+presentation owner or shared pool is destroyed. Input limits remain 32 KiB for the
+producer and 4 KiB for notes; native composed output includes both plus a separator.
+
 Temporary allocation is intentionally convenient, but still has an owner and an
 invalidation boundary.
 

@@ -25,6 +25,15 @@ ui_presentation_owns_capture :: proc(
     if owner.kind == .Dynview_Selection {
         return true
     }
+    if owner.kind == .Input_Box &&
+        owner.id == viewmodel.LIBRARY_COLLECTION_NOTE_INPUT_ID ||
+        owner.kind == .Text_Button &&
+        owner.id == viewmodel.LIBRARY_COLLECTION_NOTE_DONE_ID ||
+        owner.kind == .Checkbox &&
+        owner.id == viewmodel.LIBRARY_COLLECTION_NOTE_ORDER_ID ||
+        owner.kind == .Splitter && owner.id == viewmodel.PRESENTATION_NOTE_SPLITTER_ID {
+        return true
+    }
     return owner.kind == .Scrollbar &&
         (owner.id == UI_PRESENTATION_SCROLLBAR_ID ||
          owner.id == uiterminal.UI_TERMINAL_SCROLLBAR_ID)

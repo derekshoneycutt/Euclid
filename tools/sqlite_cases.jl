@@ -116,9 +116,7 @@ function euclid_sqlite_userdata_case()
     entry_id = SQLiteBlob(fill(UInt8(0x22), 16))
     animation_id = SQLiteBlob(fill(UInt8(0x33), 16))
     steps = SQLiteValidationStep[
-        euclid_sqlite_file_step("src/persistence/userdata/sql/user_setting.sql"; role=:setup),
-        euclid_sqlite_file_step(
-            "src/persistence/userdata/sql/user_collection_schema.sql"; role=:setup),
+        euclid_sqlite_userdata_schema_steps()...,
         euclid_sqlite_file_step("src/persistence/userdata/sql/upsert_setting.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("phase5"), SQLiteText("manifest"), SQLiteText("text"),
@@ -130,19 +128,48 @@ function euclid_sqlite_userdata_case()
             bindings=euclid_sqlite_bindings(
                 collection_id, SQLiteNull(), SQLiteText("Validation collection"),
                 SQLiteInteger(1), SQLiteInteger(0))),
-        euclid_sqlite_file_step("src/persistence/userdata/sql/insert_collection_entry.sql";
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/insert_collection_entry.sql";
             bindings=euclid_sqlite_bindings(
                 entry_id, collection_id, SQLiteNull(), SQLiteInteger(0),
                 SQLiteText("animation"), animation_id, SQLiteNull())),
         euclid_sqlite_file_step("src/persistence/userdata/sql/read_collections.sql"),
-        euclid_sqlite_file_step("src/persistence/userdata/sql/read_collection_entries.sql"),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/read_collection_entries.sql"),
+        euclid_sqlite_note_steps(collection_id, entry_id)...,
         euclid_sqlite_file_step("src/persistence/userdata/sql/delete_setting.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("phase5"), SQLiteText("manifest"))),
-        euclid_sqlite_file_step("src/persistence/userdata/sql/delete_collection_entries.sql"),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/delete_collection_entries.sql"),
         euclid_sqlite_file_step("src/persistence/userdata/sql/delete_collections.sql"),
     ]
     return SQLiteValidationCase("user-settings-and-collections"; steps)
+end
+
+"""Create the settings, collection topology, and placement-note schema in dependency order."""
+function euclid_sqlite_userdata_schema_steps()
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/user_setting.sql"; role=:setup),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/user_collection_schema.sql"; role=:setup),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/user_collection_note_schema.sql"; role=:setup),
+    ]
+end
+
+"""Exercise placement-note binding, readback, and cleanup before deleting topology."""
+function euclid_sqlite_note_steps(collection_id, entry_id)
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step("src/persistence/userdata/sql/upsert_collection_note.sql";
+            bindings=euclid_sqlite_bindings(
+                collection_id, entry_id, SQLiteText("π note"), SQLiteInteger(1))),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/read_collection_note.sql";
+            bindings=euclid_sqlite_bindings(collection_id, entry_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/delete_orphan_collection_notes.sql"),
+    ]
 end
 
 """Seed the locale, message arguments, and translations used by content reads."""

@@ -180,6 +180,14 @@ the native semantic layout; command-layout construction remains limited to stand
 math imported from canonical MIME bytes. The display thread draws, scrolls, and
 computes copy interaction geometry from the resulting sealed semantic layout.
 
+Placement-scoped collection notes use the same document grammar. Native composition
+parses the note and animation bodies independently, preserving their source spans and
+chosen order in one reading layout. This isolates malformed TeX and avoids accidental
+environment or comment continuation across bodies. Animation `text/plain` and rejected
+TeX become literal semantic prose, not executable TeX; valid neighboring content remains
+formatted. Nonempty notes also render without animation text. No heading or rule is
+inserted by the application.
+
 ## Document Line Breaking
 
 Paragraph layout searches legal semantic spaces and explicit penalties for the

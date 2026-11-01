@@ -271,12 +271,22 @@ dynview_native_import_document_blocks :: proc(
     offsets: Dynview_Native_Document_Offsets) -> i32 {
 
     next_number := 1
+    list_base: u16
+    for block in cache.document_blocks[:cache.document_block_count] {
+        list_base = max(list_base, block.list_id)
+    }
     for block in document.document_blocks {
         converted, ok := dynview_native_document_block(
             block, document, offsets.source, offsets.inline_start,
             offsets.display_row)
         if !ok {
             return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
+        if converted.list_id > 0 {
+            if int(converted.list_id)+int(list_base) > 65535 {
+                return BRIDGE_STATUS_OUT_OF_CAPACITY
+            }
+            converted.list_id += list_base
         }
         dynview_native_number_display_rows(cache, converted, &next_number)
         cache.document_blocks[cache.document_block_count] = converted

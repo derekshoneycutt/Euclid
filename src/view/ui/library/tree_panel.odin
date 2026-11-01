@@ -16,6 +16,7 @@ import theme "../theme"
 import collectionmodel "../../../collections"
 import storage "../../../core/storage"
 import log "core:log"
+import viewpreferences "../../preferences"
 
 TREE_SEMANTIC_LOCAL_ID :: 1
 TREE_NO_ITEM :: viewmodel.UI_TREE_NO_ITEM
@@ -28,6 +29,7 @@ Tree_Hit :: struct {
     actions_toggle_id: uuid.Identifier,
     actions_move_id: uuid.Identifier,
     actions_move_direction: collectionmodel.Move_Direction,
+    actions_notes_id: uuid.Identifier,
     actions_delete_id: uuid.Identifier,
 }
 
@@ -101,6 +103,7 @@ Tree_List_Preparation :: struct {
     actions_toggle: uiwidgets.Icon_Button_Result,
     actions_up: uiwidgets.Text_Button_Result,
     actions_down: uiwidgets.Text_Button_Result,
+    actions_notes: uiwidgets.Text_Button_Result,
     actions_delete: uiwidgets.Text_Button_Result,
     layout: viewmodel.Ui_Tree_Prepared_Layout,
 }
@@ -158,6 +161,7 @@ Encoded_Tree_Walk_Context :: struct {
     actions_toggle: uiwidgets.Icon_Button_Result,
     actions_up: uiwidgets.Text_Button_Result,
     actions_down: uiwidgets.Text_Button_Result,
+    actions_notes: uiwidgets.Text_Button_Result,
     actions_delete: uiwidgets.Text_Button_Result,
     reorder_foreground_index: int,
     reorder_occlusion: geometry.Rectangle,
@@ -1639,6 +1643,9 @@ tree_select_item :: proc(params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item
         !library_entry_name_flush(params.general_state, draft^.entry_id) {
         return
     }
+    if !tree_collection_note_select(params.general_state, item^.key) {
+        return
+    }
     params.ui_runtime^.library.tree.selected_item_id = item^.key
     tree_actions_reconcile(params)
     target := tree_find_stable_id(params.ji, item^.target_animation_id)
@@ -1646,6 +1653,74 @@ tree_select_item :: proc(params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item
         set_selected_animation(params.ji, target)
         params.ui_runtime^.presentation.text_scroll_y = 0
     }
+}
+
+// Load only an eligible selected placement and retain a dirty owner on failure.
+tree_collection_note_select :: proc(
+    state: ^core.Euclid_General_State, entry_id: uuid.Identifier) -> bool {
+    if state == nil {
+        return true
+    }
+    note := &state^.ui_runtime.library.collection_note
+    if note^.dirty && note^.identity.entry_id != entry_id {
+        note^.pending_selection_entry_id = entry_id
+        note^.pending_selection_revision = note^.revision
+        note^.leave_editing_after_save = true
+        note^.debounce_remaining_seconds = 0
+        _ = library_collection_note_done(state)
+        return false
+    }
+    set := &state^.preferences_runtime.collections_state
+    identity, identity_error := collectionmodel.placement_identity_for_entry(
+        set, entry_id)
+    if identity_error == .None {
+        placement, placement_error := collectionmodel.placement_resolve(set, identity)
+        collection_index := collectionmodel.find_collection(set, identity.collection_id)
+        if placement_error == .None && placement.kind == .Animation &&
+            collection_index >= 0 &&
+            set^.collections[collection_index].role == .User {
+            return viewpreferences.settings_save_collection_note_load(
+                state, identity)
+        }
+    }
+    return viewpreferences.settings_save_collection_note_clear(state)
+}
+
+// Apply a deferred tree selection only after its captured note revision is durable.
+tree_collection_note_apply_pending_selection :: proc(
+    state: ^core.Euclid_General_State) {
+    if state == nil {
+        return
+    }
+    note := &state^.ui_runtime.library.collection_note
+    target_id := note^.pending_selection_entry_id
+    if target_id == (uuid.Identifier{}) || note^.dirty || note^.save_failed ||
+        note^.saved_revision < note^.pending_selection_revision {
+        return
+    }
+    index := tree_projection_find(
+        &state^.ui_runtime.library.tree.projection, target_id)
+    if index == TREE_NO_ITEM {
+        log.warn("collection_note_deferred_selection_target_missing")
+        note^.pending_selection_entry_id = {}
+        return
+    }
+    item := state^.ui_runtime.library.tree.projection.items[index]
+    target := tree_find_stable_id(
+        state^.julia_interface, item^.target_animation_id)
+    if target == nil || !item^.selectable {
+        log.warn("collection_note_deferred_selection_target_rejected")
+        note^.pending_selection_entry_id = {}
+        return
+    }
+    note^.pending_selection_entry_id = {}
+    note^.pending_selection_revision = 0
+    state^.ui_runtime.library.tree.selected_item_id = item^.key
+    state^.ui_runtime.library.actions.drawer = {}
+    tree_actions_repair_context_focus(&state^.ui_runtime)
+    set_selected_animation(state^.julia_interface, target)
+    state^.ui_runtime.presentation.text_scroll_y = 0
+    _ = tree_collection_note_select(state, item^.key)
 }
 
 // Apply one addressed command without conflating placement selection and playback.
@@ -1670,6 +1745,10 @@ tree_apply_semantic_command :: proc(
         tree_entry_name_is_descendant(params, target, draft^.entry_id)
     if hides_editor && !library_entry_name_flush(
         params.general_state, draft^.entry_id) {
+        return active
+    }
+    if command.kind == .Select && active^.selectable &&
+        !tree_collection_note_select(params.general_state, active^.key) {
         return active
     }
     target = tree_apply_structure_command(params, target, command.kind)
@@ -2132,6 +2211,10 @@ finish_tree_interaction :: proc(
     prepared: ^Tree_List_Preparation) -> Tree_Hit {
     gated_hit := hit
     tree_entry_name_gate_hit(params, &gated_hit)
+    if gated_hit.selected_node != nil &&
+        !tree_collection_note_select(params.general_state, gated_hit.selected_node^.key) {
+        gated_hit.selected_node = nil
+    }
     if gated_hit.toggled_node != nil {
         tree_motion_anchor(params, gated_hit.toggled_node, &prepared^.layout)
     }
@@ -2187,6 +2270,7 @@ tree_refresh_hit_preparation :: proc(
     }
     if hit.actions_toggle_id != (uuid.Identifier{}) ||
        hit.actions_move_id != (uuid.Identifier{}) ||
+       hit.actions_notes_id != (uuid.Identifier{}) ||
        hit.actions_delete_id != (uuid.Identifier{}) {
         tree_actions_prepare_focus(params)
         if !tree_prepare_layout(params, &prepared^.layout) {

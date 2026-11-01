@@ -844,6 +844,19 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "core-animation-note-buffer",
+                "src/core/animation/memory.odin",
+                "animation_memory_note_buffer",
+                :custom,
+                "The bounded note buffer is allocated once per animation generation, reused across placements, and retired by shared animation-memory reset or destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "core-animation-value-store-payload",
                 "src/core/animation/value_store.odin",
                 "animation_value_store_insert",

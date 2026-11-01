@@ -266,7 +266,112 @@ scenario_library_item_action :: proc(
         operation == "move_up" || operation == "move_down" {
         return scenario_reorder_control(runtime, item, operation)
     }
+    if operation == "notes_focus" || operation == "notes_activate" ||
+        operation == "notes_press" || operation == "notes_release" ||
+        operation == "notes_on_top" {
+        return scenario_library_note_control(runtime, item, operation)
+    }
+    if operation == "note_input_press" || operation == "note_input_release" {
+        return scenario_library_note_input_pointer(runtime, item, operation)
+    }
+    if operation == "note_order_press" || operation == "note_order_release" ||
+        operation == "note_done_press" || operation == "note_done_release" {
+        return scenario_library_note_footer_pointer(runtime, item, operation)
+    }
     return scenario_library_published_action(runtime, item, operation)
+}
+
+// Click published editor footer bounds through the ordinary pointer routing path.
+scenario_library_note_footer_pointer :: proc(
+    runtime: ^Scenario_Runtime, item: ^viewmodel.Ui_Tree_Item,
+    operation: string) -> bool {
+    note := &runtime^.state^.ui_runtime.library.collection_note
+    if !note^.editing || note^.status != .Ready ||
+        note^.identity.entry_id != item^.key {
+        return false
+    }
+    order := operation == "note_order_press" || operation == "note_order_release"
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Presentation,
+        local_id = viewmodel.LIBRARY_COLLECTION_NOTE_ORDER_ID if order else
+            viewmodel.LIBRARY_COLLECTION_NOTE_DONE_ID,
+        stable_id = item^.key,
+        generation = note^.request_id,
+    }
+    snapshot := uisemantics.semantic_snapshot(runtime^.state^.ui_runtime.semantic_focus)
+    index := uisemantics.semantic_node_index(snapshot, id)
+    if index < 0 {
+        return false
+    }
+    bounds := snapshot^.nodes[index].bounds
+    if order {
+        bounds.x += bounds.width*0.5
+        bounds.width *= 0.5
+    }
+    pointer := "press" if operation == "note_order_press" ||
+        operation == "note_done_press" else "release"
+    return scenario_favorites_pointer(runtime, bounds, pointer)
+}
+
+// Route note-editor focus through its ordinary display pointer target.
+scenario_library_note_input_pointer :: proc(
+    runtime: ^Scenario_Runtime, item: ^viewmodel.Ui_Tree_Item,
+    operation: string) -> bool {
+    note := &runtime^.state^.ui_runtime.library.collection_note
+    if !note^.editing || note^.status != .Ready ||
+        note^.identity.entry_id != item^.key ||
+        note^.editor_rect.width <= 0 || note^.editor_rect.height <= 0 {
+        return false
+    }
+    pointer := "press" if operation == "note_input_press" else "release"
+    return scenario_favorites_pointer(runtime, note^.editor_rect, pointer)
+}
+
+// Route note controls through their published placement-qualified semantic nodes.
+scenario_library_note_control :: proc(
+    runtime: ^Scenario_Runtime, item: ^viewmodel.Ui_Tree_Item,
+    operation: string) -> bool {
+    state := runtime^.state
+    action := uilibrary.TREE_ACTION_NOTES
+    kind := viewmodel.Ui_Focus_Command_Kind.Activate
+    if operation == "notes_on_top" {
+        note := state^.ui_runtime.library.collection_note
+        return scenario_library_queue_command(runtime, {
+            target = {
+                domain = .Presentation,
+                local_id = viewmodel.LIBRARY_COLLECTION_NOTE_ORDER_ID,
+                stable_id = item^.key,
+                generation = note.request_id,
+            },
+            kind = .Toggle,
+        })
+    } else if operation == "notes_focus" {
+        kind = .Focus
+    }
+    id: viewmodel.Ui_Node_Id = {
+        domain = .Library_Action,
+        local_id = action,
+        stable_id = item^.key,
+        generation = state^.julia_interface^.content_generation,
+    }
+    if operation == "notes_focus" || operation == "notes_activate" ||
+        operation == "notes_on_top" {
+        return scenario_library_queue_command(runtime, {
+            target = id,
+            kind = kind,
+        })
+    }
+    snapshot := uisemantics.semantic_snapshot(state^.ui_runtime.semantic_focus)
+    index := uisemantics.semantic_node_index(snapshot, id)
+    if index < 0 {
+        return false
+    }
+    node := snapshot^.nodes[index]
+    if .Visible not_in node.states || .Enabled not_in node.states {
+        return false
+    }
+    pointer := "press" if operation == "notes_press" else "release"
+    return scenario_favorites_pointer(runtime, node.bounds, pointer)
 }
 
 // Route pointer focus to the published placement-owned name input.
@@ -678,12 +783,7 @@ scenario_assert_favorites :: proc(
     case "capacity":
         return scenario_favorites_capacity(runtime)
     case "large_store":
-        set := &runtime^.state^.preferences_runtime.collections_state
-        snapshot := uisemantics.semantic_snapshot(
-            runtime^.state^.ui_runtime.semantic_focus)
-        return scenario_favorites_capacity(runtime) && set^.entry_count >= 1024 &&
-            set^.collection_count > 512 && snapshot != nil &&
-            snapshot^.text_count > 65536
+        return scenario_favorites_large_store(runtime)
     case "order":
         return scenario_favorites_order(runtime, argument)
     case "empty":
@@ -695,13 +795,43 @@ scenario_assert_favorites :: proc(
         return scenario_favorites_playback(runtime, operation, argument)
     case "failure_retained", "recovered":
         return scenario_favorites_save_feedback(runtime, operation == "recovered")
+    case "note_failure_retained":
+        return scenario_note_failure_retained(runtime)
     case:
-        if handled, accepted := scenario_favorites_name_assertion(
-            runtime, operation, argument); handled {
-            return accepted
-        }
-        return scenario_favorites_placement_assertion(runtime, operation, argument)
+        return scenario_favorites_named_or_placement_assertion(
+            runtime, operation, argument)
     }
+}
+
+// Resolve name-editor assertions before delegating the remaining placement vocabulary.
+scenario_favorites_named_or_placement_assertion :: proc(
+    runtime: ^Scenario_Runtime, operation, argument: string) -> bool {
+    if handled, accepted := scenario_favorites_name_assertion(
+        runtime, operation, argument); handled {
+        return accepted
+    }
+    return scenario_favorites_placement_assertion(runtime, operation, argument)
+}
+
+// Verify a large tree exceeds both placement and semantic text fixture thresholds.
+scenario_favorites_large_store :: proc(runtime: ^Scenario_Runtime) -> bool {
+    set := &runtime^.state^.preferences_runtime.collections_state
+    snapshot := uisemantics.semantic_snapshot(runtime^.state^.ui_runtime.semantic_focus)
+    return scenario_favorites_capacity(runtime) && set^.entry_count >= 1024 &&
+        set^.collection_count > 512 && snapshot != nil && snapshot^.text_count > 65536
+}
+
+// Report retained editable bytes before the recovery harness removes its SQLite fault.
+scenario_note_failure_retained :: proc(runtime: ^Scenario_Runtime) -> bool {
+    note := &runtime^.state^.ui_runtime.library.collection_note
+    retained := note^.status == .Ready && note^.editing &&
+        note^.dirty && note^.save_failed &&
+        note^.identity.entry_id ==
+            runtime^.state^.ui_runtime.library.tree.selected_item_id
+    if retained {
+        log.info("collection_note_failure_observed")
+    }
+    return retained
 }
 
 // Evaluate persisted-name, draft, and inline name-editor focus assertions.

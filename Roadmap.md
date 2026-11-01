@@ -7,7 +7,6 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Custom notes on collection items
 - Export / Import by file
 - Ip-2-ip sharing protocol
 - Terminal drawing shape suite
@@ -219,7 +218,7 @@ General features:
     - [X] Favorites/Collection organization
     - [X] Custom naming in collections
     - [X] Multiple custom collections
-    - [ ] Custom notes in collections
+    - [X] Custom notes in collections
     - [ ] Sharing custom collections
       - [ ] Export/import files
       - [ ] In-network (ip-2-ip) custom collection sharing
@@ -252,10 +251,10 @@ General features:
   - [X] Mouse/cursor -following magnifier
   - [X] Independent particle-effects switch
   - [X] Open subsequent animations at their completed figure
-  - [ ] Input caret handles (maybe; maybe v2... tbd)
   - [ ] Improved accessibility system
   - [ ] Additional accessibility support : Dynview
   - [ ] Additional accessibility support : Terminal
+  - [ ] Input caret handles (maybe; maybe v2... tbd)
 
 Final tasks:
 

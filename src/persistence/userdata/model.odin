@@ -59,10 +59,13 @@ Store :: struct {
     delete_setting: sqlite.Statement,
     read_collections: sqlite.Statement,
     read_collection_entries: sqlite.Statement,
+    read_collection_note: sqlite.Statement,
     insert_collection: sqlite.Statement,
     insert_collection_entry: sqlite.Statement,
     delete_collection_entries: sqlite.Statement,
     delete_collections: sqlite.Statement,
+    upsert_collection_note: sqlite.Statement,
+    delete_orphan_collection_notes: sqlite.Statement,
     status: Store_Status,
     path: [DATABASE_PATH_MAX_BYTES]u8,
     path_length: int,
@@ -144,6 +147,12 @@ Collection_Entry_Decode_Result :: struct {
     value: collections.Entry,
     valid: bool,
     failure: sqlite.Error,
+}
+
+Collection_Note_Read_Result :: struct {
+    found: bool,
+    text_length: int,
+    notes_on_top: bool,
 }
 
 Collection_Kind_Decode_Result :: struct {

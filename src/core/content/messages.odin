@@ -83,6 +83,12 @@ Content_Message_Id :: enum u16 {
     Library_New_Collection = 1118,
     Library_Delete_Collection = 1119,
     Library_Confirm_Delete = 1120,
+    Library_Edit_Notes = 1121,
+    Library_Done_Editing = 1122,
+    Library_Notes_On_Top = 1123,
+    Library_Collection_Notes_Heading = 1124,
+    Library_Notes_Loading = 1125,
+    Library_Notes_Unavailable = 1126,
     Settings_Display_Fps = 1201,
     Settings_Limit_Fps = 1202,
     Settings_Drawing_Sound = 1203,
@@ -204,7 +210,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 186
+CONTENT_SHIPPED_MESSAGE_COUNT :: 192
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -279,6 +285,12 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1118, "ui.library.new_collection"},
     {1119, "ui.library.delete_collection"},
     {1120, "ui.library.confirm_delete"},
+    {1121, "ui.library.edit_notes"},
+    {1122, "ui.library.done_editing"},
+    {1123, "ui.library.notes_on_top"},
+    {1124, "ui.library.collection_notes_heading"},
+    {1125, "ui.library.notes_loading"},
+    {1126, "ui.library.notes_unavailable"},
     {1201, "ui.settings.display_fps"},
     {1202, "ui.settings.limit_fps"},
     {1203, "ui.settings.drawing_sound"},
@@ -448,7 +460,7 @@ content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Sig
     #partial switch id {
     case .Library_Suggestion_Action:
         return {"query", .Text}
-    case .Library_Actions_For:
+    case .Library_Actions_For, .Library_Collection_Notes_Heading:
         return {"name", .Text}
     case .Library_Unicode_Completion:
         return {"symbol", .Text}

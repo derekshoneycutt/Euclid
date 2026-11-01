@@ -73,7 +73,9 @@ unicode_completion_replaces_suffix_before_spelling :: proc(t: ^testing.T) {
     result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
         {
             events = events[:],
-        }, "", {true, "spelling"})
+        }, {
+            policy = {true, "spelling"},
+        })
     testing.expect(t, result.changed && !result.suggestion_accepted)
     testing.expect(t, !result.submit_requested)
     testing.expect_value(t, string(bytes[:length]), "é α")
@@ -172,7 +174,9 @@ unicode_completion_preserves_event_order :: proc(t: ^testing.T) {
         result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
             {
                 events = item.events[:],
-            }, "", {true, suggestion})
+            }, {
+                policy = {true, suggestion},
+            })
         testing.expect_value(t, string(bytes[:length]), item.expected)
         testing.expect(t, result.changed)
     }
@@ -197,8 +201,10 @@ unicode_completion_dismissal_tracks_text_changes :: proc(t: ^testing.T) {
     result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
         {
             events = escape[:],
-        }, "", {
-            unicode_completion = true,
+        }, {
+            policy = {
+                unicode_completion = true,
+            },
         })
     testing.expect(t, !result.changed && state.unicode_dismissed)
     testing.expect_value(t, string(bytes[:length]), "\\alpha")
@@ -218,8 +224,10 @@ unicode_completion_dismissal_tracks_text_changes :: proc(t: ^testing.T) {
     _ = input_box_apply_edit_keyboard(&state, {bytes[:], &length},
         {
             events = events[:],
-        }, "", {
-            unicode_completion = true,
+        }, {
+            policy = {
+                unicode_completion = true,
+            },
         })
     testing.expect_value(t, input_box_unicode_candidate(
         &state, string(bytes[:length])).text, "α")
@@ -336,8 +344,10 @@ unicode_completion_preserves_ordinary_keys :: proc(t: ^testing.T) {
         result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
             {
                 events = []input.Input_Event{event},
-            }, "", {
-                unicode_completion = true,
+            }, {
+                policy = {
+                    unicode_completion = true,
+                },
             })
         testing.expect(t, !result.changed)
         testing.expect_value(t, string(bytes[:length]), "\\alpha")
@@ -403,7 +413,9 @@ unicode_completion_rejects_stale_spelling_after_edit :: proc(t: ^testing.T) {
     result := input_box_apply_edit_keyboard(&state, {bytes[:], &length},
         {
             events = events[:],
-        }, "", {true, "spelling"})
+        }, {
+            policy = {true, "spelling"},
+        })
     testing.expect_value(t, string(bytes[:length]), "\\alphax")
     testing.expect(t, result.changed && !result.suggestion_accepted)
 }

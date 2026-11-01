@@ -109,9 +109,9 @@ input_box_accept_completion :: proc(
     candidate: Unicode_Completion, result: ^Input_Box_Update) {
     text_length := clamp(target.length^, 0, len(target.bytes))
     result^.changed = input_box_replace_range(state, target, {
-        first = candidate.start,
-        last = text_length,
-    }, candidate.text, result) || result^.changed
+        range = {candidate.start, text_length},
+        text = candidate.text,
+    }, result) || result^.changed
 }
 
 // input_box_accept_end_suggestion rejects stale frame-borrowed spelling corrections.
@@ -122,9 +122,9 @@ input_box_accept_end_suggestion :: proc(
         return false
     }
     result^.changed = input_box_replace_range(state, target, {
-        first = 0,
-        last = target.length^,
-    }, policy.end_suggestion, result) || result^.changed
+        range = {0, target.length^},
+        text = policy.end_suggestion,
+    }, result) || result^.changed
     result^.suggestion_accepted = !result^.edit_rejected
     return true
 }

@@ -1,0 +1,31 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"do":"pause_animation"}
+{"favorite_control":"leave"}
+{"library_placement":"focus_library"}
+{"key":"enter"}
+{"wait_state":"accordion_settled","timeout_ms":10000}
+{"library_placement":"expand:collections"}
+{"library_placement":"expand:first_collection"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"select:first_collection:Point"}
+{"wait_state":"collection_note_ready","timeout_ms":10000}
+{"library_placement":"actions_open:first_collection:Point"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"notes_activate:first_collection:Point"}
+{"wait_state":"collection_note_editing","timeout_ms":10000}
+{"library_placement":"note_input_press:first_collection:Point"}
+{"library_placement":"note_input_release:first_collection:Point"}
+{"key":{"name":"a","ctrl":true}}
+{"type_collection_note":"Failed draft must remain in the editor."}
+{"wait_state":"settings_failed","timeout_ms":20000}
+{"assert_favorites":"note_failure_retained"}
+{"key":{"name":"a","ctrl":true}}
+{"type_collection_note":"Recovered draft is durable."}
+{"wait_state":"settings_saved","timeout_ms":20000}
+{"library_placement":"notes_activate:first_collection:Point"}
+{"wait_state":"collection_note_clean","timeout_ms":20000}
+{"wait_state":"settings_saved","timeout_ms":20000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}
