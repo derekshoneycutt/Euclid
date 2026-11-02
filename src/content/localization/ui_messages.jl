@@ -36,6 +36,98 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             "Read-only last successful PNG path.", LocalizedContent.MessageArgument[]),
         "Saved PNG path"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1510),
+            "ui.share_collections.heading", "Collection exchange section heading.",
+            LocalizedContent.MessageArgument[]),
+        "Share Collections"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1511),
+            "ui.share_collections.export", "Open the collection export dialog.",
+            LocalizedContent.MessageArgument[]),
+        "Export…"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1512),
+            "ui.share_collections.import", "Open the collection import dialog.",
+            LocalizedContent.MessageArgument[]),
+        "Import…"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1513),
+            "ui.share_collections.import_selected",
+            "Commit the selected importable collections.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count",
+                    LocalizedContent.UInt32Argument)]),
+        "Import Selected ({count})"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1514),
+            "ui.share_collections.cancel", "Discard the staged collection import.",
+            LocalizedContent.MessageArgument[]),
+        "Cancel"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1515),
+            "ui.share_collections.missing_animations",
+            "Number of animations omitted from this imported collection.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count",
+                    LocalizedContent.UInt32Argument)]),
+        "{count} animations not found; they will be left out"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1516),
+            "ui.share_collections.not_importable",
+            "Heading for collections with no importable entries.",
+            LocalizedContent.MessageArgument[]),
+        "Not importable"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1517),
+            "ui.share_collections.reason.empty",
+            "Reason a collection has no installed animations.",
+            LocalizedContent.MessageArgument[]),
+        "No installed animations"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1518),
+            "ui.share_collections.reason.invalid",
+            "Reason a collection is invalid for import.",
+            LocalizedContent.MessageArgument[]),
+        "Invalid collection"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1519),
+            "ui.share_collections.exported", "Successful collection export status.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count",
+                    LocalizedContent.UInt32Argument)]),
+        "Exported {count} collections"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1520),
+            "ui.share_collections.imported", "Successful collection import status.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count",
+                    LocalizedContent.UInt32Argument)]),
+        "Imported {count} collections"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1521),
+            "ui.share_collections.imported_with_omissions",
+            "Last import status when entries were omitted.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("count",
+                    LocalizedContent.UInt32Argument)]),
+        "Last import left out {count} entries"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1522),
+            "ui.share_collections.error.read", "Collection import read failure.",
+            LocalizedContent.MessageArgument[]),
+        "Could not read the file"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1523),
+            "ui.share_collections.error.unsupported",
+            "Collection import requires a newer Euclid version.",
+            LocalizedContent.MessageArgument[]),
+        "This file needs a newer version of Euclid"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1524),
+            "ui.share_collections.error.write", "Collection export write failure.",
+            LocalizedContent.MessageArgument[]),
+        "Could not write the file"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1251), "ui.settings.particle_effects_help",
             "Help for the application-wide particle preference.",
             LocalizedContent.MessageArgument[]),

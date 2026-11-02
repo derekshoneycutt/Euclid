@@ -111,7 +111,30 @@ accordion_sections_for_layout :: proc(
         sections.items[settings_index].accessible_value =
             viewmessages.shell_message(state, status_message)
     }
+    ui_apply_sharing_omission_indicator(state, &sections)
     return sections
+}
+
+// Attach omission feedback to the descriptor that owns the Sharing accordion.
+ui_apply_sharing_omission_indicator :: proc(
+    state: ^core.Euclid_General_State,
+    sections: ^uiaccordion.Accordion_Section_Set) {
+    sharing := &state^.ui_runtime.sharing
+    if !sharing.import_left_out_entries {
+        return
+    }
+    count := u32(max(0, sharing.last_import_omitted_entry_count))
+    value := viewmessages.shell_format(state, .Share_Imported_With_Omissions,
+        []contentdata.Content_Format_Argument{{"count", count}},
+        sharing.accessible_value[:])
+    for index in 0..<sections^.count {
+        if sections^.items[index].section != .Save_Gif {
+            continue
+        }
+        sections^.items[index].error_indicator = true
+        sections^.items[index].accessible_value = value
+        return
+    }
 }
 
 // Prepare accordion headers and commit one active section before child updates.

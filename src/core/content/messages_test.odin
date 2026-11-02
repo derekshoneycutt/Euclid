@@ -101,6 +101,12 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Sharing", "Save PNG", "Save the current animation frame.",
     "Status: Idle", "Status: Saving", "Status: Saved",
     "Could not save PNG.", "Available after GIF saving finishes.", "Saved PNG path",
+    "Share Collections", "Export…", "Import…", "Import Selected ({count})",
+    "Cancel", "{count} animations not found; they will be left out",
+    "Not importable", "No installed animations", "Invalid collection",
+    "Exported {count} collections", "Imported {count} collections",
+    "Last import left out {count} entries", "Could not read the file",
+    "This file needs a newer version of Euclid", "Could not write the file",
 }
 
 // Build a complete message fixture with a stable arena owner for consumer tests.
@@ -158,7 +164,9 @@ content_message_test_signature :: proc(
     case .Library_Unicode_Completion:
         return "symbol", .Text
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
-         .Gif_Cadence_Multiple:
+         .Gif_Cadence_Multiple, .Share_Import_Selected,
+         .Share_Missing_Animations, .Share_Exported, .Share_Imported,
+         .Share_Imported_With_Omissions:
         return "count", .Uint32
     case .Settings_Stats_Dust, .Settings_Stats_Trail, .Settings_Stats_Flicker,
          .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,

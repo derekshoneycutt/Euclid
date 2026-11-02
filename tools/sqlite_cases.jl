@@ -136,6 +136,7 @@ function euclid_sqlite_userdata_case()
         euclid_sqlite_file_step("src/persistence/userdata/sql/read_collections.sql"),
         euclid_sqlite_file_step(
             "src/persistence/userdata/sql/read_collection_entries.sql"),
+        euclid_sqlite_collection_exchange_steps(collection_id)...,
         euclid_sqlite_note_steps(collection_id, entry_id)...,
         euclid_sqlite_file_step("src/persistence/userdata/sql/delete_setting.sql";
             bindings=euclid_sqlite_bindings(
@@ -145,6 +146,20 @@ function euclid_sqlite_userdata_case()
         euclid_sqlite_file_step("src/persistence/userdata/sql/delete_collections.sql"),
     ]
     return SQLiteValidationCase("user-settings-and-collections"; steps)
+end
+
+"""Exercise the streamed collection cursor and import-order query."""
+function euclid_sqlite_collection_exchange_steps(collection_id)
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/read_collection_export.sql";
+            bindings=euclid_sqlite_bindings(collection_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/read_collection_export_entries.sql";
+            bindings=euclid_sqlite_bindings(collection_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/read_next_collection_order.sql"),
+    ]
 end
 
 """Create the settings, collection topology, and placement-note schema in dependency order."""

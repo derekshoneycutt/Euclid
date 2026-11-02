@@ -946,11 +946,12 @@ Direct virtual-memory reservations, foreign heaps, and GPU allocations are not
 automatically included. Even when it sees a backing buffer, it need not see every
 suballocation from the allocator layered over that buffer.
 
-Scenario arena checkpoints currently name exactly three domains:
+Scenario arena checkpoints currently name four domains:
 
 - `animation`: the shared animation arena.
 - `snapshot_slots`: aggregate diagnostics for the service's view snapshot arenas.
 - `display_cache`: the derived Dynview cache arena.
+- `sharing_exchange`: staged collection import and exchange-plan storage.
 
 The [scenario adapter](../../../src/view/scenario/scenario_runtime.odin) samples at
 owner-controlled boundaries. Arena comparisons require matching current usage,

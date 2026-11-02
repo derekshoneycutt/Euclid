@@ -26,6 +26,7 @@ Checkbox_Params :: struct {
     semantic_domain: viewmodel.Ui_Node_Domain,
     semantic_order: u32,
     semantic_clip: geometry.Rectangle,
+    semantic_value: string,
 }
 
 Checkbox_Result :: struct {
@@ -215,6 +216,7 @@ checkbox_apply_semantics :: proc(
         bounds = result^.control_geometry.bounds,
         clip_bounds = result^.control_geometry.clip_bounds,
         label = params.label,
+        value = params.semantic_value,
     })
     _ = uisemantics.semantic_focus_for_press(params.semantic_focus, press_owner,
         .Checkbox, params.id, id)

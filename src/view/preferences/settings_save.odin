@@ -66,7 +66,9 @@ settings_save_ready :: proc(state: ^core.Euclid_General_State) -> bool {
     }
     runtime := &state^.preferences_runtime
     status := state^.ui_runtime.preferences.save_status
+    sharing := &state^.ui_runtime.sharing
     return runtime^.settings_store != nil && !runtime^.settings_save_active &&
+        !sharing.exchange_task_active && !sharing.collection_edit_locked &&
         settings_save_has_pending(runtime) && runtime^.settings_retry_frames == 0 &&
         (status != .Unavailable && status != .Failed ||
             runtime^.note_request_kind == .Read)
@@ -105,7 +107,8 @@ settings_save_collection_note_load :: proc(
     state: ^core.Euclid_General_State,
     identity: collections.Placement_Identity,
     request_edit := false) -> bool {
-    if state == nil {
+    if state == nil || state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked {
         return false
     }
     note := &state^.ui_runtime.library.collection_note
@@ -244,7 +247,8 @@ settings_save_collection_note_mark_load_failed :: proc(
 // Coalesce a dirty note revision into the shared bounded user-data worker.
 settings_save_collection_note_queue_write :: proc(
     state: ^core.Euclid_General_State) -> bool {
-    if state == nil {
+    if state == nil ||
+        state^.ui_runtime.sharing.collection_edit_locked {
         return false
     }
     note := &state^.ui_runtime.library.collection_note
@@ -269,7 +273,8 @@ settings_save_collection_note_queue_write :: proc(
 // Mark one accepted editor or reading-order change for debounced persistence.
 settings_save_collection_note_edit :: proc(
     state: ^core.Euclid_General_State) -> bool {
-    if state == nil {
+    if state == nil || state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked {
         return false
     }
     note := &state^.ui_runtime.library.collection_note
@@ -343,6 +348,10 @@ settings_save_collection_mutation :: proc(
     canonical_name: string = "") -> collections.Mutation_Error {
     if state == nil {
         return .Invalid_Entry
+    }
+    if state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked {
+        return .Policy
     }
     if settings_save_note_mutation_retires_owner(state, mutation) &&
        state^.ui_runtime.library.collection_note.dirty {
@@ -751,6 +760,10 @@ settings_save_service :: proc(
         state^.ui_runtime.preferences.save_status == .Failed {
         return
     }
+    sharing := &state^.ui_runtime.sharing
+    if sharing.exchange_task_active || sharing.collection_edit_locked {
+        return
+    }
     if runtime^.settings_save_active || !settings_save_has_pending(runtime) {
         return
     }
@@ -767,6 +780,10 @@ settings_save_submit :: proc(
     pool: ^taskpool.Task_Pool,
     drain_work: bool = false,
     history_ready: bool = false) {
+    sharing := &state^.ui_runtime.sharing
+    if sharing.exchange_task_active || sharing.collection_edit_locked {
+        return
+    }
     admission := &state^.user_data_admission
     if !viewuserdata.connection_admission_claim(
         admission, .Settings_Save, history_ready, drain_work) {

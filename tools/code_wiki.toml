@@ -96,66 +96,73 @@ navigation_order = 43
 owner = "guide_authors"
 
 [[guides]]
+title = "Export Collections File Format"
+path = "Guides/ExportCollectionsFileFormat.md"
+summary = "Normative record syntax, schema, compatibility, and requirements for Euclid collection exchange files."
+navigation_order = 44
+owner = "guide_authors"
+
+[[guides]]
 title = "Localization And Editions"
 path = "Guides/Localization.md"
 summary = "Authoring localized messages, names, and editions; native consumers, callback queries, and extension workflows."
-navigation_order = 44
+navigation_order = 45
 owner = "guide_authors"
 
 [[guides]]
 title = "Tool Rendering"
 path = "Guides/ToolRendering.md"
 summary = "Pen and compass geometry, shading, and rendering contracts."
-navigation_order = 45
+navigation_order = 46
 owner = "guide_authors"
 
 [[guides]]
 title = "Accessibility"
 path = "Guides/Accessibility.md"
 summary = "Cross-platform sidebar support, native probes, qualification evidence, exclusions, and AccessKit limits."
-navigation_order = 47
+navigation_order = 48
 owner = "guide_authors"
 
 [[guides]]
 title = "UI System"
 path = "Guides/UiSystem.md"
 summary = "Display-owned layout, panels, input, widgets, scrolling, and rendering."
-navigation_order = 48
+navigation_order = 49
 owner = "guide_authors"
 
 [[guides]]
 title = "Particle System"
 path = "Guides/ParticleSystem.md"
 summary = "Grounded PIC field physics, airborne dust, contacts, rendering, and evidence."
-navigation_order = 49
+navigation_order = 50
 owner = "guide_authors"
 
 [[guides]]
 title = "Terminal Architecture"
 path = "Guides/TerminalArchitecture.md"
 summary = "Interactive Terminal ownership, session actors, native process integration, and EuclidRepl lifecycle."
-navigation_order = 50
+navigation_order = 51
 owner = "guide_authors"
 
 [[guides]]
 title = "Testing Strategy"
 path = "Guides/TestingStrategy.md"
 summary = "Semantic trace, deterministic harness execution, scenario testing, and E2E direction."
-navigation_order = 55
+navigation_order = 56
 owner = "guide_authors"
 
 [[guides]]
 title = "LaTeX Support"
 path = "Guides/LaTeXSupport.md"
 summary = "Supported document and math syntax, output, and fallback behavior."
-navigation_order = 60
+navigation_order = 61
 owner = "guide_authors"
 
 [[guides]]
 title = "Wiki Composition"
 path = "Guides/WikiComposition.md"
 summary = "Wiki namespace ownership, producer outputs, and Content catalogue extension contract."
-navigation_order = 70
+navigation_order = 71
 owner = "guide_authors"
 
 [[guide_relations]]

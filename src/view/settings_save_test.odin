@@ -134,6 +134,42 @@ settings_save_test_destroy_state :: proc(
     free(state, context.allocator)
 }
 
+// Verify saves refuse admission during exchange work and while imports are locked.
+@(test)
+settings_save_admission_waits_for_exchange_and_edit_lock :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    store: user_data.Store
+    state^.preferences_runtime.settings_store = &store
+    state^.ui_runtime.preferences.save_status = .Pending
+    state^.preferences_runtime.settings_pending.count = 1
+    testing.expect(t, viewpreferences.settings_save_ready(state))
+
+    state^.ui_runtime.sharing.exchange_task_active = true
+    testing.expect(t, !viewpreferences.settings_save_ready(state))
+    state^.ui_runtime.sharing.exchange_task_active = false
+    state^.ui_runtime.sharing.collection_edit_locked = true
+    testing.expect(t, !viewpreferences.settings_save_ready(state))
+}
+
+// Verify an import lock rejects new collection mutations and note writes.
+@(test)
+settings_save_collection_edit_lock_rejects_writes :: proc(t: ^testing.T) {
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    state^.ui_runtime.sharing.edit_admission_blocked = true
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(
+            state, collections.Mutation{}),
+        collections.Mutation_Error.Policy)
+    testing.expect(t, !viewpreferences.settings_save_collection_note_edit(state))
+
+    state^.ui_runtime.sharing.edit_admission_blocked = false
+    state^.ui_runtime.sharing.collection_edit_locked = true
+    testing.expect(t,
+        !viewpreferences.settings_save_collection_note_queue_write(state))
+}
+
 // Block a worker until the test releases its synchronization gate.
 settings_save_test_block_worker :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {

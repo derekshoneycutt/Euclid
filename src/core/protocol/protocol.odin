@@ -13,6 +13,7 @@ User_Data_Connection_Client :: enum u8 {
     None,
     Settings_Save,
     Terminal_History,
+    Collection_Exchange,
 }
 
 // User_Data_Connection_Admission_Phase tracks a borrow through task submission.

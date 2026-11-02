@@ -39,6 +39,7 @@ import viewsimulation "simulation"
 import viewscenario "scenario"
 import viewevidence "evidence"
 import viewpreferences "preferences"
+import viewsharing "sharing"
 import uiregions "ui/layout/regions"
 import collections "../collections"
 
@@ -769,6 +770,12 @@ shutdown_runtime_session :: proc(
     julia_egress_router_detach(session.state, session.presentation)
     viewpresentation.destroy_presentation_runtime(session.presentation)
     terminalservice.terminal_graphics_runtime_destroy(session.state)
+    if session.state^.simulation_executor != nil &&
+        !viewsharing.exchange_runtime_shutdown(
+            session.state, &session.state^.simulation_executor^.pool) {
+        fmt.eprintln("Unable to join collection exchange before database teardown.")
+        runtime.exit(1)
+    }
     shutdown_shared_user_data(
         session.state, &session.state^.simulation_executor^.pool, true)
     taskpool.task_pool_shutdown(&session.state^.simulation_executor^.pool)
@@ -797,6 +804,10 @@ shutdown_shared_user_data :: proc(
     close_history: bool) {
     if state == nil || pool == nil {
         return
+    }
+    if !viewsharing.exchange_runtime_shutdown(state, pool) {
+        fmt.eprintln("Unable to join collection exchange before database teardown.")
+        runtime.exit(1)
     }
     shutdown_shared_user_data_prepare(state, close_history)
     history := &state^.terminal_history_runtime
@@ -880,6 +891,10 @@ shutdown_shared_user_data_validate :: proc(state: ^core.Euclid_General_State) {
     if state^.user_data_admission.owner == .Terminal_History &&
        !history^.task_active {
         fmt.eprintln("History connection admission remained owned after join.")
+        runtime.exit(1)
+    }
+    if state^.user_data_admission.owner == .Collection_Exchange {
+        fmt.eprintln("Collection exchange admission remained owned after join.")
         runtime.exit(1)
     }
     if history^.shutdown_failed {

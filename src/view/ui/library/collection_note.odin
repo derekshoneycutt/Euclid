@@ -117,7 +117,8 @@ library_collection_note_write_is_in_flight :: proc(
 // Begin editing the exact user-collection animation placement selected in Library.
 library_collection_note_begin_editing :: proc(
     state: ^core.Euclid_General_State, entry_id: uuid.Identifier) -> bool {
-    if state == nil {
+    if state == nil || state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked {
         return false
     }
     identity, failure := collections.placement_identity_for_entry(
@@ -146,7 +147,9 @@ library_collection_note_toggle_order :: proc(
         return false
     }
     note := &state^.ui_runtime.library.collection_note
-    if note^.status != .Ready || !note^.editing {
+    if note^.status != .Ready || !note^.editing ||
+        state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked {
         return false
     }
     note^.notes_on_top = !note^.notes_on_top

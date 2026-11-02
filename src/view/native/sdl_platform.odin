@@ -132,6 +132,7 @@ Sdl_World_Capture :: struct {
 // Sdl_Platform owns display-thread native state for one window session.
 Sdl_Platform :: struct {
     window: ^sdl.Window,
+    collection_dialog: Sdl_File_Dialog,
     device: ^sdl.GPUDevice,
     scene_target: ^sdl.GPUTexture,
     multisample_target: ^sdl.GPUTexture,

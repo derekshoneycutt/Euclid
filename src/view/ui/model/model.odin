@@ -19,6 +19,8 @@ WINDOW_TITLE :: "Euclid's Elements"
 LIBRARY_SEARCH_QUERY_BYTE_CAPACITY :: 512
 
 LIBRARY_SEARCH_RESULT_CAPACITY :: 64
+UI_SHARING_SELECTION_CAPACITY :: 256
+UI_SHARING_ACCESSIBLE_VALUE_CAPACITY :: 536
 
 LIBRARY_COLLECTION_NOTE_INPUT_ID :: 6421
 LIBRARY_COLLECTION_NOTE_DONE_ID :: 6422
@@ -163,6 +165,7 @@ Ui_Node_Domain :: enum u8 {
     Context_Menu,
     Library_Action,
     Collection_Membership,
+    Sharing_Control,
 }
 
 // Ui_Node_Id identifies one semantic node across stable and generated content.
@@ -1015,12 +1018,42 @@ Euclid_Ui_Runtime_State :: struct {
     semantic_focus: ^Ui_Semantic_Focus_State,
 }
 
-// Ui_Sharing_State retains only session interaction and the bounded published-path view.
+Ui_Sharing_Dialog_Kind :: enum u8 {
+    None,
+    Export,
+    Import,
+}
+
+Ui_Sharing_Error_Kind :: enum u8 {
+    None,
+    Read,
+    Unsupported,
+    Write,
+}
+
+// Ui_Sharing_State retains session interaction and bounded exchange selections.
 Ui_Sharing_State :: struct {
     scroll_y: f32,
     scroll_dragging: bool,
     scroll_drag_off: f32,
     png_path_available: bool,
+    import_left_out_entries: bool,
+    last_import_omitted_entry_count: int,
+    export_selected_ids: [UI_SHARING_SELECTION_CAPACITY]uuid.Identifier,
+    export_selected_count: int,
+    import_selected: [UI_SHARING_SELECTION_CAPACITY]bool,
+    import_selected_count: int,
+    import_selection_initialized: bool,
+    exchange_dialog_request: Ui_Sharing_Dialog_Kind,
+    exchange_dialog_intent: Ui_Sharing_Dialog_Kind,
+    exchange_error: Ui_Sharing_Error_Kind,
+    exchange_last_action: Ui_Sharing_Dialog_Kind,
+    accessible_value: [UI_SHARING_ACCESSIBLE_VALUE_CAPACITY]u8,
+    exchange_state_storage: storage.Arena_Owner,
+    exchange_runtime: rawptr,
+    exchange_task_active: bool,
+    edit_admission_blocked: bool,
+    collection_edit_locked: bool,
 }
 
 // library_search_clear_results removes accepted topology and suggestion state.

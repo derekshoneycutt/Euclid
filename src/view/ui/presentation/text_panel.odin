@@ -651,14 +651,16 @@ presentation_prepare_note_order :: proc(
     }
     scale := state^.ui_runtime.preferences.values.interface.text_size_percent
     label := viewmessages.shell_message(state, .Library_Notes_On_Top)
+    edit_locked := state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked
     result := uiwidgets.update_checkbox({
         id = viewmodel.LIBRARY_COLLECTION_NOTE_ORDER_ID,
         rect = layout.order_rect,
         checked = note^.notes_on_top,
-        enabled = true,
+        enabled = !edit_locked,
         mouse = frame,
         interaction_space_rect = layout.editor_clip,
-        interaction_enabled = layout.editor_clip.height > 0,
+        interaction_enabled = !edit_locked && layout.editor_clip.height > 0,
         label = label,
         font = font.cache_borrow(&state^.font_cache, .Regular),
         label_font_size = theme.ui_font_size(scale),
@@ -675,13 +677,21 @@ presentation_apply_note_order :: proc(
     state: ^core.Euclid_General_State, parent, id: viewmodel.Ui_Node_Id,
     label: string, result: ^uiwidgets.Checkbox_Result) {
     semantic := state^.ui_runtime.semantic_focus
-    if result^.toggled || uisemantics.semantic_command_requested(semantic, id, .Toggle) {
+    edit_locked := state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked
+    if !edit_locked && (result^.toggled ||
+        uisemantics.semantic_command_requested(semantic, id, .Toggle)) {
         if !uilibrary.library_collection_note_toggle_order(state) {
             log.error("collection_note_order_revision_rejected")
         }
         result^.checked_out = state^.ui_runtime.library.collection_note.notes_on_top
     }
-    states: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable, .Tab_Stop}
+    states: viewmodel.Ui_Node_State = {.Visible, .Focusable, .Tab_Stop}
+    actions: viewmodel.Ui_Node_Action_Set = {.Focus}
+    if !edit_locked {
+        states += {.Enabled}
+        actions += {.Toggle}
+    }
     if result^.checked_out {
         states += {.Checked}
     }
@@ -690,7 +700,7 @@ presentation_apply_note_order :: proc(
         parent = parent,
         role = .Checkbox,
         states = states,
-        actions = {.Focus, .Toggle},
+        actions = actions,
         region = .Presentation,
         traversal_order = 4,
         bounds = result^.control_geometry.bounds,
@@ -759,6 +769,8 @@ presentation_note_input_params :: proc(
         generation = note^.request_id,
     }
     text_percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    edit_locked := state^.ui_runtime.sharing.edit_admission_blocked ||
+        state^.ui_runtime.sharing.collection_edit_locked
     return {
         rect = layout.editor_panel,
         clip_rect = layout.editor_clip,
@@ -775,7 +787,7 @@ presentation_note_input_params :: proc(
             traversal_order = 3,
             label = viewmessages.shell_message(state, .Library_Edit_Notes),
             text = string(buffer[:note^.text_length]),
-            mode = .Editable,
+            mode = .Read_Only if edit_locked else .Editable,
             content_revision = note^.revision,
         },
         semantic_focus = state^.ui_runtime.semantic_focus,

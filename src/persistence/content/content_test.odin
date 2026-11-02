@@ -83,7 +83,7 @@ content_fixture_materializes_native_message_signatures :: proc(t: ^testing.T) {
     testing.expect(t, content_admission_read_messages(&database, generation))
     testing.expect(t, content_admission_read_arguments(&database, generation))
     testing.expect(t, content_admission_read_translations(&database, generation))
-    testing.expect_value(t, generation.data.argument_count, u16(18))
+    testing.expect_value(t, generation.data.argument_count, u16(23))
     testing.expect(t, content_admission_validate_messages(generation))
     testing.expect(t, content_admission_validate_translations(generation))
 }

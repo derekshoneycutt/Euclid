@@ -111,15 +111,18 @@ artifact_allocations_json :: proc(bundle: Bundle) -> string {
         bundle.arena_baselines, .Snapshot_Slots)
     display_cache_json := artifact_arena_baseline_json(
         bundle.arena_baselines, .Display_Cache)
+    sharing_exchange_json := artifact_arena_baseline_json(
+        bundle.arena_baselines, .Sharing_Exchange)
     return fmt.tprintf(
         "{{\"live_allocations\":%d,\"current_bytes\":%d," +
         "\"peak_bytes\":%d,\"total_allocations\":%d,\"bad_frees\":%d," +
         "\"arenas\":{{\"animation\":%s,\"snapshot_slots\":%s," +
-        "\"display_cache\":%s}},\"library\":%s}}\n",
+        "\"display_cache\":%s,\"sharing_exchange\":%s}},\"library\":%s}}\n",
         bundle.allocations.live_allocations, bundle.allocations.current_bytes,
         bundle.allocations.peak_bytes, bundle.allocations.total_allocations,
         bundle.allocations.bad_frees, animation_json, snapshot_slots_json,
-        display_cache_json, artifact_library_storage_json(bundle.library_storage))
+        display_cache_json, sharing_exchange_json,
+        artifact_library_storage_json(bundle.library_storage))
 }
 
 //   Serialize canonical scenario outcome metadata.

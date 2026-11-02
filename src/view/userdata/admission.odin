@@ -2,7 +2,7 @@ package viewuserdata
 
 import protocol "../../core/protocol"
 
-// Claim the connection when free and honor the other borrower's turn when it is ready.
+// Claim the connection when free and honor the next ready borrower's turn.
 connection_admission_claim :: proc(
     admission: ^protocol.User_Data_Connection_Admission,
     client: protocol.User_Data_Connection_Client,
@@ -101,18 +101,24 @@ connection_admission_clear_owner :: proc(
     admission^.phase = .Idle
 }
 
-// Validate the supported connection borrowers.
+// Validate the supported shared-store borrowers.
 connection_admission_client_valid :: proc(
     client: protocol.User_Data_Connection_Client) -> bool {
-    return client == .Settings_Save || client == .Terminal_History
+    return client == .Settings_Save || client == .Terminal_History ||
+        client == .Collection_Exchange
 }
 
-// Select the peer whose turn follows a successful joined task.
+// Alternate settings and history; an exchange leaves the normal borrower turn intact.
 connection_admission_other_client :: proc(
     client: protocol.User_Data_Connection_Client) ->
         protocol.User_Data_Connection_Client {
-    if client == .Settings_Save {
+    switch client {
+    case .Settings_Save:
         return .Terminal_History
+    case .Terminal_History, .Collection_Exchange:
+        return .Settings_Save
+    case .None:
+        return .None
     }
-    return .Settings_Save
+    return .None
 }

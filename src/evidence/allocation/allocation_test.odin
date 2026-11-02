@@ -99,12 +99,14 @@ allocation_test_arena_baseline_matches_warm_rebuild :: proc(t: ^testing.T) {
     testing.expect(t, !baselines.matched[Arena_Domain_Kind.Display_Cache])
 }
 
-// Verify only the three source-controlled allocation domain names are accepted.
+// Verify source-controlled allocation domain names are accepted.
 @(test)
 allocation_test_arena_domain_names_are_stable :: proc(t: ^testing.T) {
     _, animation_ok := arena_domain_kind("animation")
     _, slots_ok := arena_domain_kind("snapshot_slots")
     _, cache_ok := arena_domain_kind("display_cache")
+    _, exchange_ok := arena_domain_kind("sharing_exchange")
     _, unknown_ok := arena_domain_kind("runtime")
-    testing.expect(t, animation_ok && slots_ok && cache_ok && !unknown_ok)
+    testing.expect(t,
+        animation_ok && slots_ok && cache_ok && exchange_ok && !unknown_ok)
 }

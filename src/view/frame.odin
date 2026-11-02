@@ -47,6 +47,9 @@ import uigif "ui/gif"
 import uisharing "ui/sharing"
 import uisettings "ui/settings"
 import viewmagnifier "magnifier"
+import viewsharing "sharing"
+import sharingmodel "sharing/model"
+import uuid "core:encoding/uuid"
 
 when !core.SCENARIOS_ENABLED {
     _ :: storage
@@ -411,7 +414,7 @@ prepare_sdl_frame_owners :: proc(
     uilibrary.library_entry_name_service(state, update.frame_dt)
     uilibrary.library_collection_note_service(state, update.frame_dt)
     if state^.simulation_executor != nil {
-        service_frame_user_data(state)
+        service_frame_user_data(state, ctx.platform)
     }
     libraryservice.service_library_search(state, ctx.content_service, update.frame_dt)
     terminal_frame := terminalservice.terminal_service_update(
@@ -442,7 +445,8 @@ finish_sdl_frame_observations :: proc(
 }
 
 // Give both SQLite borrowers a fair admission turn before Terminal input is handled.
-service_frame_user_data :: proc(state: ^core.Euclid_General_State) {
+service_frame_user_data :: proc(
+    state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform) {
     persist_history := state^.ui_runtime.preferences.values.terminal.persist_history
     if terminalview.history_runtime_set_persistence(
         &state^.terminal_history_runtime, persist_history) {
@@ -451,6 +455,10 @@ service_frame_user_data :: proc(state: ^core.Euclid_General_State) {
     pool := &state^.simulation_executor^.pool
     history_ready := terminalview.history_runtime_has_work(
         &state^.terminal_history_runtime)
+    service_sharing_file_dialog(state, platform)
+    viewsharing.exchange_runtime_service(
+        state, pool, frame_exchange_animation_installed, rawptr(state),
+        history_ready)
     settings_ready := viewpreferences.settings_save_ready(state)
     terminalview.history_runtime_service(
         &state^.terminal_history_runtime, &state^.user_data_admission,
@@ -462,6 +470,95 @@ service_frame_user_data :: proc(state: ^core.Euclid_General_State) {
         _ = terminalview.terminal_history_navigation_clear(&state^.terminal)
     }
     viewpreferences.settings_save_service(state, pool, history_ready)
+}
+
+// Route one UI-requested collection dialog and publish its result on the display owner.
+service_sharing_file_dialog :: proc(
+    state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform) {
+    if state == nil || platform == nil {
+        return
+    }
+    sharing := &state^.ui_runtime.sharing
+    service_sharing_dialog_start(platform, sharing)
+    if sharing.exchange_dialog_intent == .None {
+        return
+    }
+    result := native.sdl_file_dialog_poll(&platform^.collection_dialog)
+    if result.kind == .Pending || result.kind == .Idle {
+        return
+    }
+    intent := sharing.exchange_dialog_intent
+    sharing.exchange_dialog_intent = .None
+    if result.kind == .Cancelled {
+        return
+    }
+    if result.kind == .Failed {
+        sharing.exchange_error = .Write if intent == .Export else .Read
+        log.error("collection_file_dialog_failed")
+        return
+    }
+    service_sharing_dialog_choice(state, intent, result)
+}
+
+// Start an accepted native file dialog once, recording failure on the display owner.
+service_sharing_dialog_start :: proc(
+    platform: ^native.Sdl_Platform,
+    sharing: ^viewmodel.Ui_Sharing_State) {
+    if sharing.exchange_dialog_request == .None ||
+        sharing.exchange_dialog_intent != .None {
+        return
+    }
+    request := sharing.exchange_dialog_request
+    start := native.Sdl_File_Dialog_Start_Result.Native_Failure
+    if request == .Export {
+        start = native.sdl_file_dialog_start_save(
+            &platform^.collection_dialog, platform^.window,
+            native.SDL_COLLECTIONS_DEFAULT_FILENAME)
+    } else {
+        start = native.sdl_file_dialog_start_open(
+            &platform^.collection_dialog, platform^.window, "")
+    }
+    sharing.exchange_dialog_request = .None
+    if start == .Started {
+        sharing.exchange_dialog_intent = request
+        sharing.exchange_error = .None
+        return
+    }
+    sharing.exchange_error = .Write if request == .Export else .Read
+    log.errorf("collection_file_dialog_start_failed result=%v", start)
+}
+
+// Dispatch a chosen path through the existing bounded exchange runtime.
+service_sharing_dialog_choice :: proc(
+    state: ^core.Euclid_General_State,
+    intent: viewmodel.Ui_Sharing_Dialog_Kind,
+    result: native.Sdl_File_Dialog_Result) {
+    sharing := &state^.ui_runtime.sharing
+    result_path := result.path
+    path := string(result_path[:result.path_length])
+    request := sharingmodel.Exchange_Request_Result.Invalid_Request
+    if intent == .Export {
+        request = viewsharing.exchange_runtime_request_export(
+            state, sharing.export_selected_ids[:sharing.export_selected_count], path)
+    } else {
+        request = viewsharing.exchange_runtime_request_import(state, path)
+        sharing.import_selection_initialized = false
+    }
+    if request != .Started {
+        sharing.exchange_error = .Write if intent == .Export else .Read
+        log.errorf("collection_exchange_request_failed result=%v", request)
+        return
+    }
+    sharing.exchange_last_action = intent
+    sharing.exchange_error = .None
+}
+
+// Resolve imported animation IDs against the active display-owned Julia catalogue.
+frame_exchange_animation_installed :: proc(
+    animation_id: uuid.Identifier, user_data: rawptr) -> bool {
+    state := cast(^core.Euclid_General_State)user_data
+    return state != nil &&
+        julia.find_animation_by_stable_id(state, animation_id) != nil
 }
 
 // sync_sdl_text_input_target publishes the focused editable owner and native caret area.

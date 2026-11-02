@@ -37,6 +37,12 @@ connection_admission_alternates_ready_clients :: proc(t: ^testing.T) {
     testing.expect(t, connection_admission_mark_submitted(&admission, .Terminal_History))
     testing.expect(t, connection_admission_release_joined(&admission, .Terminal_History))
     testing.expect(t, connection_admission_claim(
+        &admission, .Collection_Exchange, false, false))
+    testing.expect(t, connection_admission_mark_submitted(
+        &admission, .Collection_Exchange))
+    testing.expect(t, connection_admission_release_joined(
+        &admission, .Collection_Exchange))
+    testing.expect(t, connection_admission_claim(
         &admission, .Settings_Save, true, false))
 }
 

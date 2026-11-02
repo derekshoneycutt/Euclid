@@ -35,6 +35,7 @@ import uisettings "../ui/settings"
 import capturemodel "../capture/model"
 import geometry "../../core/geometry"
 import uianimation "../ui/animation"
+import viewsharing "../sharing"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -784,6 +785,15 @@ scenario_arena_snapshot :: proc(
     case .Display_Cache:
         scenario_add_arena_diagnostics(&snapshot,
             storage.arena_owner_diagnostics(&state^.dynview.cache_arena))
+    case .Sharing_Exchange:
+        arena := viewsharing.exchange_runtime_arena(state)
+        if arena == nil {
+            log.error("sharing_exchange_allocation_state_unavailable")
+        } else {
+            scenario_add_arena_diagnostics(
+                &snapshot, storage.arena_owner_diagnostics(arena))
+            snapshot.initialized_count = max(snapshot.initialized_count, 1)
+        }
     }
     return snapshot
 }

@@ -7,11 +7,9 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Export / Import by file
-- Ip-2-ip sharing protocol
 - Terminal drawing shape suite
 - Julia thread communications work
-- Persisting terminals
+- Retained terminals
 - Terminal animation recording
 - Terminal exercises
 - Animation builder
@@ -205,7 +203,7 @@ General features:
 - [X] Fast-forward option
 - [X] Authored completed forms
 - [X] PNG Saving
-- [ ] Sqlite backend
+- [X] Sqlite backend
   - [X] Initial creation and access
   - [X] Full-text search tables
   - [X] Initial spellcheck suggestions
@@ -213,15 +211,13 @@ General features:
   - [X] Localization tables
   - [X] Basic initial user settings structure
   - [X] Persistent REPL history
-  - [ ] Collections
+  - [X] Collections
     - [X] Initial bookmarks/favorites type collection
     - [X] Favorites/Collection organization
     - [X] Custom naming in collections
     - [X] Multiple custom collections
     - [X] Custom notes in collections
-    - [ ] Sharing custom collections
-      - [ ] Export/import files
-      - [ ] In-network (ip-2-ip) custom collection sharing
+    - [X] Sharing custom collections via import/export files
 - [ ] Terminal / REPL
   - [X] Basic setup and availability
   - [X] Basic help feature
@@ -233,7 +229,7 @@ General features:
   - [X] Julia syntax highlighting
   - [X] History explorer, Julia-familiar
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
-  - [ ] Persisting Terminals (runtime-only, as children in the trees of Terminal
+  - [ ] Retained Terminals (runtime-only, as children in the trees of Terminal
      that can be navigated away from and returned to with persisted internal state;
      exit cleans REPL state and removes from tree)
   - [ ] Terminal animation recorder w/ playback & save (e.g. start_recording! ...
@@ -347,6 +343,7 @@ Core Features:
 - More LaTeX support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
+- Ip-2-ip sharing protocol
 - Transformations
   - Scaling
   - Shearing

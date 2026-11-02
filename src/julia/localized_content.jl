@@ -21,7 +21,7 @@ end
 
 const RECORD_CAPACITIES = (
     :locales => 4,
-    :ui_messages => 192,
+    :ui_messages => 207,
     :ui_arguments => 32,
     :translations => 384,
     :subjects => 139,

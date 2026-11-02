@@ -202,6 +202,21 @@ Content_Message_Id :: enum u16 {
     Png_Status_Error = 1507,
     Png_Status_Gif_Active = 1508,
     Png_Saved_Path_Accessible = 1509,
+    Share_Collections_Heading = 1510,
+    Share_Export = 1511,
+    Share_Import = 1512,
+    Share_Import_Selected = 1513,
+    Share_Cancel = 1514,
+    Share_Missing_Animations = 1515,
+    Share_Not_Importable = 1516,
+    Share_Reason_Empty = 1517,
+    Share_Reason_Invalid = 1518,
+    Share_Exported = 1519,
+    Share_Imported = 1520,
+    Share_Imported_With_Omissions = 1521,
+    Share_Error_Read = 1522,
+    Share_Error_Unsupported = 1523,
+    Share_Error_Write = 1524,
 }
 
 // One native ID/key identity shared by admission and runtime lookup.
@@ -210,7 +225,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 192
+CONTENT_SHIPPED_MESSAGE_COUNT :: 207
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -404,6 +419,21 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1507, "ui.png.status.error"},
     {1508, "ui.png.status.gif_active"},
     {1509, "ui.png.saved_path.accessible"},
+    {1510, "ui.share_collections.heading"},
+    {1511, "ui.share_collections.export"},
+    {1512, "ui.share_collections.import"},
+    {1513, "ui.share_collections.import_selected"},
+    {1514, "ui.share_collections.cancel"},
+    {1515, "ui.share_collections.missing_animations"},
+    {1516, "ui.share_collections.not_importable"},
+    {1517, "ui.share_collections.reason.empty"},
+    {1518, "ui.share_collections.reason.invalid"},
+    {1519, "ui.share_collections.exported"},
+    {1520, "ui.share_collections.imported"},
+    {1521, "ui.share_collections.imported_with_omissions"},
+    {1522, "ui.share_collections.error.read"},
+    {1523, "ui.share_collections.error.unsupported"},
+    {1524, "ui.share_collections.error.write"},
 }
 
 // Explicit formatting failure; no error is a successful English fallback.
@@ -465,7 +495,9 @@ content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Sig
     case .Library_Unicode_Completion:
         return {"symbol", .Text}
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
-         .Gif_Cadence_Multiple:
+         .Gif_Cadence_Multiple, .Share_Import_Selected,
+         .Share_Missing_Animations, .Share_Exported, .Share_Imported,
+         .Share_Imported_With_Omissions:
         return {"count", .Uint32}
     case .Settings_Stats_Dust, .Settings_Stats_Trail, .Settings_Stats_Flicker,
          .Settings_Stats_Ui_Dust, .Settings_Stats_Animation_Entries,

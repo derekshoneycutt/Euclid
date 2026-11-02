@@ -16,6 +16,7 @@ import viewcapture "capture"
 import viewscenario "scenario"
 import terminalservice "terminal/service"
 import uilibrary "ui/library"
+import viewsharing "sharing"
 import collections "../collections"
 import viewmodel "ui/model"
 
@@ -34,6 +35,13 @@ shutdown_window_runtime :: proc(
     scenario_runtime: ^viewscenario.Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
     if session.state != nil {
+        if session.state^.simulation_executor != nil &&
+            !viewsharing.exchange_runtime_shutdown(
+                session.state, &session.state^.simulation_executor^.pool) {
+            fmt.eprintln(
+                "Unable to join collection exchange before saving shutdown state.")
+            runtime.exit(1)
+        }
         if !uilibrary.library_entry_name_flush(session.state) {
             shutdown_shared_user_data(
                 session.state, &session.state^.simulation_executor^.pool, false)

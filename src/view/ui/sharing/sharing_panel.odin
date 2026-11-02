@@ -26,6 +26,7 @@ PNG_STATUS_ID :: 6404
 Sharing_Preparation :: struct {
     layout: sharinglayout.Sharing_Layout,
     gif: uigif.Gif_View_Preparation,
+    collections: Share_Collections_Preparation,
     button: uiwidgets.Text_Button_Result,
     path: uiwidgets.Input_Box_Result,
     path_text: string,
@@ -45,9 +46,44 @@ png_path_input_rect :: proc(
     return sharinglayout.sharing_layout_for_runtime(runtime).path
 }
 
+// Measure the GIF-owned rows before placing collection controls below the GIF panel.
+sharing_layout_for_content :: proc(
+    panel: geometry.Rectangle,
+    text_percent, control_percent: int,
+    scroll_y: f32,
+    counts: Share_Collection_Counts) -> sharinglayout.Sharing_Layout {
+    options: sharinglayout.Sharing_Layout_Options = {
+        text_percent = text_percent,
+        control_percent = control_percent,
+        scroll_y = scroll_y,
+        export_count = counts.export_count,
+        importable_count = counts.importable_count,
+        warning_count = counts.warning_count,
+        non_importable_count = counts.non_importable_count,
+        has_import = counts.has_import,
+    }
+    layout := sharinglayout.sharing_layout(panel, options)
+    inset := theme.ui_control_size_metric(theme.SETTINGS_PANEL_INSET, control_percent)
+    header := theme.ui_control_size_metric(
+        theme.SETTINGS_HEADER_TOP_OFFSET, control_percent)
+    gif_inset: geometry.Rectangle = {
+        layout.gif_panel.x + inset,
+        layout.gif_panel.y + header,
+        max(f32(0), layout.gif_panel.width - inset * 2),
+        layout.gif_panel.height,
+    }
+    rows := uigif.gif_view_layout_rows(gif_inset, text_percent, control_percent)
+    gif_end_y := rows.status_y +
+        uigif.gif_path_input_top_offset(text_percent, control_percent) +
+        uigif.gif_path_input_height(text_percent, control_percent) + inset
+    gap := theme.ui_control_size_metric(10, control_percent)
+    options.collections_start_y = gif_end_y + gap
+    return sharinglayout.sharing_layout(panel, options)
+}
+
 // Resolve PNG feedback without replacing the retained successful path.
-png_status_message :: proc(state: ^core.Euclid_General_State) ->
-    contentdata.Content_Message_Id {
+png_status_message :: proc(
+    state: ^core.Euclid_General_State) -> contentdata.Content_Message_Id {
     switch state.png_capture_status.phase {
     case .Pending:
         return .Png_Status_Pending
@@ -68,29 +104,25 @@ png_status_message :: proc(state: ^core.Euclid_General_State) ->
 
 // Measure both fixed PNG rows and existing GIF rows before resolving scrollbar range.
 sharing_content_height :: proc(
-    panel: geometry.Rectangle, text_percent, control_percent: int) -> f32 {
-    layout := sharinglayout.sharing_layout(panel, text_percent, control_percent, 0)
+    panel: geometry.Rectangle, text_percent, control_percent: int,
+    counts := Share_Collection_Counts{}) -> f32 {
+    layout := sharing_layout_for_content(
+        panel, text_percent, control_percent, 0, counts)
     inset := theme.ui_control_size_metric(theme.SETTINGS_PANEL_INSET, control_percent)
-    header := theme.ui_control_size_metric(theme.SETTINGS_HEADER_TOP_OFFSET,
-        control_percent)
-    rows := uigif.gif_view_layout_rows({
-        layout.gif_panel.x + inset, layout.gif_panel.y + header,
-        max(f32(0), layout.gif_panel.width - inset * 2), panel.height},
-        text_percent, control_percent)
-    return rows.status_y - panel.y +
-        uigif.gif_path_input_top_offset(text_percent, control_percent) +
-        uigif.gif_path_input_height(text_percent, control_percent) + inset
+    return layout.collections_status_y - panel.y +
+        theme.ui_font_size(text_percent) + inset
 }
 
 // Retain Sharing-local wheel/thumb state while keeping visual-only preparation immutable.
 prepare_sharing_scroll :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
-    frame: input.Input_Frame, interactive: bool) ->
-    uiwidgets.Scroll_Container_Update_Result {
+    frame: input.Input_Frame,
+    interactive: bool) -> uiwidgets.Scroll_Container_Update_Result {
     ui := &state.ui_runtime
     preferences := ui.preferences.values.interface
+    counts := share_collection_counts(state)
     height := sharing_content_height(panel, preferences.text_size_percent,
-        preferences.control_size_percent)
+        preferences.control_size_percent, counts)
     step := theme.ui_font_size(preferences.text_size_percent) * 3
     if !interactive {
         return uiwidgets.scroll_container_visual(panel, height,
@@ -163,10 +195,12 @@ prepare_sharing_view :: proc(
     frame: input.Input_Frame, interactive := true) -> Sharing_Preparation {
     scroll := prepare_sharing_scroll(state, panel, frame, interactive)
     preferences := state.ui_runtime.preferences.values.interface
+    counts := share_collection_counts(state)
     result: Sharing_Preparation = {
         scroll = scroll,
-        layout = sharinglayout.sharing_layout(panel, preferences.text_size_percent,
-            preferences.control_size_percent, scroll.scroll_y_out),
+        layout = sharing_layout_for_content(
+            panel, preferences.text_size_percent,
+            preferences.control_size_percent, scroll.scroll_y_out, counts),
     }
     result.gif = uigif.prepare_gif_view(
         state, result.layout.gif_panel, frame, interactive)
@@ -180,19 +214,30 @@ prepare_sharing_view :: proc(
     result.status = png_status_message(state)
     result.path_text = capturemodel.png_capture_path(&state.png_capture_status)
     if len(result.path_text) > 0 {
-        params := png_path_params(state, result.layout.path, frame, result.path_text)
-        if interactive {
-            result.path = uiwidgets.input_box_prepare(
-                params, &state.ui_runtime.input.press_owner)
-        } else {
-            result.path = uiwidgets.input_box_draw_result(params, false)
-        }
-        if interactive && result.path.hovered {
-            state.ui_runtime.input.cursor = .Text
-        }
+        result.path = sharing_prepare_png_path(state, result.layout.path,
+            frame, result.path_text, interactive)
     }
     if interactive {
         register_sharing_feedback(state, panel, result)
+    }
+    result.collections = prepare_share_collections(
+        state, panel, result.layout, frame, interactive)
+    return result
+}
+
+// Prepare the visible saved-path field without granting text-edit authority.
+sharing_prepare_png_path :: proc(
+    state: ^core.Euclid_General_State, rect: geometry.Rectangle,
+    frame: input.Input_Frame, text: string, interactive: bool) ->
+    uiwidgets.Input_Box_Result {
+    params := png_path_params(state, rect, frame, text)
+    if !interactive {
+        return uiwidgets.input_box_draw_result(params, false)
+    }
+    result := uiwidgets.input_box_prepare(
+        params, &state.ui_runtime.input.press_owner)
+    if result.hovered {
+        state.ui_runtime.input.cursor = .Text
     }
     return result
 }
@@ -266,5 +311,6 @@ draw_encoded_sharing_text :: proc(
             png_path_params(state, layout.path, {}, prepared.path_text), prepared.path)
     }
     uigif.draw_encoded_gif_text(state, encoder, layout.gif_panel, prepared.gif)
+    draw_encoded_share_collections(state, encoder, layout, prepared.collections)
     uiwidgets.draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
 }

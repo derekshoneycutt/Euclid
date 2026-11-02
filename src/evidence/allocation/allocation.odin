@@ -8,13 +8,14 @@ import "core:sync"
 
 ALLOCATION_BASELINE_CAPACITY :: 16
 ALLOCATION_BASELINE_NAME_CAPACITY :: 32
-ARENA_DOMAIN_COUNT :: 3
+ARENA_DOMAIN_COUNT :: 4
 
 // Stable allocation ownership domains accepted by scenario checkpoints.
 Arena_Domain_Kind :: enum u8 {
     Animation,
     Snapshot_Slots,
     Display_Cache,
+    Sharing_Exchange,
 }
 
 // Scalar arena usage sampled at an owner-controlled synchronization point.
@@ -289,6 +290,8 @@ arena_domain_kind :: proc(name: string) -> (Arena_Domain_Kind, bool) {
         return .Snapshot_Slots, true
     case "display_cache":
         return .Display_Cache, true
+    case "sharing_exchange":
+        return .Sharing_Exchange, true
     }
     return {}, false
 }

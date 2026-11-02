@@ -209,6 +209,7 @@ artifact_test_expect_arena_allocations :: proc(t: ^testing.T, directory: string)
     testing.expect(t, strings.contains(text, "\"animation\""))
     testing.expect(t, strings.contains(text, "\"snapshot_slots\""))
     testing.expect(t, strings.contains(text, "\"display_cache\""))
+    testing.expect(t, strings.contains(text, "\"sharing_exchange\""))
     testing.expect(t, strings.contains(text, "\"assertion_present\":true"))
     testing.expect(t, strings.contains(text, "\"matched\":true"))
 }
