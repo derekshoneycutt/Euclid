@@ -275,6 +275,10 @@ Tool crossing guidance for 3D plane barriers:
 
 ## Plane and Surface Treatment
 
+- The persistent drawing surface casts a soft shadow onto a virtual receiver below
+  `z = 0`, following the same world-space light direction as animation shadows.
+  This display-only treatment does not change construction coordinates, projection,
+  brush sizes, labels, or the `z = 0` receiver for shadows cast by elevated geometry.
 - The app already provides a persistent drawing surface; do not simulate a full
   plane by drawing a large fake fill stroke unless the plane stroke itself is
   the geometric point being demonstrated.

@@ -403,6 +403,8 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
 // draw_encoded_drawing_surface encodes the projected plane and border triangles.
 draw_encoded_drawing_surface :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    _ = draw_encoded_surface_shadow(
+        encoder, state^.draw_surface, state^.iso_scale)
     room := &state^.draw_surface
     edge_size := room.edge_size
     world_points: [8]geometry.Vector3 = {room.zeros, room.right_up, room.left_down,
@@ -1851,20 +1853,20 @@ average_shadow_height :: #force_inline proc(points: []geometry.Vector3) -> f32 {
     return total / f32(len(points))
 }
 
-//   Project a 3D point onto the floor plane using light direction.
+//   Project along the scene light onto a horizontal receiver, normally z = 0.
 project_to_floor_shadow :: proc(
     p: geometry.Vector3,
-    scale: worldmodel.Iso_Scale) -> geometry.Vector3 {
+    scale: worldmodel.Iso_Scale, floor_height: f32 = 0) -> geometry.Vector3 {
     if !scale.use_directional_shadow {
-        return {p.x, p.y, 0}
+        return {p.x, p.y, floor_height}
     }
 
     l := scale.main_light_dir
     if math.abs(l.z) < SHADOW_EPSILON_LZ {
-        return {p.x, p.y, 0}
+        return {p.x, p.y, floor_height}
     }
 
-    t := -p.z / l.z
+    t := (floor_height - p.z) / l.z
     return p + l * t
 }
 
