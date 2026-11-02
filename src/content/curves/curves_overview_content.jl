@@ -11,6 +11,9 @@ function get_view_content()
 
 Here, we explore various kinds of curves in geometry.
 
+We begin with the conic sections: Circle, Ellipse, Parabola, and Hyperbola.
+The parabola is traced by a simplified articulated parabolagraph. The hyperbola's two branches are drawn together by a symmetric guide aligned with its asymptotes.
+
 Many curves are drawn as roulette curves, with one shape rolling along another. Many of these are types of trochoids. A trochoid is formed by a circle rolling along a line, which may itself be curved or straight.
 
 A cycloid is the curve traced by a point relative to a circle as it rolls along a straight line without slipping.
@@ -42,6 +45,8 @@ function get_search_content()
     return SearchContent(
         """Curves
 Here, we explore various kinds of curves in geometry.
+We begin with the conic sections: Circle, Ellipse, Parabola, and Hyperbola.
+The parabola uses a simplified articulated parabolagraph; the hyperbola uses symmetric tracers and asymptote rails.
 Many curves are drawn as roulette curves, with one shape rolling along another. Many of these are types of trochoids. A trochoid is formed by a circle rolling along a line, which may itself be curved or straight.
 A cycloid is the curve traced by a point relative to a circle as it rolls along a straight line without slipping.
 Assume the line is the x-axis and we have a circle with radius r.
@@ -50,7 +55,7 @@ and we trace P as it rolls with the circle. This gives us the formulas for the c
 Hypotrochoids and epitrochoids are formed by tracing a point relative to a circle as it rolls along another circle.
 A hypotrochoid is traced by a point attached to a circle of radius r rolling around the inside of a fixed circle of radius R, where the point is a distance d from the center of the interior circle.
 An epitrochoid is traced by a point attached to a circle of radius r rolling around the outside of a fixed circle of radius R, where the point is a distance d from the center of the exterior circle.""",
-        ("plane curves", "roulette curves", "rolling curves"))
+        ("plane curves", "conic sections", "roulette curves", "rolling curves"))
 end
 
 end

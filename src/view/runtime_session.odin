@@ -408,6 +408,31 @@ make_shape_storage :: proc(state: ^core.Euclid_General_State) -> bool {
                 brush_size = 5,
             },
         })
+    world_parabola_tool, parabola_tool_status := shapes.world_create_parabola_tool(
+        world, {
+            vertex = {0.37, 0.5, 0},
+            focal_distance = 0.075,
+            link_length = 0.16,
+            parameter_start = -1.6,
+            parameter_finish = 1.6,
+            style = {
+                color = color.Color_RGBA8(worldmodel.TOOL_COLOR),
+                brush_size = 5,
+            },
+        })
+    world_hyperbola_tool, hyperbola_tool_status := shapes.world_create_hyperbola_tool(
+        world, {
+            center = {0.5, 0.5, 0},
+            semimajor = 0.12,
+            semiminor = 0.10,
+            parameter_start = -1.35,
+            parameter_finish = 1.35,
+            rail_half_length = 0.4,
+            style = {
+                color = color.Color_RGBA8(worldmodel.TOOL_COLOR),
+                brush_size = 5,
+            },
+        })
     world_compass, compass_status := shapes.world_create_compass(world, {
         joint1 = {0, 0, 0},
         pivot = {0.01, 0.01, 0.01},
@@ -428,6 +453,7 @@ make_shape_storage :: proc(state: ^core.Euclid_General_State) -> bool {
         },
     })
     if trochoid_tool_status != .Ok || cycloid_tool_status != .Ok ||
+        parabola_tool_status != .Ok || hyperbola_tool_status != .Ok ||
         compass_status != .Ok || pen_status != .Ok ||
         shapemodel.shape_world_freeze_baseline(world) != .Ok {
         return false
@@ -437,6 +463,8 @@ make_shape_storage :: proc(state: ^core.Euclid_General_State) -> bool {
     shapes.shape_world_update_previous_values(world)
     state^.world_trochoid_tool = world_trochoid_tool
     state^.world_cycloid_tool = world_cycloid_tool
+    state^.world_parabola_tool = world_parabola_tool
+    state^.world_hyperbola_tool = world_hyperbola_tool
     state^.world_compass = world_compass
     state^.world_pen = world_pen
     return true

@@ -381,6 +381,8 @@ shape_world_cached_polygon_draw :: proc(
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Cycloid_Tool_Draw,
+            shapemodel.Shapes_Parabola_Tool_Draw,
+            shapemodel.Shapes_Hyperbola_Tool_Draw,
             shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
@@ -1398,6 +1400,40 @@ emit_shape_world_cycloid_burst :: proc(
     }
 }
 
+// Emit clear dust from the exact revealed parabola frontier used by rendering.
+emit_shape_world_parabola_burst :: proc(
+    ctx: Shape_World_Burst_Context, entity: shapemodel.Shape_Entity) {
+    vertex, position_ok := shape_world_burst_position(ctx.world, entity)
+    value, value_ok := shapemodel.shape_component_get(&ctx.world.parabolas,
+        &ctx.world.registry, entity)
+    if !position_ok || !value_ok {
+        return
+    }
+    vertices: [curve.CONIC_MAX_VERTICES]Vector3
+    result := curve.parabola_explicate(vertex, value^, vertices[:])
+    if result.status != .Invalid_Input && result.vertex_count > 1 {
+        emit_curve_polyline_dust(ctx.particles, vertices[:result.vertex_count],
+            ctx.color, ctx.authored_ink)
+    }
+}
+
+// Emit one branch's clear dust without connecting it to the opposite branch.
+emit_shape_world_hyperbola_burst :: proc(
+    ctx: Shape_World_Burst_Context, entity: shapemodel.Shape_Entity) {
+    center, position_ok := shape_world_burst_position(ctx.world, entity)
+    value, value_ok := shapemodel.shape_component_get(&ctx.world.hyperbolas,
+        &ctx.world.registry, entity)
+    if !position_ok || !value_ok {
+        return
+    }
+    vertices: [curve.CONIC_MAX_VERTICES]Vector3
+    result := curve.hyperbola_explicate(center, value^, vertices[:])
+    if result.status != .Invalid_Input && result.vertex_count > 1 {
+        emit_curve_polyline_dust(ctx.particles, vertices[:result.vertex_count],
+            ctx.color, ctx.authored_ink)
+    }
+}
+
 // Emit one constructed world geometry through its bounded shape explication.
 emit_shape_world_constructed_burst :: proc(
     ctx: Shape_World_Burst_Context,
@@ -1412,12 +1448,17 @@ emit_shape_world_constructed_burst :: proc(
         emit_shape_world_trochoid_burst(ctx, entity)
     case .Cycloid:
         emit_shape_world_cycloid_burst(ctx, entity, geometry.payload.cycloid)
+    case .Parabola:
+        emit_shape_world_parabola_burst(ctx, entity)
+    case .Hyperbola:
+        emit_shape_world_hyperbola_burst(ctx, entity)
     case .Polygon:
         emit_shape_world_polygon_burst(ctx, entity, geometry.payload.polygon)
     case .Circle_Region:
         emit_shape_world_circle_region_burst(
             ctx, entity, geometry.payload.circle_region)
-    case .Point, .Line, .Trochoid_Tool, .Cycloid_Tool,
+    case .Point, .Line, .Trochoid_Tool, .Cycloid_Tool, .Parabola_Tool,
+        .Hyperbola_Tool,
         .Pen, .Compass:
     }
 }
@@ -1456,7 +1497,8 @@ emit_shape_world_hide_geometry_burst :: proc(
     geometry, found := shapemodel.shape_component_get(
         &ctx.world^.geometries, &ctx.world^.registry, entity)
     if !found || geometry^.kind == .Pen || geometry^.kind == .Compass ||
-        geometry^.kind == .Trochoid_Tool || geometry^.kind == .Cycloid_Tool {
+        geometry^.kind == .Trochoid_Tool || geometry^.kind == .Cycloid_Tool ||
+        geometry^.kind == .Parabola_Tool || geometry^.kind == .Hyperbola_Tool {
         return false
     }
     if kick_dust {

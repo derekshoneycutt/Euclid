@@ -525,14 +525,15 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
             position = {1, 2, 3},
         })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
-    snapshot: app_bridge.Animation_Query_Snapshot
-    app_bridge.capture_animation_query_snapshot(state, &snapshot)
+    snapshot := new(app_bridge.Animation_Query_Snapshot, context.allocator)
+    defer free(snapshot, context.allocator)
+    app_bridge.capture_animation_query_snapshot(state, snapshot)
 
     transform, found := shapemodel.shape_component_get_mut(
         &world^.transforms, &world^.registry, state^.world_pen.joint1)
     testing.expect(t, found)
     transform^.position = {4, 5, 6}
-    state^.animation_query_snapshot_target = &snapshot
+    state^.animation_query_snapshot_target = snapshot
     testing.expect(
         t, app_bridge.get_pen_joint1_position(state) == geometry.Vector3{1, 2, 3})
     state^.animation_query_snapshot_target = nil

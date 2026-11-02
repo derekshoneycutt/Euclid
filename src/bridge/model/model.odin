@@ -56,6 +56,16 @@ Scene_Command_Kind :: enum u8 {
     Set_Tool_Lock,
     Emit_Trailing_Particle,
     Notify_Animation_Cycle_Boundary,
+    Set_Shape_Parabola,
+    Set_Shape_Parabola_Frontier,
+    Set_Shape_Hyperbola,
+    Set_Shape_Hyperbola_Frontier,
+    Set_Parabola_Tool_Geometry,
+    Set_Parabola_Tool_Parameter,
+    Set_Parabola_Tool_Active,
+    Set_Hyperbola_Tool_Geometry,
+    Set_Hyperbola_Tool_Parameter,
+    Set_Hyperbola_Tool_Active,
 }
 
 // Animation_Reveal_Kind names one authored target without guessing from geometry.
@@ -83,6 +93,10 @@ Scene_Command :: struct {
     trochoid_tool: shapemodel.Shape_Trochoid_Tool,
     cycloid: shapemodel.Shape_Cycloid,
     cycloid_tool: shapemodel.Shape_Cycloid_Tool,
+    parabola: shapemodel.Shape_Parabola,
+    hyperbola: shapemodel.Shape_Hyperbola_Branch,
+    parabola_tool: shapemodel.Shape_Parabola_Tool,
+    hyperbola_tool: shapemodel.Shape_Hyperbola_Tool,
     color: Bridge_Color,
     scalar: f32,
     integer: int,

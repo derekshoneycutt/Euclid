@@ -124,9 +124,11 @@ Core Content (>260 animations; 119 complete):
      infinite rotation fixed about center of polygon)
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane --
      polygons translating/rotating/reflecting around another point)
-- [X] Curves (16+ animations)
+- [X] Curves (18+ animations)
   - [X] Circle
   - [X] Ellipse
+  - [X] Parabola
+  - [X] Hyperbola
   - [X] Cycloid
   - [X] Curtate Cycloid
   - [X] Prolate Cycloid

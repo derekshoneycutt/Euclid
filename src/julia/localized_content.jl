@@ -24,11 +24,11 @@ const RECORD_CAPACITIES = (
     :ui_messages => 207,
     :ui_arguments => 32,
     :translations => 384,
-    :subjects => 139,
-    :catalog_nodes => 138,
-    :catalog_names => 552,
+    :subjects => 141,
+    :catalog_nodes => 140,
+    :catalog_names => 560,
     :editions => 8,
-    :availability => 2224,
+    :availability => 2256,
     :total_records => 4096)
 
 """One available UI locale and its default-selection status."""

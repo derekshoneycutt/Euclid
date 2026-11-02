@@ -123,6 +123,47 @@ struct BridgeCycloidToolGeometry
     orientation_phase::Cfloat
 end
 
+"""Finite directed parabola geometry matching the native ABI field-for-field."""
+struct BridgeParabolaGeometry
+    focal_distance::Cfloat
+    rotation::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    draw_parameter::Cfloat
+end
+
+"""One finite hyperbola branch; branch is either +1 or -1."""
+struct BridgeHyperbolaGeometry
+    branch::Int32
+    semimajor::Cfloat
+    semiminor::Cfloat
+    rotation::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    draw_parameter::Cfloat
+end
+
+"""Inwards-inspired guide configuration matching the native ABI."""
+struct BridgeParabolaToolGeometry
+    focal_distance::Cfloat
+    link_length::Cfloat
+    rotation::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    parameter::Cfloat
+end
+
+"""Three-rail paired-tracer configuration matching the native ABI."""
+struct BridgeHyperbolaToolGeometry
+    semimajor::Cfloat
+    semiminor::Cfloat
+    rotation::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    parameter::Cfloat
+    rail_half_length::Cfloat
+end
+
 """
 Four vertices for one square shape.
 
@@ -245,6 +286,26 @@ struct BridgeShapeTrochoidQueryResult
     geometry::BridgeTrochoidGeometry
 end
 
+"""Result of constructing one animation-owned conic curve host."""
+struct BridgeShapeConicResult
+    status::Int32
+    host_id::UInt64
+end
+
+"""Pointer-free query of one parabola's complete analytic description."""
+struct BridgeShapeParabolaQueryResult
+    status::Int32
+    host_id::UInt64
+    geometry::BridgeParabolaGeometry
+end
+
+"""Pointer-free query of one hyperbola branch's analytic description."""
+struct BridgeShapeHyperbolaQueryResult
+    status::Int32
+    host_id::UInt64
+    geometry::BridgeHyperbolaGeometry
+end
+
 """Result of constructing one literal-line Cycloid and both endpoints."""
 struct BridgeShapeCycloidResult
     status::Int32
@@ -300,7 +361,7 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(12)
+const BRIDGE_VERSION = Int32(13)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
@@ -309,6 +370,7 @@ const BRIDGE_FEATURE_CYCLOIDS = Int32(1 << 8)
 const BRIDGE_FEATURE_CIRCLE_REGIONS = Int32(1 << 9)
 const BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION = Int32(1 << 10)
 const BRIDGE_FEATURE_SETTLING_FORMATION = Int32(1 << 11)
+const BRIDGE_FEATURE_CONICS = Int32(1 << 12)
 
 const TROCHOID_EXTERNAL = Int32(0)
 const TROCHOID_INTERNAL = Int32(1)

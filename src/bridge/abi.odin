@@ -36,8 +36,9 @@ BRIDGE_FEATURE_CYCLOIDS :: (1 << 8)
 BRIDGE_FEATURE_CIRCLE_REGIONS :: (1 << 9)
 BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION :: (1 << 10)
 BRIDGE_FEATURE_SETTLING_FORMATION :: (1 << 11)
+BRIDGE_FEATURE_CONICS :: (1 << 12)
 
-BRIDGE_VERSION :: 12
+BRIDGE_VERSION :: 13
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_ANIMATION_STABLE_ID |
@@ -48,7 +49,8 @@ BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_CYCLOIDS |
     BRIDGE_FEATURE_CIRCLE_REGIONS |
     BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION |
-    BRIDGE_FEATURE_SETTLING_FORMATION
+    BRIDGE_FEATURE_SETTLING_FORMATION |
+    BRIDGE_FEATURE_CONICS
 
 BRIDGE_STATUS_OK :: 0
 BRIDGE_STATUS_INVALID_INDEX :: 1
@@ -160,6 +162,32 @@ Bridge_Shape_Cycloid_Query_Result :: struct {
     first: geometry.Vector3,
     second: geometry.Vector3,
     geometry: shapemodel.Bridge_Cycloid_Geometry,
+}
+
+// Return one parabola host and its complete mutable geometry.
+Bridge_Shape_Parabola_Result :: struct {
+    status: i32,
+    shape: u64,
+}
+
+// Return one parabola's complete mutable geometry.
+Bridge_Shape_Parabola_Query_Result :: struct {
+    status: i32,
+    shape: u64,
+    geometry: shapemodel.Bridge_Parabola_Geometry,
+}
+
+// Return one hyperbola-branch host and its complete mutable geometry.
+Bridge_Shape_Hyperbola_Result :: struct {
+    status: i32,
+    shape: u64,
+}
+
+// Return one hyperbola branch's complete mutable geometry.
+Bridge_Shape_Hyperbola_Query_Result :: struct {
+    status: i32,
+    shape: u64,
+    geometry: shapemodel.Bridge_Hyperbola_Geometry,
 }
 
 // Return one triangle host and its direct ordered vertex identities.

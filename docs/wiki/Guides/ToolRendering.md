@@ -47,6 +47,34 @@ blends the two tube normals into a welded union without false seam darkening.
 Semantic active-end circles remain a separate unshaded layer. They are not
 physical caps.
 
+### Conic instruments
+
+The parabola instrument is a simplified Inwards-inspired assembly: a directrix rail,
+sliding carriage, four equal diamond links meeting directly at their shared endpoints,
+a single extended diagonal guide, a perpendicular carriage guide, and an upright pen.
+The pen uses a flat filled active-end circle in the drawing color. The tip is the
+analytic parabola point; the diamond is resolved from its fixed link length rather
+than stretched independently to follow an unrelated pen.
+
+The hyperbola guide uses two fixed asymptote rails and a single third rail of the
+same width pivoting through their shared center. A straight upright marks the pivot.
+Opposing pen markers extend along positive Z and use flat filled active-end circles,
+matching the pen and compass rather than physical rings or carriage collars.
+Perpendicular reference marks at the minimum tracing radius indicate the vertices'
+distance from the center. The carriages remain equally far from the center, but their
+separation changes during the sweep. The rails illustrate the curve's geometry rather
+than claim a complete physical drive mechanism.
+
+Both instruments reuse the existing tool material and bounded segment drawing paths.
+Upright pens distinguish apparatus from auxiliary ink lines without ring collars.
+Active contact indicators use authored ink color resolution, including monochrome and
+increased contrast; physical tool materials do not. Common elevation moves the whole
+assembly during descent and lift, while preparation derives each pose from interpolated
+analytic state. No additional GPU resource lifetime or per-frame allocation is needed.
+
+Hiding an apparatus does not emit ink departure particles. Its completed curve is a
+separate world construction and follows the ordinary clear/reset effect lifecycle.
+
 If the stroke pipeline is unavailable, the encoder emits equivalent bounded 2D
 geometry through the native draw pipeline. The fallback remains draw-order based and
 does not provide depth-aware crossings or welded attachment shading.

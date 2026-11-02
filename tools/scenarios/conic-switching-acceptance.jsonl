@@ -1,0 +1,15 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Parabola","as":"parabola"}
+{"wait_event":"animation_selected","correlation":"parabola","timeout_ms":10000}
+{"select_animation":"Circle","as":"circle"}
+{"wait_event":"animation_selected","correlation":"circle","timeout_ms":10000}
+{"select_animation":"Ellipse","as":"ellipse"}
+{"wait_event":"animation_selected","correlation":"ellipse","timeout_ms":10000}
+{"select_animation":"Cycloid","as":"cycloid"}
+{"wait_event":"animation_selected","correlation":"cycloid","timeout_ms":10000}
+{"select_animation":"Hyperbola","as":"reload-selection"}
+{"wait_event":"animation_selected","correlation":"reload-selection","timeout_ms":10000}
+{"do":"reload_runtime","as":"reload"}
+{"wait_event":"runtime_reload_committed","correlation":"reload","timeout_ms":20000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -113,6 +113,10 @@ Kind :: enum u16 {
     Trochoid_Frontier_Committed = 187,
     Cycloid_Geometry_Committed = 188,
     Cycloid_Frontier_Committed = 189,
+    Parabola_Geometry_Committed = 190,
+    Parabola_Frontier_Committed = 191,
+    Hyperbola_Geometry_Committed = 192,
+    Hyperbola_Frontier_Committed = 193,
 
     // Drawing tools (260-319).
     Pen_Joint_Committed = 260,
@@ -125,6 +129,10 @@ Kind :: enum u16 {
     Trochoid_Tool_Parameter_Committed = 267,
     Cycloid_Tool_Geometry_Committed = 268,
     Cycloid_Tool_Parameter_Committed = 269,
+    Parabola_Tool_Geometry_Committed = 270,
+    Parabola_Tool_Parameter_Committed = 271,
+    Hyperbola_Tool_Geometry_Committed = 272,
+    Hyperbola_Tool_Parameter_Committed = 273,
 
     // Particles (320-359).
     Particle_Emission_Committed = 320,

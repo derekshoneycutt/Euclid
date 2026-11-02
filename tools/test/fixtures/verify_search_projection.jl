@@ -60,7 +60,7 @@ function main()
     projections = Dict(
         content_record_field(record, "animation_id") => record
         for record in current if record.kind == 11)
-    length(projections) == length(legacy) == 138 ||
+    length(projections) == length(legacy) == 140 ||
         error("search projection count changed")
     for source in legacy
         target = get(projections, source.animation_id, nothing)

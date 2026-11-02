@@ -132,6 +132,22 @@ The isolated [completed-preferences persistence acceptance](../../../tools/scena
 checks both committed database rows and their restored values in a new process,
 including the held completed figure on startup.
 
+The [Parabola showcase](../../../tools/scenarios/parabola-showcase.jsonl) and
+[Hyperbola showcase](../../../tools/scenarios/hyperbola-showcase.jsonl) capture their
+apparatus during drawing and the finished ink after tool lift. The typed
+`parabola_frontier_committed` and `hyperbola_frontier_committed` events report actual
+native frontier commits, not elapsed animation time. Hyperbola evidence identifies
+separate branch entities; verification must check both, not infer paired drawing
+from one event or a screenshot.
+
+The [parabola lifecycle acceptance](../../../tools/scenarios/conic-lifecycle-acceptance.jsonl)
+and [hyperbola lifecycle acceptance](../../../tools/scenarios/hyperbola-lifecycle-acceptance.jsonl)
+check reset, correlated completed-form publication, and allocation baselines.
+The [conic switching acceptance](../../../tools/scenarios/conic-switching-acceptance.jsonl)
+checks switching back to existing instruments and runtime reload. These runs are
+separate to preserve the bounded evidence history. Inspect each artifact manifest's
+result and trace completeness in addition to the captures.
+
 Viewport and splitter requests take effect at a frame boundary; put them before the
 screenshot whose layout they are meant to exercise. A screenshot completes only after
 a presented frame has been captured, so wait for `capture_completed` before depending on

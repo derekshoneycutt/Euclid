@@ -86,7 +86,7 @@ end
     geometry = extract_julia_module(config, "src/julia/geometry.jl")
     @test geometry.display_name == "EuclidGeometry"
     @test occursin("Shared geometric intersection helpers", geometry.doc_markdown)
-    @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 15
+    @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 18
 
     latex = extract_julia_module(config, "src/julia/latex.jl")
     @test latex.display_name == "EuclidLatex"
@@ -106,7 +106,7 @@ end
 
     bridge = extract_julia_module(config, "src/julia/odin-julia-bridge.jl")
     @test bridge.display_name == "OdinJuliaBridge"
-    @test length(bridge.source_files) == 8
+    @test length(bridge.source_files) == 9
     create_label = only(filter(symbol -> symbol.name == "create_new_label", bridge.symbols))
     @test length(create_label.method_signatures) >= 6
     @test occursin("Construct a new label", create_label.doc_markdown)

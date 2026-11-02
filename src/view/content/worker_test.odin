@@ -83,7 +83,7 @@ search_worker_executes_bounded_ranked_queries :: proc(t: ^testing.T) {
     testing.expect_value(t,
         generation^.record_count, u16(reader.CATALOG_EXPECTED_RECORD_COUNT))
     testing.expect_value(t,
-        generation^.records[137].node_kind, Catalog_Node_Kind.Terminal)
+        generation^.records[139].node_kind, Catalog_Node_Kind.Terminal)
     name, name_status := contentdata.content_generation_text(
         generation, generation^.records[0].display_name)
     testing.expect_value(t, name_status, contentdata.Content_Generation_Status.Ok)
@@ -113,7 +113,7 @@ catalog_snapshot_rejects_invalid_rows_and_capacity_overflow :: proc(t: ^testing.
     search_test_rejects_catalog_mutation(t, "unsafe-path",
         "UPDATE animation_catalog SET implementation_path='../escape.jl' WHERE rowid=2")
     search_test_rejects_catalog_mutation(t, "bad-order",
-        "UPDATE animation_catalog SET catalog_order=138 WHERE rowid=1")
+        "UPDATE animation_catalog SET catalog_order=140 WHERE rowid=1")
     search_test_rejects_catalog_mutation(t, "text-sibling-order",
         "UPDATE animation_catalog SET sibling_order='zero' WHERE rowid=1")
     search_test_rejects_catalog_mutation(t, "missing-parent",
@@ -125,9 +125,9 @@ catalog_snapshot_rejects_invalid_rows_and_capacity_overflow :: proc(t: ^testing.
         "WHEN 2 THEN '00000000-0000-0000-0000-000000000001' END " +
         "WHERE rowid IN (1, 2)")
     search_test_rejects_catalog_mutation(t, "overflow",
-        "INSERT INTO animation_catalog SELECT 139, 'builtin', " +
-        "'00000000-0000-0000-0000-000000000139', NULL, 1, 'Overflow', " +
-        "138, 138, 'synthetic/139.jl', 'Overflow', '', ''")
+        "INSERT INTO animation_catalog SELECT 141, 'builtin', " +
+        "'00000000-0000-0000-0000-000000000141', NULL, 1, 'Overflow', " +
+        "140, 140, 'synthetic/141.jl', 'Overflow', '', ''")
 }
 
 // Verify spellfix suggestions are published only after a corrected query has results.
@@ -260,7 +260,7 @@ search_worker_pages_large_corpora_without_message_growth :: proc(t: ^testing.T) 
 
     first := search_test_query_window(t, &service, 1, 0, "synthetic")
     second := search_test_query_window(t, &service, 2, 64, "synthetic")
-    testing.expect_value(t, first.total_match_count, u32(135))
+    testing.expect_value(t, first.total_match_count, u32(137))
     testing.expect_value(t, first.returned_count, u16(64))
     testing.expect(t, first.more_available)
     testing.expect_value(t, second.returned_count, u16(64))

@@ -46,6 +46,16 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Cycloid_Tool_Line = validate_command_cycloid_tool_line,
     .Set_Cycloid_Tool = validate_command_cycloid_tool,
     .Set_Cycloid_Tool_Parameter = validate_command_cycloid_tool_parameter,
+    .Set_Shape_Parabola = validate_command_shape_parabola,
+    .Set_Shape_Parabola_Frontier = validate_command_shape_parabola_frontier,
+    .Set_Shape_Hyperbola = validate_command_shape_hyperbola,
+    .Set_Shape_Hyperbola_Frontier = validate_command_shape_hyperbola_frontier,
+    .Set_Parabola_Tool_Geometry = validate_command_parabola_tool,
+    .Set_Parabola_Tool_Parameter = validate_command_parabola_tool_parameter,
+    .Set_Parabola_Tool_Active = validate_command_parabola_tool_active,
+    .Set_Hyperbola_Tool_Geometry = validate_command_hyperbola_tool,
+    .Set_Hyperbola_Tool_Parameter = validate_command_hyperbola_tool_parameter,
+    .Set_Hyperbola_Tool_Active = validate_command_hyperbola_tool_active,
     .Set_Shape_Visible = validate_command_shape_style,
     .Set_Shape_Active_Feature = validate_command_shape_active_feature,
     .Set_Tool_Position = validate_command_shape_transform,
@@ -78,6 +88,16 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Cycloid_Tool_Line = apply_set_cycloid_tool_line,
     .Set_Cycloid_Tool = apply_set_cycloid_tool,
     .Set_Cycloid_Tool_Parameter = apply_set_cycloid_tool_parameter,
+    .Set_Shape_Parabola = apply_set_shape_parabola,
+    .Set_Shape_Parabola_Frontier = apply_set_shape_parabola_frontier,
+    .Set_Shape_Hyperbola = apply_set_shape_hyperbola,
+    .Set_Shape_Hyperbola_Frontier = apply_set_shape_hyperbola_frontier,
+    .Set_Parabola_Tool_Geometry = apply_set_parabola_tool,
+    .Set_Parabola_Tool_Parameter = apply_set_parabola_tool_parameter,
+    .Set_Parabola_Tool_Active = apply_set_parabola_tool_active,
+    .Set_Hyperbola_Tool_Geometry = apply_set_hyperbola_tool,
+    .Set_Hyperbola_Tool_Parameter = apply_set_hyperbola_tool_parameter,
+    .Set_Hyperbola_Tool_Active = apply_set_hyperbola_tool_active,
     .Set_Shape_Visible = apply_set_shape_visible,
     .Set_Shape_Active_Feature = apply_set_shape_active_feature,
     .Set_Tool_Position = apply_set_tool_position,
@@ -104,6 +124,16 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Cycloid_Tool_Line = .Cycloid_Tool_Geometry_Committed,
     .Set_Cycloid_Tool = .Cycloid_Tool_Geometry_Committed,
     .Set_Cycloid_Tool_Parameter = .Cycloid_Tool_Parameter_Committed,
+    .Set_Shape_Parabola = .Parabola_Geometry_Committed,
+    .Set_Shape_Parabola_Frontier = .Parabola_Frontier_Committed,
+    .Set_Shape_Hyperbola = .Hyperbola_Geometry_Committed,
+    .Set_Shape_Hyperbola_Frontier = .Hyperbola_Frontier_Committed,
+    .Set_Parabola_Tool_Geometry = .Parabola_Tool_Geometry_Committed,
+    .Set_Parabola_Tool_Parameter = .Parabola_Tool_Parameter_Committed,
+    .Set_Parabola_Tool_Active = .Point_Style_Committed,
+    .Set_Hyperbola_Tool_Geometry = .Hyperbola_Tool_Geometry_Committed,
+    .Set_Hyperbola_Tool_Parameter = .Hyperbola_Tool_Parameter_Committed,
+    .Set_Hyperbola_Tool_Active = .Point_Style_Committed,
     .Set_Shape_Visible = .Point_Visibility_Committed,
     .Set_Shape_Active_Feature = .Point_Style_Committed,
     .Set_Tool_Position = .Point_Position_Committed,
@@ -140,6 +170,10 @@ capture_animation_query_snapshot :: proc(
     snapshot^.shapes.trochoid_tools = world^.trochoid_tools
     snapshot^.shapes.cycloids = world^.cycloids
     snapshot^.shapes.cycloid_tools = world^.cycloid_tools
+    snapshot^.shapes.parabolas = world^.parabolas
+    snapshot^.shapes.hyperbolas = world^.hyperbolas
+    snapshot^.shapes.parabola_tools = world^.parabola_tools
+    snapshot^.shapes.hyperbola_tools = world^.hyperbola_tools
     snapshot^.shapes.render_styles = world^.render_styles
     snapshot^.shapes.active_features = world^.active_features
     snapshot^.shapes.geometries = world^.geometries
@@ -446,6 +480,105 @@ validate_command_cycloid_tool_parameter :: proc(
             value.parameter_start, value.parameter_finish, command^.scalar)
 }
 
+// Validate a complete parabola update without mutating its canonical component.
+validate_command_shape_parabola :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found || !shapemodel.shape_parabola_is_valid(command^.parabola) {
+        return false
+    }
+    return shapemodel.shape_component_contains(&state^.shape_world.parabolas,
+        &state^.shape_world.registry, entity)
+}
+
+// Validate a parabola frontier against the host's immutable directed domain.
+validate_command_shape_parabola_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    value, present := shapemodel.shape_component_get(&state^.shape_world.parabolas,
+        &state^.shape_world.registry, entity)
+    return found && present && shapemodel.shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
+// Validate a complete update for an existing signed hyperbola branch.
+validate_command_shape_hyperbola :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found || !shapemodel.shape_hyperbola_is_valid(command^.hyperbola) {
+        return false
+    }
+    current, present := shapemodel.shape_component_get(&state^.shape_world.hyperbolas,
+        &state^.shape_world.registry, entity)
+    return present && current.branch == command^.hyperbola.branch
+}
+
+// Validate a hyperbola frontier against the host's immutable directed domain.
+validate_command_shape_hyperbola_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    value, present := shapemodel.shape_component_get(&state^.shape_world.hyperbolas,
+        &state^.shape_world.registry, entity)
+    return found && present && shapemodel.shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
+// Validate complete parabola tool geometry independently from its current position.
+validate_command_parabola_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    return command^.entity == expected &&
+        shapemodel.shape_component_contains(&state^.shape_world.parabola_tools,
+            &state^.shape_world.registry, state^.world_parabola_tool) &&
+        shapemodel.shape_parabola_tool_is_valid(command^.parabola_tool)
+}
+
+// Validate a parabola tool pose parameter against its configured domain.
+validate_command_parabola_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    value, found := shapemodel.shape_component_get(&state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    return command^.entity == shapemodel.shape_entity_pack(state^.world_parabola_tool) &&
+        found && shapemodel.shape_parameter_is_in_directed_domain(
+            value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
+// Validate the contact-highlight mutation for the permanent parabola tool.
+validate_command_parabola_tool_active :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    return command^.entity == shapemodel.shape_entity_pack(state^.world_parabola_tool) &&
+        shapemodel.shape_component_contains(&state^.shape_world.parabola_tools,
+            &state^.shape_world.registry, state^.world_parabola_tool)
+}
+
+// Validate complete hyperbola tool geometry independently from its position.
+validate_command_hyperbola_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    return command^.entity == expected &&
+        shapemodel.shape_component_contains(&state^.shape_world.hyperbola_tools,
+            &state^.shape_world.registry, state^.world_hyperbola_tool) &&
+        shapemodel.shape_hyperbola_tool_is_valid(command^.hyperbola_tool)
+}
+
+// Validate a hyperbola tool pose parameter against its configured finite domain.
+validate_command_hyperbola_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    value, found := shapemodel.shape_component_get(&state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    return command^.entity == shapemodel.shape_entity_pack(state^.world_hyperbola_tool) &&
+        found && shapemodel.shape_parameter_is_in_directed_domain(
+            value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
+// Validate the contact-highlight mutation for the permanent hyperbola tool.
+validate_command_hyperbola_tool_active :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    return command^.entity == shapemodel.shape_entity_pack(state^.world_hyperbola_tool) &&
+        shapemodel.shape_component_contains(&state^.shape_world.hyperbola_tools,
+            &state^.shape_world.registry, state^.world_hyperbola_tool)
+}
+
 // Validate one packed command target that requires an active-feature component.
 validate_command_shape_active_feature :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
@@ -613,6 +746,76 @@ apply_set_cycloid_tool :: proc(
 apply_set_cycloid_tool_parameter :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     _ = set_cycloid_tool_parameter(state, command^.scalar)
+}
+
+// Apply a validated complete parabola mutation through its bridge contract.
+apply_set_shape_parabola :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.parabola
+    _ = shape_set_parabola(state, command^.entity, {value.focal_distance, value.rotation,
+        value.parameter_start, value.parameter_finish, value.draw_parameter})
+}
+
+// Apply one validated parabola frontier mutation.
+apply_set_shape_parabola_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_parabola_frontier(state, command^.entity, command^.scalar)
+}
+
+// Apply a validated complete hyperbola branch mutation.
+apply_set_shape_hyperbola :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.hyperbola
+    _ = shape_set_hyperbola(state, command^.entity, {value.branch, value.semimajor,
+        value.semiminor, value.rotation, value.parameter_start,
+        value.parameter_finish, value.draw_parameter})
+}
+
+// Apply one validated hyperbola branch frontier mutation.
+apply_set_shape_hyperbola_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_hyperbola_frontier(state, command^.entity, command^.scalar)
+}
+
+// Apply a validated parabola tool geometry update transactionally.
+apply_set_parabola_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.parabola_tool
+    _ = set_parabola_tool_geometry(state, {value.focal_distance, value.link_length,
+        value.rotation, value.parameter_start, value.parameter_finish, value.parameter})
+}
+
+// Apply a validated parabola tool parameter update.
+apply_set_parabola_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_parabola_tool_parameter(state, command^.scalar)
+}
+
+// Apply a validated parabola tool contact-highlight update.
+apply_set_parabola_tool_active :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_parabola_tool_active(state, i32(command^.flag), command^.color)
+}
+
+// Apply a validated hyperbola tool geometry update transactionally.
+apply_set_hyperbola_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.hyperbola_tool
+    _ = set_hyperbola_tool_geometry(state, {value.semimajor, value.semiminor,
+        value.rotation, value.parameter_start, value.parameter_finish,
+        value.parameter, value.rail_half_length})
+}
+
+// Apply a validated hyperbola tool parameter update.
+apply_set_hyperbola_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_hyperbola_tool_parameter(state, command^.scalar)
+}
+
+// Apply a validated hyperbola tool contact-highlight update.
+apply_set_hyperbola_tool_active :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_hyperbola_tool_active(state, i32(command^.flag), command^.color)
 }
 
 // Apply one validated packed-entity visibility mutation.
@@ -893,9 +1096,34 @@ scene_command_evidence :: proc(
     #partial switch command^.kind {
     case .Emit_Trailing_Particle:
         payload.counts.first = 1
+    case .Set_Shape_Parabola, .Set_Shape_Parabola_Frontier,
+        .Set_Shape_Hyperbola, .Set_Shape_Hyperbola_Frontier,
+        .Set_Parabola_Tool_Geometry, .Set_Parabola_Tool_Parameter,
+        .Set_Hyperbola_Tool_Geometry, .Set_Hyperbola_Tool_Parameter:
+        entity := shapemodel.shape_entity_unpack(command^.entity)
+        if entity.slot > 0 {
+            payload.point.point_index = entity.slot - 1
+        }
+        payload.point.field = u16(command^.kind)
     case:
     }
     return kind, payload
+}
+
+// Record synchronous conic construction on the Julia owner's existing lifecycle ring.
+record_conic_creation_evidence :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    service := state^.julia_runtime_service
+    if service == nil {
+        return
+    }
+    kind, payload := scene_command_evidence(command)
+    record_julia_evidence(state, {
+        lane = .Domain,
+        kind = kind,
+        generation = service^.animation_generation,
+        payload = payload,
+    })
 }
 
 //   Record one committed scene command using compact kind-specific payload fields.

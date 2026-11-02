@@ -51,6 +51,36 @@ end
     @test rotated.rolling_orientation ≈ 0f0 atol = 1f-5
 end
 
+@testset "conic tracing points" begin
+    vertex = (0.37f0, 0.5f0, 0.2f0)
+    f = 0.075f0
+    for t in range(-1.6f0, 1.6f0; length=101)
+        point = parabola_point(vertex, f, t)
+        x, y = point[1] - vertex[1], point[2] - vertex[2]
+        @test y * y ≈ 4f0 * f * x atol=1f-6
+        @test hypot(x - f, y) ≈ x + f atol=1f-6
+        @test point[3] == vertex[3]
+        rotated = parabola_point(vertex, f, t; rotation=Float32(pi) / 2)
+        @test rotated[1] ≈ vertex[1] - y atol=1f-6
+        @test rotated[2] ≈ vertex[2] + x atol=1f-6
+    end
+    center = (0.5f0, 0.5f0, 0.3f0)
+    a, b = 0.12f0, 0.10f0
+    for t in range(-1.35f0, 1.35f0; length=101)
+        positive = hyperbola_point(center, a, b, t)
+        negative = hyperbola_point(center, a, b, t; branch=-1)
+        x, y = positive[1] - center[1], positive[2] - center[2]
+        @test x * x / (a * a) - y * y / (b * b) ≈ 1f0 atol=2f-6
+        @test hypot(x, y) >= a - 1f-7
+        @test all(positive[i] + negative[i] ≈ 2f0 * center[i] for i in 1:3)
+        rotated = hyperbola_point(center, a, b, t; rotation=Float32(pi) / 2)
+        @test rotated[1] ≈ center[1] - y atol=1f-6
+        @test rotated[2] ≈ center[2] + x atol=1f-6
+    end
+    @test hyperbola_point(center, a, b, 0f0) == (x=0.62f0, y=0.5f0, z=0.3f0)
+    @test_throws ArgumentError hyperbola_point(center, a, b, 0f0; branch=0)
+end
+
 @testset "circle_line_intersections_xy" begin
     @testset "two intersections" begin
         line_a = Float32[-2f0, 0f0, 0f0]

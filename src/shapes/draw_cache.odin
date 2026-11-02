@@ -27,6 +27,8 @@ Shapes_Pen_Draw :: shapemodel.Shapes_Pen_Draw
 Shapes_Compass_Draw :: shapemodel.Shapes_Compass_Draw
 Shapes_Trochoid_Tool_Draw :: shapemodel.Shapes_Trochoid_Tool_Draw
 Shapes_Cycloid_Tool_Draw :: shapemodel.Shapes_Cycloid_Tool_Draw
+Shapes_Parabola_Tool_Draw :: shapemodel.Shapes_Parabola_Tool_Draw
+Shapes_Hyperbola_Tool_Draw :: shapemodel.Shapes_Hyperbola_Tool_Draw
 Shapes_Draw_Cache_Item :: shapemodel.Shapes_Draw_Cache_Item
 
 // Hold an optional instrument depth classification.
@@ -64,6 +66,8 @@ draw_cache_reset_storage :: proc(cache: ^shapemodel.Shapes_Draw_Cache) {
     cache.curve_vertex_count = 0
     cache.draw_trochoid_tool = false
     cache.draw_cycloid_tool = false
+    cache.draw_parabola_tool = false
+    cache.draw_hyperbola_tool = false
     cache.draw_pen = false
     cache.draw_compass = false
 }
@@ -185,6 +189,24 @@ draw_cache_cycloid_tool_depth_and_flatness :: #force_inline proc(
         draw_cache_point_is_flat(tool.rolling_center)
 }
 
+// Return representative depth for one articulated parabola instrument packet.
+draw_cache_parabola_tool_depth_and_flatness :: #force_inline proc(
+    tool: Shapes_Parabola_Tool_Draw) -> (f32, bool) {
+    flat := draw_cache_point_is_flat(tool.vertex) &&
+        draw_cache_point_is_flat(tool.directrix_contact) &&
+        draw_cache_point_is_flat(tool.focus)
+    return draw_cache_visual_depth(tool.vertex), flat
+}
+
+// Return representative depth for one paired hyperbola instrument packet.
+draw_cache_hyperbola_tool_depth_and_flatness :: #force_inline proc(
+    tool: Shapes_Hyperbola_Tool_Draw) -> (f32, bool) {
+    flat := draw_cache_point_is_flat(tool.center) &&
+        draw_cache_point_is_flat(tool.carriage_positive) &&
+        draw_cache_point_is_flat(tool.carriage_negative)
+    return draw_cache_visual_depth(tool.center), flat
+}
+
 // Return representative depth and flatness for one cached instrument item.
 draw_cache_instrument_depth_and_flatness :: proc(
     item: ^Shapes_Draw_Cache_Item) -> Draw_Cache_Depth_Classification {
@@ -194,6 +216,12 @@ draw_cache_instrument_depth_and_flatness :: proc(
         return {depth, flat, true}
     case Shapes_Cycloid_Tool_Draw:
         depth, flat := draw_cache_cycloid_tool_depth_and_flatness(typed)
+        return {depth, flat, true}
+    case Shapes_Parabola_Tool_Draw:
+        depth, flat := draw_cache_parabola_tool_depth_and_flatness(typed)
+        return {depth, flat, true}
+    case Shapes_Hyperbola_Tool_Draw:
+        depth, flat := draw_cache_hyperbola_tool_depth_and_flatness(typed)
         return {depth, flat, true}
     case Shapes_Pen_Draw:
         depth, flat := draw_cache_pen_depth_and_flatness(typed)
@@ -242,6 +270,7 @@ draw_cache_item_depth_and_flatness :: proc(
         centroid, flat := draw_cache_polygon_centroid_and_flatness(cache, &typed)
         return draw_cache_visual_depth(centroid), flat
     case Shapes_Trochoid_Tool_Draw, Shapes_Cycloid_Tool_Draw,
+        Shapes_Parabola_Tool_Draw, Shapes_Hyperbola_Tool_Draw,
         Shapes_Pen_Draw, Shapes_Compass_Draw:
         return 0, false
     }

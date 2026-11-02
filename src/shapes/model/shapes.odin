@@ -153,6 +153,73 @@ Shape_Cycloid_Tool :: struct {
     previous_orientation_phase: f32,
 }
 
+// Hold current and previous parameters for one mutable analytic parabola.
+Shape_Parabola :: struct {
+    focal_distance: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    previous_focal_distance: f32,
+    previous_rotation: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_draw_parameter: f32,
+}
+
+// Hold one explicitly signed branch of a mutable analytic hyperbola.
+Shape_Hyperbola_Branch :: struct {
+    branch: i32,
+    semimajor: f32,
+    semiminor: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    previous_semimajor: f32,
+    previous_semiminor: f32,
+    previous_rotation: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_draw_parameter: f32,
+}
+
+// Hold the mutable pose and linkage dimensions for the permanent parabola tool.
+Shape_Parabola_Tool :: struct {
+    focal_distance: f32,
+    link_length: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    active: bool,
+    previous_focal_distance: f32,
+    previous_link_length: f32,
+    previous_rotation: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_parameter: f32,
+}
+
+// Hold the mutable pose and finite rail extent for the permanent hyperbola tool.
+Shape_Hyperbola_Tool :: struct {
+    semimajor: f32,
+    semiminor: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    rail_half_length: f32,
+    active: bool,
+    previous_semimajor: f32,
+    previous_semiminor: f32,
+    previous_rotation: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_parameter: f32,
+    previous_rail_half_length: f32,
+}
+
 // Hold canonical presentation state for one renderable entity.
 Shape_Render_Style :: struct {
     color: Color,
@@ -177,6 +244,10 @@ Shape_Geometry_Kind :: enum u8 {
     Trochoid_Tool,
     Cycloid,
     Cycloid_Tool,
+    Parabola,
+    Hyperbola,
+    Parabola_Tool,
+    Hyperbola_Tool,
     Polygon,
     Pen,
     Compass,
@@ -246,6 +317,10 @@ Shape_Geometry :: struct {
         trochoid_tool: Shape_Trochoid_Tool_Geometry,
         cycloid: Shape_Cycloid_Geometry,
         cycloid_tool: Shape_Cycloid_Tool_Geometry,
+        parabola: struct {},
+        hyperbola: struct {},
+        parabola_tool: struct {},
+        hyperbola_tool: struct {},
         polygon: Shape_Polygon_Geometry,
         pen: Shape_Pen_Geometry,
         compass: Shape_Compass_Geometry,
@@ -376,6 +451,10 @@ Shape_Construction_Needs :: struct {
     trochoid_tools: int,
     cycloids: int,
     cycloid_tools: int,
+    parabolas: int,
+    hyperbolas: int,
+    parabola_tools: int,
+    hyperbola_tools: int,
     render_styles: int,
     active_features: int,
     geometries: int,
@@ -501,6 +580,10 @@ Shape_World :: struct {
     trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
     cycloids: Shape_Component_Set(Shape_Cycloid),
     cycloid_tools: Shape_Component_Set(Shape_Cycloid_Tool),
+    parabolas: Shape_Component_Set(Shape_Parabola),
+    hyperbolas: Shape_Component_Set(Shape_Hyperbola_Branch),
+    parabola_tools: Shape_Component_Set(Shape_Parabola_Tool),
+    hyperbola_tools: Shape_Component_Set(Shape_Hyperbola_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -599,6 +682,80 @@ shape_cycloid_tool_is_valid :: proc(value: Shape_Cycloid_Tool) -> bool {
             value.parameter_finish, value.parameter)
 }
 
+// Validate one parabola domain and frontier, including its nonflat diamond limit.
+shape_parabola_is_valid :: proc(value: Shape_Parabola) -> bool {
+    if value.focal_distance <= 0 ||
+        !shape_scalar_is_finite(value.focal_distance) ||
+        !shape_scalar_is_finite(value.rotation) ||
+        !shape_scalar_is_finite(value.parameter_start) ||
+        !shape_scalar_is_finite(value.parameter_finish) ||
+        !shape_scalar_is_finite(value.draw_parameter) ||
+        value.parameter_start == value.parameter_finish {
+        return false
+    }
+    return shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, value.draw_parameter)
+}
+
+// Validate one signed hyperbola branch and its finite directed frontier.
+shape_hyperbola_is_valid :: proc(value: Shape_Hyperbola_Branch) -> bool {
+    if (value.branch != 1 && value.branch != -1) ||
+        value.semimajor <= 0 || value.semiminor <= 0 ||
+        !shape_scalar_is_finite(value.semimajor) ||
+        !shape_scalar_is_finite(value.semiminor) ||
+        !shape_scalar_is_finite(value.rotation) ||
+        !shape_scalar_is_finite(value.parameter_start) ||
+        !shape_scalar_is_finite(value.parameter_finish) ||
+        !shape_scalar_is_finite(value.draw_parameter) ||
+        value.parameter_start == value.parameter_finish ||
+        max(math.abs(value.parameter_start), math.abs(value.parameter_finish)) > 4 {
+        return false
+    }
+    return shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, value.draw_parameter)
+}
+
+// Validate an Inwards-inspired tool whose fixed links remain nondegenerate.
+shape_parabola_tool_is_valid :: proc(value: Shape_Parabola_Tool) -> bool {
+    if value.focal_distance <= 0 || value.link_length <= 0 ||
+        !shape_scalar_is_finite(value.focal_distance) ||
+        !shape_scalar_is_finite(value.link_length) ||
+        !shape_scalar_is_finite(value.rotation) ||
+        !shape_scalar_is_finite(value.parameter_start) ||
+        !shape_scalar_is_finite(value.parameter_finish) ||
+        !shape_scalar_is_finite(value.parameter) ||
+        value.parameter_start == value.parameter_finish ||
+        !shape_parameter_is_in_directed_domain(
+            value.parameter_start, value.parameter_finish, value.parameter) {
+        return false
+    }
+    extent := max(math.abs(value.parameter_start), math.abs(value.parameter_finish))
+    half_diagonal := value.focal_distance * math.sqrt(1 + extent * extent)
+    return value.link_length > half_diagonal * 1.01
+}
+
+// Validate one finite X-rail instrument and guarantee both carriages fit.
+shape_hyperbola_tool_is_valid :: proc(value: Shape_Hyperbola_Tool) -> bool {
+    if value.semimajor <= 0 || value.semiminor <= 0 ||
+        value.rail_half_length <= 0 ||
+        !shape_scalar_is_finite(value.semimajor) ||
+        !shape_scalar_is_finite(value.semiminor) ||
+        !shape_scalar_is_finite(value.rail_half_length) ||
+        !shape_scalar_is_finite(value.rotation) ||
+        !shape_scalar_is_finite(value.parameter_start) ||
+        !shape_scalar_is_finite(value.parameter_finish) ||
+        !shape_scalar_is_finite(value.parameter) ||
+        value.parameter_start == value.parameter_finish ||
+        !shape_parameter_is_in_directed_domain(
+            value.parameter_start, value.parameter_finish, value.parameter) {
+        return false
+    }
+    extent := max(math.abs(value.parameter_start), math.abs(value.parameter_finish))
+    x := value.semimajor * math.cosh(extent)
+    y := value.semiminor * math.sinh(extent)
+    return x * x + y * y <= value.rail_half_length * value.rail_half_length
+}
+
 // Validate a literal two-point rail against one no-slip rolling interval.
 shape_cycloid_line_is_valid :: proc(
     first, second: Vector3,
@@ -627,6 +784,9 @@ shape_world_invalidate_draw_cache :: proc(world: ^Shape_World) {
     world.draw_cache.polygon_triangle_count = 0
     world.draw_cache.curve_vertex_count = 0
     world.draw_cache.draw_trochoid_tool = false
+    world.draw_cache.draw_cycloid_tool = false
+    world.draw_cache.draw_parabola_tool = false
+    world.draw_cache.draw_hyperbola_tool = false
     world.draw_cache.draw_pen = false
     world.draw_cache.draw_compass = false
 }
@@ -892,6 +1052,8 @@ shape_world_has_capacity :: proc(
     if world == nil || needs.entities < 0 || needs.transforms < 0 ||
         needs.render_styles < 0 || needs.active_features < 0 ||
         needs.geometries < 0 || needs.labels < 0 || needs.label_bytes < 0 ||
+        needs.parabolas < 0 || needs.hyperbolas < 0 ||
+        needs.parabola_tools < 0 || needs.hyperbola_tools < 0 ||
         needs.vertex_references < 0 || needs.constraints < 0 {
         return false
     }
@@ -903,6 +1065,10 @@ shape_world_has_capacity :: proc(
         int(world.trochoid_tools.count) + needs.trochoid_tools <= component_capacity &&
         int(world.cycloids.count) + needs.cycloids <= component_capacity &&
         int(world.cycloid_tools.count) + needs.cycloid_tools <= component_capacity &&
+        int(world.parabolas.count) + needs.parabolas <= component_capacity &&
+        int(world.hyperbolas.count) + needs.hyperbolas <= component_capacity &&
+        int(world.parabola_tools.count) + needs.parabola_tools <= component_capacity &&
+        int(world.hyperbola_tools.count) + needs.hyperbola_tools <= component_capacity &&
         int(world.render_styles.count) + needs.render_styles <= component_capacity &&
         int(world.active_features.count) + needs.active_features <= component_capacity &&
         int(world.geometries.count) + needs.geometries <= component_capacity &&
@@ -1042,19 +1208,26 @@ shape_world_create_entity :: proc(
     return shape_registry_create(&world.registry, entity)
 }
 
+// Detect any frozen store before baseline publication can mutate world membership.
+shape_world_has_frozen_baseline_storage :: proc(world: ^Shape_World) -> bool {
+    return world.registry.baseline_frozen || world.transforms.baseline_frozen ||
+        world.arcs.baseline_frozen || world.trochoids.baseline_frozen ||
+        world.trochoid_tools.baseline_frozen ||
+        world.cycloids.baseline_frozen || world.cycloid_tools.baseline_frozen ||
+        world.parabolas.baseline_frozen || world.hyperbolas.baseline_frozen ||
+        world.parabola_tools.baseline_frozen || world.hyperbola_tools.baseline_frozen ||
+        world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
+        world.geometries.baseline_frozen || world.labels.baseline_frozen ||
+        world.vertex_references.baseline_frozen || world.label_store.baseline_frozen ||
+        world.constraints.baseline_frozen
+}
+
 // Freeze every current world frontier as baseline membership.
 shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     if world == nil {
         return .Invalid_Argument
     }
-    if world.registry.baseline_frozen || world.transforms.baseline_frozen ||
-        world.arcs.baseline_frozen || world.trochoids.baseline_frozen ||
-        world.trochoid_tools.baseline_frozen ||
-        world.cycloids.baseline_frozen || world.cycloid_tools.baseline_frozen ||
-        world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
-        world.geometries.baseline_frozen || world.labels.baseline_frozen ||
-        world.vertex_references.baseline_frozen || world.label_store.baseline_frozen ||
-        world.constraints.baseline_frozen {
+    if shape_world_has_frozen_baseline_storage(world) {
         return .Illegal_State
     }
     _ = shape_registry_freeze_baseline(&world.registry)
@@ -1064,6 +1237,10 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     _ = shape_component_freeze_baseline(&world.trochoid_tools)
     _ = shape_component_freeze_baseline(&world.cycloids)
     _ = shape_component_freeze_baseline(&world.cycloid_tools)
+    _ = shape_component_freeze_baseline(&world.parabolas)
+    _ = shape_component_freeze_baseline(&world.hyperbolas)
+    _ = shape_component_freeze_baseline(&world.parabola_tools)
+    _ = shape_component_freeze_baseline(&world.hyperbola_tools)
     _ = shape_component_freeze_baseline(&world.render_styles)
     _ = shape_component_freeze_baseline(&world.active_features)
     _ = shape_component_freeze_baseline(&world.geometries)
@@ -1086,6 +1263,8 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
         !world.arcs.baseline_frozen || !world.trochoids.baseline_frozen ||
         !world.trochoid_tools.baseline_frozen ||
         !world.cycloids.baseline_frozen || !world.cycloid_tools.baseline_frozen ||
+        !world.parabolas.baseline_frozen || !world.hyperbolas.baseline_frozen ||
+        !world.parabola_tools.baseline_frozen || !world.hyperbola_tools.baseline_frozen ||
         !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
         !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
         !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen ||
@@ -1099,6 +1278,10 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     _ = shape_component_rewind_animation(&world.trochoid_tools)
     _ = shape_component_rewind_animation(&world.cycloids)
     _ = shape_component_rewind_animation(&world.cycloid_tools)
+    _ = shape_component_rewind_animation(&world.parabolas)
+    _ = shape_component_rewind_animation(&world.hyperbolas)
+    _ = shape_component_rewind_animation(&world.parabola_tools)
+    _ = shape_component_rewind_animation(&world.hyperbola_tools)
     _ = shape_component_rewind_animation(&world.render_styles)
     _ = shape_component_rewind_animation(&world.active_features)
     _ = shape_component_rewind_animation(&world.geometries)

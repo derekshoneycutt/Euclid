@@ -62,6 +62,52 @@ Bridge_Cycloid_Tool_Geometry :: struct {
     orientation_phase: f32,
 }
 
+// Group one complete mutable parabola description for bridge operations.
+Bridge_Parabola_Geometry :: struct {
+    focal_distance: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+}
+
+// Group one signed hyperbola-branch description for bridge operations.
+Bridge_Hyperbola_Geometry :: struct {
+    branch: i32,
+    semimajor: f32,
+    semiminor: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+}
+
+// Group complete mutable geometry for the permanent parabola instrument.
+Bridge_Parabola_Tool_Geometry :: struct {
+    focal_distance: f32,
+    link_length: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+}
+
+// Group complete mutable geometry for the permanent hyperbola instrument.
+Bridge_Hyperbola_Tool_Geometry :: struct {
+    semimajor: f32,
+    semiminor: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    rail_half_length: f32,
+}
+
+#assert(size_of(Bridge_Parabola_Geometry) == 5 * size_of(f32))
+#assert(size_of(Bridge_Hyperbola_Geometry) == size_of(i32) + 6 * size_of(f32))
+#assert(size_of(Bridge_Parabola_Tool_Geometry) == 6 * size_of(f32))
+#assert(size_of(Bridge_Hyperbola_Tool_Geometry) == 7 * size_of(f32))
+
 // Group four vertices for one square bridge operation.
 Bridge_Square_Vertices :: struct {
     vertices: [4]Vector3,
@@ -81,6 +127,10 @@ Shape_Query_Snapshot :: struct {
     trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
     cycloids: Shape_Component_Set(Shape_Cycloid),
     cycloid_tools: Shape_Component_Set(Shape_Cycloid_Tool),
+    parabolas: Shape_Component_Set(Shape_Parabola),
+    hyperbolas: Shape_Component_Set(Shape_Hyperbola_Branch),
+    parabola_tools: Shape_Component_Set(Shape_Parabola_Tool),
+    hyperbola_tools: Shape_Component_Set(Shape_Hyperbola_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -102,6 +152,8 @@ Shapes_Point_Type :: enum {
     Pentagon,
     Trochoid_Tool,
     Cycloid_Tool,
+    Parabola_Tool,
+    Hyperbola_Tool,
     Pen,
     Compass,
 }
@@ -230,6 +282,41 @@ Shapes_Cycloid_Tool_Draw :: struct {
     handle_finish: Vector3,
 }
 
+// Resolve an Inwards-inspired articulated diamond and integrated tracing nib.
+Shapes_Parabola_Tool_Draw :: struct {
+    using base: Shapes_Draw_Base,
+    vertex: Vector3,
+    focus: Vector3,
+    directrix_contact: Vector3,
+    directrix_rail_start: Vector3,
+    directrix_rail_finish: Vector3,
+    diamond_first: Vector3,
+    diamond_second: Vector3,
+    guide_start: Vector3,
+    guide_finish: Vector3,
+    nib: Vector3,
+    active: bool,
+}
+
+// Resolve separate asymptote rails, pivot rail, and symmetric tracing carriages.
+Shapes_Hyperbola_Tool_Draw :: struct {
+    using base: Shapes_Draw_Base,
+    center: Vector3,
+    asymptote_first_start: Vector3,
+    asymptote_first_finish: Vector3,
+    asymptote_second_start: Vector3,
+    asymptote_second_finish: Vector3,
+    moving_rail_start: Vector3,
+    moving_rail_finish: Vector3,
+    tick_first_start: Vector3,
+    tick_first_finish: Vector3,
+    tick_second_start: Vector3,
+    tick_second_finish: Vector3,
+    carriage_positive: Vector3,
+    carriage_negative: Vector3,
+    active: bool,
+}
+
 Shapes_Draw_Cache_Item :: union {
     Shapes_Label_Draw,
     Shapes_Point_Draw,
@@ -240,6 +327,8 @@ Shapes_Draw_Cache_Item :: union {
     Shapes_Polygon_Draw,
     Shapes_Trochoid_Tool_Draw,
     Shapes_Cycloid_Tool_Draw,
+    Shapes_Parabola_Tool_Draw,
+    Shapes_Hyperbola_Tool_Draw,
     Shapes_Pen_Draw,
     Shapes_Compass_Draw,
 }
@@ -265,6 +354,10 @@ Shapes_Draw_Cache :: struct {
     draw_trochoid_tool: bool,
     cycloid_tool: Shapes_Cycloid_Tool_Draw,
     draw_cycloid_tool: bool,
+    parabola_tool: Shapes_Parabola_Tool_Draw,
+    draw_parabola_tool: bool,
+    hyperbola_tool: Shapes_Hyperbola_Tool_Draw,
+    draw_hyperbola_tool: bool,
     pen: Shapes_Pen_Draw,
     draw_pen: bool,
     compass: Shapes_Compass_Draw,

@@ -412,7 +412,11 @@ artifact_encode_payload :: proc(
             .Trochoid_Tool_Parameter_Committed,
             .Cycloid_Geometry_Committed, .Cycloid_Frontier_Committed,
             .Cycloid_Tool_Geometry_Committed,
-            .Cycloid_Tool_Parameter_Committed:
+            .Cycloid_Tool_Parameter_Committed,
+            .Parabola_Geometry_Committed, .Parabola_Frontier_Committed,
+            .Hyperbola_Geometry_Committed, .Hyperbola_Frontier_Committed,
+            .Parabola_Tool_Geometry_Committed, .Parabola_Tool_Parameter_Committed,
+            .Hyperbola_Tool_Geometry_Committed, .Hyperbola_Tool_Parameter_Committed:
         artifact_put_u32(destination, 0, payload.point.point_index)
         artifact_put_u16(destination, 4, payload.point.field)
         destination[6] = payload.point.visible

@@ -55,6 +55,30 @@ World_Lerped_Cycloid_Tool :: struct {
     value: shapemodel.Shape_Cycloid_Tool,
 }
 
+// Hold an interpolated parabola center and its analytic scalar state.
+World_Lerped_Parabola :: struct {
+    vertex: Vector3,
+    value: shapemodel.Shape_Parabola,
+}
+
+// Hold an interpolated hyperbola center and signed branch description.
+World_Lerped_Hyperbola :: struct {
+    center: Vector3,
+    value: shapemodel.Shape_Hyperbola_Branch,
+}
+
+// Hold the interpolated parabola tool center and mutable assembly description.
+World_Lerped_Parabola_Tool :: struct {
+    vertex: Vector3,
+    value: shapemodel.Shape_Parabola_Tool,
+}
+
+// Hold the interpolated hyperbola tool center and finite guide description.
+World_Lerped_Hyperbola_Tool :: struct {
+    center: Vector3,
+    value: shapemodel.Shape_Hyperbola_Tool,
+}
+
 // Snapshot Cycloid scalar state before the next fixed-step mutation.
 shape_world_update_previous_cycloid_values :: proc(world: ^shapemodel.Shape_World) {
     for index in 0..<world.cycloids.count {
@@ -110,6 +134,8 @@ shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
         value.previous_rotation = value.rotation
         value.previous_orientation_phase = value.orientation_phase
     }
+    shape_world_update_previous_conic_values(world)
+    shape_world_update_previous_conic_tool_values(world)
     shape_world_update_previous_cycloid_values(world)
 }
 
@@ -759,12 +785,39 @@ world_cache_push_instrument :: proc(
     case .Cycloid_Tool:
         world_cache_push_cycloid_tool(
             world, source, geometry.payload.cycloid_tool, alpha)
+    case .Parabola_Tool:
+        world_cache_push_parabola_tool(world, source, alpha)
+    case .Hyperbola_Tool:
+        world_cache_push_hyperbola_tool(world, source, alpha)
     case .Pen:
         world_cache_push_pen(world, source, geometry.payload.pen, alpha)
     case .Compass:
         world_cache_push_compass(world, source, geometry.payload.compass, alpha)
     case .Point, .Line, .Arc, .Filled_Arc, .Circle_Region, .Trochoid,
-        .Cycloid, .Polygon:
+        .Cycloid, .Parabola, .Hyperbola, .Polygon:
+        return false
+    }
+    return true
+}
+
+// Prepare analytic curve packets while preserving each family's frontier policy.
+world_cache_push_analytic_curve :: proc(
+    world: ^shapemodel.Shape_World,
+    source: World_Draw_Source,
+    geometry: shapemodel.Shape_Geometry,
+    alpha: f32) -> bool {
+    switch geometry.kind {
+    case .Trochoid:
+        world_cache_push_trochoid(world, source, alpha)
+    case .Cycloid:
+        world_cache_push_cycloid(world, source, geometry.payload.cycloid, alpha)
+    case .Parabola:
+        world_cache_push_parabola(world, source, alpha)
+    case .Hyperbola:
+        world_cache_push_hyperbola(world, source, alpha)
+    case .Point, .Line, .Arc, .Filled_Arc, .Circle_Region, .Polygon,
+        .Trochoid_Tool, .Cycloid_Tool, .Parabola_Tool, .Hyperbola_Tool,
+        .Pen, .Compass:
         return false
     }
     return true
@@ -776,8 +829,9 @@ world_cache_push_geometry :: proc(
     source: World_Draw_Source,
     geometry: shapemodel.Shape_Geometry,
     alpha: f32) {
-    if world_cache_push_instrument(world, source, geometry, alpha) {
-       return
+    if world_cache_push_instrument(world, source, geometry, alpha) ||
+        world_cache_push_analytic_curve(world, source, geometry, alpha) {
+        return
     }
     switch geometry.kind {
     case .Point:
@@ -789,13 +843,11 @@ world_cache_push_geometry :: proc(
     case .Circle_Region:
         world_cache_push_circle_region(
             world, source, geometry.payload.circle_region, alpha)
-    case .Trochoid:
-        world_cache_push_trochoid(world, source, alpha)
-    case .Cycloid:
-        world_cache_push_cycloid(world, source, geometry.payload.cycloid, alpha)
     case .Polygon:
         world_cache_push_polygon(world, source, geometry.payload.polygon, alpha)
-    case .Trochoid_Tool, .Cycloid_Tool, .Pen, .Compass:
+    case .Trochoid, .Cycloid, .Parabola, .Hyperbola,
+        .Trochoid_Tool, .Cycloid_Tool, .Parabola_Tool, .Hyperbola_Tool,
+        .Pen, .Compass:
         return
     }
 }

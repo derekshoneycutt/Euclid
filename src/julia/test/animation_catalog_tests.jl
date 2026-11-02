@@ -183,12 +183,12 @@ end
 end
 
 @testset "complete production catalog contract" begin
-    @test length(AnimationDescriptors) == 138
+    @test length(AnimationDescriptors) == 140
     corpus_records = EuclidLegacySearchCorpus.build_catalog_corpus(
         AnimationDescriptors,
         _ -> EuclidSearchContent.SearchContent("Catalog metadata.", ()))
     ordered_records = sort(corpus_records; by=record -> record.catalog_order)
-    @test getproperty.(ordered_records, :catalog_order) == collect(0:137)
+    @test getproperty.(ordered_records, :catalog_order) == collect(0:139)
     @test getproperty.(ordered_records, :sibling_order) ==
         getproperty.(AnimationDescriptors, :sibling_order)
     @test getproperty.(ordered_records, :implementation_path) ==
@@ -214,12 +214,12 @@ end
     curves = sort(filter(descriptor -> descriptor.parent_id == curves_id,
         AnimationDescriptors); by=descriptor -> descriptor.sibling_order)
     @test getproperty.(curves, :display_name) ==
-        ["Circle", "Ellipse", "Cycloid", "Curtate Cycloid",
+        ["Circle", "Ellipse", "Parabola", "Hyperbola", "Cycloid", "Curtate Cycloid",
             "Prolate Cycloid", "Cardioid", "Limaçon", "Dimpled Limaçon",
             "Convex Limaçon", "Deltoid", "Astroid", "5-Cusped Hypocycloid",
             "11⁄2 Hypocycloid", "Nephroid", "3-Dimple Epitrochoid",
             "5-Round-Point Hypotrochoid"]
-    @test getproperty.(curves, :sibling_order) == collect(0:15)
+    @test getproperty.(curves, :sibling_order) == collect(0:17)
     logic_id = UUID("2905c158-007b-4412-be60-20a27decc0b2")
     logic = sort(filter(descriptor -> descriptor.parent_id == logic_id,
         AnimationDescriptors); by=descriptor -> descriptor.sibling_order)
@@ -228,11 +228,11 @@ end
     path_backed = filter(
         descriptor -> descriptor.implementation_path !== nothing,
         AnimationDescriptors)
-    @test length(path_backed) == 137
+    @test length(path_backed) == 139
     implementation_paths = String[
         descriptor.implementation_path for descriptor in path_backed]
     expected_sidecars = sort!(content_sidecar_path.(implementation_paths))
-    @test length(unique(implementation_paths)) == 137
+    @test length(unique(implementation_paths)) == 139
     @test production_content_sidecars() == expected_sidecars
     generation = create_euclid_runtime_generation(ProductionContentRoot)
     for descriptor in path_backed

@@ -711,6 +711,278 @@ get_compass_joint2_position :: proc "c" (
     return {0, 0, 0}
 }
 
+// Show the permanent parabola instrument without treating it as curve ink.
+@(export)
+show_parabola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_parabola_tool), 1)
+}
+
+// Hide the permanent parabola instrument without emitting construction dust.
+@(export)
+hide_parabola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_parabola_tool), 0)
+}
+
+// Move the permanent parabola instrument's vertex while retaining its guide parameters.
+@(export)
+set_parabola_tool_position :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3) -> i32 {
+    context = state^.saved_context
+    return shape_set_position(state,
+        shapemodel.shape_entity_pack(state^.world_parabola_tool), position)
+}
+
+// Configure the parabola instrument without validating against its old position.
+@(export)
+set_parabola_tool_geometry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Parabola_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value: shapemodel.Shape_Parabola_Tool = {
+        focal_distance = geometry.focal_distance,
+        link_length = geometry.link_length,
+        rotation = geometry.rotation,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        parameter = geometry.parameter,
+    }
+    if !shapemodel.shape_parabola_tool_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    command, captured := append_scene_command(state, .Set_Parabola_Tool_Geometry)
+    if command != nil {
+        command^.entity = packed
+        command^.parabola_tool = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    current, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    value.active = previous.active
+    current^ = value
+    current.previous_focal_distance = previous.previous_focal_distance
+    current.previous_link_length = previous.previous_link_length
+    current.previous_rotation = previous.previous_rotation
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_parameter = previous.previous_parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Move the parabola instrument parameter along its configured directed domain.
+@(export)
+set_parabola_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.parabola_tools,
+        source.registry, state^.world_parabola_tool)
+    if !found || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    command, captured := append_scene_command(state, .Set_Parabola_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    mutable, present := shapemodel.shape_component_get_mut(
+        &state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    if !present {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    mutable.parameter = parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Toggle the integrated parabola nib highlight using authored ink-color policy.
+@(export)
+set_parabola_tool_active :: proc "c" (
+    state: ^core.Euclid_General_State, active: i32, color: Bridge_Color) -> i32 {
+    context = state^.saved_context
+    if active != 0 && active != 1 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    command, captured := append_scene_command(state, .Set_Parabola_Tool_Active)
+    if command != nil {
+        command^.entity = packed
+        command^.flag = active != 0
+        command^.color = color
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    tool, has_tool := shapemodel.shape_component_get_mut(
+        &state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state^.shape_world.render_styles,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    if !has_tool || !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    tool.active = active != 0
+    style.active_color = color
+    return BRIDGE_STATUS_OK
+}
+
+// Show the permanent hyperbola instrument without treating it as curve ink.
+@(export)
+show_hyperbola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_hyperbola_tool), 1)
+}
+
+// Hide the permanent hyperbola instrument without emitting construction dust.
+@(export)
+hide_hyperbola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_hyperbola_tool), 0)
+}
+
+// Move the permanent hyperbola instrument's center.
+@(export)
+set_hyperbola_tool_position :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3) -> i32 {
+    context = state^.saved_context
+    return shape_set_position(state,
+        shapemodel.shape_entity_pack(state^.world_hyperbola_tool), position)
+}
+
+// Configure the hyperbola instrument independently from its previous center.
+@(export)
+set_hyperbola_tool_geometry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Hyperbola_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value: shapemodel.Shape_Hyperbola_Tool = {
+        semimajor = geometry.semimajor,
+        semiminor = geometry.semiminor,
+        rotation = geometry.rotation,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        parameter = geometry.parameter,
+        rail_half_length = geometry.rail_half_length,
+    }
+    if !shapemodel.shape_hyperbola_tool_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    command, captured := append_scene_command(state, .Set_Hyperbola_Tool_Geometry)
+    if command != nil {
+        command^.entity = packed
+        command^.hyperbola_tool = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    current, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    value.active = previous.active
+    current^ = value
+    current.previous_semimajor = previous.previous_semimajor
+    current.previous_semiminor = previous.previous_semiminor
+    current.previous_rotation = previous.previous_rotation
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_parameter = previous.previous_parameter
+    current.previous_rail_half_length = previous.previous_rail_half_length
+    return BRIDGE_STATUS_OK
+}
+
+// Move the hyperbola instrument parameter along its configured finite domain.
+@(export)
+set_hyperbola_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.hyperbola_tools,
+        source.registry, state^.world_hyperbola_tool)
+    if !found || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    command, captured := append_scene_command(state, .Set_Hyperbola_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    mutable, present := shapemodel.shape_component_get_mut(
+        &state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    if !present {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    mutable.parameter = parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Toggle the paired hyperbola nib highlights using authored ink-color policy.
+@(export)
+set_hyperbola_tool_active :: proc "c" (
+    state: ^core.Euclid_General_State, active: i32, color: Bridge_Color) -> i32 {
+    context = state^.saved_context
+    if active != 0 && active != 1 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    command, captured := append_scene_command(state, .Set_Hyperbola_Tool_Active)
+    if command != nil {
+        command^.entity = packed
+        command^.flag = active != 0
+        command^.color = color
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    tool, has_tool := shapemodel.shape_component_get_mut(
+        &state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state^.shape_world.render_styles,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    if !has_tool || !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    tool.active = active != 0
+    style.active_color = color
+    return BRIDGE_STATUS_OK
+}
+
 //   Emit trailing particles at a position using bridge color data.
 //
 // Parameters:

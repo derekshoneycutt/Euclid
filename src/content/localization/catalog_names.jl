@@ -150,6 +150,9 @@ const EnUsCatalogNames = LocalizedContent.CatalogNameDeclaration[
         "builtin", UUID("65a8489e-e0bd-535f-bf47-3c5e9c9d70e6"), "en-US",
         "Hilbert's Foundations of Geometry"),
     LocalizedContent.CatalogNameDeclaration(
+        "builtin", UUID("6913c945-308b-47bd-8145-9d97a8500c02"), "en-US",
+        "Hyperbola"),
+    LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("697be89f-daea-5bae-b872-8286faf44b34"), "en-US",
         "Theorem 14"),
     LocalizedContent.CatalogNameDeclaration(
@@ -167,6 +170,9 @@ const EnUsCatalogNames = LocalizedContent.CatalogNameDeclaration[
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("76fdebfe-2600-551e-be64-03f1942f4f49"), "en-US",
         "Proposition I"),
+    LocalizedContent.CatalogNameDeclaration(
+        "builtin", UUID("7a30689b-72db-480b-965a-92e681786c01"), "en-US",
+        "Parabola"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("7d7dbc7a-c360-486d-b727-a9909d4c569e"), "en-US",
         "5-Cusped Hypocycloid"),

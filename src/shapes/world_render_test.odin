@@ -1,7 +1,9 @@
 package shapes
 
 import shapemodel "model"
+import curve "curve"
 
+import "core:math"
 import "core:testing"
 
 import test_helpers "../test_helpers"
@@ -349,4 +351,147 @@ world_render_packet_does_not_survive_animation_rewind :: proc(t: ^testing.T) {
     testing.expect_value(t, world.draw_cache.item_count, 0)
     testing.expect_value(t, world.draw_cache.label_byte_count, u16(0))
     testing.expect_value(t, world.draw_cache.polygon_vertex_count, 0)
+}
+
+// Verify the interpolated parabola nib and curve frontier remain analytically coincident.
+@(test)
+world_render_interpolates_parabola_frontier_and_tool_together :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    start: Vector3 = {0.37, 0.5, 0}
+    parabola, parabola_status := world_create_parabola(world, {
+        vertex = start,
+        focal_distance = 0.075,
+        parameter_start = -1.6,
+        parameter_finish = 1.6,
+        draw_parameter = -0.5,
+        style = Shape_Style{},
+    })
+    tool, tool_status := world_create_parabola_tool(world, {
+        vertex = start,
+        focal_distance = 0.075,
+        link_length = 0.16,
+        parameter_start = -1.6,
+        parameter_finish = 1.6,
+        parameter = -0.5,
+        style = Shape_Style{},
+    })
+    testing.expect_value(t, parabola_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, tool_status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_transform(world, parabola).position = {0.4, 0.55, 0}
+    world_render_test_transform(world, tool).position = {0.4, 0.55, 0}
+    parabola_value, parabola_found := shapemodel.shape_component_get_mut(
+        &world.parabolas, &world.registry, parabola)
+    tool_value, tool_found := shapemodel.shape_component_get_mut(
+        &world.parabola_tools, &world.registry, tool)
+    testing.expect(t, parabola_found && tool_found)
+    parabola_value.draw_parameter = 0.9
+    tool_value.parameter = 0.9
+
+    curve_sample, curve_found := world_lerped_parabola(world, parabola, 0.4)
+    tool_sample, tool_sample_found := world_lerped_parabola_tool(world, tool, 0.4)
+    testing.expect(t, curve_found && tool_sample_found)
+    point := curve.parabola_point(
+        curve_sample.vertex, curve_sample.value, curve_sample.value.draw_parameter)
+    pose := curve.parabola_tool_pose(tool_sample.vertex, tool_sample.value)
+    test_helpers.expect_vec3_close(t, pose.vertex, point,
+        "interpolated tool nib should match the interpolated curve frontier")
+}
+
+// Verify independently cached hyperbola branches never create a center-crossing packet.
+@(test)
+world_render_keeps_hyperbola_branch_packets_separate :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    positive, positive_status := world_create_hyperbola(world, {
+        center = {0.5, 0.5, 0},
+        branch = 1,
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1.35,
+        parameter_finish = 1.35,
+        draw_parameter = 1.35,
+        style = Shape_Style{},
+    })
+    negative, negative_status := world_create_hyperbola(world, {
+        center = {0.5, 0.5, 0},
+        branch = -1,
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1.35,
+        parameter_finish = 1.35,
+        draw_parameter = 1.35,
+        style = Shape_Style{},
+    })
+    testing.expect_value(t, positive_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, negative_status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_show(world, positive)
+    world_render_test_show(world, negative)
+
+    build_shape_world_draw_cache(world, 1)
+
+    testing.expect_value(t, world.draw_cache.item_count, 2)
+    world_render_test_assert_separate_branches(t, &world.draw_cache)
+}
+
+// Assert each cached hyperbola packet stays on one side and both sides are represented.
+world_render_test_assert_separate_branches :: proc(
+    t: ^testing.T, cache: ^shapemodel.Shapes_Draw_Cache) {
+    packet_count := 0
+    positive_packets := 0
+    negative_packets := 0
+    for item in cache.items[:cache.item_count] {
+        #partial switch draw in item {
+        case Shapes_Curve_Draw:
+            packet_count += 1
+            first := cache.curve_vertices[draw.first_vertex]
+            sign := f32(-1)
+            if first.x > 0.5 {
+                sign = 1
+                positive_packets += 1
+            } else {
+                negative_packets += 1
+            }
+            for point in cache.curve_vertices[
+                draw.first_vertex:draw.first_vertex + draw.vertex_count] {
+                testing.expectf(t, sign * (point.x - 0.5) > 0,
+                    "each branch packet should remain on its own side of center")
+            }
+        case:
+            testing.expect(t, false, "expected separate curve draw packets")
+        }
+    }
+    testing.expect_value(t, packet_count, 2)
+    testing.expect_value(t, positive_packets, 1)
+    testing.expect_value(t, negative_packets, 1)
+}
+
+// Verify the parabola slot extends the diamond diagonal rather than the directrix contact.
+@(test)
+world_render_parabola_guide_contains_analytic_nib :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    tool, status := world_create_parabola_tool(world, {
+        vertex = {0.37, 0.5, 0},
+        focal_distance = 0.075,
+        link_length = 0.16,
+        rotation = 0.3,
+        parameter_start = -1.6,
+        parameter_finish = 1.6,
+        parameter = 1.2,
+        style = Shape_Style{},
+    })
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_show(world, tool)
+    build_shape_world_draw_cache(world, 1)
+    draw := world.draw_cache.parabola_tool
+    guide_start := draw.guide_start
+    guide_finish := draw.guide_finish
+    diagonal_center := (draw.diamond_first + draw.diamond_second) * 0.5
+    test_helpers.expect_vec3_close(t, (guide_start + guide_finish) * 0.5,
+        diagonal_center, "guide should be centered on the diamond diagonal")
+    axis := guide_finish - guide_start
+    delta := draw.nib - guide_start
+    testing.expectf(t, math.abs(axis.x * delta.y - axis.y * delta.x) < 1e-5,
+        "analytic nib must lie on the extended diamond diagonal")
 }

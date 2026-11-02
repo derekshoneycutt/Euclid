@@ -67,6 +67,11 @@ end
         ["construction_paused", "construction_playing", "animation_completed",
             "animation_completion_failed", "particle_effects_disabled"])
     @test EuclidEvidence.EVENT_NAMES[UInt16(69)] == "animation_completed"
+    for (id, name) in ((191, "parabola_frontier_committed"),
+        (193, "hyperbola_frontier_committed"))
+        @test EuclidEvidence.EVENT_NAMES[UInt16(id)] == name
+        @test name in EuclidEvidence.scenario_schema().events
+    end
     @test UInt16(68) in EuclidEvidence.REQUEST_EVENT_KINDS
     @test UInt16(70) in EuclidEvidence.REQUEST_EVENT_KINDS
     @test "animation_loaded" in EuclidEvidence.scenario_schema().events
@@ -135,6 +140,20 @@ end
         @test summary.result == "passed"
         @test summary.bad_frees == 0
         @test length(summary.failure_events) == 1
+    end
+end
+
+@testset "conic evidence preserves branch identities" begin
+    mktemp() do path, io
+        write(io, EuclidEvidence.TRACE_MAGIC)
+        write_little_endian(io, UInt16(1))
+        write_little_endian(io, UInt16(64))
+        write_event(io, UInt64(1); kind=UInt16(193), first=UInt32(11))
+        write_event(io, UInt64(2); kind=UInt16(193), first=UInt32(12))
+        close(io)
+        rows = EuclidEvidence.query_trace(path; kind="hyperbola_frontier_committed")
+        @test [row.payload.point_index for row in rows] == UInt32[11, 12]
+        @test all(row.payload.type == "point" for row in rows)
     end
 end
 

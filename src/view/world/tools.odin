@@ -8,6 +8,8 @@ import math "core:math"
 import projection "projection"
 import core "../../core"
 
+CONIC_MARKER_HEIGHT :: f32(0.06)
+
 // encoded_stroke_pack_occluders copies bounded physical-pixel caster records.
 encoded_stroke_pack_occluders :: proc(
     uniforms: ^native.Stroke_Fragment_Uniforms,
@@ -162,6 +164,104 @@ draw_encoded_cycloid_tool :: proc(
         tool^.handle_finish, state^.iso_scale)
     draw_encoded_tool_segment(state, encoder, {handle_start,
         handle_finish, brush_size, tool^.color, nil})
+}
+
+// Project a physical instrument rail through the shared lit segment renderer.
+draw_encoded_tool_world_segment :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    endpoints: [2]geometry.Vector3, brush: f32, material: color.Color_RGBA8) {
+    first := projection.iso_to_cartesian(endpoints[0], state^.iso_scale)
+    finish := projection.iso_to_cartesian(endpoints[1], state^.iso_scale)
+    draw_encoded_tool_segment(state, encoder, {
+        geometry.Vector2(first), geometry.Vector2(finish), brush, material, nil})
+}
+
+// Draw fixed and moving parabola guides separately from the articulated linkage.
+draw_encoded_parabola_guides :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    tool: ^shapemodel.Shapes_Parabola_Tool_Draw, brush: f32) {
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.directrix_rail_start, tool^.directrix_rail_finish}, brush, tool^.color)
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.guide_start, tool^.guide_finish}, brush, tool^.color)
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.directrix_contact, tool^.nib}, brush * 0.6, tool^.color)
+}
+
+// Draw the equal-link diamond with plain shared joints and an upright tracing pen.
+draw_encoded_parabola_tool :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    tool: ^shapemodel.Shapes_Parabola_Tool_Draw) {
+    brush := projection.effective_ink_size(tool^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw_encoded_parabola_guides(state, encoder, tool, brush)
+    points: [5]geometry.Vector3 = {tool^.directrix_contact, tool^.diamond_first,
+        tool^.focus, tool^.diamond_second, tool^.directrix_contact}
+    for index in 0..<(len(points) - 1) {
+        draw_encoded_tool_world_segment(state, encoder,
+            {points[index], points[index + 1]}, brush, tool^.color)
+    }
+    nib_color := tool^.color
+    if tool^.has_active_color {
+        nib_color = resolve_animation_authored_ink(
+            state, color.Color_RGBA8(tool^.active_color))
+    }
+    if tool^.active {
+        center := projection.iso_to_cartesian(tool^.nib, state^.iso_scale)
+        _ = native.draw_encoder_circle(
+            encoder, geometry.Vector2(center), brush, nib_color)
+    }
+    top := tool^.nib + geometry.Vector3{0, 0, CONIC_MARKER_HEIGHT}
+    draw_encoded_tool_world_segment(
+        state, encoder, {tool^.nib, top}, brush, tool^.color)
+}
+
+// Draw upright paired pens with the same flat active contacts as pen and compass.
+draw_encoded_hyperbola_pens :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    tool: ^shapemodel.Shapes_Hyperbola_Tool_Draw, brush: f32) {
+    nib_color := tool^.color
+    if tool^.has_active_color {
+        nib_color = resolve_animation_authored_ink(
+            state, color.Color_RGBA8(tool^.active_color))
+    }
+    tips: [2]geometry.Vector3 = {tool^.carriage_positive, tool^.carriage_negative}
+    for tip in tips {
+        if tool^.active {
+            center := projection.iso_to_cartesian(tip, state^.iso_scale)
+            _ = native.draw_encoder_circle(
+                encoder, geometry.Vector2(center), brush, nib_color)
+        }
+        top := tip + geometry.Vector3{0, 0, CONIC_MARKER_HEIGHT}
+        draw_encoded_tool_world_segment(
+            state, encoder, {tip, top}, brush, tool^.color)
+    }
+}
+
+// Draw three equal-width rails, a straight pivot, reference ticks, and upright pens.
+draw_encoded_hyperbola_tool :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    tool: ^shapemodel.Shapes_Hyperbola_Tool_Draw) {
+    brush := projection.effective_ink_size(tool^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.asymptote_first_start, tool^.asymptote_first_finish}, brush, tool^.color)
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.asymptote_second_start, tool^.asymptote_second_finish}, brush, tool^.color)
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.moving_rail_start, tool^.moving_rail_finish}, brush, tool^.color)
+    tick_endpoints: [2][2]geometry.Vector3 = {
+        {tool^.tick_first_start, tool^.tick_first_finish},
+        {tool^.tick_second_start, tool^.tick_second_finish},
+    }
+    for endpoints in tick_endpoints {
+        draw_encoded_tool_world_segment(
+            state, encoder, endpoints, brush * 1.2, tool^.color)
+    }
+    pivot_top := tool^.center + geometry.Vector3{0, 0, CONIC_MARKER_HEIGHT}
+    draw_encoded_tool_world_segment(state, encoder,
+        {tool^.center, pivot_top}, brush, tool^.color)
+    draw_encoded_hyperbola_pens(state, encoder, tool, brush)
 }
 
 // encoded_compass_arc_fallback draws one butt-ended sampled outside arc.
@@ -450,6 +550,10 @@ draw_encoded_high_instrument :: proc(
         draw_encoded_trochoid_tool(state, encoder, &typed)
     case shapemodel.Shapes_Cycloid_Tool_Draw:
         draw_encoded_cycloid_tool(state, encoder, &typed)
+    case shapemodel.Shapes_Parabola_Tool_Draw:
+        draw_encoded_parabola_tool(state, encoder, &typed)
+    case shapemodel.Shapes_Hyperbola_Tool_Draw:
+        draw_encoded_hyperbola_tool(state, encoder, &typed)
     case shapemodel.Shapes_Pen_Draw:
         caster: ^shapemodel.Shapes_Compass_Draw
         if pen_receives_compass {
@@ -675,6 +779,56 @@ draw_encoded_cycloid_shadow :: proc(
         tool^.handle_finish, thickness, handle_height})
 }
 
+// Cast shadows for every physical member of the parabola instrument.
+draw_encoded_parabola_shadow :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    tool: ^shapemodel.Shapes_Parabola_Tool_Draw) {
+    thickness := projection.effective_ink_size(max(tool^.brush_size * 0.8,
+        SHADOW_MIN_THICKNESS), state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.directrix_rail_start,
+        tool^.directrix_rail_finish, thickness, tool^.directrix_contact.z})
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.guide_start,
+        tool^.guide_finish, thickness, tool^.vertex.z})
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.directrix_contact,
+        tool^.nib, thickness * 0.6, tool^.vertex.z})
+    top := tool^.nib + geometry.Vector3{0, 0, CONIC_MARKER_HEIGHT}
+    draw_encoded_tool_shadow_line(state, encoder,
+        {tool^.nib, top, thickness, (tool^.nib.z + top.z) * 0.5})
+    joints: [5]geometry.Vector3 = {tool^.directrix_contact, tool^.diamond_first,
+        tool^.focus, tool^.diamond_second, tool^.directrix_contact}
+    for index in 0..<(len(joints) - 1) {
+        draw_encoded_tool_shadow_line(state, encoder, {joints[index],
+            joints[index + 1], thickness, (joints[index].z + joints[index + 1].z) * 0.5})
+    }
+}
+
+// Cast shadows for the hyperbola's fixed and moving rails and both carriages.
+draw_encoded_hyperbola_shadow :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    tool: ^shapemodel.Shapes_Hyperbola_Tool_Draw) {
+    thickness := projection.effective_ink_size(max(tool^.brush_size * 0.8,
+        SHADOW_MIN_THICKNESS), state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.asymptote_first_start,
+        tool^.asymptote_first_finish, thickness, tool^.center.z})
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.asymptote_second_start,
+        tool^.asymptote_second_finish, thickness, tool^.center.z})
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.moving_rail_start,
+        tool^.moving_rail_finish, thickness, tool^.center.z})
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.tick_first_start,
+        tool^.tick_first_finish, thickness, tool^.center.z})
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.tick_second_start,
+        tool^.tick_second_finish, thickness, tool^.center.z})
+    bases: [3]geometry.Vector3 = {
+        tool^.center, tool^.carriage_positive, tool^.carriage_negative}
+    for base in bases {
+        top := base + geometry.Vector3{0, 0, CONIC_MARKER_HEIGHT}
+        draw_encoded_tool_shadow_line(state, encoder,
+            {base, top, thickness, (base.z + top.z) * 0.5})
+    }
+}
+
 // draw_encoded_cached_tool_shadow_pass restores tool shadows in cache order.
 draw_encoded_cached_tool_shadow_pass :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
@@ -685,6 +839,10 @@ draw_encoded_cached_tool_shadow_pass :: proc(
             draw_encoded_trochoid_shadow(state, encoder, &typed)
         case shapemodel.Shapes_Cycloid_Tool_Draw:
             draw_encoded_cycloid_shadow(state, encoder, &typed)
+        case shapemodel.Shapes_Parabola_Tool_Draw:
+            draw_encoded_parabola_shadow(state, encoder, &typed)
+        case shapemodel.Shapes_Hyperbola_Tool_Draw:
+            draw_encoded_hyperbola_shadow(state, encoder, &typed)
         case shapemodel.Shapes_Pen_Draw:
             draw_encoded_pen_shadow(state, encoder, &typed)
         case shapemodel.Shapes_Compass_Draw:

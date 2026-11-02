@@ -174,7 +174,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
         "INSERT INTO edition VALUES ('greek','Ancient Greek','grc','Greek source');"+
         "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"+
         "UPDATE content_metadata SET value='1035' WHERE key='record_count';"+
-        "UPDATE content_metadata SET value='1=6;2=1;3=92;4=13;5=92;6=139;7=138;8=138;9=4;10=278;11=138' "+
+        "UPDATE content_metadata SET value='1=6;2=1;3=92;4=13;5=92;6=141;7=140;8=140;9=4;10=282;11=140' "+
         "WHERE key='table_counts';"))
     service: Content_Service
     testing.expect(t, content_service_init(
@@ -183,7 +183,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
     generation := content_service_generation(&service)
     testing.expect(t, generation != nil && generation^.data.complete)
     testing.expect_value(t, generation^.data.edition_count, u16(4))
-    testing.expect_value(t, generation^.data.availability_count, u16(278))
+    testing.expect_value(t, generation^.data.availability_count, u16(282))
 }
 
 // Both stable slots retire all content and packed storage after repeated transactions.

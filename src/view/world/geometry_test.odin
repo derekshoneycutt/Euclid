@@ -388,6 +388,104 @@ encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {
     testing.expect_value(t, stroke_draws[0].fragment_uniforms.radius, f32(4))
 }
 
+// Verify the parabola uses one moving guide, plain diamond joints, and a flat nib.
+@(test)
+parabola_tool_uses_straight_rods_and_flat_contact :: proc(t: ^testing.T) {
+    vertices: [256]native.Draw_Vertex
+    indices: [768]u32
+    batches: [16]native.Draw_Batch
+    commands: [16]native.Draw_Command
+    stroke_vertices: [48]native.Stroke_Vertex
+    stroke_draws: [8]native.Stroke_Draw
+    custom: native.Draw_Custom_Storage = {
+        stroke_vertices = stroke_vertices[:],
+        stroke_draws = stroke_draws[:],
+    }
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], &custom},
+        {1280, 720}, {1280, 720}))
+    native.draw_encoder_enable_strokes(&encoder, true)
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    projection.fit_iso_scale_to_viewport(&state.iso_scale, 1280, 720)
+    state.ui_runtime.preferences.values.animation.scale_percent = 100
+    tool: shapemodel.Shapes_Parabola_Tool_Draw = {
+        vertex = {0.4, 0.5, 0},
+        focus = {0.5, 0.5, 0},
+        directrix_contact = {0.3, 0.5, 0},
+        directrix_rail_start = {0.3, 0.2, 0},
+        directrix_rail_finish = {0.3, 0.8, 0},
+        diamond_first = {0.4, 0.6, 0},
+        diamond_second = {0.4, 0.4, 0},
+        guide_start = {0.4, 0.2, 0},
+        guide_finish = {0.4, 0.8, 0},
+        nib = {0.4, 0.5, 0},
+        brush_size = 3,
+        active = true,
+        has_active_color = true,
+        active_color = {70, 130, 180, 255},
+        color = {255, 255, 255, 255},
+    }
+    draw_encoded_parabola_tool(state, &encoder, &tool)
+    testing.expect_value(t, encoder.stroke_draw_count, 8)
+    testing.expect(t, encoder.vertex_count > 0)
+    testing.expect_value(t, vertices[0].color, color.Color_RGBA8{70, 130, 180, 255})
+    expected_top := projection.iso_to_cartesian(
+        tool.nib + geometry.Vector3{0, 0, CONIC_MARKER_HEIGHT}, state.iso_scale)
+    testing.expect_value(t, stroke_draws[7].fragment_uniforms.segment_p1,
+        [2]f32{expected_top.x, expected_top.y})
+}
+
+// Verify the hyperbola uses eight rods and flat contacts instead of ring strokes.
+@(test)
+hyperbola_tool_uses_straight_rods_and_flat_contacts :: proc(t: ^testing.T) {
+    vertices: [512]native.Draw_Vertex
+    indices: [1536]u32
+    batches: [16]native.Draw_Batch
+    commands: [16]native.Draw_Command
+    stroke_vertices: [48]native.Stroke_Vertex
+    stroke_draws: [8]native.Stroke_Draw
+    custom: native.Draw_Custom_Storage = {
+        stroke_vertices = stroke_vertices[:],
+        stroke_draws = stroke_draws[:],
+    }
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], &custom},
+        {1280, 720}, {1280, 720}))
+    native.draw_encoder_enable_strokes(&encoder, true)
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    projection.fit_iso_scale_to_viewport(&state.iso_scale, 1280, 720)
+    state.ui_runtime.preferences.values.animation.scale_percent = 100
+    tool: shapemodel.Shapes_Hyperbola_Tool_Draw = {
+        center = {0.5, 0.5, 0},
+        asymptote_first_start = {0.2, 0.2, 0},
+        asymptote_first_finish = {0.8, 0.8, 0},
+        asymptote_second_start = {0.2, 0.8, 0},
+        asymptote_second_finish = {0.8, 0.2, 0},
+        moving_rail_start = {0.1, 0.5, 0},
+        moving_rail_finish = {0.9, 0.5, 0},
+        carriage_positive = {0.7, 0.5, 0},
+        carriage_negative = {0.3, 0.5, 0},
+        tick_first_start = {0.6, 0.49, 0},
+        tick_first_finish = {0.6, 0.51, 0},
+        tick_second_start = {0.4, 0.49, 0},
+        tick_second_finish = {0.4, 0.51, 0},
+        brush_size = 3,
+        active = true,
+        color = {255, 255, 255, 255},
+    }
+    draw_encoded_hyperbola_tool(state, &encoder, &tool)
+    testing.expect_value(t, encoder.stroke_draw_count, 8)
+    for index in 0..<3 {
+        testing.expect_value(t, stroke_draws[index].fragment_uniforms.radius,
+            stroke_draws[0].fragment_uniforms.radius)
+    }
+    testing.expect(t, encoder.vertex_count > 0)
+}
+
 // Verify guide ring sampling closes exactly at one full turn.
 @(test)
 trochoid_tool_ring_sampling_is_closed :: proc(t: ^testing.T) {

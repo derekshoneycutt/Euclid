@@ -61,7 +61,7 @@ INSERT INTO animation_catalog VALUES
         'Elements Book I Line Construction', 'straight line',
      'Construct a straight line through two points.');
 WITH RECURSIVE sequence(value) AS (
-    VALUES(4) UNION ALL SELECT value + 1 FROM sequence WHERE value < 138)
+    VALUES(4) UNION ALL SELECT value + 1 FROM sequence WHERE value < 140)
 INSERT INTO animation_catalog
 SELECT value, 'builtin', printf('00000000-0000-0000-0000-%012d', value), NULL, 1,
        printf('Synthetic %03d', value), value - 1, value - 1,
@@ -70,7 +70,7 @@ SELECT value, 'builtin', printf('00000000-0000-0000-0000-%012d', value), NULL, 1
        'Synthetic searchable geometry document'
 FROM sequence;
 UPDATE animation_catalog SET node_kind=2, display_name='Terminal',
-    implementation_path=NULL WHERE rowid=138;
+    implementation_path=NULL WHERE rowid=140;
 INSERT INTO animation_search(animation_search) VALUES('rebuild');
 INSERT INTO search_terms(word, rank) VALUES
     ('perpendicular', 1), ('circle', 2), ('construction', 3), ('line', 4);
@@ -78,7 +78,7 @@ INSERT INTO search_metadata VALUES
     ('schema_version', '2'),
     ('sqlite_version', '3.53.4'),
     ('catalog_fingerprint', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
-    ('document_count', '138'),
+    ('document_count', '140'),
     ('tokenizer_version', 'porter-unicode61-v1'),
     ('query_contract_version', '1'),
     ('index_generation', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
@@ -196,4 +196,3 @@ content_test_refresh_counts :: proc(database: ^sqlite3.Database) -> bool {
     return search_test_execute_sql(
         database, strings.clone_to_cstring(sql, context.temp_allocator))
 }
-

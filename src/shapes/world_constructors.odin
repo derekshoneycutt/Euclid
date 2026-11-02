@@ -78,6 +78,55 @@ Cycloid_Tool_Input :: struct {
     style: Shape_Style,
 }
 
+// Supply canonical analytic parabola geometry and presentation values.
+Parabola_Input :: struct {
+    vertex: Vector3,
+    focal_distance: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    style: Shape_Style,
+}
+
+// Supply one signed analytic hyperbola branch and presentation values.
+Hyperbola_Input :: struct {
+    center: Vector3,
+    branch: i32,
+    semimajor: f32,
+    semiminor: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    style: Shape_Style,
+}
+
+// Supply geometry and initial parameter for the permanent parabola instrument.
+Parabola_Tool_Input :: struct {
+    vertex: Vector3,
+    focal_distance: f32,
+    link_length: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    style: Shape_Style,
+}
+
+// Supply geometry and initial parameter for the permanent hyperbola instrument.
+Hyperbola_Tool_Input :: struct {
+    center: Vector3,
+    semimajor: f32,
+    semiminor: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    rail_half_length: f32,
+    style: Shape_Style,
+}
+
 // Supply canonical source and presentation values for one world label.
 World_Label_Input :: struct {
     source: string,
@@ -538,6 +587,165 @@ world_create_cycloid :: proc(
     }, .Ok
 }
 
+// Create one independently rendered analytic parabola entity.
+world_create_parabola :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Parabola_Input) -> (shapemodel.Shape_Entity, shapemodel.Shape_World_Status) {
+    value: shapemodel.Shape_Parabola = {
+        focal_distance = input.focal_distance,
+        rotation = input.rotation,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish,
+        draw_parameter = input.draw_parameter,
+        previous_focal_distance = input.focal_distance,
+        previous_rotation = input.rotation,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_draw_parameter = input.draw_parameter,
+    }
+    if world == nil || !shapemodel.shape_parabola_is_valid(value) {
+        return {}, .Invalid_Argument
+    }
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        parabolas = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_transform(world, input.vertex)
+    status := shapemodel.shape_component_insert(
+        &world.parabolas, &world.registry, shape, value)
+    assert(status == .Ok)
+    world_shape_publish_host(world, shape, input.style, {.Parabola, {}})
+    return shape, .Ok
+}
+
+// Create one independently rendered analytic hyperbola branch entity.
+world_create_hyperbola :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Hyperbola_Input) -> (shapemodel.Shape_Entity, shapemodel.Shape_World_Status) {
+    value: shapemodel.Shape_Hyperbola_Branch = {
+        branch = input.branch,
+        semimajor = input.semimajor,
+        semiminor = input.semiminor,
+        rotation = input.rotation,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish,
+        draw_parameter = input.draw_parameter,
+        previous_semimajor = input.semimajor,
+        previous_semiminor = input.semiminor,
+        previous_rotation = input.rotation,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_draw_parameter = input.draw_parameter,
+    }
+    if world == nil || !shapemodel.shape_hyperbola_is_valid(value) {
+        return {}, .Invalid_Argument
+    }
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        hyperbolas = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_transform(world, input.center)
+    status := shapemodel.shape_component_insert(
+        &world.hyperbolas, &world.registry, shape, value)
+    assert(status == .Ok)
+    world_shape_publish_host(world, shape, input.style, {.Hyperbola, {}})
+    return shape, .Ok
+}
+
+// Create the fixed-lifetime native parabola instrument before baseline freeze.
+world_create_parabola_tool :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Parabola_Tool_Input) -> (
+        shapemodel.Shape_Entity, shapemodel.Shape_World_Status) {
+    value: shapemodel.Shape_Parabola_Tool = {
+        focal_distance = input.focal_distance,
+        link_length = input.link_length,
+        rotation = input.rotation,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish,
+        parameter = input.parameter,
+        previous_focal_distance = input.focal_distance,
+        previous_link_length = input.link_length,
+        previous_rotation = input.rotation,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_parameter = input.parameter,
+    }
+    if world == nil || !shapemodel.shape_parabola_tool_is_valid(value) {
+        return {}, .Invalid_Argument
+    }
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        parabola_tools = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_transform(world, input.vertex)
+    status := shapemodel.shape_component_insert(
+        &world.parabola_tools, &world.registry, shape, value)
+    assert(status == .Ok)
+    world_shape_publish_host(world, shape, input.style, {.Parabola_Tool, {}})
+    return shape, .Ok
+}
+
+// Create the fixed-lifetime native hyperbola instrument before baseline freeze.
+world_create_hyperbola_tool :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Hyperbola_Tool_Input) -> (
+        shapemodel.Shape_Entity, shapemodel.Shape_World_Status) {
+    value: shapemodel.Shape_Hyperbola_Tool = {
+        semimajor = input.semimajor,
+        semiminor = input.semiminor,
+        rotation = input.rotation,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish,
+        parameter = input.parameter,
+        rail_half_length = input.rail_half_length,
+        previous_semimajor = input.semimajor,
+        previous_semiminor = input.semiminor,
+        previous_rotation = input.rotation,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_parameter = input.parameter,
+        previous_rail_half_length = input.rail_half_length,
+    }
+    if world == nil || !shapemodel.shape_hyperbola_tool_is_valid(value) {
+        return {}, .Invalid_Argument
+    }
+    needs: shapemodel.Shape_Construction_Needs = {
+        entities = 1,
+        transforms = 1,
+        hyperbola_tools = 1,
+        render_styles = 1,
+        geometries = 1,
+    }
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_transform(world, input.center)
+    status := shapemodel.shape_component_insert(
+        &world.hyperbola_tools, &world.registry, shape, value)
+    assert(status == .Ok)
+    world_shape_publish_host(world, shape, input.style, {.Hyperbola_Tool, {}})
+    return shape, .Ok
+}
+
 // Create the permanent cycloid guide with its own endpoint transforms.
 world_create_cycloid_tool :: proc(
     world: ^shapemodel.Shape_World,
@@ -555,6 +763,7 @@ world_create_cycloid_tool :: proc(
         previous_parameter = input.parameter,
         previous_orientation_phase = input.orientation_phase,
     }
+
     if world == nil || !shapemodel.shape_cycloid_tool_is_valid(value) ||
         !shapemodel.shape_cycloid_line_is_valid(input.first, input.second,
             input.rolling_radius, input.parameter_start, input.parameter_finish) {

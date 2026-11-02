@@ -14,7 +14,30 @@ export circle_circle_intersections_xy, circle_line_intersections_xy,
     TrochoidMode, TrochoidExternal, TrochoidInternal,
     trochoid_orbit_radius, trochoid_rolling_orientation,
     trochoid_point, trochoid_tool_pose,
-    cycloid_line_basis, cycloid_contact_point, cycloid_point, cycloid_tool_pose
+    cycloid_line_basis, cycloid_contact_point, cycloid_point, cycloid_tool_pose,
+    parabola_point, hyperbola_point
+
+"""Return named board coordinates for a rotated conic point without heap storage."""
+function conic_world_point(origin, x::Real, y::Real, rotation::Real)
+    sine, cosine = sincos(rotation)
+    return (x=Float32(origin[1] + x * cosine - y * sine),
+        y=Float32(origin[2] + x * sine + y * cosine), z=Float32(origin[3]))
+end
+
+"""Evaluate a right-opening parabola, preserving its vertex elevation."""
+function parabola_point(vertex, focal_distance::Real, parameter::Real;
+    rotation::Real=0f0)
+    return conic_world_point(vertex, focal_distance * parameter * parameter,
+        2 * focal_distance * parameter, rotation)
+end
+
+"""Evaluate one signed hyperbola branch; opposite signs are central reflections."""
+function hyperbola_point(center, semimajor::Real, semiminor::Real,
+    parameter::Real; branch::Integer=1, rotation::Real=0f0)
+    branch in (-1, 1) || throw(ArgumentError("hyperbola branch must be +1 or -1"))
+    return conic_world_point(center, branch * semimajor * cosh(parameter),
+        branch * semiminor * sinh(parameter), rotation)
+end
 
 @enum TrochoidMode::UInt8 TrochoidExternal=0 TrochoidInternal=1
 

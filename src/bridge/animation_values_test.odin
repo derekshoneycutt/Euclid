@@ -143,14 +143,15 @@ animation_value_abi_reads_snapshot_and_newest_pending_write :: proc(t: ^testing.
     canonical: [1]u8 = {1}
     _ = set_animation_value(
         state, identity, raw_data(canonical[:]), len(canonical))
-    snapshot: bridgemodel.Animation_Query_Snapshot
-    snapshot.animation_values_valid = animation_model.animation_value_store_pack(
+    snapshot := new(bridgemodel.Animation_Query_Snapshot, context.allocator)
+    defer free(snapshot)
+    snapshot^.animation_values_valid = animation_model.animation_value_store_pack(
         &state^.animation_values,
         state^.animation_values.generation,
-        &snapshot.animation_values) == .Ok
+        &snapshot^.animation_values) == .Ok
     batch: bridgemodel.Scene_Command_Batch
     state^.scene_command_batch_target = &batch
-    state^.animation_query_snapshot_target = &snapshot
+    state^.animation_query_snapshot_target = snapshot
     destination: [1]u8
 
     testing.expect_value(t, get_animation_value(

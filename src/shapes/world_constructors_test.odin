@@ -471,3 +471,87 @@ shapes_test_world_tool_constraint_capacity_failure_is_transactional :: proc(
     testing.expect_value(t, world.transforms.count, u16(0))
     testing.expect_value(t, world.constraints.count, before_constraints)
 }
+
+// Verify permanent conic tools survive animation-suffix rewind with stable handles.
+@(test)
+shapes_test_world_conic_tools_survive_animation_rewind :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    parabola, parabola_status := world_create_parabola_tool(world, {
+        vertex = {0.37, 0.5, 0},
+        focal_distance = 0.075,
+        link_length = 0.16,
+        parameter_start = -1.6,
+        parameter_finish = 1.6,
+        parameter = 0,
+        style = world_shape_test_style(),
+    })
+    hyperbola, hyperbola_status := world_create_hyperbola_tool(world, {
+        center = {0.5, 0.5, 0},
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1.35,
+        parameter_finish = 1.35,
+        parameter = 0,
+        rail_half_length = 0.4,
+        style = world_shape_test_style(),
+    })
+    testing.expect_value(t, parabola_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, hyperbola_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
+        world), shapemodel.Shape_World_Status.Ok)
+    _, curve_status := world_create_parabola(world, {
+        vertex = {0.37, 0.5, 0},
+        focal_distance = 0.075,
+        parameter_start = -1,
+        parameter_finish = 1,
+        draw_parameter = 0,
+        style = world_shape_test_style(),
+    })
+    testing.expect_value(t, curve_status, shapemodel.Shape_World_Status.Ok)
+
+    testing.expect_value(t, shapemodel.shape_world_rewind_animation(
+        world), shapemodel.Shape_World_Status.Ok)
+
+    testing.expect(t, shapemodel.shape_registry_resolves(
+        &world.registry, parabola))
+    testing.expect(t, shapemodel.shape_registry_resolves(
+        &world.registry, hyperbola))
+    testing.expect_value(t, world.parabola_tools.count, u16(1))
+    testing.expect_value(t, world.hyperbola_tools.count, u16(1))
+    testing.expect_value(t, world.parabolas.count, u16(0))
+}
+
+// Verify invalid conic constructors reject input before publishing world components.
+@(test)
+shapes_test_world_conic_constructors_reject_invalid_geometry_transactionally :: proc(
+    t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    _, parabola_status := world_create_parabola(world, {
+        vertex = {},
+        focal_distance = 0.075,
+        parameter_start = -1,
+        parameter_finish = 1,
+        draw_parameter = 2,
+        style = world_shape_test_style(),
+    })
+    _, hyperbola_status := world_create_hyperbola(world, {
+        center = {},
+        branch = 0,
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1,
+        parameter_finish = 1,
+        draw_parameter = 0,
+        style = world_shape_test_style(),
+    })
+
+    testing.expect_value(t,
+        parabola_status, shapemodel.Shape_World_Status.Invalid_Argument)
+    testing.expect_value(t,
+        hyperbola_status, shapemodel.Shape_World_Status.Invalid_Argument)
+    testing.expect_value(t, world.registry.entity_count, u32(0))
+    testing.expect_value(t, world.transforms.count, u16(0))
+    testing.expect_value(t, world.geometries.count, u16(0))
+}

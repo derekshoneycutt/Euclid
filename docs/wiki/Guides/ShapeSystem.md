@@ -90,6 +90,9 @@ Geometry is composed from explicit references rather than nested ownership trees
 | Arc | The host transform is the center; the arc component carries radius, start angle, and signed sweep. |
 | Trochoid | The host transform is the fixed center; an analytic component carries rolling and tracer parameters. |
 | Cycloid | Two endpoint transforms define the directed baseline; an analytic component carries rolling and tracer parameters. |
+| Parabola | The host transform is the vertex; focal distance, rotation, finite directed domain, and reveal frontier define the open curve. |
+| Hyperbola branch | The host transform is the center; positive semiaxes, branch sign, rotation, finite domain, and frontier define one disconnected branch. |
+| Conic instruments | Permanent hosts carry analytic tool parameters; prepared diamond joints, rails, and tracing tips are derived poses. |
 | Polygon | An ordered range of vertex entity references. |
 | Pen and compass | Joint and pivot transforms plus their tool constraints. |
 | Label | A descriptor into world-owned UTF-8 bytes. |
@@ -136,6 +139,21 @@ These parameters are interpolated and evaluated to produce the current visible c
 The curve package owns evaluation and adaptive sampling; the draw cache consumes the
 result. The exact sampling policy and bounds belong in
 [`src/shapes/curve/`](../../../src/shapes/curve/), not in this guide.
+
+Parabolas use local coordinates `(f*t*t, 2*f*t)` with `f > 0`. Hyperbola branches use
+`sign * (a*cosh(t), b*sinh(t))` with positive semiaxes and sign `+1` or `-1`.
+Translation and planar rotation are applied after evaluation. Both families retain
+finite directed domains even though the mathematical curves are unbounded.
+The two hyperbola branches are separate entities and separate open draw packets;
+neither stroke preparation nor departure dust connects them through the center.
+
+The simplified Inwards-inspired parabola instrument and symmetric three-rail
+hyperbola guide use those same analytic parameters. Preparation interpolates scalar
+state before evaluating the nonlinear tool pose, so tracing tips agree with the
+visible reveal frontiers between simulation ticks. Instrument configuration validates
+the entire finite domain: the diamond must not flatten, and hyperbola carriages must
+fit on the moving rail. These are geometric drawing guides, not general-purpose
+mechanical simulations.
 
 Labels use a pointer-free descriptor into bytes owned by the world. A descriptor is
 valid only with the world lifetime that owns those bytes; consumers that cross an

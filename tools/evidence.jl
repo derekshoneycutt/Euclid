@@ -52,9 +52,15 @@ const EVENT_NAMES = Dict{UInt16,String}(
     181 => "point_style_committed", 182 => "point_visibility_committed",
     183 => "constraint_solve_completed", 184 => "constraint_solve_failed",
     185 => "arc_geometry_committed",
+    190 => "parabola_geometry_committed", 191 => "parabola_frontier_committed",
+    192 => "hyperbola_geometry_committed", 193 => "hyperbola_frontier_committed",
     260 => "pen_joint_committed", 261 => "pen_active_committed",
     262 => "pen_visibility_committed", 263 => "compass_joint_committed",
     264 => "compass_active_committed", 265 => "compass_visibility_committed",
+    270 => "parabola_tool_geometry_committed",
+    271 => "parabola_tool_parameter_committed",
+    272 => "hyperbola_tool_geometry_committed",
+    273 => "hyperbola_tool_parameter_committed",
     320 => "particle_emission_committed", 321 => "particle_emission_rejected",
     360 => "frame_presented", 361 => "dynview_published",
     362 => "capture_requested", 363 => "capture_completed",
@@ -81,7 +87,8 @@ const EVENT_NAMES = Dict{UInt16,String}(
     560 => "settings_save_submitted", 561 => "settings_save_committed",
     562 => "settings_save_failed")
 
-const POINT_EVENT_KINDS = Set(UInt16[180, 181, 182])
+const POINT_EVENT_KINDS = Set(UInt16[180, 181, 182, 190, 191, 192, 193,
+    270, 271, 272, 273])
 const REQUEST_EVENT_KINDS = Set(UInt16[65, 68, 70, 122, 123, 380, 381])
 const HANDLE_EVENT_KINDS = Set(UInt16[421, 423])
 
@@ -122,6 +129,7 @@ const SCENARIO_EVENTS = [
     "animation_selected", "animation_tick_committed",
     "animation_completed", "animation_completion_failed",
     "animation_cycle_boundary", "animation_loaded", "scene_batch_committed",
+    "parabola_frontier_committed", "hyperbola_frontier_committed",
     "constraint_solve_completed", "presentation_cleared",
     "presentation_superseded", "dynview_published",
     "library_search_committed",

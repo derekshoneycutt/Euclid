@@ -181,6 +181,21 @@ permanent guide and compass descend together, remain aligned while drawing, then
 together before either tool is hidden. Hiding a guide is intentionally silent; hiding
 the finished curve is the operation that emits clear dust.
 
+Parabola and hyperbola constructions use integrated tracing tips rather than a separate
+compass. The Inwards-inspired parabola apparatus sweeps one finite open arc through its
+vertex. The hyperbola's asymptote X stays fixed while its third rail pivots and opposing
+pen carriages slide symmetrically, drawing both branches simultaneously through their
+vertices. Minimum-radius ticks stay on the moving rail; do not treat them as stationary
+board marks or imply the pen separation is constant.
+
+Keep the analytic ink on the board plane and synchronize tool parameters with reveal
+frontiers in the same animation batch. Each active tip emits its ordinary drawing trail;
+rails and other reference parts do not create extra construction strokes. Lower the
+whole apparatus, activate contact only at the surface, then deactivate and lift from
+the final endpoints. Hide it before the readable finished-curve hold. Immediate
+completed-form selection must show the curves without the apparatus or drawing trails.
+Finite endpoints are display extents, not mathematical endpoints of either conic.
+
 Hypocycloid families use one common fixed-circle scale so changes in `k = R/r` remain
 visually comparable. For reduced rational `k = p/q`, animate one uninterrupted parameter
 domain of `0..2pi*q`; scale draw duration with `q` to preserve angular speed. The fixed

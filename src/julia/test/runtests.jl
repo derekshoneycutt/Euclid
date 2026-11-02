@@ -25,6 +25,10 @@ using Test
         include("animation_catalog_tests.jl")
     end
 
+    @testset "Conic Animations" begin
+        include("conic_animation_tests.jl")
+    end
+
     @testset "Localized Content" begin
         include("localized_content_tests.jl")
     end

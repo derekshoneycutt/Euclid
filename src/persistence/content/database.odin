@@ -212,7 +212,7 @@ content_database_validate_metadata :: proc(
        !search_metadata_equals(database, "sqlite_version", "3.53.4") ||
        !search_metadata_equals(database, "tokenizer_version", "porter-unicode61-v1") ||
        !search_metadata_equals(database, "query_contract_version", "1") ||
-       !search_metadata_equals(database, "document_count", "138") ||
+       !search_metadata_equals(database, "document_count", "140") ||
        !search_metadata_equals(database, "catalog_fingerprint", expected_fingerprint) ||
        !search_metadata_equals(database, "index_generation", expected_fingerprint) ||
        !content_admission_validate_metadata(database, expected_fingerprint) {

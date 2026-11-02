@@ -19,6 +19,10 @@ Bridge_Shape_Query_Source :: struct {
     trochoids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Trochoid),
     cycloids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid),
     cycloid_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid_Tool),
+    parabolas: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Parabola),
+    hyperbolas: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Hyperbola_Branch),
+    parabola_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Parabola_Tool),
+    hyperbola_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Hyperbola_Tool),
     render_styles: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Render_Style),
     active_features: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Active_Feature),
     geometries: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Geometry),
@@ -72,25 +76,34 @@ bridge_shape_resolve :: proc(
         shapemodel.shape_registry_resolves(&world.registry, entity)
 }
 
+// Borrow immutable component projections for the lifetime of the active snapshot.
+bridge_shape_snapshot_query_source :: proc(
+    shapes: ^shapemodel.Shape_Query_Snapshot) -> Bridge_Shape_Query_Source {
+    return {
+        registry = &shapes.registry,
+        transforms = &shapes.transforms,
+        arcs = &shapes.arcs,
+        trochoids = &shapes.trochoids,
+        cycloids = &shapes.cycloids,
+        cycloid_tools = &shapes.cycloid_tools,
+        parabolas = &shapes.parabolas,
+        hyperbolas = &shapes.hyperbolas,
+        parabola_tools = &shapes.parabola_tools,
+        hyperbola_tools = &shapes.hyperbola_tools,
+        render_styles = &shapes.render_styles,
+        active_features = &shapes.active_features,
+        geometries = &shapes.geometries,
+        labels = &shapes.labels,
+        label_store = &shapes.label_store,
+    }
+}
+
 // Select worker-owned projections during capture and canonical state otherwise.
 bridge_shape_query_source :: proc(
     state: ^core.Euclid_General_State) -> (Bridge_Shape_Query_Source, bool) {
     snapshot := active_animation_query_snapshot(state)
     if snapshot != nil {
-        shapes := &snapshot.shapes
-        return {
-            registry = &shapes.registry,
-            transforms = &shapes.transforms,
-            arcs = &shapes.arcs,
-            trochoids = &shapes.trochoids,
-            cycloids = &shapes.cycloids,
-            cycloid_tools = &shapes.cycloid_tools,
-            render_styles = &shapes.render_styles,
-            active_features = &shapes.active_features,
-            geometries = &shapes.geometries,
-            labels = &shapes.labels,
-            label_store = &shapes.label_store,
-        }, true
+        return bridge_shape_snapshot_query_source(&snapshot.shapes), true
     }
     world := bridge_shape_world(state)
     if world == nil {
@@ -103,6 +116,10 @@ bridge_shape_query_source :: proc(
         trochoids = &world.trochoids,
         cycloids = &world.cycloids,
         cycloid_tools = &world.cycloid_tools,
+        parabolas = &world.parabolas,
+        hyperbolas = &world.hyperbolas,
+        parabola_tools = &world.parabola_tools,
+        hyperbola_tools = &world.hyperbola_tools,
         render_styles = &world.render_styles,
         active_features = &world.active_features,
         geometries = &world.geometries,
@@ -287,6 +304,32 @@ bridge_cycloid_value :: proc(
     }
 }
 
+// Convert the public parabola geometry layout into canonical shape state.
+bridge_parabola_value :: proc(
+    geometry: shapemodel.Bridge_Parabola_Geometry) -> shapemodel.Shape_Parabola {
+    return {
+        focal_distance = geometry.focal_distance,
+        rotation = geometry.rotation,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        draw_parameter = geometry.draw_parameter,
+    }
+}
+
+// Convert the public signed hyperbola layout into canonical branch state.
+bridge_hyperbola_value :: proc(
+    geometry: shapemodel.Bridge_Hyperbola_Geometry) -> shapemodel.Shape_Hyperbola_Branch {
+    return {
+        branch = geometry.branch,
+        semimajor = geometry.semimajor,
+        semiminor = geometry.semiminor,
+        rotation = geometry.rotation,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        draw_parameter = geometry.draw_parameter,
+    }
+}
+
 // Resolve one cycloid host's immutable endpoint references and current positions.
 bridge_cycloid_endpoints :: proc(source: ^Bridge_Shape_Query_Source,
     entity: shapemodel.Shape_Entity) -> (Bridge_Cycloid_Line, bool) {
@@ -362,6 +405,62 @@ shape_create_cycloid :: proc "c" (
         first = shapemodel.shape_entity_pack(handle.first),
         second = shapemodel.shape_entity_pack(handle.second),
     }
+}
+
+// Create one analytic parabola with an exact frontier-aware native curve packet.
+@(export)
+shape_create_parabola :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3,
+    geometry: shapemodel.Bridge_Parabola_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Parabola_Result {
+    context = state.saved_context
+    value := bridge_parabola_value(geometry)
+    entity, status := shapes.world_create_parabola(&state.shape_world, {
+        vertex = position,
+        focal_distance = value.focal_distance,
+        rotation = value.rotation,
+        parameter_start = value.parameter_start,
+        parameter_finish = value.parameter_finish,
+        draw_parameter = value.draw_parameter,
+        style = bridge_shape_style(style),
+    })
+    if status == .Ok {
+        command: Scene_Command = {
+            kind = .Set_Shape_Parabola,
+            entity = shapemodel.shape_entity_pack(entity),
+        }
+        record_conic_creation_evidence(state, &command)
+    }
+    return {bridge_shape_status(status), shapemodel.shape_entity_pack(entity)}
+}
+
+// Create one independent analytic hyperbola branch.
+@(export)
+shape_create_hyperbola :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3,
+    geometry: shapemodel.Bridge_Hyperbola_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Hyperbola_Result {
+    context = state.saved_context
+    value := bridge_hyperbola_value(geometry)
+    entity, status := shapes.world_create_hyperbola(&state.shape_world, {
+        center = position,
+        branch = value.branch,
+        semimajor = value.semimajor,
+        semiminor = value.semiminor,
+        rotation = value.rotation,
+        parameter_start = value.parameter_start,
+        parameter_finish = value.parameter_finish,
+        draw_parameter = value.draw_parameter,
+        style = bridge_shape_style(style),
+    })
+    if status == .Ok {
+        command: Scene_Command = {
+            kind = .Set_Shape_Hyperbola,
+            entity = shapemodel.shape_entity_pack(entity),
+        }
+        record_conic_creation_evidence(state, &command)
+    }
+    return {bridge_shape_status(status), shapemodel.shape_entity_pack(entity)}
 }
 
 // Create one triangle with direct packed ordered vertex handles.
@@ -531,7 +630,7 @@ shape_get_trochoid :: proc "c" (
     entity := shapemodel.shape_entity_unpack(packed)
     if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
         return {
-            status = BRIDGE_STATUS_NOT_FOUND, 
+            status = BRIDGE_STATUS_NOT_FOUND,
             shape = packed,
         }
     }
@@ -587,6 +686,199 @@ shape_get_cycloid :: proc "c" (
         value.tracer_distance, value.tracer_phase, value.parameter_start,
         value.parameter_finish, value.draw_parameter}
     return {BRIDGE_STATUS_OK, packed, line.first, line.second, geometry}
+}
+
+// Return one resolved parabola's complete analytic description.
+@(export)
+shape_get_parabola :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Parabola_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {
+            status = BRIDGE_STATUS_NOT_FOUND,
+            shape = packed,
+        }
+    }
+    value, found := shapemodel.shape_component_get(
+        source.parabolas, source.registry, entity)
+    if !found {
+        return {
+            status = BRIDGE_STATUS_NOT_FOUND,
+            shape = packed,
+        }
+    }
+    return {
+        status = BRIDGE_STATUS_OK,
+        shape = packed,
+        geometry = {value.focal_distance, value.rotation, value.parameter_start,
+            value.parameter_finish, value.draw_parameter},
+    }
+}
+
+// Return one resolved hyperbola branch's complete analytic description.
+@(export)
+shape_get_hyperbola :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Hyperbola_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {
+            status = BRIDGE_STATUS_NOT_FOUND,
+            shape = packed,
+        }
+    }
+    value, found := shapemodel.shape_component_get(
+        source.hyperbolas, source.registry, entity)
+    if !found {
+        return {
+            status = BRIDGE_STATUS_NOT_FOUND,
+            shape = packed,
+        }
+    }
+    return {
+        status = BRIDGE_STATUS_OK,
+        shape = packed,
+        geometry = {value.branch, value.semimajor, value.semiminor, value.rotation,
+            value.parameter_start, value.parameter_finish, value.draw_parameter},
+    }
+}
+
+// Set one complete parabola while preserving its prior interpolation sample.
+@(export)
+shape_set_parabola :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64,
+    geometry: shapemodel.Bridge_Parabola_Geometry) -> i32 {
+    context = state.saved_context
+    value := bridge_parabola_value(geometry)
+    if !shapemodel.shape_parabola_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Parabola, packed)
+    if command != nil {
+        command.parabola = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, present := shapemodel.shape_component_get_mut(&state.shape_world.parabolas,
+        &state.shape_world.registry, entity)
+    if !present {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    current^ = value
+    current.previous_focal_distance = previous.previous_focal_distance
+    current.previous_rotation = previous.previous_rotation
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_draw_parameter = previous.previous_draw_parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Change one parabola's reveal frontier without replacing its directed domain.
+@(export)
+shape_set_parabola_frontier :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64, parameter: f32) -> i32 {
+    context = state.saved_context
+    if !shapemodel.shape_scalar_is_finite(parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Parabola_Frontier, packed)
+    if command != nil {
+        command.scalar = parameter
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, present := shapemodel.shape_component_get_mut(&state.shape_world.parabolas,
+        &state.shape_world.registry, entity)
+    if !present || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    current.draw_parameter = parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Set one complete hyperbola branch while preserving prior interpolation values.
+@(export)
+shape_set_hyperbola :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64,
+    geometry: shapemodel.Bridge_Hyperbola_Geometry) -> i32 {
+    context = state.saved_context
+    value := bridge_hyperbola_value(geometry)
+    if !shapemodel.shape_hyperbola_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Hyperbola, packed)
+    if command != nil {
+        command.hyperbola = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, present := shapemodel.shape_component_get_mut(&state.shape_world.hyperbolas,
+        &state.shape_world.registry, entity)
+    if !present || current.branch != value.branch {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    previous := current^
+    current^ = value
+    current.previous_semimajor = previous.previous_semimajor
+    current.previous_semiminor = previous.previous_semiminor
+    current.previous_rotation = previous.previous_rotation
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_draw_parameter = previous.previous_draw_parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Change one hyperbola branch frontier without replacing its directed domain.
+@(export)
+shape_set_hyperbola_frontier :: proc "c" (
+    state: ^core.Euclid_General_State, packed: u64, parameter: f32) -> i32 {
+    context = state.saved_context
+    if !shapemodel.shape_scalar_is_finite(parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Hyperbola_Frontier, packed)
+    if command != nil {
+        command.scalar = parameter
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, present := shapemodel.shape_component_get_mut(&state.shape_world.hyperbolas,
+        &state.shape_world.registry, entity)
+    if !present || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    current.draw_parameter = parameter
+    return BRIDGE_STATUS_OK
 }
 
 // Set one live transform position by packed entity identity.

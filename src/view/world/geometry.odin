@@ -532,8 +532,10 @@ draw_encoded_cached_basic_item :: proc(
     case shapemodel.Shapes_Polygon_Draw:
         draw_encoded_basic_polygon(state, encoder, &typed, high)
     case shapemodel.Shapes_Trochoid_Tool_Draw,
-        shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
-        shapemodel.Shapes_Compass_Draw:
+        shapemodel.Shapes_Cycloid_Tool_Draw,
+        shapemodel.Shapes_Parabola_Tool_Draw,
+        shapemodel.Shapes_Hyperbola_Tool_Draw,
+        shapemodel.Shapes_Pen_Draw, shapemodel.Shapes_Compass_Draw:
     }
 }
 
@@ -744,8 +746,10 @@ draw_encoded_cached_shadow_pass :: proc(
         case shapemodel.Shapes_Polygon_Draw:
             draw_encoded_cached_polygon_shadow(state, encoder, &item)
         case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
-            shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
-            shapemodel.Shapes_Compass_Draw:
+            shapemodel.Shapes_Cycloid_Tool_Draw,
+            shapemodel.Shapes_Parabola_Tool_Draw,
+            shapemodel.Shapes_Hyperbola_Tool_Draw,
+            shapemodel.Shapes_Pen_Draw, shapemodel.Shapes_Compass_Draw:
         }
     }
 }
@@ -1720,6 +1724,8 @@ find_cached_pen_item :: proc(
             shapemodel.Shapes_Polygon_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Cycloid_Tool_Draw,
+            shapemodel.Shapes_Parabola_Tool_Draw,
+            shapemodel.Shapes_Hyperbola_Tool_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
     }
@@ -1743,6 +1749,8 @@ find_cached_trochoid_tool_item :: proc(
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Polygon_Draw,
             shapemodel.Shapes_Cycloid_Tool_Draw,
+            shapemodel.Shapes_Parabola_Tool_Draw,
+            shapemodel.Shapes_Hyperbola_Tool_Draw,
             shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
@@ -1767,6 +1775,8 @@ find_cached_compass_item :: proc(
             shapemodel.Shapes_Polygon_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Cycloid_Tool_Draw,
+            shapemodel.Shapes_Parabola_Tool_Draw,
+            shapemodel.Shapes_Hyperbola_Tool_Draw,
             shapemodel.Shapes_Pen_Draw:
         }
     }
@@ -1784,12 +1794,9 @@ find_pen_crossing_polygon :: proc(
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case shapemodel.Shapes_Polygon_Draw:
-            if !draw_cached_polygon_is_elevated(state, &item_typed) {
-                continue
-            }
-
             trial: Pen_Polygon_Crossing = {}
-            if !build_pen_polygon_crossing(state, pen, &item_typed, &trial) {
+            if !draw_cached_polygon_is_elevated(state, &item_typed) ||
+                !build_pen_polygon_crossing(state, pen, &item_typed, &trial) {
                 continue
             }
 
@@ -1807,6 +1814,8 @@ find_pen_crossing_polygon :: proc(
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Cycloid_Tool_Draw,
+            shapemodel.Shapes_Parabola_Tool_Draw,
+            shapemodel.Shapes_Hyperbola_Tool_Draw,
             shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
