@@ -91,7 +91,7 @@ Geometry is composed from explicit references rather than nested ownership trees
 | Trochoid | The host transform is the fixed center; an analytic component carries rolling and tracer parameters. |
 | Cycloid | Two endpoint transforms define the directed baseline; an analytic component carries rolling and tracer parameters. |
 | Parabola | The host transform is the vertex; focal distance, rotation, finite directed domain, and reveal frontier define the open curve. |
-| Hyperbola branch | The host transform is the center; positive semiaxes, branch sign, rotation, finite domain, and frontier define one disconnected branch. |
+| Hyperbola | One host owns the center, positive semiaxes, rotation, finite directed domain, common frontier, and immutable selection of both, positive, or negative branches. |
 | Conic instruments | Permanent hosts carry analytic tool parameters; prepared diamond joints, rails, and tracing tips are derived poses. |
 | Polygon | An ordered range of vertex entity references. |
 | Pen and compass | Joint and pivot transforms plus their tool constraints. |
@@ -144,8 +144,18 @@ Parabolas use local coordinates `(f*t*t, 2*f*t)` with `f > 0`. Hyperbola branche
 `sign * (a*cosh(t), b*sinh(t))` with positive semiaxes and sign `+1` or `-1`.
 Translation and planar rotation are applied after evaluation. Both families retain
 finite directed domains even though the mathematical curves are unbounded.
-The two hyperbola branches are separate entities and separate open draw packets;
-neither stroke preparation nor departure dust connects them through the center.
+One hyperbola host owns the common geometry. Julia construction accepts
+`branches=:both` (default), `:positive`, or `:negative`, fixed for that host's
+lifetime. These names refer to the local analytic sign before rotation, not
+screen left/right. Queries expose selection separately from mutable geometry;
+geometry and frontier setters preserve it. Native selection uses an `i32` enum
+(`Both=0`, `Positive=1`, `Negative=2`); `None=-1` is tool-contact-only.
+Preparation derives one open packet per selected branch, publishing all selected
+packets or none when bounded cache storage is exhausted. One-sided selection
+needs only one packet. One visibility change affects the whole shape. Departure
+dust samples only selected revealed ink; neither preparation nor departure
+connects branches through the center. Dynamic selection changes and independent
+branch styles/frontiers are not supported.
 
 The simplified Inwards-inspired parabola instrument and symmetric three-rail
 hyperbola guide use those same analytic parameters. Preparation interpolates scalar
@@ -153,7 +163,8 @@ state before evaluating the nonlinear tool pose, so tracing tips agree with the
 visible reveal frontiers between simulation ticks. Instrument configuration validates
 the entire finite domain: the diamond must not flatten, and hyperbola carriages must
 fit on the moving rail. These are geometric drawing guides, not general-purpose
-mechanical simulations.
+mechanical simulations. Both hyperbola carriages, pen bodies, and shadows always
+move; only selected tips show active contact and emit tracing particles.
 
 Labels use a pointer-free descriptor into bytes owned by the world. A descriptor is
 valid only with the world lifetime that owns those bytes; consumers that cross an

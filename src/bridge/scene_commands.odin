@@ -501,16 +501,15 @@ validate_command_shape_parabola_frontier :: proc(
         value.parameter_start, value.parameter_finish, command^.scalar)
 }
 
-// Validate a complete update for an existing signed hyperbola branch.
+// Validate a complete update for an existing hyperbola host.
 validate_command_shape_hyperbola :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
     if !found || !shapemodel.shape_hyperbola_is_valid(command^.hyperbola) {
         return false
     }
-    current, present := shapemodel.shape_component_get(&state^.shape_world.hyperbolas,
+    return shapemodel.shape_component_contains(&state^.shape_world.hyperbolas,
         &state^.shape_world.registry, entity)
-    return present && current.branch == command^.hyperbola.branch
 }
 
 // Validate a hyperbola frontier against the host's immutable directed domain.
@@ -574,7 +573,9 @@ validate_command_hyperbola_tool_parameter :: proc(
 // Validate the contact-highlight mutation for the permanent hyperbola tool.
 validate_command_hyperbola_tool_active :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return command^.entity == shapemodel.shape_entity_pack(state^.world_hyperbola_tool) &&
+    return command^.integer >= int(shapemodel.Hyperbola_Branches.Both) &&
+        command^.integer <= int(shapemodel.Hyperbola_Branches.Negative) &&
+        command^.entity == shapemodel.shape_entity_pack(state^.world_hyperbola_tool) &&
         shapemodel.shape_component_contains(&state^.shape_world.hyperbola_tools,
             &state^.shape_world.registry, state^.world_hyperbola_tool)
 }
@@ -762,16 +763,16 @@ apply_set_shape_parabola_frontier :: proc(
     _ = shape_set_parabola_frontier(state, command^.entity, command^.scalar)
 }
 
-// Apply a validated complete hyperbola branch mutation.
+// Apply a validated complete hyperbola mutation.
 apply_set_shape_hyperbola :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     value := command^.hyperbola
-    _ = shape_set_hyperbola(state, command^.entity, {value.branch, value.semimajor,
+    _ = shape_set_hyperbola(state, command^.entity, {value.semimajor,
         value.semiminor, value.rotation, value.parameter_start,
         value.parameter_finish, value.draw_parameter})
 }
 
-// Apply one validated hyperbola branch frontier mutation.
+// Apply one validated common hyperbola frontier mutation.
 apply_set_shape_hyperbola_frontier :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     _ = shape_set_hyperbola_frontier(state, command^.entity, command^.scalar)
@@ -815,7 +816,8 @@ apply_set_hyperbola_tool_parameter :: proc(
 // Apply a validated hyperbola tool contact-highlight update.
 apply_set_hyperbola_tool_active :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    _ = set_hyperbola_tool_active(state, i32(command^.flag), command^.color)
+    _ = set_hyperbola_tool_active(state, i32(command^.flag), command^.color,
+        shapemodel.Hyperbola_Branches(command^.integer))
 }
 
 // Apply one validated packed-entity visibility mutation.

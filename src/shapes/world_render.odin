@@ -61,10 +61,10 @@ World_Lerped_Parabola :: struct {
     value: shapemodel.Shape_Parabola,
 }
 
-// Hold an interpolated hyperbola center and signed branch description.
+// Hold one interpolated hyperbola center and common analytic description.
 World_Lerped_Hyperbola :: struct {
     center: Vector3,
-    value: shapemodel.Shape_Hyperbola_Branch,
+    value: shapemodel.Shape_Hyperbola,
 }
 
 // Hold the interpolated parabola tool center and mutable assembly description.

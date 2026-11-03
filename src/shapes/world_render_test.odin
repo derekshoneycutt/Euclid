@@ -398,14 +398,13 @@ world_render_interpolates_parabola_frontier_and_tool_together :: proc(t: ^testin
         "interpolated tool nib should match the interpolated curve frontier")
 }
 
-// Verify independently cached hyperbola branches never create a center-crossing packet.
+// Verify one hyperbola host produces two disconnected packets with one identity.
 @(test)
 world_render_keeps_hyperbola_branch_packets_separate :: proc(t: ^testing.T) {
     world := new(shapemodel.Shape_World, context.allocator)
     defer free(world, context.allocator)
-    positive, positive_status := world_create_hyperbola(world, {
+    shape, status := world_create_hyperbola(world, {
         center = {0.5, 0.5, 0},
-        branch = 1,
         semimajor = 0.12,
         semiminor = 0.1,
         parameter_start = -1.35,
@@ -413,25 +412,183 @@ world_render_keeps_hyperbola_branch_packets_separate :: proc(t: ^testing.T) {
         draw_parameter = 1.35,
         style = Shape_Style{},
     })
-    negative, negative_status := world_create_hyperbola(world, {
-        center = {0.5, 0.5, 0},
-        branch = -1,
-        semimajor = 0.12,
-        semiminor = 0.1,
-        parameter_start = -1.35,
-        parameter_finish = 1.35,
-        draw_parameter = 1.35,
-        style = Shape_Style{},
-    })
-    testing.expect_value(t, positive_status, shapemodel.Shape_World_Status.Ok)
-    testing.expect_value(t, negative_status, shapemodel.Shape_World_Status.Ok)
-    world_render_test_show(world, positive)
-    world_render_test_show(world, negative)
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, world.registry.entity_count, u32(1))
+    testing.expect_value(t, world.transforms.count, u16(1))
+    testing.expect_value(t, world.hyperbolas.count, u16(1))
+    testing.expect_value(t, world.geometries.count, u16(1))
+    testing.expect_value(t, world.render_styles.count, u16(1))
+    world_render_test_show(world, shape)
 
     build_shape_world_draw_cache(world, 1)
 
     testing.expect_value(t, world.draw_cache.item_count, 2)
     world_render_test_assert_separate_branches(t, &world.draw_cache)
+}
+
+// Verify one-sided ink needs one slot while retaining the same shared host pose.
+@(test)
+world_render_hyperbola_selection_uses_one_packet :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    entity, status := world_create_hyperbola(world, {
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1.35,
+        parameter_finish = 1.35,
+        draw_parameter = 0.4,
+    })
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    value, found := shapemodel.shape_component_get_mut(
+        &world.hyperbolas, &world.registry, entity)
+    testing.expect(t, found)
+    source: World_Draw_Source = {
+        entity = entity,
+    }
+    selections := [?]shapemodel.Hyperbola_Branches{.Positive, .Negative}
+    for selection in selections {
+        value.branches = selection
+        world.draw_cache.item_count = len(world.draw_cache.items) - 1
+        world.draw_cache.curve_vertex_count =
+            len(world.draw_cache.curve_vertices) - curve.CONIC_MAX_VERTICES
+        first := world.draw_cache.curve_vertex_count
+        world_cache_push_hyperbola(world, source, 1)
+        testing.expect_value(t, world.draw_cache.item_count, len(world.draw_cache.items))
+        testing.expect(t, world.draw_cache.curve_vertex_count > first)
+        first_point := world.draw_cache.curve_vertices[first]
+        testing.expect_value(t, first_point.x > 0, selection == .Positive)
+    }
+}
+
+// Check partial reverse-domain ink uses the selected local sign after rotation.
+@(test)
+world_render_hyperbola_selected_rotated_reverse_frontier :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    center: Vector3 = {0.4, 0.6, 0.2}
+    selections := [?]shapemodel.Hyperbola_Branches{.Positive, .Negative}
+    for selection in selections {
+        entity, status := world_create_hyperbola(world, {
+            center = center,
+            branches = selection,
+            semimajor = 0.12,
+            semiminor = 0.1,
+            rotation = 0.8,
+            parameter_start = 1.25,
+            parameter_finish = -0.75,
+            draw_parameter = 0.25,
+        })
+        testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+        value, found := shapemodel.shape_component_get(
+            &world.hyperbolas, &world.registry, entity)
+        testing.expect(t, found)
+        world.draw_cache.item_count = 0
+        world.draw_cache.curve_vertex_count = 0
+        source: World_Draw_Source = {
+            entity = entity,
+        }
+        world_cache_push_hyperbola(world, source, 0.5)
+        testing.expect_value(t, world.draw_cache.item_count, 1)
+        branch: i32 = 1
+        if selection == .Negative {
+            branch = -1
+        }
+        count := world.draw_cache.curve_vertex_count
+        testing.expect(t, count > 1)
+        test_helpers.expect_vec3_close(t, world.draw_cache.curve_vertices[0],
+            curve.hyperbola_point(center, value^, 1.25, branch),
+            "reverse-domain ink must start at the selected analytic endpoint")
+        test_helpers.expect_vec3_close(t, world.draw_cache.curve_vertices[count - 1],
+            curve.hyperbola_point(center, value^, 0.25, branch),
+            "partial ink must end exactly at the selected rotated frontier")
+        world.draw_cache.item_count = 0
+        world.draw_cache.curve_vertex_count = len(world.draw_cache.curve_vertices)
+        world_cache_push_hyperbola(world, source, 1)
+        testing.expect_value(t, world.draw_cache.item_count, 0)
+        testing.expect_value(t, world.draw_cache.curve_vertex_count,
+            len(world.draw_cache.curve_vertices))
+    }
+}
+
+// Verify a failed second branch reservation rolls back both packets and vertices.
+@(test)
+world_render_hyperbola_capacity_failure_keeps_prior_packets :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    entity, status := world_create_hyperbola(world, {
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1.35,
+        parameter_finish = 1.35,
+        draw_parameter = 1.35,
+    })
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    source: World_Draw_Source = {
+        entity = entity,
+    }
+    world.draw_cache.item_count = len(world.draw_cache.items) - 1
+    sentinel := world.draw_cache.items[0]
+    world_cache_push_hyperbola(world, source, 1)
+    testing.expect_value(t, world.draw_cache.item_count, len(world.draw_cache.items) - 1)
+    testing.expect_value(t, world.draw_cache.curve_vertex_count, 0)
+    testing.expect_value(t, world.draw_cache.items[0], sentinel)
+    world.draw_cache.item_count = 1
+    world.draw_cache.curve_vertex_count =
+        len(world.draw_cache.curve_vertices) - curve.CONIC_MAX_VERTICES
+    first_vertex := world.draw_cache.curve_vertex_count
+    world.draw_cache.curve_vertices[0] = {3, 4, 5}
+    world_cache_push_hyperbola(world, source, 1)
+    testing.expect_value(t, world.draw_cache.item_count, 1)
+    testing.expect_value(t, world.draw_cache.curve_vertex_count, first_vertex)
+    testing.expect_value(t, world.draw_cache.items[0], sentinel)
+    test_helpers.expect_vec3_close(t, world.draw_cache.curve_vertices[0], {3, 4, 5},
+        "failed preparation must preserve prior vertex spans")
+}
+
+// Verify both branch frontiers use the same interpolated center and geometry.
+@(test)
+world_render_hyperbola_interpolates_one_shared_pose :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    entity, status := world_create_hyperbola(world, {
+        center = {0.3, 0.4, 0},
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1,
+        parameter_finish = 1,
+        draw_parameter = -0.5,
+    })
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_show(world, entity)
+    shape_world_update_previous_values(world)
+    world_render_test_transform(world, entity).position = {0.5, 0.6, 0.2}
+    value, found := shapemodel.shape_component_get_mut(
+        &world.hyperbolas, &world.registry, entity)
+    testing.expect(t, found)
+    value.rotation = 0.8
+    value.draw_parameter = 0.5
+    build_shape_world_draw_cache(world, 0.5)
+    testing.expect_value(t, world.draw_cache.item_count, 2)
+    expected: shapemodel.Shape_Hyperbola = {
+        semimajor = 0.12,
+        semiminor = 0.1,
+        rotation = 0.4,
+    }
+    for item, index in world.draw_cache.items[:world.draw_cache.item_count] {
+        #partial switch draw in item {
+        case Shapes_Curve_Draw:
+            branch: i32 = 1
+            if index == 1 {
+                branch = -1
+            }
+            last := draw.first_vertex + draw.vertex_count - 1
+            test_helpers.expect_vec3_close(t, world.draw_cache.curve_vertices[last],
+                curve.hyperbola_point({0.4, 0.5, 0.1}, expected, 0, branch),
+                "both strokes must use the same interpolated host and frontier")
+        case:
+            testing.expect(t, false, "expected an open curve packet")
+        }
+    }
 }
 
 // Assert each cached hyperbola packet stays on one side and both sides are represented.
@@ -444,6 +601,8 @@ world_render_test_assert_separate_branches :: proc(
         #partial switch draw in item {
         case Shapes_Curve_Draw:
             packet_count += 1
+            testing.expect_value(t, draw.source_index, 0)
+            testing.expect_value(t, draw.topology, shapemodel.Curve_Topology.Open)
             first := cache.curve_vertices[draw.first_vertex]
             sign := f32(-1)
             if first.x > 0.5 {

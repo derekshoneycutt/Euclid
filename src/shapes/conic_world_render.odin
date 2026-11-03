@@ -74,7 +74,7 @@ world_lerped_parabola :: proc(
     return {vertex, value}, shapemodel.shape_parabola_is_valid(value)
 }
 
-// Interpolate a signed hyperbola branch without combining its partner.
+// Interpolate the common parameters of both hyperbola branches once.
 world_lerped_hyperbola :: proc(
     world: ^shapemodel.Shape_World,
     entity: shapemodel.Shape_Entity,
@@ -85,8 +85,8 @@ world_lerped_hyperbola :: proc(
     if !position_ok || !value_ok {
         return {}, false
     }
-    value: shapemodel.Shape_Hyperbola_Branch = {
-        branch = current.branch,
+    value: shapemodel.Shape_Hyperbola = {
+        branches = current.branches,
         semimajor = math.lerp(current.previous_semimajor, current.semimajor, alpha),
         semiminor = math.lerp(current.previous_semiminor, current.semiminor, alpha),
         rotation = math.lerp(current.previous_rotation, current.rotation, alpha),
@@ -137,32 +137,29 @@ world_cache_push_parabola :: proc(
     }
 }
 
-// Cache one branch in its own bounded packet; never bridge the hyperbola center.
-world_cache_push_hyperbola :: proc(
-    world: ^shapemodel.Shape_World, source: World_Draw_Source, alpha: f32) {
-    lerped, found := world_lerped_hyperbola(world, source.entity, alpha)
-    if !found {
-        return
-    }
+// Append one derived branch packet; the caller owns two-branch rollback.
+world_cache_append_hyperbola_branch :: proc(
+    world: ^shapemodel.Shape_World, source: World_Draw_Source,
+    lerped: World_Lerped_Hyperbola, branch: i32) -> bool {
     first, reserved := draw_cache_reserve_curve_vertices_storage(
         &world.draw_cache, curve.CONIC_MAX_VERTICES)
     if !reserved {
-        return
+        return false
     }
     vertices := world.draw_cache.curve_vertices[first:first + curve.CONIC_MAX_VERTICES]
-    result := curve.hyperbola_explicate(lerped.center, lerped.value, vertices)
+    result := curve.hyperbola_explicate(lerped.center, lerped.value, vertices, branch)
     draw_cache_finalize_curve_vertices_storage(
         &world.draw_cache, first, curve.CONIC_MAX_VERTICES, result.vertex_count)
     if result.status == .Invalid_Input || result.vertex_count < 2 {
         draw_cache_rollback_curve_vertices_storage(
             &world.draw_cache, first, result.vertex_count)
-        return
+        return result.status != .Invalid_Input
     }
     slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
     if !has_slot {
         draw_cache_rollback_curve_vertices_storage(
             &world.draw_cache, first, result.vertex_count)
-        return
+        return false
     }
     slot^ = Shapes_Curve_Draw{
         base = world_make_draw_base(source, .Curve),
@@ -170,6 +167,29 @@ world_cache_push_hyperbola :: proc(
         vertex_count = result.vertex_count,
         capacity_limited = result.status == .Capacity_Limited,
         topology = .Open,
+    }
+    return true
+}
+
+// Publish all selected strokes from one host, or roll back the whole preparation.
+world_cache_push_hyperbola :: proc(
+    world: ^shapemodel.Shape_World, source: World_Draw_Source, alpha: f32) {
+    lerped, found := world_lerped_hyperbola(world, source.entity, alpha)
+    if !found {
+        return
+    }
+    first_item := world.draw_cache.item_count
+    first_vertex := world.draw_cache.curve_vertex_count
+    branches := [?]i32{1, -1}
+    for branch in branches {
+        if !shapemodel.hyperbola_branch_is_selected(lerped.value.branches, branch) {
+            continue
+        }
+        if !world_cache_append_hyperbola_branch(world, source, lerped, branch) {
+            world.draw_cache.item_count = first_item
+            world.draw_cache.curve_vertex_count = first_vertex
+            return
+        }
     }
 }
 
@@ -263,7 +283,7 @@ world_lerped_hyperbola_tool :: proc(
         parameter = math.lerp(current.previous_parameter, current.parameter, alpha),
         rail_half_length = math.lerp(
             current.previous_rail_half_length, current.rail_half_length, alpha),
-        active = current.active,
+        active_branches = current.active_branches,
     }
     return {center, value}, shapemodel.shape_hyperbola_tool_is_valid(value)
 }
@@ -291,7 +311,7 @@ world_cache_push_hyperbola_tool :: proc(
         tick_second_finish = pose.tick_second_finish,
         carriage_positive = pose.carriage_positive,
         carriage_negative = pose.carriage_negative,
-        active = lerped.value.active,
+        active_branches = lerped.value.active_branches,
     }
     world.draw_cache.hyperbola_tool = draw
     world.draw_cache.draw_hyperbola_tool = true

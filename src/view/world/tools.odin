@@ -226,8 +226,12 @@ draw_encoded_hyperbola_pens :: proc(
             state, color.Color_RGBA8(tool^.active_color))
     }
     tips: [2]geometry.Vector3 = {tool^.carriage_positive, tool^.carriage_negative}
-    for tip in tips {
-        if tool^.active {
+    for tip, index in tips {
+        branch: i32 = 1
+        if index == 1 {
+            branch = -1
+        }
+        if shapemodel.hyperbola_branch_is_selected(tool^.active_branches, branch) {
             center := projection.iso_to_cartesian(tip, state^.iso_scale)
             _ = native.draw_encoder_circle(
                 encoder, geometry.Vector2(center), brush, nib_color)

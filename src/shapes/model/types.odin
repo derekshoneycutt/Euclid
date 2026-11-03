@@ -71,9 +71,8 @@ Bridge_Parabola_Geometry :: struct {
     draw_parameter: f32,
 }
 
-// Group one signed hyperbola-branch description for bridge operations.
+// Group one complete hyperbola description for bridge operations.
 Bridge_Hyperbola_Geometry :: struct {
-    branch: i32,
     semimajor: f32,
     semiminor: f32,
     rotation: f32,
@@ -104,7 +103,7 @@ Bridge_Hyperbola_Tool_Geometry :: struct {
 }
 
 #assert(size_of(Bridge_Parabola_Geometry) == 5 * size_of(f32))
-#assert(size_of(Bridge_Hyperbola_Geometry) == size_of(i32) + 6 * size_of(f32))
+#assert(size_of(Bridge_Hyperbola_Geometry) == 6 * size_of(f32))
 #assert(size_of(Bridge_Parabola_Tool_Geometry) == 6 * size_of(f32))
 #assert(size_of(Bridge_Hyperbola_Tool_Geometry) == 7 * size_of(f32))
 
@@ -128,7 +127,7 @@ Shape_Query_Snapshot :: struct {
     cycloids: Shape_Component_Set(Shape_Cycloid),
     cycloid_tools: Shape_Component_Set(Shape_Cycloid_Tool),
     parabolas: Shape_Component_Set(Shape_Parabola),
-    hyperbolas: Shape_Component_Set(Shape_Hyperbola_Branch),
+    hyperbolas: Shape_Component_Set(Shape_Hyperbola),
     parabola_tools: Shape_Component_Set(Shape_Parabola_Tool),
     hyperbola_tools: Shape_Component_Set(Shape_Hyperbola_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
@@ -314,7 +313,7 @@ Shapes_Hyperbola_Tool_Draw :: struct {
     tick_second_finish: Vector3,
     carriage_positive: Vector3,
     carriage_negative: Vector3,
-    active: bool,
+    active_branches: Hyperbola_Branches,
 }
 
 Shapes_Draw_Cache_Item :: union {

@@ -1417,7 +1417,7 @@ emit_shape_world_parabola_burst :: proc(
     }
 }
 
-// Emit one branch's clear dust without connecting it to the opposite branch.
+// Depart both strokes of one hyperbola without connecting them through the center.
 emit_shape_world_hyperbola_burst :: proc(
     ctx: Shape_World_Burst_Context, entity: shapemodel.Shape_Entity) {
     center, position_ok := shape_world_burst_position(ctx.world, entity)
@@ -1427,10 +1427,16 @@ emit_shape_world_hyperbola_burst :: proc(
         return
     }
     vertices: [curve.CONIC_MAX_VERTICES]Vector3
-    result := curve.hyperbola_explicate(center, value^, vertices[:])
-    if result.status != .Invalid_Input && result.vertex_count > 1 {
-        emit_curve_polyline_dust(ctx.particles, vertices[:result.vertex_count],
-            ctx.color, ctx.authored_ink)
+    branches := [?]i32{1, -1}
+    for branch in branches {
+        if !shapemodel.hyperbola_branch_is_selected(value.branches, branch) {
+            continue
+        }
+        result := curve.hyperbola_explicate(center, value^, vertices[:], branch)
+        if result.status != .Invalid_Input && result.vertex_count > 1 {
+            emit_curve_polyline_dust(ctx.particles, vertices[:result.vertex_count],
+                ctx.color, ctx.authored_ink)
+        }
     }
 }
 

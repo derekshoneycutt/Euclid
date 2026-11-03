@@ -878,6 +878,7 @@ set_hyperbola_tool_geometry :: proc "c" (
     geometry: shapemodel.Bridge_Hyperbola_Tool_Geometry) -> i32 {
     context = state^.saved_context
     value: shapemodel.Shape_Hyperbola_Tool = {
+        active_branches = .None,
         semimajor = geometry.semimajor,
         semiminor = geometry.semiminor,
         rotation = geometry.rotation,
@@ -905,7 +906,7 @@ set_hyperbola_tool_geometry :: proc "c" (
         return BRIDGE_STATUS_NOT_FOUND
     }
     previous := current^
-    value.active = previous.active
+    value.active_branches = previous.active_branches
     current^ = value
     current.previous_semimajor = previous.previous_semimajor
     current.previous_semiminor = previous.previous_semiminor
@@ -951,12 +952,14 @@ set_hyperbola_tool_parameter :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Toggle the paired hyperbola nib highlights using authored ink-color policy.
+// Select hyperbola nib contacts without changing either carriage's movement.
 @(export)
 set_hyperbola_tool_active :: proc "c" (
-    state: ^core.Euclid_General_State, active: i32, color: Bridge_Color) -> i32 {
+    state: ^core.Euclid_General_State, active: i32, color: Bridge_Color,
+    branches: shapemodel.Hyperbola_Branches = .Both) -> i32 {
     context = state^.saved_context
-    if active != 0 && active != 1 {
+    if (active != 0 && active != 1) ||
+        !shapemodel.hyperbola_branches_are_valid(branches) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
@@ -964,6 +967,7 @@ set_hyperbola_tool_active :: proc "c" (
     if command != nil {
         command^.entity = packed
         command^.flag = active != 0
+        command^.integer = int(branches)
         command^.color = color
     }
     if captured {
@@ -978,7 +982,10 @@ set_hyperbola_tool_active :: proc "c" (
     if !has_tool || !has_style {
         return BRIDGE_STATUS_NOT_FOUND
     }
-    tool.active = active != 0
+    tool.active_branches = .None
+    if active != 0 {
+        tool.active_branches = branches
+    }
     style.active_color = color
     return BRIDGE_STATUS_OK
 }

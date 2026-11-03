@@ -132,9 +132,8 @@ struct BridgeParabolaGeometry
     draw_parameter::Cfloat
 end
 
-"""One finite hyperbola branch; branch is either +1 or -1."""
+"""One finite hyperbola with common geometry and frontier for both branches."""
 struct BridgeHyperbolaGeometry
-    branch::Int32
     semimajor::Cfloat
     semiminor::Cfloat
     rotation::Cfloat
@@ -299,11 +298,12 @@ struct BridgeShapeParabolaQueryResult
     geometry::BridgeParabolaGeometry
 end
 
-"""Pointer-free query of one hyperbola branch's analytic description."""
+"""Pointer-free query of one complete hyperbola's analytic description."""
 struct BridgeShapeHyperbolaQueryResult
     status::Int32
     host_id::UInt64
     geometry::BridgeHyperbolaGeometry
+    branches::Int32
 end
 
 """Result of constructing one literal-line Cycloid and both endpoints."""
@@ -361,7 +361,11 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(13)
+const BRIDGE_VERSION = Int32(15)
+
+const HYPERBOLA_POSITIVE = Int32(1)
+const HYPERBOLA_NEGATIVE = Int32(2)
+const HYPERBOLA_BOTH = Int32(0)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)

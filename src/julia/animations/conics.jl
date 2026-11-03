@@ -38,7 +38,7 @@ function animate_parabola_rise(state_ptr::Ptr{Cvoid}, timer::Real,
         topz * normalized_progress(timer, duration))
 end
 
-"""Position the paired hyperbola apparatus without changing either branch frontier."""
+"""Position the paired hyperbola apparatus without changing the curve frontier."""
 function place_hyperbola_tool(state_ptr::Ptr{Cvoid}, center,
     parameter::Real, elevation::Real)
     checked_curve_status(OdinJuliaBridge.set_hyperbola_tool_position(
@@ -56,21 +56,25 @@ function animate_hyperbola_descend(state_ptr::Ptr{Cvoid}, timer::Real,
     checked_curve_status(OdinJuliaBridge.show_hyperbola_tool(state_ptr))
 end
 
-"""Draw both disconnected hyperbola branches with synchronized opposing tips."""
+"""Move both hyperbola pens while selected tips alone leave authored ink."""
 function animate_draw_hyperbola(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, center, semimajor::Real, semiminor::Real,
     parameter_start::Real, parameter_finish::Real;
-    positive_id::Integer, negative_id::Integer, color)
+    curve_id::Integer, color, rotation::Real=0f0, branches::Symbol=:both)
+    selection = OdinJuliaBridge.hyperbola_branches(branches)
     parameter = curve_parameter(timer, duration, parameter_start, parameter_finish)
     place_hyperbola_tool(state_ptr, center, parameter, 0f0)
-    checked_curve_status(OdinJuliaBridge.set_hyperbola_tool_active(state_ptr, 1, color))
+    checked_curve_status(OdinJuliaBridge.set_hyperbola_tool_active(
+        state_ptr, 1, color; branches))
     checked_curve_status(OdinJuliaBridge.set_hyperbola_frontier(
-        state_ptr, positive_id, parameter))
-    checked_curve_status(OdinJuliaBridge.set_hyperbola_frontier(
-        state_ptr, negative_id, parameter))
+        state_ptr, curve_id, parameter))
     for branch in (1, -1)
+        selected_branch = branch == 1 ? OdinJuliaBridge.HYPERBOLA_POSITIVE :
+            OdinJuliaBridge.HYPERBOLA_NEGATIVE
+        selection != OdinJuliaBridge.HYPERBOLA_BOTH &&
+            selection != selected_branch && continue
         tip = EuclidGeometry.hyperbola_point(
-            center, semimajor, semiminor, parameter; branch)
+            center, semimajor, semiminor, parameter; branch, rotation)
         OdinJuliaBridge.emit_trailing_particle(state_ptr, tip[1], tip[2], tip[3], color)
     end
 end

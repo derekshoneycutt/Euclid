@@ -137,8 +137,14 @@ The [Parabola showcase](../../../tools/scenarios/parabola-showcase.jsonl) and
 apparatus during drawing and the finished ink after tool lift. The typed
 `parabola_frontier_committed` and `hyperbola_frontier_committed` events report actual
 native frontier commits, not elapsed animation time. Hyperbola evidence identifies
-separate branch entities; verification must check both, not infer paired drawing
-from one event or a screenshot.
+one complete shape host. Native tests cover immutable both/positive/negative
+construction selection, query/snapshot and captured-geometry preservation, selected
+packet capacity, per-tip contacts with both physical pens retained, and departure
+only from selected ink without center-gap dust. Julia fixtures invoke the real
+authored lifecycle and shared helpers for each mode, including directed rotated
+trails, reset, and completed form. Neither a frontier event nor a screenshot alone
+proves those invariants. Existing scenarios use the default both mode; one-sided
+application/visual acceptance is not currently covered by them.
 
 The [parabola lifecycle acceptance](../../../tools/scenarios/conic-lifecycle-acceptance.jsonl)
 and [hyperbola lifecycle acceptance](../../../tools/scenarios/hyperbola-lifecycle-acceptance.jsonl)

@@ -77,8 +77,7 @@ parabola_tool_pose_preserves_equal_link_lengths :: proc(t: ^testing.T) {
 @(test)
 hyperbola_branches_are_centrally_symmetric :: proc(t: ^testing.T) {
     center: Vector3 = {0.5, 0.5, 0}
-    positive: shapemodel.Shape_Hyperbola_Branch = {
-        branch = 1,
+    value: shapemodel.Shape_Hyperbola = {
         semimajor = 0.12,
         semiminor = 0.1,
         rotation = 0.53,
@@ -86,11 +85,8 @@ hyperbola_branches_are_centrally_symmetric :: proc(t: ^testing.T) {
         parameter_finish = 1.35,
         draw_parameter = 0.7,
     }
-    negative := positive
-    negative.branch = -1
-
-    positive_point := hyperbola_point(center, positive, positive.draw_parameter)
-    negative_point := hyperbola_point(center, negative, negative.draw_parameter)
+    positive_point := hyperbola_point(center, value, value.draw_parameter, 1)
+    negative_point := hyperbola_point(center, value, value.draw_parameter, -1)
     test_helpers.expect_vec3_close(t, negative_point, center + center - positive_point,
         "negative branch should be a central reflection of the positive branch")
 }
@@ -117,7 +113,6 @@ hyperbola_tool_pose_keeps_symmetric_carriages_and_ticks :: proc(t: ^testing.T) {
         "minimum-radius ticks should remain centrally symmetric")
     test_helpers.expect_vec3_close(t,
         pose.carriage_positive, hyperbola_point(center, {
-            branch = 1,
             semimajor = value.semimajor,
             semiminor = value.semiminor,
             rotation = value.rotation,
@@ -156,35 +151,66 @@ parabola_curve_sampling_preserves_reverse_domain_and_frontier :: proc(t: ^testin
 // Verify each hyperbola branch samples independently to its exact parameter frontier.
 @(test)
 hyperbola_curve_sampling_keeps_branches_separate :: proc(t: ^testing.T) {
-    positive: shapemodel.Shape_Hyperbola_Branch = {
-        branch = 1,
+    value: shapemodel.Shape_Hyperbola = {
         semimajor = 0.12,
         semiminor = 0.1,
         parameter_start = -1.35,
         parameter_finish = 1.35,
         draw_parameter = 0.4,
     }
-    negative := positive
-    negative.branch = -1
     positive_vertices: [CONIC_MAX_VERTICES]Vector3
     negative_vertices: [CONIC_MAX_VERTICES]Vector3
-    positive_result := hyperbola_explicate({}, positive, positive_vertices[:])
-    negative_result := hyperbola_explicate({}, negative, negative_vertices[:])
+    positive_result := hyperbola_explicate({}, value, positive_vertices[:], 1)
+    negative_result := hyperbola_explicate({}, value, negative_vertices[:], -1)
 
     testing.expect(t, positive_result.vertex_count > 1)
     testing.expect(t, negative_result.vertex_count > 1)
     test_helpers.expect_vec3_close(t,
         positive_vertices[positive_result.vertex_count - 1],
-        hyperbola_point({}, positive, positive.draw_parameter),
+        hyperbola_point({}, value, value.draw_parameter, 1),
         "positive branch should end at its exact frontier")
     test_helpers.expect_vec3_close(t,
         negative_vertices[negative_result.vertex_count - 1],
-        hyperbola_point({}, negative, negative.draw_parameter),
+        hyperbola_point({}, value, value.draw_parameter, -1),
         "negative branch should end at its own exact frontier")
     testing.expect(t,
         positive_vertices[positive_result.vertex_count - 1].x > 0 &&
         negative_vertices[negative_result.vertex_count - 1].x < 0,
         "separate branch packets should never bridge the center")
+}
+
+// Verify both strokes preserve directed domains, rotation, and exact frontiers.
+@(test)
+hyperbola_sampling_preserves_common_directed_frontier :: proc(t: ^testing.T) {
+    value: shapemodel.Shape_Hyperbola = {
+        semimajor = 0.12,
+        semiminor = 0.1,
+        rotation = 0.53,
+    }
+    center: Vector3 = {0.4, 0.6, 0.2}
+    directions := [?]f32{1, -1}
+    progresses := [?]f32{0, 0.37, 1}
+    branches := [?]i32{1, -1}
+    vertices: [CONIC_MAX_VERTICES]Vector3
+    for direction in directions {
+        value.parameter_start = -1.35 * direction
+        value.parameter_finish = 1.35 * direction
+        for progress in progresses {
+            value.draw_parameter = math.lerp(
+                value.parameter_start, value.parameter_finish, progress)
+            for branch in branches {
+                result := hyperbola_explicate(center, value, vertices[:], branch)
+                testing.expect(t, result.status != .Invalid_Input)
+                testing.expect_value(t, result.topology, Curve_Topology.Open)
+                test_helpers.expect_vec3_close(t, vertices[0],
+                    hyperbola_point(center, value, value.parameter_start, branch),
+                    "each branch starts at the shared directed start")
+                test_helpers.expect_vec3_close(t, vertices[result.vertex_count - 1],
+                    hyperbola_point(center, value, value.draw_parameter, branch),
+                    "each branch ends at the exact common frontier")
+            }
+        }
+    }
 }
 
 // Verify invalid conic geometry and insufficient bounded output are rejected.
@@ -216,8 +242,7 @@ conic_curve_sampling_rejects_invalid_and_short_outputs :: proc(t: ^testing.T) {
 // Verify valid high-curvature input reports bounded sampling capacity explicitly.
 @(test)
 hyperbola_curve_sampling_reports_capacity_limit :: proc(t: ^testing.T) {
-    value: shapemodel.Shape_Hyperbola_Branch = {
-        branch = 1,
+    value: shapemodel.Shape_Hyperbola = {
         semimajor = 100,
         semiminor = 100,
         parameter_start = -4,
@@ -225,7 +250,7 @@ hyperbola_curve_sampling_reports_capacity_limit :: proc(t: ^testing.T) {
         draw_parameter = 4,
     }
     vertices: [CONIC_MAX_VERTICES]Vector3
-    result := hyperbola_explicate({}, value, vertices[:])
+    result := hyperbola_explicate({}, value, vertices[:], 1)
 
     testing.expect_value(t, result.status, Curve_Explication_Status.Capacity_Limited)
     testing.expect(t, result.vertex_count <= CONIC_MAX_VERTICES)

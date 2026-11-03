@@ -20,7 +20,7 @@ Bridge_Shape_Query_Source :: struct {
     cycloids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid),
     cycloid_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid_Tool),
     parabolas: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Parabola),
-    hyperbolas: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Hyperbola_Branch),
+    hyperbolas: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Hyperbola),
     parabola_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Parabola_Tool),
     hyperbola_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Hyperbola_Tool),
     render_styles: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Render_Style),
@@ -316,11 +316,10 @@ bridge_parabola_value :: proc(
     }
 }
 
-// Convert the public signed hyperbola layout into canonical branch state.
+// Convert the public hyperbola layout into common two-branch state.
 bridge_hyperbola_value :: proc(
-    geometry: shapemodel.Bridge_Hyperbola_Geometry) -> shapemodel.Shape_Hyperbola_Branch {
+    geometry: shapemodel.Bridge_Hyperbola_Geometry) -> shapemodel.Shape_Hyperbola {
     return {
-        branch = geometry.branch,
         semimajor = geometry.semimajor,
         semiminor = geometry.semiminor,
         rotation = geometry.rotation,
@@ -434,17 +433,18 @@ shape_create_parabola :: proc "c" (
     return {bridge_shape_status(status), shapemodel.shape_entity_pack(entity)}
 }
 
-// Create one independent analytic hyperbola branch.
+// Create one analytic hyperbola host owning both branches.
 @(export)
 shape_create_hyperbola :: proc "c" (
     state: ^core.Euclid_General_State, position: Vector3,
     geometry: shapemodel.Bridge_Hyperbola_Geometry,
-    style: Bridge_Shape_Style) -> Bridge_Shape_Hyperbola_Result {
+    style: Bridge_Shape_Style,
+    branches: shapemodel.Hyperbola_Branches = .Both) -> Bridge_Shape_Hyperbola_Result {
     context = state.saved_context
     value := bridge_hyperbola_value(geometry)
     entity, status := shapes.world_create_hyperbola(&state.shape_world, {
+        branches = branches,
         center = position,
-        branch = value.branch,
         semimajor = value.semimajor,
         semiminor = value.semiminor,
         rotation = value.rotation,
@@ -718,7 +718,7 @@ shape_get_parabola :: proc "c" (
     }
 }
 
-// Return one resolved hyperbola branch's complete analytic description.
+// Return one resolved hyperbola's common analytic description.
 @(export)
 shape_get_hyperbola :: proc "c" (
     state: ^core.Euclid_General_State,
@@ -743,8 +743,9 @@ shape_get_hyperbola :: proc "c" (
     return {
         status = BRIDGE_STATUS_OK,
         shape = packed,
-        geometry = {value.branch, value.semimajor, value.semiminor, value.rotation,
+        geometry = {value.semimajor, value.semiminor, value.rotation,
             value.parameter_start, value.parameter_finish, value.draw_parameter},
+        branches = value.branches,
     }
 }
 
@@ -814,7 +815,7 @@ shape_set_parabola_frontier :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Set one complete hyperbola branch while preserving prior interpolation values.
+// Set one complete hyperbola while preserving prior interpolation values.
 @(export)
 shape_set_hyperbola :: proc "c" (
     state: ^core.Euclid_General_State, packed: u64,
@@ -837,10 +838,11 @@ shape_set_hyperbola :: proc "c" (
     }
     current, present := shapemodel.shape_component_get_mut(&state.shape_world.hyperbolas,
         &state.shape_world.registry, entity)
-    if !present || current.branch != value.branch {
+    if !present {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
     previous := current^
+    value.branches = previous.branches
     current^ = value
     current.previous_semimajor = previous.previous_semimajor
     current.previous_semiminor = previous.previous_semiminor
@@ -851,7 +853,7 @@ shape_set_hyperbola :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
-// Change one hyperbola branch frontier without replacing its directed domain.
+// Advance selected hyperbola ink without replacing the common directed domain.
 @(export)
 shape_set_hyperbola_frontier :: proc "c" (
     state: ^core.Euclid_General_State, packed: u64, parameter: f32) -> i32 {

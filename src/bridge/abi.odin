@@ -38,7 +38,7 @@ BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION :: (1 << 10)
 BRIDGE_FEATURE_SETTLING_FORMATION :: (1 << 11)
 BRIDGE_FEATURE_CONICS :: (1 << 12)
 
-BRIDGE_VERSION :: 13
+BRIDGE_VERSION :: 15
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_ANIMATION_STABLE_ID |
@@ -177,17 +177,18 @@ Bridge_Shape_Parabola_Query_Result :: struct {
     geometry: shapemodel.Bridge_Parabola_Geometry,
 }
 
-// Return one hyperbola-branch host and its complete mutable geometry.
+// Return the single host of a complete hyperbola.
 Bridge_Shape_Hyperbola_Result :: struct {
     status: i32,
     shape: u64,
 }
 
-// Return one hyperbola branch's complete mutable geometry.
+// Return one complete hyperbola's common mutable geometry.
 Bridge_Shape_Hyperbola_Query_Result :: struct {
     status: i32,
     shape: u64,
     geometry: shapemodel.Bridge_Hyperbola_Geometry,
+    branches: shapemodel.Hyperbola_Branches,
 }
 
 // Return one triangle host and its direct ordered vertex identities.

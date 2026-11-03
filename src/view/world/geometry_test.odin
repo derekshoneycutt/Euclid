@@ -437,6 +437,51 @@ parabola_tool_uses_straight_rods_and_flat_contact :: proc(t: ^testing.T) {
         [2]f32{expected_top.x, expected_top.y})
 }
 
+// Check both physical pen segments remain at their carriages regardless of contact.
+hyperbola_test_pen_bodies :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    tool: ^shapemodel.Shapes_Hyperbola_Tool_Draw, draws: []native.Stroke_Draw) {
+    for index in 6..<8 {
+        tip := tool.carriage_positive
+        if index == 7 {
+            tip = tool.carriage_negative
+        }
+        expected := projection.iso_to_cartesian(tip, state.iso_scale)
+        testing.expect_value(t, draws[index].fragment_uniforms.segment_p0,
+            [2]f32{expected.x, expected.y})
+    }
+}
+
+// Compare contact geometry for selected tips while retaining the entire apparatus.
+hyperbola_test_selected_contacts :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    tool: ^shapemodel.Shapes_Hyperbola_Tool_Draw,
+    storage: native.Draw_Storage, paired_vertices: int) {
+    encoder: native.Draw_Encoder
+    selections := [?]shapemodel.Hyperbola_Branches{.Positive, .Negative, .None}
+    for selection in selections {
+        testing.expect(t, native.draw_encoder_begin(&encoder, storage,
+            {1280, 720}, {1280, 720}))
+        native.draw_encoder_enable_strokes(&encoder, true)
+        tool.active_branches = selection
+        draw_encoded_hyperbola_tool(state, &encoder, tool)
+        testing.expect_value(t, encoder.stroke_draw_count, 8)
+        if selection == .None {
+            testing.expect_value(t, encoder.vertex_count, 0)
+        } else {
+            testing.expect_value(t, encoder.vertex_count * 2, paired_vertices)
+            tip := tool.carriage_positive
+            if selection == .Negative {
+                tip = tool.carriage_negative
+            }
+            expected := projection.iso_to_cartesian(tip, state.iso_scale)
+            testing.expect_value(t, encoder.vertices[0].position,
+                geometry.Vector2(expected))
+        }
+        hyperbola_test_pen_bodies(t, state, tool, storage.custom.stroke_draws)
+    }
+}
+
 // Verify the hyperbola uses eight rods and flat contacts instead of ring strokes.
 @(test)
 hyperbola_tool_uses_straight_rods_and_flat_contacts :: proc(t: ^testing.T) {
@@ -450,9 +495,11 @@ hyperbola_tool_uses_straight_rods_and_flat_contacts :: proc(t: ^testing.T) {
         stroke_vertices = stroke_vertices[:],
         stroke_draws = stroke_draws[:],
     }
+    storage: native.Draw_Storage = {
+        vertices[:], indices[:], batches[:], commands[:], &custom,
+    }
     encoder: native.Draw_Encoder
-    testing.expect(t, native.draw_encoder_begin(&encoder,
-        {vertices[:], indices[:], batches[:], commands[:], &custom},
+    testing.expect(t, native.draw_encoder_begin(&encoder, storage,
         {1280, 720}, {1280, 720}))
     native.draw_encoder_enable_strokes(&encoder, true)
     state := new(core.Euclid_General_State, context.allocator)
@@ -474,7 +521,7 @@ hyperbola_tool_uses_straight_rods_and_flat_contacts :: proc(t: ^testing.T) {
         tick_second_start = {0.4, 0.49, 0},
         tick_second_finish = {0.4, 0.51, 0},
         brush_size = 3,
-        active = true,
+        active_branches = .Both,
         color = {255, 255, 255, 255},
     }
     draw_encoded_hyperbola_tool(state, &encoder, &tool)
@@ -484,6 +531,7 @@ hyperbola_tool_uses_straight_rods_and_flat_contacts :: proc(t: ^testing.T) {
             stroke_draws[0].fragment_uniforms.radius)
     }
     testing.expect(t, encoder.vertex_count > 0)
+    hyperbola_test_selected_contacts(t, state, &tool, storage, encoder.vertex_count)
 }
 
 // Verify guide ring sampling closes exactly at one full turn.

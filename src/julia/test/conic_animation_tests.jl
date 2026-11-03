@@ -5,6 +5,14 @@ const AnimationKey = Main.OdinJuliaBridge.AnimationKey
 const BRIDGE_STATUS_OK = Int32(0)
 const TROCHOID_EXTERNAL = Main.OdinJuliaBridge.TROCHOID_EXTERNAL
 const TROCHOID_INTERNAL = Main.OdinJuliaBridge.TROCHOID_INTERNAL
+const HYPERBOLA_POSITIVE = Main.OdinJuliaBridge.HYPERBOLA_POSITIVE
+const HYPERBOLA_NEGATIVE = Main.OdinJuliaBridge.HYPERBOLA_NEGATIVE
+const HYPERBOLA_BOTH = Main.OdinJuliaBridge.HYPERBOLA_BOTH
+using Main.OdinJuliaBridge: hyperbola_branches
+
+"""Decode the real bridge selection for authored content running in this fixture."""
+hyperbola_branch_mode(selection::Int32) =
+    Main.OdinJuliaBridge.hyperbola_branch_mode(selection)
 """Own recorded calls and mock native storage for one lifecycle test invocation."""
 mutable struct Fixture
     calls::Vector{Tuple{Symbol,Tuple,NamedTuple}}
@@ -175,7 +183,7 @@ show_hyperbola_tool(args...; kwargs...) =
 """Record hyperbola instrument cleanup."""
 hide_hyperbola_tool(args...; kwargs...) =
     record(:hide_hyperbola_tool, args, (; kwargs...))
-"""Record an individual hyperbola branch's reveal frontier."""
+"""Record the complete hyperbola's common reveal frontier."""
 set_hyperbola_frontier(args...; kwargs...) =
     record(:set_hyperbola_frontier, args, (; kwargs...))
 """Record curve visibility without entering native code."""
@@ -203,7 +211,7 @@ function create_new_parabola(args...; kwargs...)
     return (status=BRIDGE_STATUS_OK, host_id=fixture.next_id)
 end
 
-"""Return a separate identity for each signed hyperbola branch."""
+"""Return one identity for each complete hyperbola."""
 function create_new_hyperbola(args...; kwargs...)
     record(:create_new_hyperbola, args, (; kwargs...))
     fixture = fixture_from_state(args[1])
@@ -269,10 +277,12 @@ end
         entry, program = conic_test_program(name)
         @test invoke_conic_test_entry(
             entry, fixture, bridge.ANIMATION_OPERATION_ENTER, 0f0)
-        @test fixture.next_id == branches
+        @test fixture.next_id == 1
         if branches == 2
             creations = filter(call -> call[1] == :create_new_hyperbola, fixture.calls)
-            @test getproperty.(getindex.(creations, 3), :branch) == [1, -1]
+            @test length(creations) == 1
+            @test !hasproperty(only(creations)[3], :branch)
+            @test fixture.stored_state.curve_id == 1
         end
 
         independent = bridge.Fixture(
@@ -280,8 +290,8 @@ end
         saved_state, saved_calls = fixture.stored_state, length(fixture.calls)
         @test invoke_conic_test_entry(
             entry, independent, bridge.ANIMATION_OPERATION_ENTER, 0f0)
-        @test independent.next_id == 100 + branches
-        @test fixture.next_id == branches
+        @test independent.next_id == 101
+        @test fixture.next_id == 1
         @test fixture.stored_state === saved_state
         @test length(fixture.calls) == saved_calls
         for _ in 1:3
@@ -296,7 +306,7 @@ end
                 fixture.calls)
             tool_call = only(filter(
                 call -> call[1] == Symbol("set_$(name)_tool_parameter"), fixture.calls))
-            @test length(frontier_calls) == branches
+            @test length(frontier_calls) == 1
             @test all(call[2][3] == tool_call[2][2] for call in frontier_calls)
             trails = filter(call -> call[1] == :emit_trailing_particle, fixture.calls)
             @test length(trails) == branches
@@ -322,17 +332,17 @@ end
                 entry, fixture, bridge.ANIMATION_OPERATION_TICK, 0.5f0)
         end
         @test fixture.stored_state.phase == program.PhaseDescend
-        @test fixture.next_id == branches
+        @test fixture.next_id == 1
         empty!(fixture.calls)
         @test invoke_conic_test_entry(entry, fixture,
             bridge.ANIMATION_OPERATION_SHOW_COMPLETED, 0f0)
-        @test count(call -> call[1] == :show_point, fixture.calls) == branches
+        @test count(call -> call[1] == :show_point, fixture.calls) == 1
         @test !any(call -> call[1] == :emit_trailing_particle, fixture.calls)
         @test any(call -> call[1] == Symbol("hide_$(name)_tool"), fixture.calls)
         frontiers = filter(call -> call[1] == Symbol("set_$(name)_frontier"),
             fixture.calls)
         @test all(call[2][3] == program.FinishParameter for call in frontiers)
-        @test length(frontiers) == branches
+        @test length(frontiers) == 1
         @test invoke_conic_test_entry(entry, fixture,
             bridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED, 0f0)
         @test invoke_conic_test_entry(
@@ -397,7 +407,7 @@ function assert_curve_draw_step(fixture, program, family::String, progress::Floa
             call[1] == Symbol("set_$(family)_tool_parameter"), fixture.calls))
         frontiers = filter(call ->
             call[1] == Symbol("set_$(family)_frontier"), fixture.calls)
-        @test length(frontiers) == length(trails)
+        @test length(frontiers) == 1
         @test tool[2][2] ≈ parameter
         @test all(call -> call[2][3] == tool[2][2], frontiers)
     end
@@ -411,11 +421,134 @@ function assert_curve_draw_step(fixture, program, family::String, progress::Floa
     end
 end
 
+@testset "one hyperbola frontier drives two rotated tip trails" begin
+    entry, _ = conic_test_program("hyperbola")
+    owner = parentmodule(parentmodule(entry))
+    helpers = Base.invokelatest(getfield, owner, :EuclidAnimations)
+    draw = Base.invokelatest(getfield, helpers, :animate_draw_hyperbola)
+    bridge = ConicAnimationTestBridge
+    fixture = bridge.Fixture(
+        Tuple{Symbol,Tuple,NamedTuple}[], nothing, UInt64(0), :none)
+    center = (0.4f0, 0.6f0, 0.2f0)
+    GC.@preserve fixture begin
+        state = pointer_from_objref(fixture)
+        Base.invokelatest(draw, state, 0.5f0, 1f0, center, 0.12f0, 0.1f0,
+            1.25f0, -0.75f0; curve_id=UInt64(7), color=:steelblue, rotation=0.4f0)
+    end
+    frontier = only(filter(call ->
+        call[1] == :set_hyperbola_frontier, fixture.calls))
+    @test frontier[2][2:3] == (UInt64(7), 0.25f0)
+    trails = filter(call -> call[1] == :emit_trailing_particle, fixture.calls)
+    @test length(trails) == 2
+    for (index, trail) in enumerate(trails)
+        expected = hyperbola_point(center, 0.12f0, 0.1f0, 0.25f0;
+            branch=index == 1 ? 1 : -1, rotation=0.4f0)
+        @test all(isapprox.(recorded_curve_position(trail), Tuple(expected)))
+    end
+end
+
 """Record one real lifecycle tick with no calls retained from earlier phases."""
 function curve_test_tick(entry, fixture, dt::Float32)
     empty!(fixture.calls)
     return invoke_conic_test_entry(entry, fixture,
         ConicAnimationTestBridge.ANIMATION_OPERATION_TICK, dt)
+end
+
+"""Initialize a real authored hyperbola with test-owned native state and selection."""
+function initialize_hyperbola_fixture(entry, fixture, branches::Symbol)
+    initialize = Base.invokelatest(getfield, parentmodule(entry), :initialize)
+    GC.@preserve fixture begin
+        Base.invokelatest(initialize, pointer_from_objref(fixture); branches)
+    end
+    return nothing
+end
+
+"""Check selected ink contacts without confusing inactive motion with drawing."""
+function assert_hyperbola_contacts(fixture, branches::Symbol, active::Bool)
+    contacts = filter(call -> call[1] == :set_hyperbola_tool_active, fixture.calls)
+    @test !isempty(contacts)
+    @test last(contacts)[2][2] == Int(active)
+    if active
+        @test last(contacts)[3].branches == branches
+    end
+end
+
+@testset "immutable hyperbola selection preserves the real authored lifecycle" begin
+    bridge = ConicAnimationTestBridge
+    for (branches, signs) in ((:both, (1, -1)), (:positive, (1,)), (:negative, (-1,)))
+        entry, program = conic_test_program("hyperbola")
+        fixture = bridge.Fixture(
+            Tuple{Symbol,Tuple,NamedTuple}[], nothing, UInt64(0), :none)
+        initialize_hyperbola_fixture(entry, fixture, branches)
+        creation = only(filter(call ->
+            call[1] == :create_new_hyperbola, fixture.calls))
+        @test creation[3].branches == branches
+        @test fixture.next_id == 1
+        @test fixture.stored_state.branches ==
+            OdinJuliaBridge.hyperbola_branches(branches)
+        assert_hyperbola_contacts(fixture, branches, false)
+        curve_test_tick(entry, fixture, program.DescendDuration / 2)
+        assert_hyperbola_contacts(fixture, branches, false)
+        @test !any(call -> call[1] == :emit_trailing_particle, fixture.calls)
+        curve_test_tick(entry, fixture, program.DescendDuration / 2)
+        assert_hyperbola_contacts(fixture, branches, true)
+        curve_test_tick(entry, fixture, program.DrawDuration / 2)
+        frontier = only(filter(call ->
+            call[1] == :set_hyperbola_frontier, fixture.calls))
+        @test frontier[2][2] == fixture.stored_state.curve_id
+        tool = only(filter(call ->
+            call[1] == :set_hyperbola_tool_parameter, fixture.calls))
+        @test tool[2][2] == frontier[2][3]
+        assert_hyperbola_contacts(fixture, branches, true)
+        trails = filter(call -> call[1] == :emit_trailing_particle, fixture.calls)
+        @test length(trails) == length(signs)
+        for (trail, sign) in zip(trails, signs)
+            expected = hyperbola_point(program.Center, program.Semimajor,
+                program.Semiminor, frontier[2][3]; branch=sign)
+            @test all(isapprox.(recorded_curve_position(trail), Tuple(expected)))
+        end
+        curve_test_tick(entry, fixture, program.DrawDuration / 2)
+        assert_hyperbola_contacts(fixture, branches, false)
+        curve_test_tick(entry, fixture, program.RiseDuration)
+        assert_hyperbola_contacts(fixture, branches, false)
+        @test !any(call -> call[1] == :emit_trailing_particle, fixture.calls)
+        curve_test_tick(entry, fixture, program.HoldDuration)
+        @test fixture.stored_state.branches ==
+            OdinJuliaBridge.hyperbola_branches(branches)
+        @test fixture.next_id == 1
+        empty!(fixture.calls)
+        @test invoke_conic_test_entry(entry, fixture,
+            bridge.ANIMATION_OPERATION_SHOW_COMPLETED, 0f0)
+        assert_hyperbola_contacts(fixture, branches, false)
+        @test !any(call -> call[1] == :emit_trailing_particle, fixture.calls)
+        @test fixture.next_id == 1
+        @test invoke_conic_test_entry(entry, fixture,
+            bridge.ANIMATION_OPERATION_EXIT, 0f0)
+    end
+end
+
+@testset "selected hyperbola trails use rotated intrinsic axes" begin
+    entry, _ = conic_test_program("hyperbola")
+    owner = parentmodule(parentmodule(entry))
+    helpers = Base.invokelatest(getfield, owner, :EuclidAnimations)
+    draw = Base.invokelatest(getfield, helpers, :animate_draw_hyperbola)
+    bridge = ConicAnimationTestBridge
+    center = (0.4f0, 0.6f0, 0.2f0)
+    for (branches, sign) in ((:positive, 1), (:negative, -1))
+        fixture = bridge.Fixture(
+            Tuple{Symbol,Tuple,NamedTuple}[], nothing, UInt64(0), :none)
+        GC.@preserve fixture begin
+            Base.invokelatest(draw, pointer_from_objref(fixture), 0.5f0, 1f0,
+                center, 0.12f0, 0.1f0, 1.25f0, -0.75f0;
+                curve_id=UInt64(7), color=:steelblue, rotation=0.8f0, branches)
+        end
+        trail = only(filter(call -> call[1] == :emit_trailing_particle, fixture.calls))
+        expected = hyperbola_point(center, 0.12f0, 0.1f0, 0.25f0;
+            branch=sign, rotation=0.8f0)
+        @test all(isapprox.(recorded_curve_position(trail), Tuple(expected)))
+        @test length(
+            filter(call -> call[1] == :set_hyperbola_frontier, fixture.calls)) == 1
+    end
 end
 
 @testset "shared curve helpers preserve directed parameters and rotated tracers" begin

@@ -55,7 +55,7 @@ end
     @test OdinJuliaBridge.BRIDGE_STATUS_NON_CONVERGED == Int32(7)
     @test OdinJuliaBridge.BRIDGE_STATUS_NOT_FOUND == Int32(8)
     @test OdinJuliaBridge.BRIDGE_STATUS_SCHEMA_MISMATCH == Int32(9)
-    @test OdinJuliaBridge.BRIDGE_VERSION == Int32(13)
+    @test OdinJuliaBridge.BRIDGE_VERSION == Int32(15)
     @test OdinJuliaBridge.BRIDGE_FEATURE_TYPED_ANIMATION_STATE == Int32(1 << 4)
     @test OdinJuliaBridge.BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG == Int32(1 << 5)
     @test OdinJuliaBridge.BRIDGE_FEATURE_MIME_PRESENTATION == Int32(1 << 6)
@@ -72,12 +72,13 @@ end
     @test sizeof(OdinJuliaBridge.BridgeCircleRegionGeometry) == 12
     @test sizeof(OdinJuliaBridge.BridgeShapeCircleRegion) == 32
     @test sizeof(BridgeParabolaGeometry) == 20
-    @test sizeof(BridgeHyperbolaGeometry) == 28
+    @test sizeof(BridgeHyperbolaGeometry) == 24
     @test sizeof(BridgeParabolaToolGeometry) == 24
     @test sizeof(BridgeHyperbolaToolGeometry) == 28
     @test sizeof(BridgeShapeConicResult) == 16
     @test sizeof(BridgeShapeParabolaQueryResult) == 40
     @test sizeof(BridgeShapeHyperbolaQueryResult) == 48
+    @test fieldoffset(BridgeShapeHyperbolaQueryResult, 4) == 40
     @test fieldoffset(BridgeHyperbolaGeometry, 2) == 4
     @test fieldoffset(BridgeShapeParabolaQueryResult, 3) == 16
     @test fieldoffset(BridgeShapeHyperbolaQueryResult, 3) == 16
@@ -85,6 +86,14 @@ end
 end
 
 @testset "conic ABI builders" begin
+    for (mode, code) in ((:both, Int32(0)), (:positive, Int32(1)), (:negative, Int32(2)))
+        @test OdinJuliaBridge.hyperbola_branches(mode) == code
+        @test OdinJuliaBridge.hyperbola_branch_mode(code) == mode
+    end
+    @test_throws ArgumentError OdinJuliaBridge.hyperbola_branches(:none)
+    @test_throws ArgumentError OdinJuliaBridge.hyperbola_branches(:left)
+    @test_throws ArgumentError OdinJuliaBridge.hyperbola_branch_mode(Int32(-1))
+    @test_throws ArgumentError OdinJuliaBridge.hyperbola_branch_mode(Int32(4))
     parabola = OdinJuliaBridge._parabola_geometry(; focal_distance=0.075,
         rotation=0.25, parameter_start=-1.6, parameter_finish=1.6,
         draw_parameter=0.5)
@@ -93,10 +102,10 @@ end
     @test parabola.parameter_start == -1.6f0
     @test parabola.parameter_finish == 1.6f0
     @test parabola.draw_parameter == 0.5f0
-    hyperbola = OdinJuliaBridge._hyperbola_geometry(; branch=-1,
+    hyperbola = OdinJuliaBridge._hyperbola_geometry(;
         semimajor=0.12, semiminor=0.10, rotation=0.25, parameter_start=1.35,
         parameter_finish=-1.35, draw_parameter=0.5)
-    @test hyperbola.branch == Int32(-1)
+    @test !hasproperty(hyperbola, :branch)
     @test hyperbola.semimajor == 0.12f0
     @test hyperbola.semiminor == 0.10f0
     @test hyperbola.rotation == 0.25f0

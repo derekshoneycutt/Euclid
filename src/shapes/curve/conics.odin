@@ -45,9 +45,10 @@ parabola_point :: proc(
 // Evaluate one exact rotated branch while keeping its explicit sign.
 hyperbola_point :: proc(
     center: Vector3,
-    value: shapemodel.Shape_Hyperbola_Branch,
-    parameter: f32) -> Vector3 {
-    sign := f32(value.branch)
+    value: shapemodel.Shape_Hyperbola,
+    parameter: f32, branch: i32 = 1) -> Vector3 {
+    assert(branch == 1 || branch == -1)
+    sign := f32(branch)
     local: Vector3 = {sign * value.semimajor * math.cosh(parameter),
         sign * value.semiminor * math.sinh(parameter), 0}
     return center + rotate_planar(local, value.rotation)
@@ -170,7 +171,7 @@ parabola_refine_parameters :: proc(
 
 // Refine one hyperbola branch without combining it with its reflected branch.
 hyperbola_refine_parameters :: proc(
-    center: Vector3, value: shapemodel.Shape_Hyperbola_Branch,
+    center: Vector3, value: shapemodel.Shape_Hyperbola,
     parameters: []f32, count: int) -> (int, bool) {
     capacity_limited := false
     current_count := count
@@ -229,10 +230,10 @@ parabola_explicate :: proc(
 
 // Resolve one hyperbola branch's sampled domain and exact interpolated frontier.
 hyperbola_explicate :: proc(
-    center: Vector3, value: shapemodel.Shape_Hyperbola_Branch,
-    vertices: []Vector3) -> Curve_Explication_Result {
+    center: Vector3, value: shapemodel.Shape_Hyperbola,
+    vertices: []Vector3, branch: i32) -> Curve_Explication_Result {
     if !shapemodel.shape_hyperbola_is_valid(value) ||
-       len(vertices) < CONIC_MAX_VERTICES {
+       len(vertices) < CONIC_MAX_VERTICES || (branch != 1 && branch != -1) {
         return {
             status = .Invalid_Input,
             topology = .Open,
@@ -250,12 +251,13 @@ hyperbola_explicate :: proc(
             parameter, value.draw_parameter) {
             break
         }
-        vertices[written] = hyperbola_point(center, value, parameter)
+        vertices[written] = hyperbola_point(center, value, parameter, branch)
         written += 1
     }
     if written == 0 || !curve_parameters_match(parameters[max(written - 1, 0)],
         value.draw_parameter) {
-        vertices[written] = hyperbola_point(center, value, value.draw_parameter)
+        vertices[written] = hyperbola_point(
+            center, value, value.draw_parameter, branch)
         written += 1
     }
     return {written, curve_explication_status(limited), .Open}

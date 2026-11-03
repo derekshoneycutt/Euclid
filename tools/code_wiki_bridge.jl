@@ -43,7 +43,8 @@ end
 function split_odin_abi_parameters(parameters::AbstractString)
     isempty(strip(parameters)) && return String[]
     if !occursin(':', parameters)
-        return strip.(split(parameters, ','))
+        return [String(strip(first(split(part, '='; limit=2))))
+            for part in split(parameters, ',')]
     end
     types = String[]
     pending_names = 0
@@ -53,7 +54,7 @@ function split_odin_abi_parameters(parameters::AbstractString)
             pending_names += 1
             continue
         end
-        parameter_type = strip(part[last(separator) + 1:end])
+        parameter_type = strip(first(split(part[last(separator) + 1:end], '='; limit=2)))
         append!(types, fill(parameter_type, pending_names + 1))
         pending_names = 0
     end
@@ -272,6 +273,7 @@ const ODIN_ABI_TYPE_ALIASES = Dict(
     "Bridge_Shape_Hyperbola_Query_Result" => "bridge-shape-hyperbola-query-result",
     "shapemodel.Bridge_Parabola_Geometry" => "bridge-parabola-geometry",
     "shapemodel.Bridge_Hyperbola_Geometry" => "bridge-hyperbola-geometry",
+    "shapemodel.Hyperbola_Branches" => "i32",
     "shapemodel.Bridge_Parabola_Tool_Geometry" => "bridge-parabola-tool-geometry",
     "shapemodel.Bridge_Hyperbola_Tool_Geometry" => "bridge-hyperbola-tool-geometry",
     "Bridge_Shape_Triangle_Result" => "bridge-shape-triangle-result",

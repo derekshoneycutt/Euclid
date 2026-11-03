@@ -167,9 +167,17 @@ Shape_Parabola :: struct {
     previous_draw_parameter: f32,
 }
 
-// Hold one explicitly signed branch of a mutable analytic hyperbola.
-Shape_Hyperbola_Branch :: struct {
-    branch: i32,
+// Select intrinsic hyperbola branches; None is reserved for inactive tool contact.
+Hyperbola_Branches :: enum i32 {
+    None = -1,
+    Both = 0,
+    Positive = 1,
+    Negative = 2,
+}
+
+// Hold immutable ink selection and mutable common geometry for one hyperbola.
+Shape_Hyperbola :: struct {
+    branches: Hyperbola_Branches,
     semimajor: f32,
     semiminor: f32,
     rotation: f32,
@@ -210,7 +218,7 @@ Shape_Hyperbola_Tool :: struct {
     parameter_finish: f32,
     parameter: f32,
     rail_half_length: f32,
-    active: bool,
+    active_branches: Hyperbola_Branches,
     previous_semimajor: f32,
     previous_semiminor: f32,
     previous_rotation: f32,
@@ -581,7 +589,7 @@ Shape_World :: struct {
     cycloids: Shape_Component_Set(Shape_Cycloid),
     cycloid_tools: Shape_Component_Set(Shape_Cycloid_Tool),
     parabolas: Shape_Component_Set(Shape_Parabola),
-    hyperbolas: Shape_Component_Set(Shape_Hyperbola_Branch),
+    hyperbolas: Shape_Component_Set(Shape_Hyperbola),
     parabola_tools: Shape_Component_Set(Shape_Parabola_Tool),
     hyperbola_tools: Shape_Component_Set(Shape_Hyperbola_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
@@ -697,9 +705,22 @@ shape_parabola_is_valid :: proc(value: Shape_Parabola) -> bool {
         value.parameter_start, value.parameter_finish, value.draw_parameter)
 }
 
-// Validate one signed hyperbola branch and its finite directed frontier.
-shape_hyperbola_is_valid :: proc(value: Shape_Hyperbola_Branch) -> bool {
-    if (value.branch != 1 && value.branch != -1) ||
+// Reject unknown selection values and empty selections on constructed shapes.
+hyperbola_branches_are_valid :: proc(
+    value: Hyperbola_Branches, allow_none := false) -> bool {
+    return value == .Both || value == .Positive || value == .Negative ||
+        (allow_none && value == .None)
+}
+
+// Select one analytic sign without changing the paired apparatus geometry.
+hyperbola_branch_is_selected :: proc(value: Hyperbola_Branches, branch: i32) -> bool {
+    return value == .Both || (value == .Positive && branch == 1) ||
+        (value == .Negative && branch == -1)
+}
+
+// Validate a complete hyperbola and its common finite directed frontier.
+shape_hyperbola_is_valid :: proc(value: Shape_Hyperbola) -> bool {
+    if !hyperbola_branches_are_valid(value.branches) ||
         value.semimajor <= 0 || value.semiminor <= 0 ||
         !shape_scalar_is_finite(value.semimajor) ||
         !shape_scalar_is_finite(value.semiminor) ||
@@ -736,7 +757,8 @@ shape_parabola_tool_is_valid :: proc(value: Shape_Parabola_Tool) -> bool {
 
 // Validate one finite X-rail instrument and guarantee both carriages fit.
 shape_hyperbola_tool_is_valid :: proc(value: Shape_Hyperbola_Tool) -> bool {
-    if value.semimajor <= 0 || value.semiminor <= 0 ||
+    if !hyperbola_branches_are_valid(value.active_branches, true) ||
+        value.semimajor <= 0 || value.semiminor <= 0 ||
         value.rail_half_length <= 0 ||
         !shape_scalar_is_finite(value.semimajor) ||
         !shape_scalar_is_finite(value.semiminor) ||

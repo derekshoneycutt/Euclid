@@ -522,6 +522,72 @@ shapes_test_world_conic_tools_survive_animation_rewind :: proc(t: ^testing.T) {
     testing.expect_value(t, world.parabolas.count, u16(0))
 }
 
+// Verify one hyperbola fits in the final host slot and exhaustion is transactional.
+@(test)
+shapes_test_hyperbola_uses_one_remaining_host :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    for _ in 0..<shapemodel.MAX_SHAPE_ENTITIES - 1 {
+        _, status := world_create_point(world, {}, world_shape_test_style())
+        testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    }
+    input: Hyperbola_Input = {
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1,
+        parameter_finish = 1,
+        draw_parameter = 0,
+        style = world_shape_test_style(),
+    }
+    _, status := world_create_hyperbola(world, input)
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t,
+        world.registry.entity_count, u32(shapemodel.MAX_SHAPE_ENTITIES))
+    testing.expect_value(t, world.hyperbolas.count, u16(1))
+    _, exhausted := world_create_hyperbola(world, input)
+    testing.expect_value(t, exhausted, shapemodel.Shape_World_Status.Out_Of_Capacity)
+    testing.expect_value(t,
+        world.registry.entity_count, u32(shapemodel.MAX_SHAPE_ENTITIES))
+    testing.expect_value(t, world.transforms.count, u16(shapemodel.MAX_SHAPE_ENTITIES))
+    testing.expect_value(t, world.geometries.count, u16(shapemodel.MAX_SHAPE_ENTITIES))
+    testing.expect_value(t, world.hyperbolas.count, u16(1))
+}
+
+// Verify selection is construction metadata and never requires another host.
+@(test)
+shapes_test_hyperbola_branch_selection_is_bounded :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    input: Hyperbola_Input = {
+        semimajor = 0.12,
+        semiminor = 0.1,
+        parameter_start = -1,
+        parameter_finish = 1,
+        draw_parameter = 0,
+    }
+    selections := [?]shapemodel.Hyperbola_Branches{.Both, .Positive, .Negative}
+    for selection, index in selections {
+        input.branches = selection
+        entity, status := world_create_hyperbola(world, input)
+        testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+        value, found := shapemodel.shape_component_get(
+            &world.hyperbolas, &world.registry, entity)
+        testing.expect(t, found)
+        testing.expect_value(t, value.branches, selection)
+        testing.expect_value(t, world.registry.entity_count, u32(index + 1))
+    }
+    invalid := [?]shapemodel.Hyperbola_Branches{.None, shapemodel.Hyperbola_Branches(4)}
+    for selection in invalid {
+        input.branches = selection
+        _, status := world_create_hyperbola(world, input)
+        testing.expect_value(t, status, shapemodel.Shape_World_Status.Invalid_Argument)
+        testing.expect_value(t, world.registry.entity_count, u32(3))
+        testing.expect_value(t, world.hyperbolas.count, u16(3))
+        testing.expect_value(t, world.transforms.count, u16(3))
+        testing.expect_value(t, world.geometries.count, u16(3))
+    }
+}
+
 // Verify invalid conic constructors reject input before publishing world components.
 @(test)
 shapes_test_world_conic_constructors_reject_invalid_geometry_transactionally :: proc(
@@ -538,8 +604,7 @@ shapes_test_world_conic_constructors_reject_invalid_geometry_transactionally :: 
     })
     _, hyperbola_status := world_create_hyperbola(world, {
         center = {},
-        branch = 0,
-        semimajor = 0.12,
+        semimajor = 0,
         semiminor = 0.1,
         parameter_start = -1,
         parameter_finish = 1,

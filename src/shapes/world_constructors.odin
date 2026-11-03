@@ -89,10 +89,10 @@ Parabola_Input :: struct {
     style: Shape_Style,
 }
 
-// Supply one signed analytic hyperbola branch and presentation values.
+// Supply one complete analytic hyperbola and presentation values.
 Hyperbola_Input :: struct {
+    branches: shapemodel.Hyperbola_Branches,
     center: Vector3,
-    branch: i32,
     semimajor: f32,
     semiminor: f32,
     rotation: f32,
@@ -624,12 +624,12 @@ world_create_parabola :: proc(
     return shape, .Ok
 }
 
-// Create one independently rendered analytic hyperbola branch entity.
+// Create one host owning both disconnected branches of an analytic hyperbola.
 world_create_hyperbola :: proc(
     world: ^shapemodel.Shape_World,
     input: Hyperbola_Input) -> (shapemodel.Shape_Entity, shapemodel.Shape_World_Status) {
-    value: shapemodel.Shape_Hyperbola_Branch = {
-        branch = input.branch,
+    value: shapemodel.Shape_Hyperbola = {
+        branches = input.branches,
         semimajor = input.semimajor,
         semiminor = input.semiminor,
         rotation = input.rotation,
@@ -710,6 +710,7 @@ world_create_hyperbola_tool :: proc(
     input: Hyperbola_Tool_Input) -> (
         shapemodel.Shape_Entity, shapemodel.Shape_World_Status) {
     value: shapemodel.Shape_Hyperbola_Tool = {
+        active_branches = .None,
         semimajor = input.semimajor,
         semiminor = input.semiminor,
         rotation = input.rotation,

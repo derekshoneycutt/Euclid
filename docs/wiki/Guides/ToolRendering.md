@@ -65,6 +65,12 @@ distance from the center. The carriages remain equally far from the center, but 
 separation changes during the sweep. The rails illustrate the curve's geometry rather
 than claim a complete physical drive mechanism.
 
+Hyperbola ink selection is fixed at shape construction (`:both`, `:positive`, or
+`:negative`, relative to the intrinsic axes before rotation). Both carriages,
+upright pens, and their shadows remain present and move in all modes. Per-tip
+contact selection controls only the flat drawing indicators and tracing particles;
+neither tip is active during descent, lift, or completed-form display.
+
 Both instruments reuse the existing tool material and bounded segment drawing paths.
 Upright pens distinguish apparatus from auxiliary ink lines without ring collars.
 Active contact indicators use authored ink color resolution, including monochrome and

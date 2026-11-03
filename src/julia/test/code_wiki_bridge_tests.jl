@@ -41,6 +41,16 @@ end
         "notify :: proc(^core.Euclid_General_State, u64) {...}")
     @test parts.parameter_types == ["^core.Euclid_General_State", "u64"]
     @test parts.return_type == "void"
+    parts = CodeWiki.parse_odin_abi_signature(
+        "select :: proc(branches: shapemodel.Hyperbola_Branches = .Both) -> i32 {...}")
+    @test parts.parameter_types == ["shapemodel.Hyperbola_Branches"]
+    @test parts.return_type == "i32"
+    anonymous = CodeWiki.parse_odin_abi_signature(
+        "select :: proc(shapemodel.Hyperbola_Branches = .Both) -> i32 {...}")
+    @test anonymous.parameter_types == parts.parameter_types
+    selection_export = bridge_test_export(parameter_type="shapemodel.Hyperbola_Branches")
+    @test length(CodeWiki.pair_bridge_records(
+        [selection_export], [bridge_test_call()])) == 1
 end
 
 @testset "harness-only exports are not the public animation bridge" begin

@@ -94,7 +94,7 @@ Scene_Command :: struct {
     cycloid: shapemodel.Shape_Cycloid,
     cycloid_tool: shapemodel.Shape_Cycloid_Tool,
     parabola: shapemodel.Shape_Parabola,
-    hyperbola: shapemodel.Shape_Hyperbola_Branch,
+    hyperbola: shapemodel.Shape_Hyperbola,
     parabola_tool: shapemodel.Shape_Parabola_Tool,
     hyperbola_tool: shapemodel.Shape_Hyperbola_Tool,
     color: Bridge_Color,

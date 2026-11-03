@@ -143,6 +143,15 @@ Use the Cycloid, Trochoid, Parabola, and Hyperbola motion/draw helpers for commo
 mechanics, just as other content uses the pen and compass helpers. Circle uses
 the existing compass descent, circle draw, and compass rise helpers.
 
+Hyperbola content retains one curve identity and immutable constructor selection
+(`branches=:both`, `:positive`, or `:negative`, in the intrinsic axes). Its shared
+drawing helper receives the same selection, advances one native frontier, and
+emits trails and activates contact only at selected tips. Both physical pens and
+carriages always move, even in one-sided mode. Descent, rise, and completed-form
+display leave both contacts inactive. Reset preserves selection; the single
+catalogue animation defaults to both. Disconnected strokes never require separate
+shape hosts.
+
 A typical construction follows this visual rhythm:
 
 ```mermaid
