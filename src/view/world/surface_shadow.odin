@@ -48,7 +48,9 @@ draw_encoded_surface_shadow :: proc(
     mesh: Surface_Shadow_Mesh
     build_surface_shadow_mesh(surface, scale, &mesh)
     batch, ready := native.draw_encoder_prepare(
-        encoder, len(mesh.vertices), len(mesh.indices), {pipeline = .Colored})
+        encoder, len(mesh.vertices), len(mesh.indices), {
+            pipeline = .Colored,
+        })
     if !ready {
         return false
     }

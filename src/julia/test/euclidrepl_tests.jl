@@ -33,6 +33,57 @@ end
 
 const TEST_STATE_PTR = Ptr{Cvoid}(0)
 const TEST_REPL_RUNTIME = EuclidRepl.create_runtime()
+const REPL_TEST_POSITIONS = Dict{UInt64,NTuple{3,Float32}}()
+const REPL_TEST_HIDDEN = UInt64[]
+
+"""Supply immutable native projections only for the null-state unit fixture."""
+function OdinJuliaBridge.get_point(state::Ptr{Cvoid}, id::UInt64)
+    state == C_NULL || return OdinJuliaBridge.get_point(state, Int(id))
+    found = haskey(REPL_TEST_POSITIONS, id)
+    status = found ? OdinJuliaBridge.BRIDGE_STATUS_OK :
+        OdinJuliaBridge.BRIDGE_STATUS_INVALID_INDEX
+    return OdinJuliaBridge.BridgePointView(
+        status, id, 0, 0, UInt8(found), 1, 0,
+        get(REPL_TEST_POSITIONS, id, (0f0, 0f0, 0f0)),
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0), 0, 5f0, 0)
+end
+
+"""Record motion in the null-state fixture without replacing native non-null calls."""
+function OdinJuliaBridge.set_point_position_status(
+    state::Ptr{Cvoid}, id::UInt64, position)
+    state == C_NULL ||
+        return OdinJuliaBridge.set_point_position_status(state, Int(id), position)
+    haskey(REPL_TEST_POSITIONS, id) || return OdinJuliaBridge.BRIDGE_STATUS_INVALID_INDEX
+    REPL_TEST_POSITIONS[id] = Tuple(Float32.(position))
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record ordered visibility in the null-state fixture."""
+function OdinJuliaBridge.hide_point(state::Ptr{Cvoid}, id::UInt64)
+    state == C_NULL || return OdinJuliaBridge.hide_point(state, Int(id))
+    haskey(REPL_TEST_POSITIONS, id) || return OdinJuliaBridge.BRIDGE_STATUS_INVALID_INDEX
+    push!(REPL_TEST_HIDDEN, id)
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record action frames and activation order without invoking native tools."""
+mutable struct ReplQueueTestPayload <: EuclidRepl.ReplDrawPayload
+    identity::Int
+    frames::Vector{Tuple{Int,Float32}}
+    fail::Bool
+end
+
+"""Append each rendered frame or raise a deterministic execution failure."""
+function EuclidRepl.render_payload!(
+    ::Ptr{Cvoid}, elapsed::Real, _::Real, payload::ReplQueueTestPayload)
+    payload.fail && error("fixture execution failed")
+    push!(payload.frames, (payload.identity, Float32(elapsed)))
+end
+
+"""Create a one-second action sharing a test-owned frame observation vector."""
+queue_fixture_job(identity, frames; fail=false) = EuclidRepl.ReplDrawJob(
+    :test, 1f0, 0f0, ReplQueueTestPayload(identity, frames, fail))
 
 """Provide a successful visibility callback for Julia-only REPL tests."""
 function test_shape_set_visible(
@@ -94,6 +145,13 @@ end
 end
 
 @testset "EuclidRepl hide helpers" begin
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
+    empty!(REPL_TEST_HIDDEN)
+    session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
+    for id in UInt64[5, 7, 11, 21, 31]
+        REPL_TEST_POSITIONS[id] = (0f0, 0f0, 0f0)
+        EuclidRepl.track_managed_host!(session, id)
+    end
     point = OdinJuliaBridge.BridgeShapeEntityResult(
         OdinJuliaBridge.BRIDGE_STATUS_OK, UInt64(7))
     point_view = OdinJuliaBridge.BridgePointView(
@@ -124,6 +182,13 @@ end
         TEST_REPL_RUNTIME, TEST_STATE_PTR, circle_shape))
     @test isnothing(EuclidRepl.hide!(
         TEST_REPL_RUNTIME, TEST_STATE_PTR, filled_circle_shape))
+    @test isempty(REPL_TEST_HIDDEN)
+    @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).pending_count == 5
+    for _ in 1:6
+        EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+    end
+    @test REPL_TEST_HIDDEN == UInt64[5, 7, 7, 11, 21, 31]
+    @test_throws ArgumentError EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 99)
 end
 
 @testset "EuclidRepl color palette helpers" begin
@@ -186,9 +251,10 @@ end
 
     compass_status = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test compass_status.active == true
-    @test compass_status.kind == :highlight_compass
+    @test compass_status.kind == :highlight_pen
+    @test compass_status.pending_count == 1
 
-    @test EuclidRepl.stop!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).active == false
 end
 
@@ -200,8 +266,9 @@ end
     @test state0.managed_shape_count == 0
 
     session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
-    @test EuclidRepl.stop!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == false
+    @test !isdefined(EuclidRepl, :stop!)
     @test EuclidRepl.clear!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
 
     # Simulate managed geometry bookkeeping in test-only state.
     push!(session.managed_host_ids, 1)
@@ -210,6 +277,10 @@ end
         TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 2
 
     @test EuclidRepl.clear!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 2
+    REPL_TEST_POSITIONS[1] = (0f0, 0f0, 0f0)
+    REPL_TEST_POSITIONS[2] = (0f0, 0f0, 0f0)
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     @test EuclidRepl.status(
         TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 0
 
@@ -219,36 +290,168 @@ end
     @test state_after_reset.managed_shape_count == 0
 end
 
-@testset "EuclidRepl preemption and status" begin
+@testset "EuclidRepl FIFO and bounded storage reuse" begin
     EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
     session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
-    payload_a = EuclidRepl.PointPayload(1, Float32[0f0, 0f0, 0f0], :steelblue, 5f0)
-    job_a = EuclidRepl.ReplDrawJob(:point, 0.5f0, 0.25f0, payload_a)
-
-    payload_b = EuclidRepl.LinePayload(
-        2,
-        3,
-        4,
-        Float32[0f0, 0f0, 0f0],
-        Float32[1f0, 0f0, 0f0],
-        :steelblue,
-        5f0)
-    job_b = EuclidRepl.ReplDrawJob(:line, 0.8f0, 0f0, payload_b)
+    frames = Tuple{Int,Float32}[]
+    job_a = queue_fixture_job(1, frames)
+    job_b = queue_fixture_job(2, frames)
 
     EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_a)
     s1 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s1.active == true
-    @test s1.kind == :point
+    @test s1.kind == :test
 
     EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_b)
     s2 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s2.active == true
-    @test s2.kind == :line
+    @test s2.kind == :test
+    @test session.active_job === job_a
+    @test s2.pending_count == 1
     @test s2.subscription_id === nothing
     @test job_b.elapsed == 0f0
 
-    @test EuclidRepl.stop!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 0.25f0)
+    @test frames == [(1, 0.25f0)]
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 2f0)
+    @test frames == [(1, 0.25f0), (1, 1f0)]
+    @test job_b.elapsed == 0f0
+    @test !EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).drained
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+    @test frames[end] == (2, 1f0)
     s3 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s3.active == false
+    @test s3.drained
+    @test s3.completed_count == 2
+    slots = session.pending
+    for cycle in 1:3
+        for id in 1:EuclidRepl.ACTION_QUEUE_CAPACITY
+            EuclidRepl.start_job!(
+                TEST_REPL_RUNTIME, TEST_STATE_PTR, queue_fixture_job(id, frames))
+        end
+        @test session.pending_count == EuclidRepl.ACTION_QUEUE_CAPACITY - 1
+        @test_throws ArgumentError EuclidRepl.start_job!(
+            TEST_REPL_RUNTIME, TEST_STATE_PTR, queue_fixture_job(99, frames))
+        @test_throws ArgumentError EuclidRepl.point!(
+            TEST_REPL_RUNTIME, TEST_STATE_PTR, [0, 0, 0])
+        @test_throws ArgumentError EuclidRepl.line!(
+            TEST_REPL_RUNTIME, TEST_STATE_PTR, [0, 0, 0], [1, 1, 0])
+        @test_throws ArgumentError EuclidRepl.circle!(
+            TEST_REPL_RUNTIME, TEST_STATE_PTR, [0, 0, 0], 1)
+        @test session.pending_count == EuclidRepl.ACTION_QUEUE_CAPACITY - 1
+        for _ in 1:EuclidRepl.ACTION_QUEUE_CAPACITY
+            EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+        end
+
+        @testset "EuclidRepl stale activation and copied highlight inputs" begin
+            runtime = EuclidRepl.create_runtime()
+            REPL_TEST_POSITIONS[42] = (0f0, 0f0, 0f0)
+            EuclidRepl.translate_points!(
+                runtime, TEST_STATE_PTR, [42], [[0, 0, 0]], [0.1, 0, 0])
+            delete!(REPL_TEST_POSITIONS, UInt64(42))
+            @test_throws ArgumentError EuclidRepl.run_active_job_frame!(
+                runtime, TEST_STATE_PTR, 1f0)
+            @test EuclidRepl.status(runtime, TEST_STATE_PTR).failed
+            @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 0
+            EuclidRepl.reset_session!(runtime, TEST_STATE_PTR)
+            start = [0.1f0, 0.2f0, 0f0]
+            finish = [0.5f0, 0.2f0, 0f0]
+            EuclidRepl.highlight_pen!(runtime, TEST_STATE_PTR, start, finish)
+            start[1] = 99f0
+            finish[1] = 99f0
+            @test runtime.session.active_job.payload.start_pos == [0.1f0, 0.2f0, 0f0]
+            @test runtime.session.active_job.payload.end_pos == [0.5f0, 0.2f0, 0f0]
+            EuclidRepl.reset_session!(runtime, TEST_STATE_PTR)
+        end
+        @test first.(frames[(end - EuclidRepl.ACTION_QUEUE_CAPACITY + 1):end]) ==
+            collect(1:EuclidRepl.ACTION_QUEUE_CAPACITY)
+        @test session.pending === slots
+        @test all(isnothing, slots)
+    end
+end
+
+@testset "EuclidRepl activation-time motion and immutable submission" begin
+    runtime = EuclidRepl.create_runtime()
+    REPL_TEST_POSITIONS[7] = (0.1f0, 0.2f0, 0f0)
+    ids = UInt64[7]
+    starts = [[9f0, 9f0, 9f0]]
+    displacement = [0.2f0, 0f0, 0f0]
+    returned = EuclidRepl.translate_points!(
+        runtime, TEST_STATE_PTR, ids, starts, displacement; duration=1f0)
+    EuclidRepl.translate_points!(
+        runtime, TEST_STATE_PTR, ids, starts, displacement; duration=1f0)
+    ids[1] = 99
+    returned[1] = 99
+    starts[1][1] = 99f0
+    displacement[1] = 99f0
+    for (step, expected) in enumerate([0.15f0, 0.2f0, 0.25f0, 0.3f0])
+        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+        @test isapprox(REPL_TEST_POSITIONS[7][1], expected; atol=1f-6)
+    end
+    @test !EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test isapprox(REPL_TEST_POSITIONS[7][1], 0.5f0; atol=1f-6)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+    @test_throws ArgumentError EuclidRepl.translate_points!(
+        runtime, TEST_STATE_PTR, [99], [[0, 0, 0]], [1, 0, 0])
+    @test_throws ArgumentError EuclidRepl.validated_point_ids(fill(7, 17))
+    @test_throws ArgumentError EuclidRepl.validated_point_ids([7, 7])
+    @test_throws ArgumentError EuclidRepl.rotate_points!(
+        runtime, TEST_STATE_PTR, [7], [[0, 0, 0]], [0, 0, 0], [0, 0, 1], Inf)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 2
+end
+
+@testset "EuclidRepl failure blocks successors and reset releases payloads" begin
+    runtime = EuclidRepl.create_runtime()
+    frames = Tuple{Int,Float32}[]
+    EuclidRepl.start_job!(
+        runtime, TEST_STATE_PTR, queue_fixture_job(1, frames; fail=true))
+    EuclidRepl.start_job!(
+        runtime, TEST_STATE_PTR, queue_fixture_job(2, frames))
+    @test_throws ErrorException EuclidRepl.run_active_job_frame!(
+        runtime, TEST_STATE_PTR, 1f0)
+    failed = EuclidRepl.status(runtime, TEST_STATE_PTR)
+    @test failed.failed && !failed.drained
+    @test failed.completed_count == 0 && failed.pending_count == 1
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test isempty(frames)
+    @test_throws ErrorException EuclidRepl.clear!(runtime, TEST_STATE_PTR)
+    EuclidRepl.reset_session!(runtime, TEST_STATE_PTR)
+    @test all(isnothing, runtime.session.pending)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+end
+
+@testset "EuclidRepl ordered clear preserves later admissions" begin
+    runtime = EuclidRepl.create_runtime()
+    session = runtime.session
+    empty!(REPL_TEST_HIDDEN)
+    REPL_TEST_POSITIONS[8] = (0f0, 0f0, 0f0)
+    REPL_TEST_POSITIONS[9] = (0f0, 0f0, 0f0)
+    EuclidRepl.track_managed_host!(session, UInt64(8))
+    EuclidRepl.clear!(runtime, TEST_STATE_PTR)
+    EuclidRepl.track_managed_host!(session, UInt64(9))
+    EuclidRepl.hide!(runtime, TEST_STATE_PTR, 9)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test REPL_TEST_HIDDEN == UInt64[8]
+    @test session.managed_host_ids == UInt64[9]
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test REPL_TEST_HIDDEN == UInt64[8, 9]
+end
+
+@testset "EuclidRepl large clear uses bounded captured batches" begin
+    runtime = EuclidRepl.create_runtime()
+    empty!(REPL_TEST_HIDDEN)
+    for id in UInt64.(100:356)
+        REPL_TEST_POSITIONS[id] = (0f0, 0f0, 0f0)
+        EuclidRepl.track_managed_host!(runtime.session, id)
+    end
+    EuclidRepl.clear!(runtime, TEST_STATE_PTR)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_HIDDEN) == EuclidRepl.CLEAR_COMMAND_CAPACITY
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 0
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test REPL_TEST_HIDDEN == UInt64.(100:356)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+    @test isempty(runtime.session.managed_host_ids)
 end

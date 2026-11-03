@@ -1,0 +1,35 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_paused","timeout_ms":10000}
+{"type":"for i in 1:EuclidRepl.ACTION_QUEUE_CAPACITY; highlight_pen!([0.3,0.4,0],[0.6,0.4,0];duration=0.1); end; @assert status().pending_count==31; rejected=false; try point!([0.5,0.5,0]); catch e; e isa ArgumentError || rethrow(); global rejected=true; end; @assert rejected && status().pending_count==31 && status().managed_shape_count==0; println(\"queue-\"*\"capacity\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-capacity","timeout_ms":10000}
+{"do":"resume_animation"}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==32; @assert !isdefined(@__MODULE__,:stop!); println(\"queue-\"*\"drained\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-drained","timeout_ms":20000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"type":"for i in 1:32; highlight_pen!([0.3,0.4,0],[0.6,0.4,0];duration=0.1); end; while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==64; println(\"queue-\"*\"reused\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-reused","timeout_ms":20000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"do":"pause_animation"}
+{"wait_state":"animation_paused","timeout_ms":10000}
+{"type":"point!([0.4,0.4,0]); line!([0.2,0.2,0],[0.7,0.2,0]); @assert status().pending_count==1; println(\"queue-\"*\"teardown\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-teardown","timeout_ms":10000}
+{"do":"reload_runtime"}
+{"wait_event":"runtime_reload_committed","timeout_ms":30000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@assert status().drained && status().pending_count==0 && status().managed_shape_count==0; println(\"queue-\"*\"fresh\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-fresh","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

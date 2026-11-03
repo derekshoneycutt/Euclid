@@ -8,7 +8,6 @@ there are some things that do need to start early.
 ## Current Backlog
 
 - Terminal drawing shape suite
-- Julia thread communications work
 - Retained terminals
 - Terminal animation recording
 - Terminal exercises
@@ -83,6 +82,7 @@ Core Content (>260 animations; 119 complete):
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
 - [ ] Tarski (39+ animations)
+  - [ ] Between-ness
   - [ ] Axiom 1-4
   - [ ] Axiom 5,5_1
   - [ ] Axiom 6
@@ -95,7 +95,6 @@ Core Content (>260 animations; 119 complete):
   - [ ] Axiom 20, 20_1
   - [ ] Axiom 21-24
 - [ ] Logic (9+; 2 complete)
-  - [ ] Between-ness
   - [X] And
   - [ ] Or
   - [X] Not
@@ -263,7 +262,7 @@ Final tasks:
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Isolate SQLite persistence module
-  - [ ] Julia thread structure to support Odin-based animations
+  - [ ] Julia thread mailboxes optimizations & cleaning
 - [ ] Render polishes
   - [X] Shader-based particle drawing
   - [X] PIC dust particle physics
@@ -333,7 +332,7 @@ Core Features:
 - More primitives
   - gnomons
   - strings--small connectors
-  - curve candidates: parabolas and hyperbolas, strophoid, spiral, leminiscate,
+  - curve candidates: strophoid, spiral, leminiscate,
     tratrix and catenary, concoids, cissoids, pedals, negative pedals, glissettes,
     evolutes and involutes, inversions, caustics
 - Limited lifetime line/arc segments--disintegrate after drawing

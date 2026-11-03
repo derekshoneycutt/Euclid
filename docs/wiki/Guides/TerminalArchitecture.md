@@ -861,7 +861,41 @@ Animation pause also pauses drawing-job progress.
 Like line and circle handles, this handle can be passed directly to `hide!` after
 drawing completes: `p = point!([0.5,0.5,0])`, then `hide!(p)`.
 
-Starting a new EuclidRepl job finalizes and preempts the previous job. Closing a session
+Actions now run FIFO, with at most one active job and 32 outstanding actions
+(`ACTION_QUEUE_CAPACITY`, active plus pending). The fixed pending slots belong to
+the Terminal generation, are reused after completion, and release their payload
+references on reset. Point-motion batches have at most 16 distinct targets
+(`TRANSFORM_POINT_CAPACITY`), bounding retained inputs and per-tick command counts.
+Constructor admission reserves native identities using the existing transactional
+constructors; these hosts remain hidden until their drawing action runs. Full or
+invalid submissions raise an error without replacing earlier work.
+
+Submitted vectors and styles are copied. Motion targets are revalidated and their
+starts sampled from the immutable native query at activation, after earlier actions.
+The existing `start_positions` argument remains accepted and validated for signature
+compatibility, but no longer overrides those activation-time starts. Two queued
+translations therefore compose instead of both starting from the submission state.
+`hide!` queues hiding a managed host. `clear!` queues hiding the hosts admitted before
+that command, preserving later admissions. Neither interrupts construction.
+Large ordered clears use the native 256-command capacity per captured tick and retain the
+active action until all copied hosts have been processed.
+The legacy finish-now `stop!()` helper has been removed; use the ordinary animation
+pause/resume controls to inspect progress without changing order.
+
+`status()` preserves active-job fields and adds `pending_count`, `completed_count`,
+`failed`, and `drained`. Wait with `while !status().drained && !status().failed;
+sleep(0.01); end`, then check `failed`. `active` alone can be false between actions:
+the successor starts on a later captured tick, never in its predecessor's final batch.
+An execution exception blocks later work until owner-controlled reset.
+
+**Publication limitation:** completion counts and `drained` report successful Julia
+scene-command capture, not acknowledgement of display publication. The existing
+native tick protocol provides no publication acknowledgement to this queue. If Odin
+rejects a captured batch, native diagnostics/evidence report the rejection, but Julia
+may already have counted that action as completed and may proceed to its successor.
+The queue does not strengthen that existing publication guarantee.
+
+Closing a session
 resets managed geometry and stops tick admission before actors become quiescent. A new
 Terminal generation always receives a fresh runtime; drawing jobs never cross generations.
 
@@ -869,6 +903,11 @@ The default diagonal draw has a
 [line acceptance scenario](../../../tools/scenarios/terminal-line-acceptance.jsonl).
 It verifies animation pause freezes job progress and captures the completed line before
 checking allocation safety and orderly shutdown.
+The [queue acceptance](../../../tools/scenarios/terminal-queue-acceptance.jsonl)
+checks construction order, tool retirement, pause, copied inputs, successive motion,
+ordered hide/clear, and capture. The
+[capacity/lifecycle acceptance](../../../tools/scenarios/terminal-queue-lifecycle-acceptance.jsonl)
+checks exact admission capacity, rejection, FIFO drain, reload, and teardown.
 
 ## Backpressure And Memory Ownership
 

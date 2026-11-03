@@ -1,0 +1,32 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"p=point!([0.3,0.4,0];duration=3); l=line!([0.2,0.3,0],[0.7,0.3,0];duration=3); c=circle!([0.5,0.5,0],0.15;duration=3); @assert status().kind==:point && status().pending_count==2; @assert all(h->OdinJuliaBridge.get_point(state_ptr,h).do_draw==0,(p.index,l.host_id,c.host_id)); println(\"queue-\"*\"admitted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-admitted","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_paused","timeout_ms":10000}
+{"type":"before=status(); sleep(0.2); after=status(); @assert before.elapsed==after.elapsed && after.pending_count==2; println(\"queue-\"*\"paused\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-paused","timeout_ms":10000}
+{"do":"resume_animation"}
+{"type":"while status().kind!=:line && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==1; @assert OdinJuliaBridge.get_point(state_ptr,p.index).do_draw==1 && OdinJuliaBridge.get_point(state_ptr,c.host_id).do_draw==0; println(\"queue-\"*\"line\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-line","timeout_ms":15000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==3; @assert all(h->OdinJuliaBridge.get_point(state_ptr,h).do_draw==1,(p.index,l.host_id,c.host_id)); println(\"queue-\"*\"drawn\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-drawn","timeout_ms":15000}
+{"type":"d=Float32[0.1,0,0]; ids=UInt64[p.index]; starts=[[9,9,9]]; translate_points!(ids,starts,d;duration=1); translate_points!(ids,starts,d;duration=1); d[1]=99; ids[1]=0; starts[1][1]=99; while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; @assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.index).pos[1],0.5f0;atol=1f-5); println(\"queue-\"*\"composed\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-composed","timeout_ms":15000}
+{"screenshot":".build/terminal-queue-finished.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"type":"highlight_pen!([0.2,0.3,0],[0.7,0.3,0];duration=0.5); highlight_compass!([0.5,0.5,0],[0.65,0.5,0],pi/2,0.15;duration=0.5); hide!(p); clear!(); q=point!([0.6,0.6,0];duration=1); while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().managed_shape_count==1; @assert OdinJuliaBridge.get_point(state_ptr,q.index).do_draw==1; @assert all(h->OdinJuliaBridge.get_point(state_ptr,h).do_draw==0,(p.index,l.host_id,c.host_id)); println(\"queue-\"*\"cleared\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"queue-cleared","timeout_ms":15000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

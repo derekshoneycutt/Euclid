@@ -241,6 +241,17 @@ A quick cheatsheet for drawing the standard Euclidean matters:
 - `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)`
   : Animates drawing a circle centered at [x, y, z], with a radius of r.
 
+Drawing, highlights, point motion, `hide!`, and `clear!` run in submission order,
+without interrupting earlier actions. The queue holds at most 32 outstanding
+actions; point motions accept at most 16 distinct points and sample their starting
+positions when they begin. `clear!()` is ordered, not a queue flush.
+
+Inspect `status().pending_count`, `status().failed`, and `status().drained`.
+`drained` means all actions finished Julia command capture, not confirmed native
+publication. See
+[Terminal architecture](docs/wiki/Guides/TerminalArchitecture.md#euclidrepl-and-tick-streams)
+for the publication limitation and lifecycle contract.
+
 #### Some details about using the Terminal
 
 The `state_ptr` variable is *always* available from the Terminal. This is the first

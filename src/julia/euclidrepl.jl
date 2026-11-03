@@ -6,8 +6,11 @@ with tool animation.
 
 Key behavior:
 - one active draw job at a time,
-- new draws preempt active draw and finalize interrupted shape visibility,
+- bounded FIFO actions run to natural completion without replacement,
 - drawn geometry persists until Terminal session reset/restart.
+
+`status().drained` reports successful command capture, not native publication.
+Use ordinary animation pause/resume; the former finish-now `stop!` is removed.
 
 Use `?point!`, `?line!`, and `?circle!` in the Terminal for API details.
 """
@@ -24,7 +27,12 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!,
     rotate_points_z!, reflect2d_points!, reflect2d_points_x_axis!,
     reflect2d_points_y_axis!, reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
-    stop!, clear!, status
+    ACTION_QUEUE_CAPACITY, TRANSFORM_POINT_CAPACITY, clear!, status
+
+const ACTION_QUEUE_CAPACITY = 32
+const TRANSFORM_POINT_CAPACITY = 16
+"""Native scene-command ceiling from bridge/model/model.odin; a clear emits only hides."""
+const CLEAR_COMMAND_CAPACITY = 256
 
 const DEFAULT_POINT_DURATION = 5.5f0
 const DEFAULT_LINE_DURATION = 7.5f0
@@ -122,16 +130,40 @@ struct TransformPayload <: ReplDrawPayload
     spec::TransformSpec
 end
 
+"""Copied visibility intent with bounded per-tick progress for large ordered clears."""
+mutable struct VisibilityPayload <: ReplDrawPayload
+    host_ids::Vector{UInt64}
+    clear::Bool
+    next_host::Int
+end
+
+"""Start an ordered visibility action at its first copied host."""
+function visibility_payload(host_ids, clear)
+    return VisibilityPayload(host_ids, clear, 1)
+end
+
+"""One admitted action, with activation deferred until its first captured tick."""
 mutable struct ReplDrawJob
     kind::Symbol
     duration::Float32
     elapsed::Float32
     payload::ReplDrawPayload
+    activated::Bool
 end
 
+"""Construct an unactivated action without allocating per-tick state."""
+ReplDrawJob(kind, duration, elapsed, payload) =
+    ReplDrawJob(kind, duration, elapsed, payload, false)
+
+"""Generation-owned fixed FIFO slots and persistent managed geometry identities."""
 mutable struct ReplDrawSession
     active_job::Union{Nothing, ReplDrawJob}
     managed_host_ids::Vector{UInt64}
+    pending::Vector{Union{Nothing,ReplDrawJob}}
+    pending_head::Int
+    pending_count::Int
+    completed_count::Int
+    failed::Bool
 end
 
 """Generation-local EuclidRepl state owned by one Terminal session."""
@@ -140,7 +172,12 @@ mutable struct EuclidReplRuntime
 end
 
 """Create empty EuclidRepl state for one Terminal session generation."""
-create_runtime() = EuclidReplRuntime(ReplDrawSession(nothing, UInt64[]))
+function create_runtime()
+    slots = Vector{Union{Nothing,ReplDrawJob}}(undef, ACTION_QUEUE_CAPACITY)
+    fill!(slots, nothing)
+    return EuclidReplRuntime(ReplDrawSession(
+        nothing, UInt64[], slots, 1, 0, 0, false))
+end
 
 """Install user-facing drawing helpers bound to one Terminal generation."""
 function install_drawing_helpers!(
@@ -172,9 +209,7 @@ function install_drawing_helpers!(
         """Animate a compass highlight."""
         highlight_compass!(args...; kwargs...) = EuclidRepl.highlight_compass!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
-        """Stop the active Euclid draw animation."""
-        stop!() = EuclidRepl.stop!(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
-        """Clear all geometry managed by this Terminal generation."""
+        """Queue a clear of geometry admitted before this command."""
         clear!() = EuclidRepl.clear!(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
         """Return Euclid drawing status for this Terminal generation."""
         status() = EuclidRepl.status(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
@@ -254,6 +289,10 @@ struct ReplStatus
     duration::Union{Nothing,Float32}
     subscription_id::Union{Nothing,Int}
     managed_shape_count::Int
+    pending_count::Int
+    completed_count::Int
+    failed::Bool
+    drained::Bool
 end
 
 """Return the Terminal-generation-owned EuclidRepl session."""
@@ -331,6 +370,9 @@ function validated_point_ids(point_ids)
     if isempty(ids)
         throw(ArgumentError("point_ids must contain at least one id"))
     end
+    length(ids) <= TRANSFORM_POINT_CAPACITY ||
+        throw(ArgumentError("point batch exceeds TRANSFORM_POINT_CAPACITY"))
+    allunique(ids) || throw(ArgumentError("point_ids must be distinct"))
     return ids
 end
 
@@ -340,6 +382,8 @@ function validated_start_positions(start_positions)
 
     # Accept flat xyz-packed input (e.g. [x1, y1, z1, x2, y2, z2]) for convenience.
     if start_positions isa AbstractVector{<:Real}
+        length(start_positions) <= 3 * TRANSFORM_POINT_CAPACITY ||
+            throw(ArgumentError("start_positions exceeds TRANSFORM_POINT_CAPACITY"))
         if length(start_positions) % 3 != 0
             throw(ArgumentError(
                 "flat start_positions must contain a multiple of 3 values (x, y, z per point)"))
@@ -354,6 +398,8 @@ function validated_start_positions(start_positions)
     end
 
     for (idx, pos) in enumerate(start_positions)
+        idx <= TRANSFORM_POINT_CAPACITY ||
+            throw(ArgumentError("start_positions exceeds TRANSFORM_POINT_CAPACITY"))
         push!(positions, vec3("start_positions[$(idx)]", pos))
     end
     return positions
@@ -579,13 +625,15 @@ function render_transform_spec!(
     start_position::AbstractVector{<:Real},
     spec::TranslateSpec)
 
-    EuclidAnimations.transform_translate_point(
+    result = EuclidAnimations.transform_translate_point(
         state_ptr,
         point_id,
         start_position,
         spec.displacement,
         elapsed,
         duration)
+    result == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Terminal translation failed with status $result")
 end
 
 """Render one frame of batch point rotation."""
@@ -597,7 +645,7 @@ function render_transform_spec!(
     start_position::AbstractVector{<:Real},
     spec::RotateSpec)
 
-    EuclidAnimations.transform_rotate_point(
+    result = EuclidAnimations.transform_rotate_point(
         state_ptr,
         point_id,
         start_position,
@@ -606,6 +654,8 @@ function render_transform_spec!(
         spec.theta,
         elapsed,
         duration)
+    result == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Terminal rotation failed with status $result")
 end
 
 """Render one frame of batch point 2D reflection."""
@@ -617,7 +667,7 @@ function render_transform_spec!(
     start_position::AbstractVector{<:Real},
     spec::Reflect2DSpec)
 
-    EuclidAnimations.transform_reflect2d_point(
+    result = EuclidAnimations.transform_reflect2d_point(
         state_ptr,
         point_id,
         start_position,
@@ -625,6 +675,8 @@ function render_transform_spec!(
         spec.line_b,
         elapsed,
         duration)
+    result == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Terminal reflection failed with status $result")
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -649,12 +701,83 @@ function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     end
 
     finalize_payload!(state_ptr, job.payload)
+    retire_job_tool!(state_ptr, job)
+end
+
+"""Retire the active apparatus without completing interrupted geometry."""
+function retire_job_tool!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
+    state_ptr == C_NULL && return nothing
     if job.kind == :point || job.kind == :line || job.kind == :highlight_pen
         OdinJuliaBridge.hide_pen(state_ptr)
     elseif job.kind == :circle || job.kind == :highlight_compass
         OdinJuliaBridge.hide_compass(state_ptr)
     end
 end
+
+"""Highlights leave no persistent shape to finalize."""
+finalize_payload!(
+    _::Ptr{Cvoid}, _::Union{PenHighlightPayload,CompassHighlightPayload}) =
+    nothing
+
+"""Visibility has already been emitted by its bounded execution frames."""
+finalize_payload!(_::Ptr{Cvoid}, _::VisibilityPayload) = nothing
+
+"""Emit ordered hiding, retaining identities admitted after an ordered clear."""
+function render_payload!(
+    state_ptr::Ptr{Cvoid}, _::Real, _::Real, payload::VisibilityPayload)
+    last_host = min(length(payload.host_ids),
+        payload.next_host + CLEAR_COMMAND_CAPACITY - 1)
+    for index in payload.next_host:last_host
+        id = payload.host_ids[index]
+        OdinJuliaBridge.hide_point(state_ptr, id) == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+            error("Terminal visibility execution failed for entity $id")
+    end
+    payload.next_host = last_host + 1
+    return nothing
+end
+
+"""Validate a target against the bridge's current immutable projection."""
+function validated_target(state_ptr::Ptr{Cvoid}, id::UInt64)
+    view = OdinJuliaBridge.get_point(state_ptr, id)
+    view.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        throw(ArgumentError("invalid or stale Terminal entity $id"))
+    return view
+end
+
+"""Validate copied motion targets before any action is admitted."""
+function validate_transform_targets(state_ptr::Ptr{Cvoid}, ids::Vector{UInt64})
+    for id in ids
+        validated_target(state_ptr, id).has_position != 0 ||
+            throw(ArgumentError("Terminal motion target $id has no position"))
+    end
+end
+
+"""Revalidate native targets and sample motion starts once, at activation."""
+function activate_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
+    for (index, id) in pairs(payload.point_ids)
+        view = validated_target(state_ptr, id)
+        view.has_position != 0 || error("Terminal motion target $id lost its position")
+        for component in 1:3
+            payload.start_positions[index][component] = view.pos[component]
+        end
+    end
+end
+
+"""Revalidate a construction host immediately before its first frame."""
+activate_payload!(state_ptr::Ptr{Cvoid}, payload::PointPayload) =
+    validated_target(state_ptr, payload.point_id)
+activate_payload!(state_ptr::Ptr{Cvoid}, payload::Union{LinePayload,CirclePayload}) =
+    validated_target(state_ptr, payload.host_id)
+
+"""Revalidate every visibility target before emitting any commands."""
+function activate_payload!(state_ptr::Ptr{Cvoid}, payload::VisibilityPayload)
+    for id in payload.host_ids
+        validated_target(state_ptr, id)
+    end
+end
+
+"""Payloads without native identities need no activation query."""
+activate_payload!(::Ptr{Cvoid}, _::ReplDrawPayload) = nothing
 
 """Clear the generation-local job without changing managed geometry."""
 function clear_active_job!(
@@ -695,22 +818,58 @@ function run_active_job_frame!(
     dt::Real)
 
     session = ensure_session!(runtime)
+    session.failed && return nothing
     job = session.active_job
     if job === nothing
-        return
+        session.pending_count == 0 && return nothing
+        job = session.pending[session.pending_head]
+        session.pending[session.pending_head] = nothing
+        session.pending_head = mod1(session.pending_head + 1, ACTION_QUEUE_CAPACITY)
+        session.pending_count -= 1
+        session.active_job = job
     end
 
-    dt_clamped = max(0f0, Float32(dt))
-    job.elapsed = min(job.duration, job.elapsed + dt_clamped)
-    render_payload!(state_ptr, job.elapsed, job.duration, job.payload)
-
-    if job.elapsed >= job.duration
-        finalize_job!(state_ptr, job)
-        clear_active_job!(runtime, state_ptr, session)
+    succeeded = false
+    try
+        execute_job_frame!(state_ptr, session, job, dt)
+        succeeded = true
+    finally
+        if !succeeded
+            session.failed = true
+        end
     end
 end
 
-"""Preempt an active draw and stage its replacement for captured Terminal animation ticks."""
+"""Advance one action; completion means capture succeeded, not native publication."""
+function execute_job_frame!(
+    state_ptr::Ptr{Cvoid}, session::ReplDrawSession, job::ReplDrawJob, dt::Real)
+    if !job.activated
+        activate_payload!(state_ptr, job.payload)
+        job.activated = true
+    end
+    job.elapsed = min(job.duration, job.elapsed + max(0f0, Float32(dt)))
+    render_payload!(state_ptr, job.elapsed, job.duration, job.payload)
+    visibility_complete = !(job.payload isa VisibilityPayload) ||
+        job.payload.next_host > length(job.payload.host_ids)
+    if job.elapsed >= job.duration && visibility_complete
+        finalize_job!(state_ptr, job)
+        if job.payload isa VisibilityPayload && job.payload.clear
+            filter!(id -> !(id in job.payload.host_ids), session.managed_host_ids)
+        end
+        session.completed_count += 1
+        session.active_job = nothing
+    end
+end
+
+"""Reject overflow or a failed generation before reserving native identities."""
+function require_action_capacity(session::ReplDrawSession)
+    session.failed && error("Terminal action execution failed; reset the Terminal")
+    outstanding = session.pending_count + Int(session.active_job !== nothing)
+    outstanding < ACTION_QUEUE_CAPACITY ||
+        throw(ArgumentError("Terminal action queue is full (capacity $ACTION_QUEUE_CAPACITY)"))
+end
+
+"""Append without changing earlier work; the next action starts on a later tick."""
 function start_job!(
     runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -718,66 +877,55 @@ function start_job!(
 
     session = ensure_session!(runtime)
 
-    if session.active_job !== nothing
-        finalize_job!(state_ptr, session.active_job)
-        clear_active_job!(runtime, state_ptr, session)
+    require_action_capacity(session)
+    if session.active_job === nothing && session.pending_count == 0
+        session.active_job = job
+    else
+        index = mod1(session.pending_head + session.pending_count, ACTION_QUEUE_CAPACITY)
+        session.pending[index] = job
+        session.pending_count += 1
     end
-
-    session.active_job = job
 end
 
 """Stop animation and clear managed state before a Terminal session closes."""
 function reset_session!(runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
     session = ensure_session!(runtime)
+    session.active_job === nothing || retire_job_tool!(state_ptr, session.active_job)
     clear_active_job!(runtime, state_ptr, session)
+    fill!(session.pending, nothing)
+    session.pending_head = 1
+    session.pending_count = 0
+    session.completed_count = 0
+    session.failed = false
     clear_managed_geometry!(state_ptr, session)
     return nothing
 end
 
 """
-Stop the active draw animation hook without deleting geometry.
+Queue a clear of geometry admitted before this command, without interrupting actions.
 
-Returns `true` when an active draw was stopped, otherwise `false`.
-"""
-function stop!(
-    host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
-
-    session = ensure_session!(host_runtime)
-    job = session.active_job
-    if job === nothing
-        return false
-    end
-
-    finalize_job!(state_ptr, job)
-    clear_active_job!(host_runtime, state_ptr, session)
-    return true
-end
-
-"""
-Clear EuclidRepl-managed geometry and reset active draw state.
-
-Returns `true` when clear completes.
+Returns `true` when admitted. Large clears use the native 256-command tick capacity.
 """
 function clear!(
     host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
 
     session = ensure_session!(host_runtime)
-    clear_active_job!(host_runtime, state_ptr, session)
-    clear_managed_geometry!(state_ptr, session)
+    require_action_capacity(session)
+    payload = visibility_payload(copy(session.managed_host_ids), true)
+    start_job!(host_runtime, state_ptr, ReplDrawJob(:clear, eps(Float32), 0f0, payload))
     return true
 end
 
-"""Hide one packed bridge entity, tolerating hosts that lack the hide symbol."""
-function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::UInt64)
-    try
-        OdinJuliaBridge.hide_point(state_ptr, id)
-    catch err
-        message = sprint(showerror, err)
-        if occursin("could not load symbol", message) || occursin("undefined symbol", message)
-            return nothing
-        end
-        rethrow(err)
-    end
+"""Queue hiding a valid managed host without interrupting accepted work."""
+function _hide_bridge_point(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, id::UInt64)
+    session = ensure_session!(runtime)
+    require_action_capacity(session)
+    id in session.managed_host_ids ||
+        throw(ArgumentError("hide! requires a Terminal-managed geometry host"))
+    validated_target(state_ptr, id)
+    payload = visibility_payload(UInt64[id], false)
+    start_job!(runtime, state_ptr, ReplDrawJob(:hide, eps(Float32), 0f0, payload))
     return nothing
 end
 
@@ -788,7 +936,7 @@ function hide!(
     index::Integer)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, UInt64(index))
+    _hide_bridge_point(host_runtime, state_ptr, UInt64(index))
     return nothing
 end
 
@@ -799,7 +947,7 @@ function hide!(
     point::OdinJuliaBridge.BridgeShapeEntityResult)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, point.index)
+    _hide_bridge_point(host_runtime, state_ptr, point.index)
     return nothing
 end
 
@@ -809,7 +957,7 @@ function hide!(
     view::OdinJuliaBridge.BridgePointView)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, view.index)
+    _hide_bridge_point(host_runtime, state_ptr, view.index)
     return nothing
 end
 function hide!(
@@ -818,7 +966,7 @@ function hide!(
     shape::OdinJuliaBridge.BridgeShapeLine)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, shape.host_id)
+    _hide_bridge_point(host_runtime, state_ptr, shape.host_id)
     return nothing
 end
 function hide!(
@@ -827,7 +975,7 @@ function hide!(
     shape::OdinJuliaBridge.BridgeShapeCircle)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, shape.host_id)
+    _hide_bridge_point(host_runtime, state_ptr, shape.host_id)
     return nothing
 end
 function hide!(
@@ -836,11 +984,11 @@ function hide!(
     shape::OdinJuliaBridge.BridgeShapeFilledCircle)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, shape.host_id)
+    _hide_bridge_point(host_runtime, state_ptr, shape.host_id)
     return nothing
 end
 
-"""Return compact EuclidRepl runtime status for REPL inspection."""
+"""Inspect FIFO capture progress; `drained` excludes failed or pending work, not native rejection."""
 function status(
     host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
 
@@ -855,7 +1003,9 @@ function status(
             nothing,
             nothing,
             nothing,
-            length(session.managed_host_ids))
+            length(session.managed_host_ids),
+            session.pending_count, session.completed_count, session.failed,
+            session.pending_count == 0 && !session.failed)
     end
 
     return ReplStatus(
@@ -864,18 +1014,21 @@ function status(
         job.elapsed,
         job.duration,
         nothing,
-        length(session.managed_host_ids))
+        length(session.managed_host_ids),
+        session.pending_count, session.completed_count, session.failed, false)
 end
 
 """
 Draw a point with pen animation and return a `BridgeShapeEntityResult` handle.
 
+Append to the bounded FIFO without interrupting earlier actions. The reserved
+host remains hidden until activation; duration includes descent, drawing, and ascent.
 Pass the returned handle to `hide!` to hide the completed point.
 
 Keywords:
 - `color=:steelblue`
 - `brush=5f0`
-- `duration=DEFAULT_POINT_DURATION` (draw animation duration only)
+- `duration=DEFAULT_POINT_DURATION` (full tool sequence)
 """
 function point!(
     host_runtime::EuclidReplRuntime,
@@ -887,7 +1040,11 @@ function point!(
     brush_value = validated_brush(brush)
     draw_duration = validated_duration(duration)
 
+    color = OdinJuliaBridge._shape_color(color)
+    require_action_capacity(ensure_session!(host_runtime))
     point = OdinJuliaBridge.create_new_point(state_ptr, pos3, color, brush_value)
+    point.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Terminal point reservation failed with status $(point.status)")
     payload = PointPayload(point.index, pos3, color, brush_value)
     job = ReplDrawJob(:point, draw_duration, Float32(0f0), payload)
 
@@ -899,10 +1056,11 @@ end
 """
 Draw a line with pen animation and return a `BridgeShapeLine` handle.
 
+Append to the bounded FIFO; the reserved host is hidden until its action runs.
 Keywords:
 - `color=:steelblue`
 - `brush=5f0`
-- `duration=DEFAULT_LINE_DURATION` (draw animation duration only)
+- `duration=DEFAULT_LINE_DURATION` (full tool sequence)
 """
 function line!(
     host_runtime::EuclidReplRuntime,
@@ -915,11 +1073,15 @@ function line!(
     brush_value = validated_brush(brush)
     draw_duration = validated_duration(duration)
 
+    color = OdinJuliaBridge._shape_color(color)
+    require_action_capacity(ensure_session!(host_runtime))
     line_shape = OdinJuliaBridge.create_new_line(
         state_ptr,
         start_pos3,
         start_pos3,
         color, brush_value)
+    line_shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Terminal line reservation failed with status $(line_shape.status)")
 
     payload = LinePayload(
         line_shape.host_id,
@@ -939,13 +1101,14 @@ end
 """
 Draw a circle, arc, or sector with compass animation and return a circle handle.
 
+Append to the bounded FIFO; the reserved host is hidden until its action runs.
 Keywords:
 - `start_theta=0f0`
 - `sweep_theta=2pi`
 - `filled=false`
 - `color=:steelblue`
 - `brush=5f0`
-- `duration=DEFAULT_CIRCLE_DURATION` (draw animation duration only)
+- `duration=DEFAULT_CIRCLE_DURATION` (full tool sequence)
 
 Positive sweeps increase theta and negative sweeps decrease theta. Full turns are
 represented explicitly by positive or negative `2pi` sweeps.
@@ -965,6 +1128,8 @@ function circle!(
 
     start_pos = point_on_circle(center3, radius_valid, start_theta_valid)
 
+    color = OdinJuliaBridge._shape_color(color)
+    require_action_capacity(ensure_session!(host_runtime))
     shape = if filled
         OdinJuliaBridge.create_new_filledcircle(state_ptr, center3, radius_valid,
             start_theta_valid, sweep_theta_valid, color, brush_value)
@@ -973,6 +1138,8 @@ function circle!(
             start_theta_valid, sweep_theta_valid, color, brush_value)
     end
 
+    shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Terminal circle reservation failed with status $(shape.status)")
     payload = CirclePayload(filled, shape.host_id, center3, start_pos,
         radius_valid, sweep_theta_valid,
         color, brush_value)
@@ -1008,7 +1175,8 @@ function highlight_pen!(
     end_pos3 = vec3("end_pos", end_pos)
     draw_duration = validated_duration(duration)
 
-    payload = PenHighlightPayload(start_pos3, end_pos3, color)
+    payload = PenHighlightPayload(
+        start_pos3, end_pos3, OdinJuliaBridge._shape_color(color))
     job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return nothing
@@ -1055,7 +1223,7 @@ function highlight_compass!(
         end_on_arc,
         angle_theta32,
         radius32,
-        color,
+        OdinJuliaBridge._shape_color(color),
         filled)
     job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
@@ -1063,7 +1231,10 @@ function highlight_compass!(
 end
 
 """
-Animate translation of multiple points using per-point start positions.
+Queue translation of at most 16 distinct points from their activation-time positions.
+
+`start_positions` is copied and validated for compatibility, but actual starts
+are sampled after preceding actions finish. Returned IDs do not alias queued inputs.
 
 Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
@@ -1081,16 +1252,19 @@ function translate_points!(
     validate_transform_batch_lengths(ids, starts)
     displacement3 = vec3("displacement", displacement)
     draw_duration = validated_duration(duration)
+    validate_transform_targets(state_ptr, ids)
 
     payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
-    return ids
+    return copy(ids)
 end
 
 """
 Animate rotation of multiple points around a shared 3D axis line.
 
+Queue at most 16 distinct targets. `start_positions` remains validated for
+compatibility; actual starts are sampled at activation, not submission.
 Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
@@ -1110,14 +1284,18 @@ function rotate_points!(
     axis_a = vec3("axis_point_a", axis_point_a)
     axis_b = vec3("axis_point_b", axis_point_b)
     draw_duration = validated_duration(duration)
+    theta32 = validated_angle_theta(theta)
+    sum(abs2, axis_b - axis_a) > EuclidAnimations.TransformEps^2 ||
+        throw(ArgumentError("rotation axis must have distinct endpoints"))
+    validate_transform_targets(state_ptr, ids)
 
     payload = TransformPayload(
         ids,
         starts,
-        RotateSpec(axis_a, axis_b, Float32(theta)))
+        RotateSpec(axis_a, axis_b, theta32))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
-    return ids
+    return copy(ids)
 end
 
 """Rotate points around world X axis through origin."""
@@ -1183,6 +1361,8 @@ end
 """
 Animate 2D reflection of multiple points across one XY line (`z=0`).
 
+Queue at most 16 distinct targets, sampling their starts at activation.
+`start_positions` remains accepted and validated for signature compatibility.
 Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
@@ -1201,11 +1381,17 @@ function reflect2d_points!(
     line_a = vec3("line_point_a", line_point_a)
     line_b = vec3("line_point_b", line_point_b)
     draw_duration = validated_duration(duration)
+    abs(line_a[3]) <= EuclidAnimations.TransformEps &&
+        abs(line_b[3]) <= EuclidAnimations.TransformEps ||
+        throw(ArgumentError("reflection line must lie in the XY plane"))
+    sum(abs2, line_b[1:2] - line_a[1:2]) > EuclidAnimations.TransformEps^2 ||
+        throw(ArgumentError("reflection line must have distinct XY endpoints"))
+    validate_transform_targets(state_ptr, ids)
 
     payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
-    return ids
+    return copy(ids)
 end
 
 """Reflect points across world X axis (`y=0`) on XY plane."""
