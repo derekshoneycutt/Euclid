@@ -97,6 +97,19 @@ tables group code by the architectural question a contributor is likely to ask.
 | Evidence and diagnostics | Typed behavioral evidence, scenarios, profiles, and operational logs | [`src/evidence/`](../../../src/evidence/), [`src/diagnostics/`](../../../src/diagnostics/) |
 | Build and analysis | Build orchestration, tests, static analysis, assets, and wiki | [`tools/`](../../../tools/) |
 
+`EuclidAnimations` remains one base-sysimage module. Its
+[`entry point`](../../../src/julia/animations.jl) includes logical motion,
+drawing, transformation, completion, and existing REPL-adapter files under
+[`animations/`](../../../src/julia/animations/). The build fingerprints that
+directory recursively, so changing an included helper invalidates the sysimage
+cache. Reloadable content generations borrow this same module; they do not
+reinclude or redefine the helpers.
+
+Each authored curve, like other construction content, owns its complete
+lifecycle and explicit phase loop in its own leaf file. Shared helpers execute
+parameter-driven apparatus motion and drawing, not content lifecycles or phase
+transitions. See [Animations Style](AnimationsStyle.md#motion-conventions).
+
 The [Architecture Guide Map](#architecture-guide-map) provides the next step for each
 subsystem. For dependency ownership and normative code rules, see
 [Coding Standards](CodingStandards.md).

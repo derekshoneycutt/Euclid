@@ -83,6 +83,20 @@ end
     repository_root = abspath(joinpath(@__DIR__, "..", "..", ".."))
     config = JuliaWikiConfig(repository_root=repository_root)
 
+    animations = extract_julia_module(config, "src/julia/animations.jl")
+    @test animations.stable_id == "julia:EuclidAnimations"
+    @test "src/julia/animations.jl" in
+        ["src/julia/" * path for path in animations.source_files]
+    @test all(path -> path in animations.source_files,
+        ["animations/$name.jl" for name in
+            ("common", "transforms", "pen", "compass", "strokes", "circles",
+                "completion", "repl", "cycloids", "trochoids", "conics")])
+    @test all(name -> any(symbol -> symbol.name == name && symbol.visibility == :public,
+        animations.symbols),
+        ("animate_draw_point", "animate_draw_line", "animate_draw_circle",
+            "animate_repl_draw_circle", "animate_draw_trochoid",
+            "animate_draw_cycloid", "animate_draw_parabola", "animate_draw_hyperbola"))
+
     geometry = extract_julia_module(config, "src/julia/geometry.jl")
     @test geometry.display_name == "EuclidGeometry"
     @test occursin("Shared geometric intersection helpers", geometry.doc_markdown)

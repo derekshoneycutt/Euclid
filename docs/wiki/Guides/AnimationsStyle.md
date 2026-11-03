@@ -124,6 +124,25 @@ text fragments keep their normal colors, including during mixed transfers.
 
 ## Motion Conventions
 
+Each authored animation defines its own state, phases, initialization, reset,
+`loop`, completed-form selection, cleanup, and lifecycle entry in its content
+module. The leaf's loop explicitly chooses the phase ordering and transitions.
+Do not include a shared content lifecycle or delegate the loop to a generic
+animation runner.
+
+Reusable motion belongs to the sysimage-owned `EuclidAnimations` module.
+Its entry point is [`animations.jl`](../../../src/julia/animations.jl), which
+includes logical implementation files from
+[`animations/`](../../../src/julia/animations/). These helpers take explicit
+phase-local elapsed time, duration, geometry, and native identities. They perform
+the requested motion or drawing step; they do not own a content module's clock,
+successor phase, reset, text publication, or catalogue registration.
+
+Named curves retain their own animation flows even when they share an apparatus.
+Use the Cycloid, Trochoid, Parabola, and Hyperbola motion/draw helpers for common
+mechanics, just as other content uses the pen and compass helpers. Circle uses
+the existing compass descent, circle draw, and compass rise helpers.
+
 A typical construction follows this visual rhythm:
 
 ```mermaid
@@ -195,6 +214,11 @@ whole apparatus, activate contact only at the surface, then deactivate and lift 
 the final endpoints. Hide it before the readable finished-curve hold. Immediate
 completed-form selection must show the curves without the apparatus or drawing trails.
 Finite endpoints are display extents, not mathematical endpoints of either conic.
+
+Clamp the final phase-local draw step to its exact finishing parameter before
+entering rise, including when a tick overshoots the phase duration. Both apparatus
+and ink must reach that same endpoint. Descent and rise keep contact inactive and
+emit no drawing trails; cleanup hides the apparatus before the finished hold.
 
 Hypocycloid families use one common fixed-circle scale so changes in `k = R/r` remain
 visually comparable. For reduced rational `k = p/q`, animate one uninterrupted parameter

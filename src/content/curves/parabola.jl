@@ -3,7 +3,7 @@ module EuclidCurvesParabola
 using UUIDs
 using ..AnimationCatalog
 using ..OdinJuliaBridge
-using ..EuclidGeometry
+using ..EuclidAnimations
 
 include("parabola_content.jl")
 
@@ -47,13 +47,6 @@ function get_view_content(_state_ptr::Ptr{Cvoid})
     return EuclidCurvesParabolaContent.get_view_content()
 end
 
-"""Place the entire instrument using one tracing parameter and elevation."""
-function place_instrument(state_ptr::Ptr{Cvoid}, parameter::Float32, z::Float32)
-    checked(OdinJuliaBridge.set_parabola_tool_position(
-        state_ptr, (Vertex[1], Vertex[2], z)))
-    checked(OdinJuliaBridge.set_parabola_tool_parameter(state_ptr, parameter))
-end
-
 """Deactivate and hide the permanent apparatus at selection and phase boundaries."""
 function clean(state_ptr::Ptr{Cvoid})
     checked(OdinJuliaBridge.set_parabola_tool_active(state_ptr, 0, CurveColor))
@@ -66,7 +59,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     checked(OdinJuliaBridge.set_parabola_frontier(
         state_ptr, state.curve_id, StartParameter))
     clean(state_ptr)
-    place_instrument(state_ptr, StartParameter, TopZ)
+    EuclidAnimations.place_parabola_tool(state_ptr, Vertex, StartParameter, TopZ)
     checked(OdinJuliaBridge.set_animation_value!(state_ptr, StateKey,
         AnimationState(state.curve_id, PhaseDescend, 0f0)))
 end
@@ -102,24 +95,19 @@ end
 function advance_draw_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
     timer::Float32, dt::Float32)
     next_timer = min(timer + dt, DrawDuration)
-    progress = next_timer / DrawDuration
-    parameter = StartParameter + (FinishParameter - StartParameter) * progress
-    place_instrument(state_ptr, parameter, 0f0)
-    checked(OdinJuliaBridge.set_parabola_frontier(
-        state_ptr, state.curve_id, parameter))
-    tip = EuclidGeometry.parabola_point(Vertex, FocalDistance, parameter)
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, tip[1], tip[2], tip[3],
-        CurveColor)
+    EuclidAnimations.animate_draw_parabola(state_ptr, next_timer, DrawDuration,
+        Vertex, FocalDistance, StartParameter, FinishParameter;
+        curve_id=state.curve_id, color=CurveColor)
     next_timer < DrawDuration && return PhaseDraw, next_timer
+    checked(OdinJuliaBridge.set_parabola_tool_active(state_ptr, 0, CurveColor))
     return PhaseRise, 0f0
 end
 
 """Lower the apparatus and establish surface contact before revealing ink."""
 function advance_descend_phase(state_ptr::Ptr{Cvoid}, timer::Float32, dt::Float32)
     next_timer = min(timer + dt, DescendDuration)
-    place_instrument(state_ptr, StartParameter,
-        TopZ * (1f0 - next_timer / DescendDuration))
-    checked(OdinJuliaBridge.show_parabola_tool(state_ptr))
+    EuclidAnimations.animate_parabola_descend(state_ptr, next_timer,
+        DescendDuration, TopZ, Vertex, StartParameter; color=CurveColor)
     next_timer < DescendDuration && return PhaseDescend, next_timer
     checked(OdinJuliaBridge.set_parabola_tool_active(state_ptr, 1, CurveColor))
     return PhaseDraw, 0f0
@@ -127,9 +115,9 @@ end
 
 """Lift from the actual final endpoint and announce the completed drawing."""
 function advance_rise_phase(state_ptr::Ptr{Cvoid}, timer::Float32, dt::Float32)
-    checked(OdinJuliaBridge.set_parabola_tool_active(state_ptr, 0, CurveColor))
     next_timer = min(timer + dt, RiseDuration)
-    place_instrument(state_ptr, FinishParameter, TopZ * next_timer / RiseDuration)
+    EuclidAnimations.animate_parabola_rise(state_ptr, next_timer, RiseDuration,
+        TopZ, Vertex, FinishParameter; color=CurveColor)
     next_timer < RiseDuration && return PhaseRise, next_timer
     clean(state_ptr)
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)

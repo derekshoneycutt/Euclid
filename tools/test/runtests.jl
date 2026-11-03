@@ -672,34 +672,7 @@ reflection_sha256 = "reflection"
         @test !unit_command_runs_odin(["julia"])
     end
 
-    @testset "sysimage input fingerprint" begin
-        relative_inputs = replace.(
-            relpath.(sysimage_stable_input_paths(), JULIA_TEST_PROJECT), '\\' => '/')
-        @test "animation_catalog.jl" in relative_inputs
-        @test "localized_content.jl" in relative_inputs
-        @test !("animation_catalog_data.jl" in relative_inputs)
-        @test !("animation_catalog_generation.jl" in relative_inputs)
-        @test !("nullanimation.jl" in relative_inputs)
-        @test !any(startswith(path, "elements/") for path in relative_inputs)
-        @test length(content_input_fingerprint()) == 64
-
-        mktempdir() do root
-            first_path = joinpath(root, "first.jl")
-            second_path = joinpath(root, "second.jl")
-            write(first_path, "first")
-            write(second_path, "second")
-            identity = "julia=test;platform=test"
-            first = fingerprint_sysimage_inputs(
-                [first_path, second_path], root; identity)
-            @test first == fingerprint_sysimage_inputs(
-                [first_path, second_path], root; identity)
-            @test first != fingerprint_sysimage_inputs(
-                [first_path, second_path], root; identity=identity * ";changed")
-            write(second_path, "changed")
-            @test first != fingerprint_sysimage_inputs(
-                [first_path, second_path], root; identity)
-        end
-    end
+    include("sysimage_inputs_tests.jl")
 
     @testset "sysimage cache validation" begin
         mktempdir() do cache_root

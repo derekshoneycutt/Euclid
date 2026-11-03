@@ -180,6 +180,7 @@ const SYSIMAGE_STABLE_INPUTS = String[
     "latex.jl",
     "geometry.jl",
     "animations.jl",
+    "animations",
     "animation_catalog.jl",
     "localized_content.jl",
     "runtime.jl",
