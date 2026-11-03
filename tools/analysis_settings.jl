@@ -314,12 +314,17 @@ function euclid_odin_naming_policy(id, path, kind, name, reason)
         id, path, :odin, kind, name, reason; response=Ignore)
 end
 
-"""Return exact reviewed naming exceptions for intentional public type spellings."""
+"""Return exact reviewed naming exceptions for intentional public API spellings."""
 function euclid_reviewed_naming_policies()
     policy = euclid_odin_naming_policy
     return ReviewedNamingPolicy[
         policy("rgba8-channel-width-name", "src/core/color/color.odin", :type,
             "Color_RGBA8", "Type names RGBA channel order and eight-bit width."),
+        ReviewedNamingPolicy(
+            "terminal-state-pointer-binding", "src/julia/euclidrepl.jl",
+            :julia, :constant, "state_ptr",
+            "Terminal user code retains the documented lowercase state_ptr binding.";
+            response=Ignore),
     ]
 end
 

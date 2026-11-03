@@ -188,6 +188,8 @@ function install_drawing_helpers!(
     repl_module = EuclidRepl
     Core.eval(context_module, quote
         const EuclidRepl = $repl_module
+        const OdinJuliaBridge = EuclidRepl.OdinJuliaBridge
+        const EuclidAnimations = EuclidRepl.EuclidAnimations
         const EUCLID_REPL_RUNTIME = $runtime
         const EUCLID_STATE_PTR = $state_ptr
         const state_ptr = $state_ptr
@@ -751,7 +753,7 @@ construction_target(payload::PointPayload, id::UInt64) = payload.point_id == id
 construction_target(payload::LinePayload, id::UInt64) =
     id == payload.host_id || id == payload.start_id || id == payload.end_id
 construction_target(payload::CirclePayload, id::UInt64) = payload.host_id == id
-construction_target(::ReplDrawPayload, ::UInt64) = false
+construction_target(_::ReplDrawPayload, _::UInt64) = false
 
 """Recognize admitted native reservations that may not exist in this tick's older snapshot."""
 function queued_construction_target(session::ReplDrawSession, id::UInt64)::Bool

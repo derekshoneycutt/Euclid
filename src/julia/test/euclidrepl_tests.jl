@@ -487,7 +487,8 @@ end
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test !job.activated && job.elapsed == 0f0
     @test !runtime.session.failed
-    @test_throws ArgumentError EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test_throws ArgumentError EuclidRepl.run_active_job_frame!(
+        runtime, TEST_STATE_PTR, 1f0)
     @test runtime.session.failed
     EuclidRepl.reset_session!(runtime, TEST_STATE_PTR)
 end
