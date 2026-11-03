@@ -70,6 +70,9 @@ end
     @test !callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, -0.2f0)
     @test isempty(payload.frames)
     @test callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.2f0)
+    @test isempty(payload.frames)
+    @test job.elapsed == 0f0 && !job.activated
+    @test callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.2f0)
     @test payload.frames == Float32[0.2]
     @test EuclidRepl.status(runtime, host.state_ptr).active
     @test callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.8f0)

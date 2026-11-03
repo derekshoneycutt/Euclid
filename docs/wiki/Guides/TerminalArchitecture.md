@@ -872,6 +872,11 @@ invalid submissions raise an error without replacing earlier work.
 
 Submitted vectors and styles are copied. Motion targets are revalidated and their
 starts sampled from the immutable native query at activation, after earlier actions.
+When an idle queue receives work, its first captured tick is an admission boundary
+only: activation waits for the following tick's fresh snapshot. The display may
+have captured the first tick before Terminal evaluation reserved its entities.
+Same-evaluation motion and hide commands accept identities from successful queued
+construction reservations; they still revalidate against the snapshot at activation.
 The existing `start_positions` argument remains accepted and validated for signature
 compatibility, but no longer overrides those activation-time starts. Two queued
 translations therefore compose instead of both starting from the submission state.
@@ -905,7 +910,9 @@ It verifies animation pause freezes job progress and captures the completed line
 checking allocation safety and orderly shutdown.
 The [queue acceptance](../../../tools/scenarios/terminal-queue-acceptance.jsonl)
 checks construction order, tool retirement, pause, copied inputs, successive motion,
-ordered hide/clear, and capture. The
+ordered hide/clear, and capture. Its constructors use one-second full tool
+sequences to keep the run within bounded evidence retention; native inspection
+uses the session's `EuclidRepl.OdinJuliaBridge` binding. The
 [capacity/lifecycle acceptance](../../../tools/scenarios/terminal-queue-lifecycle-acceptance.jsonl)
 checks exact admission capacity, rejection, FIFO drain, reload, and teardown.
 

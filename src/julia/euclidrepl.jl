@@ -164,6 +164,7 @@ mutable struct ReplDrawSession
     pending_count::Int
     completed_count::Int
     failed::Bool
+    awaiting_snapshot::Bool
 end
 
 """Generation-local EuclidRepl state owned by one Terminal session."""
@@ -176,7 +177,7 @@ function create_runtime()
     slots = Vector{Union{Nothing,ReplDrawJob}}(undef, ACTION_QUEUE_CAPACITY)
     fill!(slots, nothing)
     return EuclidReplRuntime(ReplDrawSession(
-        nothing, UInt64[], slots, 1, 0, 0, false))
+        nothing, UInt64[], slots, 1, 0, 0, false, false))
 end
 
 """Install user-facing drawing helpers bound to one Terminal generation."""
@@ -189,6 +190,7 @@ function install_drawing_helpers!(
         const EuclidRepl = $repl_module
         const EUCLID_REPL_RUNTIME = $runtime
         const EUCLID_STATE_PTR = $state_ptr
+        const state_ptr = $state_ptr
         """Hide one REPL-managed geometry target."""
         hide!(args...; kwargs...) = EuclidRepl.hide!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
@@ -744,9 +746,34 @@ function validated_target(state_ptr::Ptr{Cvoid}, id::UInt64)
     return view
 end
 
-"""Validate copied motion targets before any action is admitted."""
-function validate_transform_targets(state_ptr::Ptr{Cvoid}, ids::Vector{UInt64})
+"""Recognize transform identities reserved by a queued construction."""
+construction_target(payload::PointPayload, id::UInt64) = payload.point_id == id
+construction_target(payload::LinePayload, id::UInt64) =
+    id == payload.host_id || id == payload.start_id || id == payload.end_id
+construction_target(payload::CirclePayload, id::UInt64) = payload.host_id == id
+construction_target(::ReplDrawPayload, ::UInt64) = false
+
+"""Recognize admitted native reservations that may not exist in this tick's older snapshot."""
+function queued_construction_target(session::ReplDrawSession, id::UInt64)::Bool
+    job = session.active_job
+    if job !== nothing && construction_target(job.payload, id)
+        return true
+    end
+    for offset in 0:(session.pending_count - 1)
+        index = mod1(session.pending_head + offset, ACTION_QUEUE_CAPACITY)
+        job = session.pending[index]
+        if job !== nothing && construction_target(job.payload, id)
+            return true
+        end
+    end
+    return false
+end
+
+"""Validate snapshot targets or successful queued reservations; activation revalidates both."""
+function validate_transform_targets(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, ids::Vector{UInt64})
     for id in ids
+        queued_construction_target(runtime.session, id) && continue
         validated_target(state_ptr, id).has_position != 0 ||
             throw(ArgumentError("Terminal motion target $id has no position"))
     end
@@ -819,6 +846,10 @@ function run_active_job_frame!(
 
     session = ensure_session!(runtime)
     session.failed && return nothing
+    if session.awaiting_snapshot
+        session.awaiting_snapshot = false
+        return nothing
+    end
     job = session.active_job
     if job === nothing
         session.pending_count == 0 && return nothing
@@ -880,6 +911,7 @@ function start_job!(
     require_action_capacity(session)
     if session.active_job === nothing && session.pending_count == 0
         session.active_job = job
+        session.awaiting_snapshot = true
     else
         index = mod1(session.pending_head + session.pending_count, ACTION_QUEUE_CAPACITY)
         session.pending[index] = job
@@ -897,6 +929,7 @@ function reset_session!(runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
     session.pending_count = 0
     session.completed_count = 0
     session.failed = false
+    session.awaiting_snapshot = false
     clear_managed_geometry!(state_ptr, session)
     return nothing
 end
@@ -923,7 +956,7 @@ function _hide_bridge_point(
     require_action_capacity(session)
     id in session.managed_host_ids ||
         throw(ArgumentError("hide! requires a Terminal-managed geometry host"))
-    validated_target(state_ptr, id)
+    queued_construction_target(session, id) || validated_target(state_ptr, id)
     payload = visibility_payload(UInt64[id], false)
     start_job!(runtime, state_ptr, ReplDrawJob(:hide, eps(Float32), 0f0, payload))
     return nothing
@@ -1252,7 +1285,7 @@ function translate_points!(
     validate_transform_batch_lengths(ids, starts)
     displacement3 = vec3("displacement", displacement)
     draw_duration = validated_duration(duration)
-    validate_transform_targets(state_ptr, ids)
+    validate_transform_targets(host_runtime, state_ptr, ids)
 
     payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
@@ -1287,7 +1320,7 @@ function rotate_points!(
     theta32 = validated_angle_theta(theta)
     sum(abs2, axis_b - axis_a) > EuclidAnimations.TransformEps^2 ||
         throw(ArgumentError("rotation axis must have distinct endpoints"))
-    validate_transform_targets(state_ptr, ids)
+    validate_transform_targets(host_runtime, state_ptr, ids)
 
     payload = TransformPayload(
         ids,
@@ -1386,7 +1419,7 @@ function reflect2d_points!(
         throw(ArgumentError("reflection line must lie in the XY plane"))
     sum(abs2, line_b[1:2] - line_a[1:2]) > EuclidAnimations.TransformEps^2 ||
         throw(ArgumentError("reflection line must have distinct XY endpoints"))
-    validate_transform_targets(state_ptr, ids)
+    validate_transform_targets(host_runtime, state_ptr, ids)
 
     payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)

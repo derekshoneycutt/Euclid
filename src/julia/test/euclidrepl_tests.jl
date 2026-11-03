@@ -184,6 +184,8 @@ end
         TEST_REPL_RUNTIME, TEST_STATE_PTR, filled_circle_shape))
     @test isempty(REPL_TEST_HIDDEN)
     @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).pending_count == 5
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+    @test isempty(REPL_TEST_HIDDEN)
     for _ in 1:6
         EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     end
@@ -269,6 +271,7 @@ end
     @test !isdefined(EuclidRepl, :stop!)
     @test EuclidRepl.clear!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
 
     # Simulate managed geometry bookkeeping in test-only state.
     push!(session.managed_host_ids, 1)
@@ -280,6 +283,7 @@ end
     @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 2
     REPL_TEST_POSITIONS[1] = (0f0, 0f0, 0f0)
     REPL_TEST_POSITIONS[2] = (0f0, 0f0, 0f0)
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     @test EuclidRepl.status(
         TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 0
@@ -313,6 +317,9 @@ end
     @test job_b.elapsed == 0f0
 
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 0.25f0)
+    @test isempty(frames)
+    @test job_a.elapsed == 0f0 && !job_a.activated
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 0.25f0)
     @test frames == [(1, 0.25f0)]
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 2f0)
     @test frames == [(1, 0.25f0), (1, 1f0)]
@@ -340,6 +347,7 @@ end
         @test_throws ArgumentError EuclidRepl.circle!(
             TEST_REPL_RUNTIME, TEST_STATE_PTR, [0, 0, 0], 1)
         @test session.pending_count == EuclidRepl.ACTION_QUEUE_CAPACITY - 1
+        EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
         for _ in 1:EuclidRepl.ACTION_QUEUE_CAPACITY
             EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
         end
@@ -350,6 +358,8 @@ end
             EuclidRepl.translate_points!(
                 runtime, TEST_STATE_PTR, [42], [[0, 0, 0]], [0.1, 0, 0])
             delete!(REPL_TEST_POSITIONS, UInt64(42))
+            EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+            @test !EuclidRepl.status(runtime, TEST_STATE_PTR).failed
             @test_throws ArgumentError EuclidRepl.run_active_job_frame!(
                 runtime, TEST_STATE_PTR, 1f0)
             @test EuclidRepl.status(runtime, TEST_STATE_PTR).failed
@@ -385,6 +395,8 @@ end
     returned[1] = 99
     starts[1][1] = 99f0
     displacement[1] = 99f0
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    @test REPL_TEST_POSITIONS[7] == (0.1f0, 0.2f0, 0f0)
     for (step, expected) in enumerate([0.15f0, 0.2f0, 0.25f0, 0.3f0])
         EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
         @test isapprox(REPL_TEST_POSITIONS[7][1], expected; atol=1f-6)
@@ -409,6 +421,7 @@ end
         runtime, TEST_STATE_PTR, queue_fixture_job(1, frames; fail=true))
     EuclidRepl.start_job!(
         runtime, TEST_STATE_PTR, queue_fixture_job(2, frames))
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test_throws ErrorException EuclidRepl.run_active_job_frame!(
         runtime, TEST_STATE_PTR, 1f0)
     failed = EuclidRepl.status(runtime, TEST_STATE_PTR)
@@ -433,6 +446,8 @@ end
     EuclidRepl.track_managed_host!(session, UInt64(9))
     EuclidRepl.hide!(runtime, TEST_STATE_PTR, 9)
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test isempty(REPL_TEST_HIDDEN)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test REPL_TEST_HIDDEN == UInt64[8]
     @test session.managed_host_ids == UInt64[9]
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
@@ -448,10 +463,31 @@ end
     end
     EuclidRepl.clear!(runtime, TEST_STATE_PTR)
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test length(REPL_TEST_HIDDEN) == EuclidRepl.CLEAR_COMMAND_CAPACITY
     @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 0
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test REPL_TEST_HIDDEN == UInt64.(100:356)
     @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
     @test isempty(runtime.session.managed_host_ids)
+end
+
+@testset "EuclidRepl same-evaluation construction dependencies use reservations" begin
+    runtime = EuclidRepl.create_runtime()
+    id = UInt64(500)
+    delete!(REPL_TEST_POSITIONS, id)
+    payload = EuclidRepl.PointPayload(id, [0.3f0, 0.4f0, 0f0], :steelblue, 5f0)
+    job = EuclidRepl.ReplDrawJob(:point, 1f0, 0f0, payload)
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
+    EuclidRepl.track_managed_host!(runtime.session, id)
+    EuclidRepl.translate_points!(
+        runtime, TEST_STATE_PTR, [id], [[0, 0, 0]], [0.1, 0, 0])
+    EuclidRepl.hide!(runtime, TEST_STATE_PTR, id)
+    @test runtime.session.pending_count == 2
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test !job.activated && job.elapsed == 0f0
+    @test !runtime.session.failed
+    @test_throws ArgumentError EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test runtime.session.failed
+    EuclidRepl.reset_session!(runtime, TEST_STATE_PTR)
 end
