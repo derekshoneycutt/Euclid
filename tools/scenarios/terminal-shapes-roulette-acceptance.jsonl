@@ -1,0 +1,59 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"rail_a=[0.1,0.2,0]; rail_b=[0.9,0.2,0]; c1=cycloid!(rail_a,rail_b;rolling_radius=0.02,duration=0.1);"}
+{"type":" c2=ordinary_cycloid!(rail_a,rail_b,0.02;duration=0.1); c3=curtate_cycloid!(rail_a,rail_b,0.02,0.01;"}
+{"type":"duration=0.1); c4=prolate_cycloid!(rail_a,rail_b,0.02,0.03;duration=0.1); @assert all(x->x.status==0"}
+{"type":",(c1,c2,c3,c4)); rotate_z!(c2,pi/2;pivot=[0.5,0.2,0],duration=0.1); \"verified-terminal\"*\"-shapes-rou"}
+{"type":"lette-acceptance-1\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-roulette-acceptance-1","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"t1=trochoid!([0.2,0.7,0];fixed_radius=0.1,rolling_radius=0.05,tracer_distance=0.05,duration=0.1); t2"}
+{"type":"=trochoid!([0.4,0.7,0];mode=:internal,fixed_radius=0.1,rolling_radius=0.05,tracer_distance=0.02,dura"}
+{"type":"tion=0.1); ellipse_result=ellipse!([0.6,0.7,0],0.08,0.05;duration=0.1); cardioid_result=cardioid!([0"}
+{"type":".8,0.7,0],0.04;duration=0.1); @assert all(x->x.status==0,(t1,t2,ellipse_result,cardioid_result)); \"v"}
+{"type":"erified-terminal\"*\"-shapes-roulette-acceptance-2\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-roulette-acceptance-2","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"l1=limacon!([0.2,0.5,0],0.08,0.04;duration=0.1); l2=convex_limacon!([0.4,0.5,0],0.08;duration=0.1); "}
+{"type":"l3=dimpled_limacon!([0.6,0.5,0],0.08;duration=0.1); e=epitrochoid!([0.8,0.5,0],0.1,3//1,0.08;duratio"}
+{"type":"n=0.1); h=hypotrochoid!([0.2,0.3,0],0.15,5//3,0.1;duration=0.1); @assert all(x->x.status==0,(l1,l2,l"}
+{"type":"3,e,h)); \"verified-terminal\"*\"-shapes-roulette-acceptance-3\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-roulette-acceptance-3","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"hy=hypocycloid!([0.4,0.3,0],0.15,3//1;duration=0.1); d=deltoid!([0.6,0.3,0],0.15;duration=0.1); a=as"}
+{"type":"troid!([0.8,0.3,0],0.15;duration=0.1); f=five_hypocycloid!([0.2,0.1,0],0.15;duration=0.1); eh=eleven"}
+{"type":"_half_hypocycloid!([0.4,0.1,0],0.15;duration=0.1); n=nephroid!([0.6,0.1,0],0.1;duration=0.1); @asser"}
+{"type":"t all(x->x.status==0,(hy,d,a,f,eh,n)); \"verified-terminal\"*\"-shapes-roulette-acceptance-4\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-roulette-acceptance-4","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"ed=three_dimple_epitrochoid!([0.8,0.1,0],0.1,0.06;duration=0.1); fp=five_point_hypotrochoid!([0.5,0."}
+{"type":"85,0],0.1;duration=0.1); directed=trochoid!([0.3,0.85,0];fixed_radius=0.1,rolling_radius=0.05,tracer"}
+{"type":"_distance=0.02,parameter_start=1,parameter_finish=-1,draw_parameter=0,duration=0.1); @assert all(x->"}
+{"type":"x.status==0,(ed,fp,directed)); rejected=try ellipse!([0.5,0.5,0],0.05,0.1); false; catch error; erro"}
+{"type":"r isa ArgumentError; end; @assert rejected; \"verified-terminal\"*\"-shapes-roulette-acceptance-5\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-roulette-acceptance-5","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; \"native-ready-\"*\"roulette-6\""}
+{"key":"enter"}
+{"wait_terminal_contains":"native-ready-roulette-6","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"query=OdinJuliaBridge.get_trochoid_geometry(state_ptr,directed.host_id); @assert query.status==0 && "}
+{"type":"query.geometry.parameter_start==1 && query.geometry.parameter_finish==-1 && query.geometry.draw_para"}
+{"type":"meter==0; cy=OdinJuliaBridge.get_cycloid_geometry(state_ptr,c2.host_id); @assert !status().failed &&"}
+{"type":" status().managed_shape_count==22 && cy.status==0; @assert isapprox(hypot(cy.second[1]-cy.first[1],c"}
+{"type":"y.second[2]-cy.first[2]),0.8;atol=1f-4); \"verified-terminal\"*\"-shapes-roulette-acceptance-6\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-roulette-acceptance-6","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/terminal-shapes-roulette.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

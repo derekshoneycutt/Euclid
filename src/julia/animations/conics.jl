@@ -20,13 +20,14 @@ end
 function animate_draw_parabola(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, vertex, focal_distance::Real,
     parameter_start::Real, parameter_finish::Real;
-    curve_id::Integer, color)
+    curve_id::Integer, color, rotation::Real=0f0)
     parameter = curve_parameter(timer, duration, parameter_start, parameter_finish)
     place_parabola_tool(state_ptr, vertex, parameter, 0f0)
     checked_curve_status(OdinJuliaBridge.set_parabola_tool_active(state_ptr, 1, color))
     checked_curve_status(
         OdinJuliaBridge.set_parabola_frontier(state_ptr, curve_id, parameter))
-    tip = EuclidGeometry.parabola_point(vertex, focal_distance, parameter)
+    tip = EuclidGeometry.parabola_point(
+        vertex, focal_distance, parameter; rotation)
     OdinJuliaBridge.emit_trailing_particle(state_ptr, tip[1], tip[2], tip[3], color)
 end
 

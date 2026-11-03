@@ -36,8 +36,9 @@ end
 function animate_draw_cycloid(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, first, second, radius::Real;
     tracer_distance::Real, parameter_start::Real, parameter_finish::Real,
-    curve_id::Integer, color, brush::Real, tracer_phase::Real=0f0)
-    parameter = curve_parameter(timer, duration, parameter_start, parameter_finish)
+    curve_id::Integer, color, brush::Real, tracer_phase::Real=0f0,
+    draw_parameter::Real=parameter_finish)
+    parameter = curve_parameter(timer, duration, parameter_start, draw_parameter)
     tracer = place_cycloid_tools(state_ptr, first, second, radius, tracer_distance,
         parameter, 0f0; parameter_start, parameter_finish, tracer_phase)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
@@ -53,9 +54,9 @@ end
 function animate_cycloid_rise(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, topz::Real, first, second, radius::Real;
     tracer_distance::Real, parameter_start::Real, parameter_finish::Real,
-    tracer_phase::Real=0f0)
+    tracer_phase::Real=0f0, draw_parameter::Real=parameter_finish)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     place_cycloid_tools(state_ptr, first, second, radius, tracer_distance,
-        parameter_finish, topz * normalized_progress(timer, duration);
+        draw_parameter, topz * normalized_progress(timer, duration);
         parameter_start, parameter_finish, tracer_phase)
 end

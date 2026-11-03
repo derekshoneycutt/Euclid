@@ -1,0 +1,57 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"p=parabola!([0.5,0.4,0];focal_distance=0.1,parameter_start=-0.5,parameter_finish=0.5,draw_parameter="}
+{"type":"0,duration=0.2); hpos=hyperbola!([0.25,0.65,0];semimajor=0.1,semiminor=0.05,parameter_start=-0.3,par"}
+{"type":"ameter_finish=0.3,draw_parameter=0.1,branches=:positive,duration=0.2); hneg=hyperbola!([0.5,0.65,0];"}
+{"type":"semimajor=0.1,semiminor=0.05,parameter_start=-0.3,parameter_finish=0.3,draw_parameter=0,branches=:ne"}
+{"type":"gative,duration=0.2); hboth=hyperbola!([0.75,0.65,0];semimajor=0.1,semiminor=0.05,parameter_start=-0"}
+{"type":".3,parameter_finish=0.3,draw_parameter=-0.1,branches=:both,duration=0.2); @assert all(x->x.status==0"}
+{"type":",(p,hpos,hneg,hboth)); \"verified-terminal\"*\"-shapes-conics-acceptance-1\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-conics-acceptance-1","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; \"native-ready-\"*\"conics-2\""}
+{"key":"enter"}
+{"wait_terminal_contains":"native-ready-conics-2","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"@assert !status().failed && status().managed_shape_count==4; pq=OdinJuliaBridge.get_parabola_geometr"}
+{"type":"y(state_ptr,p.host_id); qpos=OdinJuliaBridge.get_hyperbola_geometry(state_ptr,hpos.host_id); qneg=Od"}
+{"type":"inJuliaBridge.get_hyperbola_geometry(state_ptr,hneg.host_id); qboth=OdinJuliaBridge.get_hyperbola_ge"}
+{"type":"ometry(state_ptr,hboth.host_id); @assert pq.geometry.draw_parameter==0; @assert qpos.branches==OdinJ"}
+{"type":"uliaBridge.HYPERBOLA_POSITIVE && qneg.branches==OdinJuliaBridge.HYPERBOLA_NEGATIVE && qboth.branches"}
+{"type":"==OdinJuliaBridge.HYPERBOLA_BOTH; \"verified-terminal\"*\"-shapes-conics-acceptance-2\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-conics-acceptance-2","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"rotate_z!(p,-pi/2;pivot=[0.5,0.5,0],duration=0.4); rotate_z!(hpos,pi;pivot=[0.5,0.5,0],duration=0.4)"}
+{"type":"; rotate_z!(hneg,-pi;pivot=[0.5,0.5,0],duration=0.4); rotate_z!(hboth,2pi;pivot=[0.5,0.5,0],duration"}
+{"type":"=0.4); sleep(0.15); angle=OdinJuliaBridge.get_parabola_geometry(state_ptr,p.host_id).geometry.rotati"}
+{"type":"on; @assert -pi/2<angle<0; observed=OdinJuliaBridge.get_point(state_ptr,p.host_id).pos; expected=Euc"}
+{"type":"lidRepl.rotated_xy_position(Float32[0.5,0.4,0],[0.5,0.5,0],angle); @assert isapprox(Float32[observed"}
+{"type":"...],expected;atol=0.002); \"verified-terminal\"*\"-shapes-conics-acceptance-4\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-conics-acceptance-4","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; \"native-ready-\"*\"conics-4\""}
+{"key":"enter"}
+{"wait_terminal_contains":"native-ready-conics-4","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"@assert !status().failed; @assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.host_id).pos[1],0.4"}
+{"type":";atol=1f-4); @assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.host_id).pos[2],0.5;atol=1f-4); "}
+{"type":"@assert isapprox(OdinJuliaBridge.get_parabola_geometry(state_ptr,p.host_id).geometry.rotation,-pi/2;"}
+{"type":"atol=1f-4); @assert OdinJuliaBridge.get_hyperbola_geometry(state_ptr,hpos.host_id).branches==OdinJul"}
+{"type":"iaBridge.HYPERBOLA_POSITIVE; @assert OdinJuliaBridge.get_hyperbola_geometry(state_ptr,hneg.host_id)."}
+{"type":"branches==OdinJuliaBridge.HYPERBOLA_NEGATIVE; @assert OdinJuliaBridge.get_hyperbola_geometry(state_p"}
+{"type":"tr,hboth.host_id).branches==OdinJuliaBridge.HYPERBOLA_BOTH; \"verified-terminal\"*\"-shapes-conics-acce"}
+{"type":"ptance-5\""}
+{"key":"enter"}
+{"wait_terminal_contains":"verified-terminal-shapes-conics-acceptance-5","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/terminal-shapes-conics.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

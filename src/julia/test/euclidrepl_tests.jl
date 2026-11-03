@@ -35,6 +35,50 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
 const TEST_REPL_RUNTIME = EuclidRepl.create_runtime()
 const REPL_TEST_POSITIONS = Dict{UInt64,NTuple{3,Float32}}()
 const REPL_TEST_HIDDEN = UInt64[]
+const REPL_TEST_REVEALED = UInt64[]
+const REPL_TEST_FRONTIERS = Dict{UInt64,Float32}()
+
+"""Record exact Cycloid completion frontiers in the null-state fixture."""
+function OdinJuliaBridge.set_cycloid_frontier(
+    state::Ptr{Cvoid}, id::UInt64, frontier::Float32)
+    state == C_NULL ||
+        return OdinJuliaBridge.set_cycloid_frontier(state, Int(id), frontier)
+    REPL_TEST_FRONTIERS[id] = frontier
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record exact trochoid completion frontiers in the null-state fixture."""
+function OdinJuliaBridge.set_trochoid_frontier(
+    state::Ptr{Cvoid}, id::UInt64, frontier::Float32)
+    state == C_NULL ||
+        return OdinJuliaBridge.set_trochoid_frontier(state, Int(id), frontier)
+    REPL_TEST_FRONTIERS[id] = frontier
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record exact parabola completion frontiers in the null-state fixture."""
+function OdinJuliaBridge.set_parabola_frontier(
+    state::Ptr{Cvoid}, id::UInt64, frontier::Float32)
+    state == C_NULL ||
+        return OdinJuliaBridge.set_parabola_frontier(state, Int(id), frontier)
+    REPL_TEST_FRONTIERS[id] = frontier
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record exact hyperbola completion frontiers in the null-state fixture."""
+function OdinJuliaBridge.set_hyperbola_frontier(
+    state::Ptr{Cvoid}, id::UInt64, frontier::Float32)
+    state == C_NULL ||
+        return OdinJuliaBridge.set_hyperbola_frontier(state, Int(id), frontier)
+    REPL_TEST_FRONTIERS[id] = frontier
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Accept completion visibility only for the null-state frontier fixture."""
+function OdinJuliaBridge.show_point(state::Ptr{Cvoid}, id::UInt64)
+    state == C_NULL || return OdinJuliaBridge.show_point(state, Int(id))
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
 
 """Supply immutable native projections only for the null-state unit fixture."""
 function OdinJuliaBridge.get_point(state::Ptr{Cvoid}, id::UInt64)
@@ -64,6 +108,13 @@ function OdinJuliaBridge.hide_point(state::Ptr{Cvoid}, id::UInt64)
     state == C_NULL || return OdinJuliaBridge.hide_point(state, Int(id))
     haskey(REPL_TEST_POSITIONS, id) || return OdinJuliaBridge.BRIDGE_STATUS_INVALID_INDEX
     push!(REPL_TEST_HIDDEN, id)
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record one reveal request made by a polygon phase test."""
+function record_test_region_reveal!(
+    _state::Ptr{Cvoid}, id::UInt64, _duration::Real)
+    push!(REPL_TEST_REVEALED, id)
     return OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -99,6 +150,10 @@ if Sys.iswindows()
 end
 
 @testset "EuclidRepl validation" begin
+    @test EuclidRepl.validated_label_source("A"^256) == "A"^256
+    @test EuclidRepl.validated_label_source("é"^128) == "é"^128
+    @test_throws ArgumentError EuclidRepl.validated_label_source("é"^129)
+    @test_throws ArgumentError EuclidRepl.validated_label_source("a\0b")
     @test_throws ArgumentError EuclidRepl.validated_duration(0f0)
     @test_throws ArgumentError EuclidRepl.validated_duration(-1f0)
     @test_throws ArgumentError EuclidRepl.validated_duration(Inf32)
@@ -121,8 +176,45 @@ end
     @test_throws ArgumentError EuclidRepl.validated_radius(-1f0)
     @test_throws ArgumentError EuclidRepl.validated_radius(Inf32)
 
+    triangle_vertices = EuclidRepl.validated_polygon_vertices([
+        [0, 0, 0], [2, 0, 0], [0, 2, 0]])
+    @test triangle_vertices == [
+        Float32[0, 0, 0], Float32[2, 0, 0], Float32[0, 2, 0]]
+    @test_throws ArgumentError EuclidRepl.validated_polygon_vertices([
+        [0, 0, 0], [2, 2, 0], [0, 3, 0], [3, 0, 0]])
+    @test_throws ArgumentError EuclidRepl.validated_polygon_vertices([
+        [0, 0, 0], [2, 0, 0], [0, 2, 1]])
+    @test_throws ArgumentError EuclidRepl.validated_polygon_vertices([
+        [0, 0, 0], [1, 0, 0], [2, 0, 0]])
+    @test EuclidRepl.polygon_vertex_ids(
+        OdinJuliaBridge.BridgeShapeTriangle(0, 10, 11, 12, 13)) ==
+        UInt64[11, 12, 13]
+    @test EuclidRepl.polygon_vertex_ids(
+        OdinJuliaBridge.BridgeShapeSquare(0, 10, 11, 12, 13, 14)) ==
+        UInt64[11, 12, 13, 14]
+    @test EuclidRepl.polygon_vertex_ids(
+        OdinJuliaBridge.BridgeShapePentagon(0, 10, 11, 12, 13, 14, 15)) ==
+        UInt64[11, 12, 13, 14, 15]
+    @test_throws ArgumentError EuclidRepl.polygon_vertex_ids(
+        OdinJuliaBridge.BridgeShapeTriangle(
+            OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT, 10, 11, 12, 13))
+
+    region = EuclidRepl.validated_circle_region(
+        [0, 0, 0], 1, [1, 0, 0], 1)
+    @test region == (
+        (center=Float32[0, 0, 0], radius=1f0),
+        (center=Float32[1, 0, 0], radius=1f0))
+    @test_throws ArgumentError EuclidRepl.validated_circle_region(
+        [0, 0, 0], 1, [2, 0, 0], 1)
+    @test_throws ArgumentError EuclidRepl.validated_circle_region(
+        [0, 0, 0], 1, [0.5, 0, 0], 0.25)
+    @test_throws ArgumentError EuclidRepl.validated_circle_region(
+        [0, 0, 0], 1, [1, 0, 1], 1)
+
     @test_throws ArgumentError EuclidRepl.vec3("bad", Float32[1f0, 2f0])
     @test_throws ArgumentError EuclidRepl.vec3("bad", Float32[1f0, Inf32, 3f0])
+    @test_throws ArgumentError EuclidRepl.validated_positive_parameter("radius", 0)
+    @test_throws ArgumentError EuclidRepl.validated_positive_parameter("radius", Inf)
 
     nested_positions = EuclidRepl.validated_start_positions([
         Float64[1.0, 2.0, 3.0],
@@ -142,6 +234,54 @@ end
     @test_throws ArgumentError EuclidRepl.validated_start_positions(
         Float64[1.0, 2.0, 3.0, 4.0])
 
+end
+
+@testset "EuclidRepl shape family domains reject before admission" begin
+    runtime = EuclidRepl.create_runtime()
+    first = Float32[0, 0, 0]
+    second = Float32[0.5, 0, 0]
+    @test_throws ArgumentError EuclidRepl.cycloid!(
+        runtime, TEST_STATE_PTR, first, second;
+        rolling_radius=0.1, parameter_finish=4pi)
+    @test_throws ArgumentError EuclidRepl.cycloid!(
+        runtime, TEST_STATE_PTR, first, Float32[0.5, 0, 1],
+        rolling_radius=0.01)
+    @test_throws ArgumentError EuclidRepl.curtate_cycloid!(
+        runtime, TEST_STATE_PTR, first, [1, 0, 0], 0.1, 0.1)
+    @test_throws ArgumentError EuclidRepl.prolate_cycloid!(
+        runtime, TEST_STATE_PTR, first, [1, 0, 0], 0.1, 0.1)
+    @test_throws ArgumentError EuclidRepl.trochoid!(
+        runtime, TEST_STATE_PTR, first; mode=:unknown, fixed_radius=0.1,
+        rolling_radius=0.05, tracer_distance=0.02)
+    @test_throws ArgumentError EuclidRepl.trochoid!(
+        runtime, TEST_STATE_PTR, first; mode=:internal, fixed_radius=0.05,
+        rolling_radius=0.1, tracer_distance=0.02)
+    @test_throws ArgumentError EuclidRepl.trochoid!(
+        runtime, TEST_STATE_PTR, first; fixed_radius=0.1,
+        rolling_radius=0.05, tracer_distance=0.02,
+        parameter_start=-1, parameter_finish=1, draw_parameter=2)
+    @test_throws ArgumentError EuclidRepl.ellipse!(
+        runtime, TEST_STATE_PTR, first, 0.05, 0.1)
+    @test_throws ArgumentError EuclidRepl.hypocycloid!(
+        runtime, TEST_STATE_PTR, first, 0.1, 1 // 1)
+    @test_throws ArgumentError EuclidRepl.rational_trochoid!(
+        runtime, TEST_STATE_PTR, first, :internal, 0.1, 1 // 1, 0.02)
+    @test_throws ArgumentError EuclidRepl.parabola!(
+        runtime, TEST_STATE_PTR, first; focal_distance=0)
+    @test_throws ArgumentError EuclidRepl.parabola!(
+        runtime, TEST_STATE_PTR, first; focal_distance=0.1,
+        parameter_start=1, parameter_finish=-1, draw_parameter=2)
+    @test_throws ArgumentError EuclidRepl.hyperbola!(
+        runtime, TEST_STATE_PTR, first; semimajor=0.1, semiminor=0.05,
+        parameter_start=-5, parameter_finish=5)
+    @test_throws ArgumentError EuclidRepl.hyperbola!(
+        runtime, TEST_STATE_PTR, first; semimajor=0.1, semiminor=0.05,
+        rail_half_length=0.1)
+    @test_throws ArgumentError EuclidRepl.hyperbola!(
+        runtime, TEST_STATE_PTR, first; semimajor=0.1, semiminor=0.05,
+        branches=:invalid)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).pending_count == 0
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).managed_shape_count == 0
 end
 
 @testset "EuclidRepl hide helpers" begin
@@ -191,6 +331,126 @@ end
     end
     @test REPL_TEST_HIDDEN == UInt64[5, 7, 7, 11, 21, 31]
     @test_throws ArgumentError EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 99)
+end
+
+@testset "EuclidRepl typed shape identities and admissions" begin
+    runtime = EuclidRepl.create_runtime()
+    vertices = [[0, 0, 0], [2, 0, 0], [0, 2, 0]]
+    shape = EuclidRepl.queue_polygon!(
+        runtime, TEST_STATE_PTR, vertices, :steelblue, 1f0, :triangle,
+        (points, _) -> OdinJuliaBridge.BridgeShapeTriangle(
+            OdinJuliaBridge.BRIDGE_STATUS_OK, 600, 601, 602, 603))
+    payload = runtime.session.active_job.payload
+    @test EuclidRepl.polygon_vertex_ids(shape) == UInt64[601, 602, 603]
+    @test payload.vertices == [
+        Float32[0, 0, 0], Float32[2, 0, 0], Float32[0, 2, 0]]
+    @test runtime.session.managed_host_ids == UInt64[600]
+    vertices[2][1] = 50
+    @test payload.vertices[2] == Float32[2, 0, 0]
+    @test_throws ArgumentError EuclidRepl.queue_polygon!(
+        runtime, TEST_STATE_PTR, [[0, 0, 0], [2, 2, 0], [0, 3, 0], [3, 0, 0]],
+        :steelblue, 1f0, :square, (_, _) -> error("invalid polygon was constructed"))
+
+    region_runtime = EuclidRepl.create_runtime()
+    region = EuclidRepl.queue_circle_region!(
+        region_runtime, TEST_STATE_PTR, [0, 0, 0], 1, [1, 0, 0], 1,
+        :lens,
+        (state, first, first_radius, second, second_radius; color) ->
+            OdinJuliaBridge.BridgeShapeCircleRegion(
+                OdinJuliaBridge.BRIDGE_STATUS_OK, 700, 701, 702);
+        color=:steelblue, duration=1f0)
+    @test EuclidRepl.circle_region_center_ids(region) == (UInt64(701), UInt64(702))
+    @test region_runtime.session.active_job.payload.center_ids ==
+        (UInt64(701), UInt64(702))
+end
+
+@testset "EuclidRepl coordinated polygon rotation" begin
+    runtime = EuclidRepl.create_runtime()
+    ids = UInt64[801, 802, 803]
+    initial = ((0f0, 0f0, 0f0), (1f0, 0f0, 0f0), (0f0, 2f0, 0f0))
+    for (id, position) in zip(ids, initial)
+        REPL_TEST_POSITIONS[id] = position
+    end
+    shape = OdinJuliaBridge.BridgeShapeTriangle(
+        OdinJuliaBridge.BRIDGE_STATUS_OK, 800, ids...)
+    EuclidRepl.rotate_z!(runtime, TEST_STATE_PTR, shape, Float32(pi / 2);
+        pivot=Float32[0.5, -0.5, 2], duration=1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    moved = Tuple(REPL_TEST_POSITIONS[id] for id in ids)
+    initial_distances = (1f0, 2f0, sqrt(5f0))
+    measured = (
+        sqrt(sum(abs2(moved[1][index] - moved[2][index]) for index in 1:3)),
+        sqrt(sum(abs2(moved[1][index] - moved[3][index]) for index in 1:3)),
+        sqrt(sum(abs2(moved[2][index] - moved[3][index]) for index in 1:3)))
+    @test collect(measured) ≈ collect(initial_distances) atol=1f-5
+    active = EuclidRepl.status(runtime, TEST_STATE_PTR)
+    expected = EuclidRepl.rotated_xy_position(collect(initial[2]),
+        Float32[0.5, -0.5, 2], Float32(pi / 2) * active.elapsed)
+    @test collect(moved[2]) ≈ expected atol=1f-5
+    @test active.active
+    for _ in 1:3
+        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    end
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+end
+
+@testset "EuclidRepl polygon reveal survives skipped phase frames" begin
+    empty!(REPL_TEST_REVEALED)
+    payload = EuclidRepl.PolygonPayload(
+        950, UInt64[951, 952, 953],
+        [Float32[0, 0, 0], Float32[1, 0, 0], Float32[0, 1, 0]],
+        :steelblue, false)
+    EuclidRepl.start_polygon_reveal_if_due!(
+        TEST_STATE_PTR, 0.95f0, 1f0, payload, record_test_region_reveal!)
+    @test payload.reveal_started
+    @test REPL_TEST_REVEALED == UInt64[950]
+    EuclidRepl.start_polygon_reveal_if_due!(
+        TEST_STATE_PTR, 0.99f0, 1f0, payload, record_test_region_reveal!)
+    @test REPL_TEST_REVEALED == UInt64[950]
+end
+
+@testset "EuclidRepl curve completion commits exact frontiers" begin
+    empty!(REPL_TEST_FRONTIERS)
+    origin = Float32[0, 0, 0]
+    payloads = (
+        EuclidRepl.CycloidPayload(960, (UInt64(961), UInt64(962)),
+            origin, Float32[1, 0, 0], 0.1f0, 0.1f0, 0f0, 1f0, -1f0, 0f0, :steelblue, 5f0),
+        EuclidRepl.TrochoidPayload(970, origin, Int32(0),
+            0.1f0, 0.05f0, 0.02f0, 0f0, 0f0, 0f0, 6f0, 1.5f0, :steelblue, 5f0),
+        EuclidRepl.ParabolaPayload(980, origin,
+            0.1f0, 0f0, -1f0, 1f0, 0.5f0, 1f0, :steelblue, 5f0),
+        EuclidRepl.HyperbolaPayload(990, origin,
+            0.1f0, 0.05f0, 0f0, -1f0, 1f0, -0.5f0, 1f0, :both, :steelblue, 5f0))
+    for payload in payloads
+        EuclidRepl.finalize_payload!(TEST_STATE_PTR, payload)
+        @test REPL_TEST_FRONTIERS[payload.host_id] == payload.draw_parameter
+    end
+end
+
+@testset "EuclidRepl activation-sampled analytic rotation admission" begin
+    rotated = EuclidRepl.rotated_xy_position(
+        Float32[1, 0, 7], Float32[0, 0, 0], Float32(pi / 2))
+    @test rotated isa Vector{Float32}
+    @test rotated ≈ Float32[0, 1, 7] atol=1f-5
+
+    runtime = EuclidRepl.create_runtime()
+    host_id = UInt64(900)
+    EuclidRepl.track_managed_host!(runtime.session, host_id)
+    shape = OdinJuliaBridge.BridgeShapeCircle(
+        OdinJuliaBridge.BRIDGE_STATUS_OK, host_id)
+    pivot = Float32[0.3, 0.4, 0]
+    @test EuclidRepl.rotate_z!(runtime, TEST_STATE_PTR, shape, pi / 2;
+        pivot, duration=1f0) == host_id
+    payload = runtime.session.active_job.payload
+    @test payload.kind == :arc && payload.geometry === nothing
+    pivot[1] = 9f0
+    @test payload.pivot == Float32[0.3, 0.4, 0]
+    @test_throws ArgumentError EuclidRepl.rotate_z!(
+        runtime, TEST_STATE_PTR,
+        OdinJuliaBridge.BridgeShapeCircle(
+            OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT, host_id),
+        1; pivot=[0, 0, 0])
 end
 
 @testset "EuclidRepl color palette helpers" begin

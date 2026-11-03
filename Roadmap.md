@@ -7,7 +7,6 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Terminal drawing shape suite
 - Retained terminals
 - Terminal animation recording
 - Terminal exercises
@@ -229,7 +228,7 @@ General features:
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
   - [X] Julia syntax highlighting
   - [X] History explorer, Julia-familiar
-  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+  - [X] Complete Terminal shape suite
   - [ ] Retained Terminals (runtime-only, as children in the trees of Terminal
      that can be navigated away from and returned to with persisted internal state;
      exit cleans REPL state and removes from tree)

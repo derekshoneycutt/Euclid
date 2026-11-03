@@ -904,6 +904,66 @@ Closing a session
 resets managed geometry and stops tick admission before actors become quiescent. A new
 Terminal generation always receives a fresh runtime; drawing jobs never cross generations.
 
+## Terminal Shape Constructors And Motion
+
+The Terminal exposes the existing typed bridge results rather than wrapping them in a
+generic shape handle. Successful constructors reserve their host and defining entities,
+return that typed result immediately, and queue the full tool choreography. The result
+can be referenced by later commands in the same evaluation; execution still validates
+it against the activation-time native snapshot.
+
+| Constructor family | Terminal helpers | Result and defining identities |
+| --- | --- | --- |
+| Point, line, circle or arc | `point!`, `line!`, `circle!` | Entity, line host plus endpoints, or circle host |
+| Text label | `label!` | Label entity result |
+| Filled polygons | `triangle!`, `square!`, `pentagon!` | Typed polygon result; ordered vertices from `polygon_vertex_ids` |
+| Circle regions | `lens!`, `lune!` | Circle-region result; defining centers from `circle_region_center_ids` |
+| Literal-rail Cycloid | `cycloid!`, `ordinary_cycloid!`, `curtate_cycloid!`, `prolate_cycloid!` | Cycloid result with typed `first_id` and `second_id` rail endpoints |
+| Rolling-circle families | `trochoid!`, `ellipse!`, `cardioid!`, `limacon!`, `convex_limacon!`, `dimpled_limacon!`, `epitrochoid!`, `hypotrochoid!`, `hypocycloid!`, `deltoid!`, `astroid!`, `five_hypocycloid!`, `eleven_half_hypocycloid!`, `nephroid!`, `three_dimple_epitrochoid!`, `five_point_hypotrochoid!` | Trochoid result with one analytic host |
+| Conics | `parabola!`, `hyperbola!` | Conic result with one host; hyperbola branch selection is immutable |
+
+`label!` accepts at most 256 UTF-8 bytes and rejects NUL. Polygon input must be an
+ordered, non-self-intersecting XY outline with three to five distinct vertices at one
+z coordinate. Lens and lune centers share a z coordinate, and their radii must create
+exactly two circle intersections. A lune is directional: it constructs the first
+circle minus the second. These fill-plane restrictions do not constrain later
+defining-point motion.
+
+Curve constructors retain their native analytic parameterizations and directed finite
+frontiers. Completion commits the exact requested frontier even if a frame skips the
+end of the drawing phase. `cycloid!` requires enough rail length for its rolling travel.
+`trochoid!` selects `mode=:external` or `:internal`; named roulette helpers choose the
+corresponding radius ratios and closure interval. Parabolas require positive focal
+distance. Hyperbolas use one shared host and frontier; `branches=:both` (default),
+`:positive`, or `:negative` selects authored ink without splitting the paired tool.
+Invalid domains and geometries fail before a constructor reserves native identities.
+
+`polygon_vertex_ids(shape)` returns a `Vector{UInt64}` in construction order.
+`line_endpoint_ids(shape)` returns the line endpoints, and
+`circle_region_center_ids(shape)` returns the two region centers. These IDs can be
+passed to the queued point-batch functions. Moving one polygon vertex deforms the
+polygon; moving all vertices together preserves its native point dependencies and
+moves the polygon as a whole. Batch starts are sampled at activation, so successive
+queued edits compose.
+
+Point batches support 3D translation and rotation and XY reflection. `rotate_z!`
+coordinates defining-point rotation for lines, polygons, circle regions, and the
+literal Cycloid rail. Its analytic planar forms preserve native geometry and the
+directed frontier for circles/arcs, trochoids (including ellipses), parabolas, and
+hyperbolas. A rotation about the world-Z line moves an off-center analytic host and
+updates its in-plane orientation. No arbitrary-axis analytic posing or quaternion
+state is implied; unsupported analytic out-of-plane motion is not approximated.
+
+The bounded real-Terminal acceptance scenarios cover the
+[base constructors](../../../tools/scenarios/terminal-shapes-basic-acceptance.jsonl),
+[roulette inventory](../../../tools/scenarios/terminal-shapes-roulette-acceptance.jsonl),
+[defining-point and analytic motion](../../../tools/scenarios/terminal-shapes-motion-acceptance.jsonl),
+and [conics and branch selection](../../../tools/scenarios/terminal-shapes-conics-acceptance.jsonl).
+Input is chunked to fit ordinary frame admission, and returned markers are split in
+source so input echo cannot satisfy an output wait. Native geometry checks follow a
+committed animation tick, not queue-capture completion alone. Allocation baselines
+measure quiet frame reuse after constructor, tool, and Terminal-input admission.
+
 The default diagonal draw has a
 [line acceptance scenario](../../../tools/scenarios/terminal-line-acceptance.jsonl).
 It verifies animation pause freezes job progress and captures the completed line before

@@ -37,8 +37,9 @@ end
 function animate_draw_trochoid(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, center, parameter_start::Real, parameter_finish::Real;
     mode, fixed_radius::Real, rolling_radius::Real, tracer_distance::Real,
-    curve_id::Integer, color, brush::Real, rotation::Real=0f0, tracer_phase::Real=0f0)
-    parameter = curve_parameter(timer, duration, parameter_start, parameter_finish)
+    curve_id::Integer, color, brush::Real, rotation::Real=0f0, tracer_phase::Real=0f0,
+    draw_parameter::Real=parameter_finish)
+    parameter = curve_parameter(timer, duration, parameter_start, draw_parameter)
     tracer = place_trochoid_tools(state_ptr, center, mode, fixed_radius,
         rolling_radius, tracer_distance, parameter, 0f0; rotation, tracer_phase)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
