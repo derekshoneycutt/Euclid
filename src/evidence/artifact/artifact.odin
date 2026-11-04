@@ -405,18 +405,19 @@ artifact_put_u64 :: proc(destination: []u8, offset: int, value: u64) {
 artifact_encode_payload :: proc(
     destination: []u8, kind: trace.Kind, payload: trace.Event_Payload) {
     #partial switch kind {
-        case .Point_Position_Committed, .Point_Style_Committed,
-            .Point_Visibility_Committed, .Arc_Geometry_Committed,
-            .Trochoid_Geometry_Committed, .Trochoid_Frontier_Committed,
-            .Trochoid_Tool_Geometry_Committed,
-            .Trochoid_Tool_Parameter_Committed,
-            .Cycloid_Geometry_Committed, .Cycloid_Frontier_Committed,
-            .Cycloid_Tool_Geometry_Committed,
-            .Cycloid_Tool_Parameter_Committed,
-            .Parabola_Geometry_Committed, .Parabola_Frontier_Committed,
-            .Hyperbola_Geometry_Committed, .Hyperbola_Frontier_Committed,
-            .Parabola_Tool_Geometry_Committed, .Parabola_Tool_Parameter_Committed,
-            .Hyperbola_Tool_Geometry_Committed, .Hyperbola_Tool_Parameter_Committed:
+        case .Shape_Orientation_Committed, .Point_Position_Committed,
+             .Point_Style_Committed,
+             .Point_Visibility_Committed, .Arc_Geometry_Committed,
+             .Trochoid_Geometry_Committed, .Trochoid_Frontier_Committed,
+             .Trochoid_Tool_Geometry_Committed,
+             .Trochoid_Tool_Parameter_Committed,
+             .Cycloid_Geometry_Committed, .Cycloid_Frontier_Committed,
+             .Cycloid_Tool_Geometry_Committed,
+             .Cycloid_Tool_Parameter_Committed,
+             .Parabola_Geometry_Committed, .Parabola_Frontier_Committed,
+             .Hyperbola_Geometry_Committed, .Hyperbola_Frontier_Committed,
+             .Parabola_Tool_Geometry_Committed, .Parabola_Tool_Parameter_Committed,
+             .Hyperbola_Tool_Geometry_Committed, .Hyperbola_Tool_Parameter_Committed:
         artifact_put_u32(destination, 0, payload.point.point_index)
         artifact_put_u16(destination, 4, payload.point.field)
         destination[6] = payload.point.visible

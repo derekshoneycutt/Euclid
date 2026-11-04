@@ -2,6 +2,19 @@
 _shape_color(color::BridgeColor) = color
 _shape_color(color) = bridge_color(color)
 
+"""Query a host's native local-to-world unit XYZW orientation from the active snapshot."""
+function get_shape_orientation(state_ptr::Ptr{Cvoid}, id::Integer)
+    @ccall shape_get_orientation(
+        state_ptr::Ptr{Cvoid}, UInt64(id)::UInt64)::BridgeShapeOrientationResult
+end
+
+"""Capture a host's complete unit XYZW orientation in the current scene transaction."""
+function set_shape_orientation(
+    state_ptr::Ptr{Cvoid}, id::Integer, orientation::NTuple{4,Cfloat})
+    @ccall shape_set_orientation(state_ptr::Ptr{Cvoid}, UInt64(id)::UInt64,
+        orientation::NTuple{4,Cfloat})::Int32
+end
+
 """Build canonical shape style values for one native constructor."""
 _shape_style(color, brush_size::Real) =
     BridgeShapeStyle(_shape_color(color), Cfloat(brush_size))

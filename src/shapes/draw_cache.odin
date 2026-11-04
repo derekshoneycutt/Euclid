@@ -1,6 +1,7 @@
 package shapes
 
 import shapemodel "model"
+import "core:math"
 
 // This file owns the derived draw-cache packet: item/vertex/triangle storage,
 // depth-based sorting, and polygon ear-clipping triangulation used by any
@@ -615,7 +616,33 @@ triangulate_polygon_ear_clip_storage :: proc(
     base_vertex: int,
     vertices: []Vector3,
     triangle_start: int) -> int {
+    normal: Vector3
+    for index in 0..<len(vertices) {
+        first := vertices[index]
+        second := vertices[(index + 1) % len(vertices)]
+        normal.x += (first.y - second.y) * (first.z + second.z)
+        normal.y += (first.z - second.z) * (first.x + second.x)
+        normal.z += (first.x - second.x) * (first.y + second.y)
+    }
+    planar: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector3
+    for point, index in vertices {
+        if math.abs(normal.x) > math.abs(normal.y) &&
+            math.abs(normal.x) > math.abs(normal.z) {
+            planar[index] = {point.y, point.z, 0}
+        } else if math.abs(normal.y) > math.abs(normal.z) {
+            planar[index] = {point.z, point.x, 0}
+        } else {
+            planar[index] = {point.x, point.y, 0}
+        }
+    }
+    return triangulate_polygon_ear_clip_xy_storage(
+        cache, base_vertex, planar[:len(vertices)], triangle_start)
+}
 
+// Triangulate a plane-projected ring while retaining original world-vertex indices.
+triangulate_polygon_ear_clip_xy_storage :: proc(
+    cache: ^shapemodel.Shapes_Draw_Cache, base_vertex: int,
+    vertices: []Vector3, triangle_start: int) -> int {
     count := len(vertices)
     if count < 3 {
         return 0

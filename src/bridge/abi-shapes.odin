@@ -10,11 +10,13 @@ import projection "../view/world/projection"
 import worldmodel "../view/world/model"
 import view_font "../view/font"
 import viewtext "../view/ui/text"
+import "core:math/linalg"
 
 // Group immutable component sources selected for one bridge query.
 Bridge_Shape_Query_Source :: struct {
     registry: ^shapemodel.Shape_Registry,
     transforms: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Transform),
+    orientations: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Orientation),
     arcs: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Arc),
     trochoids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Trochoid),
     cycloids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid),
@@ -82,6 +84,7 @@ bridge_shape_snapshot_query_source :: proc(
     return {
         registry = &shapes.registry,
         transforms = &shapes.transforms,
+        orientations = &shapes.orientations,
         arcs = &shapes.arcs,
         trochoids = &shapes.trochoids,
         cycloids = &shapes.cycloids,
@@ -112,6 +115,7 @@ bridge_shape_query_source :: proc(
     return {
         registry = &world.registry,
         transforms = &world.transforms,
+        orientations = &world.orientations,
         arcs = &world.arcs,
         trochoids = &world.trochoids,
         cycloids = &world.cycloids,
@@ -890,6 +894,11 @@ shape_set_position :: proc "c" (
     packed: u64,
     position: Vector3) -> i32 {
     context = state.saved_context
+    if !shapemodel.shape_scalar_is_finite(position.x) ||
+        !shapemodel.shape_scalar_is_finite(position.y) ||
+        !shapemodel.shape_scalar_is_finite(position.z) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
     command, captured := capture_shape_command(state, .Set_Shape_Position, packed)
     if command != nil {
         command.position = position
@@ -905,6 +914,14 @@ shape_set_position :: proc "c" (
         &state.shape_world.transforms, &state.shape_world.registry, entity)
     if !has_transform {
         return BRIDGE_STATUS_NOT_FOUND
+    }
+    commands := [?]Scene_Command{{
+        kind = .Set_Shape_Position,
+        entity = packed,
+        position = position,
+    }}
+    if !shape_plane_edits_valid(&state.shape_world, commands[:]) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     transform.position = position
     return BRIDGE_STATUS_OK
@@ -1041,7 +1058,7 @@ bridge_cycloid_preserve_previous :: proc(
     current^.previous_draw_parameter = previous.previous_draw_parameter
 }
 
-// Set one live cycloid's complete scalar description against its immutable rail.
+// Validate scalar edits against the live rail or the captured transaction's final rail.
 @(export)
 shape_set_cycloid :: proc "c" (
     state: ^core.Euclid_General_State,
@@ -1054,10 +1071,7 @@ shape_set_cycloid :: proc "c" (
     if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
         return BRIDGE_STATUS_NOT_FOUND
     }
-    line, endpoints_ok := bridge_cycloid_endpoints(&source, entity)
-    if !shapemodel.shape_cycloid_is_valid(value) || !endpoints_ok ||
-        !shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
-            value.rolling_radius, value.parameter_start, value.parameter_finish) {
+    if !shapemodel.shape_cycloid_is_valid(value) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     command, captured := capture_shape_command(state, .Set_Shape_Cycloid, packed)
@@ -1066,6 +1080,12 @@ shape_set_cycloid :: proc "c" (
     }
     if captured {
         return BRIDGE_STATUS_OK
+    }
+    line, endpoints_ok := bridge_cycloid_endpoints(&source, entity)
+    if !endpoints_ok || !shapemodel.shape_cycloid_line_is_valid({},
+        {linalg.length(line.second - line.first), 0, 0},
+        value.rolling_radius, value.parameter_start, value.parameter_finish) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     current, has_value := shapemodel.shape_component_get_mut(
         &state.shape_world.cycloids, &state.shape_world.registry, entity)

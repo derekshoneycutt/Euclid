@@ -33,6 +33,7 @@ Scene_Command_Validator :: #type proc(
 //   makes the table exhaustive at compile time.
 SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Position = validate_command_shape_transform,
+    .Set_Shape_Orientation = validate_command_shape_orientation,
     .Set_Shape_Color = validate_command_shape_style,
     .Set_Shape_Active_Color = validate_command_shape_style,
     .Set_Shape_Brush = validate_command_shape_style,
@@ -75,6 +76,7 @@ Scene_Command_Applier :: #type proc(
 //   makes the table exhaustive at compile time.
 SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Position = apply_set_shape_position,
+    .Set_Shape_Orientation = apply_set_shape_orientation,
     .Set_Shape_Color = apply_set_shape_color,
     .Set_Shape_Active_Color = apply_set_shape_active_color,
     .Set_Shape_Brush = apply_set_shape_brush,
@@ -111,6 +113,7 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
 
 SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Shape_Position = .Point_Position_Committed,
+    .Set_Shape_Orientation = .Shape_Orientation_Committed,
     .Set_Shape_Color = .Point_Style_Committed,
     .Set_Shape_Active_Color = .Point_Style_Committed,
     .Set_Shape_Brush = .Point_Style_Committed,
@@ -165,6 +168,7 @@ capture_animation_query_snapshot :: proc(
     world := &state^.shape_world
     snapshot^.shapes.registry = world^.registry
     snapshot^.shapes.transforms = world^.transforms
+    snapshot^.shapes.orientations = world^.orientations
     snapshot^.shapes.arcs = world^.arcs
     snapshot^.shapes.trochoids = world^.trochoids
     snapshot^.shapes.trochoid_tools = world^.trochoid_tools
@@ -308,7 +312,10 @@ validate_command_animation_reveal :: proc(
 validate_command_shape_transform :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    return found && shapemodel.shape_component_contains(
+    return found && shapemodel.shape_scalar_is_finite(command.position.x) &&
+        shapemodel.shape_scalar_is_finite(command.position.y) &&
+        shapemodel.shape_scalar_is_finite(command.position.z) &&
+        shapemodel.shape_component_contains(
         &state^.shape_world.transforms, &state^.shape_world.registry, entity)
 }
 
@@ -420,10 +427,7 @@ validate_command_shape_cycloid :: proc(
         !shapemodel.shape_cycloid_is_valid(command^.cycloid) {
         return false
     }
-    line, line_ok := command_cycloid_line(state, entity, .Cycloid)
-    return line_ok && shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
-        command^.cycloid.rolling_radius, command^.cycloid.parameter_start,
-        command^.cycloid.parameter_finish)
+    return true
 }
 
 // Validate one Cycloid reveal frontier against its directed domain.
@@ -637,7 +641,11 @@ scene_command_batch_tool_contact_count :: proc(batch: ^Scene_Command_Batch) -> i
 // Apply one validated packed-entity transform mutation.
 apply_set_shape_position :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    _ = shape_set_position(state, command^.entity, command^.position)
+    entity := shapemodel.shape_entity_unpack(command.entity)
+    value, found := shapemodel.shape_component_get_mut(
+        &state.shape_world.transforms, &state.shape_world.registry, entity)
+    assert(found)
+    value.position = command.position
 }
 
 // Apply one packed tool transform mutation with its owner-side effects.
@@ -716,10 +724,13 @@ apply_set_trochoid_tool_parameter :: proc(
 // Apply one validated complete Cycloid scalar mutation.
 apply_set_shape_cycloid :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    value := command^.cycloid
-    _ = shape_set_cycloid(state, command^.entity, {value.rolling_radius,
-        value.tracer_distance, value.tracer_phase, value.parameter_start,
-        value.parameter_finish, value.draw_parameter})
+    entity := shapemodel.shape_entity_unpack(command.entity)
+    current, found := shapemodel.shape_component_get_mut(
+        &state.shape_world.cycloids, &state.shape_world.registry, entity)
+    assert(found)
+    previous := current^
+    current^ = command.cycloid
+    bridge_cycloid_preserve_previous(current, previous)
 }
 
 // Apply one validated Cycloid reveal-frontier mutation.
@@ -859,6 +870,9 @@ validate_scene_command_batch :: proc(
         if validator == nil || !validator(state, command) {
             return false
         }
+    }
+    if !scene_command_batch_planes_valid(state, batch) {
+        return false
     }
     contact_count := scene_command_batch_tool_contact_count(batch)
     return contact_count == 0 || particles.can_queue_dust_tool_contacts(
@@ -1098,7 +1112,7 @@ scene_command_evidence :: proc(
     #partial switch command^.kind {
     case .Emit_Trailing_Particle:
         payload.counts.first = 1
-    case .Set_Shape_Parabola, .Set_Shape_Parabola_Frontier,
+    case .Set_Shape_Orientation, .Set_Shape_Parabola, .Set_Shape_Parabola_Frontier,
         .Set_Shape_Hyperbola, .Set_Shape_Hyperbola_Frontier,
         .Set_Parabola_Tool_Geometry, .Set_Parabola_Tool_Parameter,
         .Set_Hyperbola_Tool_Geometry, .Set_Hyperbola_Tool_Parameter:

@@ -34,7 +34,8 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     limacon!, convex_limacon!, dimpled_limacon!, epitrochoid!, hypotrochoid!,
     hypocycloid!, deltoid!, astroid!, five_hypocycloid!,
     eleven_half_hypocycloid!, nephroid!, three_dimple_epitrochoid!,
-    five_point_hypotrochoid!, parabola!, hyperbola!, rotate_z!,
+    five_point_hypotrochoid!, parabola!, hyperbola!,
+    translate!, rotate!, rotate_x!, rotate_y!, rotate_z!, reflect!,
     highlight_pen!, highlight_compass!,
     translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!,
     rotate_points_z!, reflect2d_points!, reflect2d_points_x_axis!,
@@ -186,25 +187,6 @@ struct HyperbolaPayload <: ReplDrawPayload
     brush::Float32
 end
 
-mutable struct AnalyticRotationPayload <: ReplDrawPayload
-    kind::Symbol
-    host_id::UInt64
-    pivot::Vector{Float32}
-    theta::Float32
-    center::Vector{Float32}
-    geometry::Union{
-        Nothing,
-        OdinJuliaBridge.BridgeArcGeometry,
-        OdinJuliaBridge.BridgeTrochoidGeometry,
-        OdinJuliaBridge.BridgeParabolaGeometry,
-        OdinJuliaBridge.BridgeHyperbolaGeometry}
-end
-
-"""Commit an analytic rotation at its exact requested endpoint."""
-finalize_payload!(
-    state_ptr::Ptr{Cvoid}, payload::AnalyticRotationPayload) =
-    render_payload!(state_ptr, 1f0, 1f0, payload)
-
 struct PenHighlightPayload <: ReplDrawPayload
     start_pos::Vector{Float32}
     end_pos::Vector{Float32}
@@ -233,16 +215,20 @@ struct RotateSpec <: TransformSpec
     theta::Float32
 end
 
-struct Reflect2DSpec <: TransformSpec
-    line_a::Vector{Float32}
-    line_b::Vector{Float32}
-end
-
-struct TransformPayload <: ReplDrawPayload
+mutable struct TransformPayload <: ReplDrawPayload
     point_ids::Vector{UInt64}
     start_positions::Vector{Vector{Float32}}
     spec::TransformSpec
+    host_id::UInt64
+    expected_kinds::Tuple{Vararg{Int32}}
+    oriented::Bool
+    start_orientation::NTuple{4,Float32}
+    reflection::Bool
 end
+
+"""Build an explicit defining-point edit without a separate shape pose."""
+point_transform_payload(ids, starts, spec) = TransformPayload(
+    ids, starts, spec, UInt64(0), (), false, (0f0, 0f0, 0f0, 1f0), false)
 
 """Copied visibility intent with bounded per-tick progress for large ordered clears."""
 mutable struct VisibilityPayload <: ReplDrawPayload
@@ -486,6 +472,18 @@ end
 """Install user-facing rotation helpers bound to one Terminal generation."""
 function install_rotation_helpers!(context_module::Module)::Nothing
     Core.eval(context_module, quote
+        """Queue world-space translation of a typed geometry shape."""
+        translate!(args...; kwargs...) = EuclidRepl.translate!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Queue rotation about a directed world-space axis line."""
+        rotate!(args...; kwargs...) = EuclidRepl.rotate!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Queue right-handed world-X rotation through an explicit pivot."""
+        rotate_x!(args...; kwargs...) = EuclidRepl.rotate_x!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Queue right-handed world-Y rotation through an explicit pivot."""
+        rotate_y!(args...; kwargs...) = EuclidRepl.rotate_y!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
         """Translate managed points."""
         translate_points!(args...; kwargs...) = EuclidRepl.translate_points!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
@@ -501,7 +499,7 @@ function install_rotation_helpers!(context_module::Module)::Nothing
         """Rotate managed points about the z axis."""
         rotate_points_z!(args...; kwargs...) = EuclidRepl.rotate_points_z!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
-        """Rotate a typed shape in its supported board-plane representation."""
+        """Queue right-handed world-Z rotation through an explicit pivot."""
         rotate_z!(args...; kwargs...) = EuclidRepl.rotate_z!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
     end)
@@ -511,6 +509,9 @@ end
 """Install user-facing reflection helpers bound to one Terminal generation."""
 function install_reflection_helpers!(context_module::Module)::Nothing
     Core.eval(context_module, quote
+        """Queue a planar reflection as one directed world-axis half-turn."""
+        reflect!(args...; kwargs...) = EuclidRepl.reflect!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
         """Reflect points across an arbitrary 2D line."""
         reflect2d_points!(args...; kwargs...) = EuclidRepl.reflect2d_points!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
@@ -717,15 +718,6 @@ function validated_start_positions(start_positions)
     return positions
 end
 
-"""Validate matching lengths for point ids and start positions."""
-function validate_transform_batch_lengths(
-    point_ids::Vector{UInt64}, start_positions::Vector{Vector{Float32}})
-
-    if length(point_ids) != length(start_positions)
-        throw(ArgumentError("point_ids and start_positions must have equal length"))
-    end
-end
-
 """Rotate a point about the world-Z line through a pivot without changing z."""
 function rotated_xy_position(
     position::AbstractVector{<:Real}, pivot::AbstractVector{<:Real}, theta::Real)
@@ -736,72 +728,6 @@ function rotated_xy_position(
         pivot[1] + dx * cosine - dy * sine,
         pivot[2] + dx * sine + dy * cosine,
         position[3]]
-end
-
-"""Rotate an arc's in-plane parameterization after its center moves."""
-function rotate_analytic_geometry!(
-    state_ptr::Ptr{Cvoid}, payload::AnalyticRotationPayload, theta::Float32,
-    geometry::OdinJuliaBridge.BridgeArcGeometry)
-    payload.kind == :arc || error("Terminal analytic rotation has an invalid arc kind")
-    checked_terminal_status(OdinJuliaBridge.set_arc_geometry(state_ptr,
-        payload.host_id, geometry.radius, geometry.start_theta + theta,
-        geometry.sweep_theta), "arc rotation")
-end
-
-"""Rotate a trochoid's in-plane parameterization without changing its frontier."""
-function rotate_analytic_geometry!(
-    state_ptr::Ptr{Cvoid}, payload::AnalyticRotationPayload, theta::Float32,
-    geometry::OdinJuliaBridge.BridgeTrochoidGeometry)
-    payload.kind == :trochoid ||
-        error("Terminal analytic rotation has an invalid trochoid kind")
-    checked_terminal_status(OdinJuliaBridge.set_trochoid_geometry(
-        state_ptr, payload.host_id; mode=geometry.mode,
-        fixed_radius=geometry.fixed_radius, rolling_radius=geometry.rolling_radius,
-        tracer_distance=geometry.tracer_distance, tracer_phase=geometry.tracer_phase,
-        rotation=geometry.rotation + theta, parameter_start=geometry.parameter_start,
-        parameter_finish=geometry.parameter_finish,
-        draw_parameter=geometry.draw_parameter), "trochoid rotation")
-end
-
-"""Rotate a parabola's in-plane parameterization without changing its frontier."""
-function rotate_analytic_geometry!(
-    state_ptr::Ptr{Cvoid}, payload::AnalyticRotationPayload, theta::Float32,
-    geometry::OdinJuliaBridge.BridgeParabolaGeometry)
-    payload.kind == :parabola ||
-        error("Terminal analytic rotation has an invalid parabola kind")
-    checked_terminal_status(OdinJuliaBridge.set_parabola_geometry(
-        state_ptr, payload.host_id; focal_distance=geometry.focal_distance,
-        rotation=geometry.rotation + theta, parameter_start=geometry.parameter_start,
-        parameter_finish=geometry.parameter_finish,
-        draw_parameter=geometry.draw_parameter), "parabola rotation")
-end
-
-"""Rotate a hyperbola's in-plane parameterization without changing its frontier."""
-function rotate_analytic_geometry!(
-    state_ptr::Ptr{Cvoid}, payload::AnalyticRotationPayload, theta::Float32,
-    geometry::OdinJuliaBridge.BridgeHyperbolaGeometry)
-    payload.kind == :hyperbola ||
-        error("Terminal analytic rotation has an invalid hyperbola kind")
-    checked_terminal_status(OdinJuliaBridge.set_hyperbola_geometry(
-        state_ptr, payload.host_id; semimajor=geometry.semimajor,
-        semiminor=geometry.semiminor, rotation=geometry.rotation + theta,
-        parameter_start=geometry.parameter_start,
-        parameter_finish=geometry.parameter_finish,
-        draw_parameter=geometry.draw_parameter), "hyperbola rotation")
-end
-
-"""Render a queued analytic planar rotation while preserving native geometry."""
-function render_payload!(
-    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real,
-    payload::AnalyticRotationPayload)
-    geometry = payload.geometry
-    geometry === nothing && error("Terminal analytic rotation was not initialized")
-    theta = payload.theta * clamp(Float32(elapsed / duration), 0f0, 1f0)
-    position = rotated_xy_position(payload.center, payload.pivot, theta)
-    checked_terminal_status(OdinJuliaBridge.set_point_position_status(
-        state_ptr, payload.host_id, position[1], position[2], position[3]),
-        "analytic center motion")
-    rotate_analytic_geometry!(state_ptr, payload, theta, geometry)
 end
 
 """Compute a point on the XY circle at `theta`, keeping center z."""
@@ -838,6 +764,12 @@ function validated_polygon_vertices(vertices)
         for index in eachindex(points))
     isfinite(twice_area) && !iszero(twice_area) ||
         throw(ArgumentError("polygon vertices must enclose nonzero area"))
+    validate_polygon_edge_intersections(points)
+    return points
+end
+
+"""Reject crossings between nonadjacent edges of an ordered polygon."""
+function validate_polygon_edge_intersections(points)
     for first_edge in eachindex(points)
         first_next = mod1(first_edge + 1, length(points))
         for second_edge in (first_edge + 1):length(points)
@@ -849,7 +781,7 @@ function validated_polygon_vertices(vertices)
                 throw(ArgumentError("polygon edges must not intersect"))
         end
     end
-    return points
+    return nothing
 end
 
 """Return a circle-region constructor's validated planar geometry."""
@@ -945,11 +877,7 @@ end
 
 """Apply final visible state for a transform payload at completed progress."""
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
-    for (index, point_id) in pairs(payload.point_ids)
-        start_position = payload.start_positions[index]
-        render_transform_spec!(state_ptr, 1f0, 1f0, point_id,
-            start_position, payload.spec)
-    end
+    render_rigid_transform!(state_ptr, 1f0, 1f0, payload, payload.spec)
 end
 
 """Render one frame of the active payload animation at elapsed draw time."""
@@ -1268,82 +1196,10 @@ function render_compass_highlight_pass!(
         payload.center, start_pos, angle_theta, payload.radius, payload.color)
 end
 
-"""Render one frame of batch point translation."""
-function render_transform_spec!(
-    state_ptr::Ptr{Cvoid},
-    elapsed::Real,
-    duration::Real,
-    point_id::UInt64,
-    start_position::AbstractVector{<:Real},
-    spec::TranslateSpec)
-
-    result = EuclidAnimations.transform_translate_point(
-        state_ptr,
-        point_id,
-        start_position,
-        spec.displacement,
-        elapsed,
-        duration)
-    result == OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        error("Terminal translation failed with status $result")
-end
-
-"""Render one frame of batch point rotation."""
-function render_transform_spec!(
-    state_ptr::Ptr{Cvoid},
-    elapsed::Real,
-    duration::Real,
-    point_id::UInt64,
-    start_position::AbstractVector{<:Real},
-    spec::RotateSpec)
-
-    result = EuclidAnimations.transform_rotate_point(
-        state_ptr,
-        point_id,
-        start_position,
-        spec.axis_a,
-        spec.axis_b,
-        spec.theta,
-        elapsed,
-        duration)
-    result == OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        error("Terminal rotation failed with status $result")
-end
-
-"""Render one frame of batch point 2D reflection."""
-function render_transform_spec!(
-    state_ptr::Ptr{Cvoid},
-    elapsed::Real,
-    duration::Real,
-    point_id::UInt64,
-    start_position::AbstractVector{<:Real},
-    spec::Reflect2DSpec)
-
-    result = EuclidAnimations.transform_reflect2d_point(
-        state_ptr,
-        point_id,
-        start_position,
-        spec.line_a,
-        spec.line_b,
-        elapsed,
-        duration)
-    result == OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        error("Terminal reflection failed with status $result")
-end
-
 """Render one frame of the active payload animation at elapsed draw time."""
 function render_payload!(
     state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::TransformPayload)
-    for (index, point_id) in pairs(payload.point_ids)
-        start_position = payload.start_positions[index]
-        render_transform_spec!(
-            state_ptr,
-            elapsed,
-            duration,
-            point_id,
-            start_position,
-            payload.spec)
-    end
+    render_rigid_transform!(state_ptr, elapsed, duration, payload, payload.spec)
 end
 
 """Finalize active job visibility and hide the tool used for that job."""
@@ -1359,10 +1215,9 @@ end
 """Retire the active apparatus without completing interrupted geometry."""
 function retire_job_tool!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     state_ptr == C_NULL && return nothing
-    if job.kind == :point || job.kind == :line || job.kind == :polygon ||
-        job.kind == :highlight_pen
+    if job.kind in (:point, :line, :polygon, :highlight_pen)
         OdinJuliaBridge.hide_pen(state_ptr)
-    elseif job.kind == :circle || job.kind == :highlight_compass
+    elseif job.kind in (:circle, :highlight_compass)
         OdinJuliaBridge.hide_compass(state_ptr)
     elseif job.kind == :cycloid
         checked_terminal_status(OdinJuliaBridge.hide_cycloid_tool(state_ptr),
@@ -1425,8 +1280,6 @@ construction_target(payload::CycloidPayload, id::UInt64) =
     id == payload.host_id || id in payload.endpoint_ids
 construction_target(payload::Union{TrochoidPayload,ParabolaPayload,HyperbolaPayload},
     id::UInt64) = payload.host_id == id
-construction_target(payload::AnalyticRotationPayload, id::UInt64) =
-    payload.host_id == id
 construction_target(_::ReplDrawPayload, _::UInt64) = false
 
 """Recognize admitted native reservations that may not exist in this tick's older snapshot."""
@@ -1457,6 +1310,11 @@ end
 
 """Revalidate native targets and sample motion starts once, at activation."""
 function activate_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
+    if payload.host_id != 0
+        view = validated_target(state_ptr, payload.host_id)
+        view.point_type in payload.expected_kinds ||
+            throw(ArgumentError("Terminal transform target has the wrong geometry kind"))
+    end
     for (index, id) in pairs(payload.point_ids)
         view = validated_target(state_ptr, id)
         view.has_position != 0 || error("Terminal motion target $id lost its position")
@@ -1464,6 +1322,12 @@ function activate_payload!(state_ptr::Ptr{Cvoid}, payload::TransformPayload)
             payload.start_positions[index][component] = view.pos[component]
         end
     end
+    if payload.oriented
+        query = OdinJuliaBridge.get_shape_orientation(state_ptr, payload.host_id)
+        checked_terminal_status(query.status, "shape orientation query")
+        payload.start_orientation = query.orientation
+    end
+    payload.reflection && validate_reflection_plane(payload)
 end
 
 """Revalidate a construction host immediately before its first frame."""
@@ -1546,35 +1410,6 @@ function activate_payload!(state_ptr::Ptr{Cvoid}, payload::HyperbolaPayload)
         parameter=payload.parameter_start,
         rail_half_length=payload.rail_half_length)
     checked_terminal_status(status, "hyperbola tool setup")
-end
-
-"""Snapshot current center and analytic parameters when the rotation activates."""
-function activate_payload!(
-    state_ptr::Ptr{Cvoid}, payload::AnalyticRotationPayload)
-    view = validated_target(state_ptr, payload.host_id)
-    view.has_position != 0 ||
-        error("Terminal analytic rotation target has no position")
-    payload.center = Float32[view.pos...]
-    if payload.kind == :arc
-        query = OdinJuliaBridge.get_arc_geometry(state_ptr, payload.host_id)
-        checked_terminal_status(query.status, "arc geometry query")
-        payload.geometry = query.arc
-    elseif payload.kind == :trochoid
-        query = OdinJuliaBridge.get_trochoid_geometry(state_ptr, payload.host_id)
-        checked_terminal_status(query.status, "trochoid geometry query")
-        payload.geometry = query.geometry
-    else
-        parabola = OdinJuliaBridge.get_parabola_geometry(state_ptr, payload.host_id)
-        if parabola.status == OdinJuliaBridge.BRIDGE_STATUS_OK
-            payload.kind = :parabola
-            payload.geometry = parabola.geometry
-        else
-            hyperbola = OdinJuliaBridge.get_hyperbola_geometry(state_ptr, payload.host_id)
-            checked_terminal_status(hyperbola.status, "conic geometry query")
-            payload.kind = :hyperbola
-            payload.geometry = hyperbola.geometry
-        end
-    end
 end
 
 """Revalidate every visibility target before emitting any commands."""
@@ -2116,7 +1951,8 @@ end
 function queue_circle_region!(
     runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, first_center,
     first_radius::Real, second_center, second_radius::Real,
-    kind::Symbol, constructor; color=DEFAULT_COLOR, duration::Real=DEFAULT_REGION_DURATION)
+    kind::Symbol, constructor;
+    color=DEFAULT_COLOR, duration::Real=DEFAULT_REGION_DURATION)
     first, second = validated_circle_region(
         first_center, first_radius, second_center, second_radius)
     reveal_duration = validated_duration(duration)
@@ -2599,8 +2435,8 @@ end
 """
 Queue translation of at most 16 distinct points from their activation-time positions.
 
-`start_positions` is copied and validated for compatibility, but actual starts
-are sampled after preceding actions finish. Returned IDs do not alias queued inputs.
+Actual starts are sampled after preceding actions finish.
+Returned IDs do not alias queued inputs.
 
 Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
@@ -2609,18 +2445,16 @@ function translate_points!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
-    start_positions,
     displacement::AbstractVector{<:Real};
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     ids = validated_point_ids(point_ids)
-    starts = validated_start_positions(start_positions)
-    validate_transform_batch_lengths(ids, starts)
+    starts = [Float32[0, 0, 0] for _ in ids]
     displacement3 = vec3("displacement", displacement)
     draw_duration = validated_duration(duration)
     validate_transform_targets(host_runtime, state_ptr, ids)
 
-    payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
+    payload = point_transform_payload(ids, starts, TranslateSpec(displacement3))
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return copy(ids)
@@ -2629,8 +2463,7 @@ end
 """
 Animate rotation of multiple points around a shared 3D axis line.
 
-Queue at most 16 distinct targets. `start_positions` remains validated for
-compatibility; actual starts are sampled at activation, not submission.
+Queue at most 16 distinct targets; actual starts are sampled at activation.
 Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
@@ -2638,15 +2471,13 @@ function rotate_points!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
-    start_positions,
     axis_point_a::AbstractVector{<:Real},
     axis_point_b::AbstractVector{<:Real},
     theta::Real;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     ids = validated_point_ids(point_ids)
-    starts = validated_start_positions(start_positions)
-    validate_transform_batch_lengths(ids, starts)
+    starts = [Float32[0, 0, 0] for _ in ids]
     axis_a = vec3("axis_point_a", axis_point_a)
     axis_b = vec3("axis_point_b", axis_point_b)
     draw_duration = validated_duration(duration)
@@ -2655,7 +2486,7 @@ function rotate_points!(
         throw(ArgumentError("rotation axis must have distinct endpoints"))
     validate_transform_targets(host_runtime, state_ptr, ids)
 
-    payload = TransformPayload(
+    payload = point_transform_payload(
         ids,
         starts,
         RotateSpec(axis_a, axis_b, theta32))
@@ -2669,7 +2500,6 @@ function rotate_points_x!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
-    start_positions,
     theta::Real;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
@@ -2677,7 +2507,6 @@ function rotate_points_x!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
         theta;
@@ -2689,7 +2518,6 @@ function rotate_points_y!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
-    start_positions,
     theta::Real;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
@@ -2697,7 +2525,6 @@ function rotate_points_y!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0],
         theta;
@@ -2709,7 +2536,6 @@ function rotate_points_z!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
-    start_positions,
     theta::Real;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
@@ -2717,117 +2543,19 @@ function rotate_points_z!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 0f0, 1f0],
         theta;
         duration=duration)
 end
 
-"""Queue a coordinated defining-point rotation about a supplied world-Z line."""
-function rotate_defining_points_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, point_ids,
-    theta::Real, pivot::AbstractVector{<:Real}; duration::Real=DEFAULT_TRANSFORM_DURATION)
-    ids = validated_point_ids(point_ids)
-    pivot3 = vec3("pivot", pivot)
-    starts = [Float32[0f0, 0f0, 0f0] for _ in ids]
-    axis_end = Float32[pivot3[1], pivot3[2], pivot3[3] + 1f0]
-    return rotate_points!(runtime, state_ptr, ids, starts, pivot3, axis_end,
-        theta; duration)
-end
-
-"""Queue a supported planar rotation for a shape's defining points."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeLine, theta::Real;
-    pivot::AbstractVector{<:Real}, duration::Real=DEFAULT_TRANSFORM_DURATION)
-    rotate_defining_points_z!(runtime, state_ptr, line_endpoint_ids(shape),
-        theta, pivot; duration)
-end
-
-"""Queue a supported planar rotation for a polygon's ordered defining points."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::Union{OdinJuliaBridge.BridgeShapeTriangle,
-        OdinJuliaBridge.BridgeShapeSquare,OdinJuliaBridge.BridgeShapePentagon},
-    theta::Real; pivot::AbstractVector{<:Real},
-    duration::Real=DEFAULT_TRANSFORM_DURATION)
-    rotate_defining_points_z!(runtime, state_ptr, polygon_vertex_ids(shape),
-        theta, pivot; duration)
-end
-
-"""Queue a planar rotation of both defining centers of a lens or lune."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeCircleRegion, theta::Real;
-    pivot::AbstractVector{<:Real}, duration::Real=DEFAULT_TRANSFORM_DURATION)
-    rotate_defining_points_z!(runtime, state_ptr,
-        circle_region_center_ids(shape), theta, pivot; duration)
-end
-
-"""Queue a planar rotation of both defining rail endpoints of a Cycloid."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeCycloidResult, theta::Real;
-    pivot::AbstractVector{<:Real}, duration::Real=DEFAULT_TRANSFORM_DURATION)
-    shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        throw(ArgumentError("Cycloid result is not successful"))
-    rotate_defining_points_z!(runtime, state_ptr,
-        (shape.first_id, shape.second_id), theta, pivot; duration)
-end
-
-"""Admit an activation-sampled planar rotation of one analytic shape host."""
-function queue_analytic_rotation!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, status::Int32,
-    host_id::UInt64, kind::Symbol, theta::Real, pivot, duration::Real)
-    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
-        throw(ArgumentError("analytic shape result is not successful"))
-    session = ensure_session!(runtime)
-    host_id in session.managed_host_ids ||
-        throw(ArgumentError("rotate_z! requires a Terminal-managed shape"))
-    theta32 = validated_angle_theta(theta)
-    pivot3 = vec3("pivot", pivot)
-    draw_duration = validated_duration(duration)
-    require_action_capacity(session)
-    payload = AnalyticRotationPayload(
-        kind, host_id, pivot3, theta32, Float32[0f0, 0f0, 0f0], nothing)
-    start_job!(runtime, state_ptr,
-        ReplDrawJob(:analytic_rotation, draw_duration, 0f0, payload))
-    return host_id
-end
-
-"""Rotate an arc or sector in its board plane, preserving radius and sweep."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeCircle, theta::Real;
-    pivot::AbstractVector{<:Real}, duration::Real=DEFAULT_TRANSFORM_DURATION)
-    queue_analytic_rotation!(runtime, state_ptr, shape.status, shape.host_id,
-        :arc, theta, pivot, duration)
-end
-
-"""Rotate a trochoid family in its board plane without changing its parameterization."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeTrochoidResult, theta::Real;
-    pivot::AbstractVector{<:Real}, duration::Real=DEFAULT_TRANSFORM_DURATION)
-    queue_analytic_rotation!(runtime, state_ptr, shape.status, shape.host_id,
-        :trochoid, theta, pivot, duration)
-end
-
-"""Rotate a parabola or hyperbola in its board plane without changing its frontier."""
-function rotate_z!(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeConicResult, theta::Real;
-    pivot::AbstractVector{<:Real}, duration::Real=DEFAULT_TRANSFORM_DURATION)
-    queue_analytic_rotation!(runtime, state_ptr, shape.status, shape.host_id,
-        :conic, theta, pivot, duration)
-end
+include("repl_transforms.jl")
 
 """
 Animate 2D reflection of multiple points across one XY line (`z=0`).
 
 Queue at most 16 distinct targets, sampling their starts at activation.
-`start_positions` remains accepted and validated for signature compatibility.
+All points share the directed line's right-handed +pi rotation path.
 Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
@@ -2835,14 +2563,12 @@ function reflect2d_points!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
-    start_positions,
     line_point_a::AbstractVector{<:Real},
     line_point_b::AbstractVector{<:Real};
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     ids = validated_point_ids(point_ids)
-    starts = validated_start_positions(start_positions)
-    validate_transform_batch_lengths(ids, starts)
+    starts = [Float32[0, 0, 0] for _ in ids]
     line_a = vec3("line_point_a", line_point_a)
     line_b = vec3("line_point_b", line_point_b)
     draw_duration = validated_duration(duration)
@@ -2853,7 +2579,9 @@ function reflect2d_points!(
         throw(ArgumentError("reflection line must have distinct XY endpoints"))
     validate_transform_targets(host_runtime, state_ptr, ids)
 
-    payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
+    payload = point_transform_payload(
+        ids, starts, RotateSpec(line_a, line_b, Float32(pi)))
+    payload.reflection = true
     job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return copy(ids)
@@ -2863,15 +2591,13 @@ end
 function reflect2d_points_x_axis!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
-    point_ids,
-    start_positions;
+    point_ids;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0];
         duration=duration)
@@ -2881,15 +2607,13 @@ end
 function reflect2d_points_y_axis!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
-    point_ids,
-    start_positions;
+    point_ids;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[0f0, 1f0, 0f0];
         duration=duration)
@@ -2899,15 +2623,13 @@ end
 function reflect2d_points_diag_pos!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
-    point_ids,
-    start_positions;
+    point_ids;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 1f0, 0f0];
         duration=duration)
@@ -2917,15 +2639,13 @@ end
 function reflect2d_points_diag_neg!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
-    point_ids,
-    start_positions;
+    point_ids;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
         host_runtime,
         state_ptr,
         point_ids,
-        start_positions,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, -1f0, 0f0];
         duration=duration)

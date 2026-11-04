@@ -58,6 +58,13 @@ Shape_Transform :: struct {
     previous_position: Vector3,
 }
 
+// Hold unit local-to-world rotations; world rotations compose on the left.
+// Identity is 1, not zero; the bridge transports explicit XYZW components.
+Shape_Orientation :: struct {
+    orientation: quaternion128,
+    previous_orientation: quaternion128,
+}
+
 // Hold current and previous parameters for one mutable planar arc.
 Shape_Arc :: struct {
     radius: f32,
@@ -583,6 +590,7 @@ Shape_World :: struct {
     draw_cache: Shapes_Draw_Cache,
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
+    orientations: Shape_Component_Set(Shape_Orientation),
     arcs: Shape_Component_Set(Shape_Arc),
     trochoids: Shape_Component_Set(Shape_Trochoid),
     trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
@@ -1233,6 +1241,7 @@ shape_world_create_entity :: proc(
 // Detect any frozen store before baseline publication can mutate world membership.
 shape_world_has_frozen_baseline_storage :: proc(world: ^Shape_World) -> bool {
     return world.registry.baseline_frozen || world.transforms.baseline_frozen ||
+        world.orientations.baseline_frozen ||
         world.arcs.baseline_frozen || world.trochoids.baseline_frozen ||
         world.trochoid_tools.baseline_frozen ||
         world.cycloids.baseline_frozen || world.cycloid_tools.baseline_frozen ||
@@ -1254,6 +1263,7 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     }
     _ = shape_registry_freeze_baseline(&world.registry)
     _ = shape_component_freeze_baseline(&world.transforms)
+    _ = shape_component_freeze_baseline(&world.orientations)
     _ = shape_component_freeze_baseline(&world.arcs)
     _ = shape_component_freeze_baseline(&world.trochoids)
     _ = shape_component_freeze_baseline(&world.trochoid_tools)
@@ -1276,25 +1286,32 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     return .Ok
 }
 
+// Require every owning store to have a baseline before retiring animation suffixes.
+shape_world_baseline_is_frozen :: proc(world: ^Shape_World) -> bool {
+    return world.registry.baseline_frozen && world.transforms.baseline_frozen &&
+        world.orientations.baseline_frozen &&
+        world.arcs.baseline_frozen && world.trochoids.baseline_frozen &&
+        world.trochoid_tools.baseline_frozen &&
+        world.cycloids.baseline_frozen && world.cycloid_tools.baseline_frozen &&
+        world.parabolas.baseline_frozen && world.hyperbolas.baseline_frozen &&
+        world.parabola_tools.baseline_frozen && world.hyperbola_tools.baseline_frozen &&
+        world.render_styles.baseline_frozen && world.active_features.baseline_frozen &&
+        world.geometries.baseline_frozen && world.labels.baseline_frozen &&
+        world.vertex_references.baseline_frozen && world.label_store.baseline_frozen &&
+        world.constraints.baseline_frozen
+}
+
 // Retire every component suffix before invalidating animation entity identities.
 shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status {
     if world == nil {
         return .Invalid_Argument
     }
-    if !world.registry.baseline_frozen || !world.transforms.baseline_frozen ||
-        !world.arcs.baseline_frozen || !world.trochoids.baseline_frozen ||
-        !world.trochoid_tools.baseline_frozen ||
-        !world.cycloids.baseline_frozen || !world.cycloid_tools.baseline_frozen ||
-        !world.parabolas.baseline_frozen || !world.hyperbolas.baseline_frozen ||
-        !world.parabola_tools.baseline_frozen || !world.hyperbola_tools.baseline_frozen ||
-        !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
-        !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
-        !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen ||
-        !world.constraints.baseline_frozen {
+    if !shape_world_baseline_is_frozen(world) {
         return .Illegal_State
     }
     shape_world_invalidate_draw_cache(world)
     _ = shape_component_rewind_animation(&world.transforms)
+    _ = shape_component_rewind_animation(&world.orientations)
     _ = shape_component_rewind_animation(&world.arcs)
     _ = shape_component_rewind_animation(&world.trochoids)
     _ = shape_component_rewind_animation(&world.trochoid_tools)

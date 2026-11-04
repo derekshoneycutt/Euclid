@@ -7,7 +7,6 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Retained terminals
 - Terminal animation recording
 - Terminal exercises
 - Animation builder
@@ -16,7 +15,6 @@ there are some things that do need to start early.
 -----------------
 
 - UI animation polish
-- Updated clipping where appropriate
 
 -----------------
 
@@ -80,6 +78,15 @@ Core Content (>260 animations; 119 complete):
   - [X] Section 6 (8 animations)
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
+- [ ] Tarski Chap 1-4 Intro to Logic (9+; 2 prelim complete, to be redone generally tho)
+  - [X] And
+  - [X] Not
+  - [ ] Or
+  - [ ] If
+  - [ ] Iff
+  - [ ] Existence
+  - [ ] ForAll
+  - [ ] Sets
 - [ ] Tarski (39+ animations)
   - [ ] Between-ness
   - [ ] Axiom 1-4
@@ -93,15 +100,9 @@ Core Content (>260 animations; 119 complete):
   - [ ] Axiom 12-19
   - [ ] Axiom 20, 20_1
   - [ ] Axiom 21-24
-- [ ] Logic (9+; 2 complete)
-  - [X] And
-  - [ ] Or
-  - [X] Not
-  - [ ] If
-  - [ ] Iff
-  - [ ] Existence
-  - [ ] ForAll
-  - [ ] Sets
+- [ ] Veblen Projective Geometry Chp 1 (tbd)
+- [ ] Scott Analytic Geometry Chp 1 (tbd)
+- [ ] Burnside Chp 1-4 (tbd)
 - [ ] Algebraic groups (14+ animations; 7 complete)
   - [ ] Definitions (14 animations)
     - [X] $\mathbb{Z}_2$ (irregular poly reflecting about line; special case of $C_n$)
@@ -229,9 +230,6 @@ General features:
   - [X] Julia syntax highlighting
   - [X] History explorer, Julia-familiar
   - [X] Complete Terminal shape suite
-  - [ ] Retained Terminals (runtime-only, as children in the trees of Terminal
-     that can be navigated away from and returned to with persisted internal state;
-     exit cleans REPL state and removes from tree)
   - [ ] Terminal animation recorder w/ playback & save (e.g. start_recording! ...
      end_recording! ... replay_recording!)
   - [ ] REPL-focused exercises
@@ -269,7 +267,6 @@ Final tasks:
   - [X] Core expand/collapse animations
   - [X] UI Shadows
   - [X] Major view text animations
-  - [ ] Update clipping for better 3D feelings on things past pen w/ 1 plane
   - [ ] Extended overall look/feel animations
   - [ ] Animation movement speed adjustments (linear vs exponential vs whatever)
 - [ ] Semantic trace and deterministic animation test harness (default off)
@@ -343,6 +340,9 @@ Core Features:
 - More LaTeX support
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
+- Retained Terminals (runtime-only, as children in the trees of Terminal
+  that can be navigated away from and returned to with persisted internal state;
+  exit cleans REPL state and removes from tree)
 - Ip-2-ip sharing protocol
 - Transformations
   - Scaling

@@ -49,6 +49,16 @@ The final tables and estimates are unchanged.
 ## Runtime Scenarios
 
 Scenarios are bounded JSONL programs in [`tools/scenarios/`](../../../tools/scenarios/).
+
+Unified shape motion is covered by
+[`terminal-world-transforms-acceptance`](../../../tools/scenarios/terminal-world-transforms-acceptance.jsonl)
+(tilted arcs, sectors, lenses/lunes, polygons, inverse motion and directed reflection)
+and [`terminal-world-curves-acceptance`](../../../tools/scenarios/terminal-world-curves-acceptance.jsonl)
+(vertical/oblique cycloids, ellipses, conics, departure and allocation baselines).
+Native tests assert rigid evaluation equivariance, orientation transport/lifetime,
+atomic final-plane validation, and split-triangle area/winding conservation.
+Julia tests compare every typed family against an independent Rodrigues oracle,
+including signed full-turn paths and noncommuting queued rotations.
 Use them when a behavioral claim crosses ordinary application boundaries—for example,
 when a request must be correlated with a later event, a frame must be captured after a
 state change, or shutdown evidence matters.

@@ -117,6 +117,7 @@ Kind :: enum u16 {
     Parabola_Frontier_Committed = 191,
     Hyperbola_Geometry_Committed = 192,
     Hyperbola_Frontier_Committed = 193,
+    Shape_Orientation_Committed = 194,
 
     // Drawing tools (260-319).
     Pen_Joint_Committed = 260,

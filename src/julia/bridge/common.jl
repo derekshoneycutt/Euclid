@@ -272,6 +272,12 @@ struct BridgeShapeArcQueryResult
     arc::BridgeArcGeometry
 end
 
+"""Pointer-free plane orientation query; quaternion components are local-to-world XYZW."""
+struct BridgeShapeOrientationResult
+    status::Int32
+    orientation::NTuple{4,Cfloat}
+end
+
 """Result of constructing one animation-owned trochoid."""
 struct BridgeShapeTrochoidResult
     status::Int32
@@ -360,6 +366,18 @@ const BRIDGE_STATUS_ILLEGAL_STATE = Int32(6)
 const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
+
+"""Canonical shape-view kinds; these are not renderer packet discriminants."""
+const SHAPE_KIND_POINT = Int32(0)
+const SHAPE_KIND_LINE = Int32(1)
+const SHAPE_KIND_ARC = Int32(2)
+const SHAPE_KIND_FILLED_ARC = Int32(3)
+const SHAPE_KIND_CIRCLE_REGION = Int32(4)
+const SHAPE_KIND_TROCHOID = Int32(5)
+const SHAPE_KIND_CYCLOID = Int32(7)
+const SHAPE_KIND_PARABOLA = Int32(9)
+const SHAPE_KIND_HYPERBOLA = Int32(10)
+const SHAPE_KIND_POLYGON = Int32(13)
 
 const BRIDGE_VERSION = Int32(15)
 

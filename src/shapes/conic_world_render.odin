@@ -115,6 +115,8 @@ world_cache_push_parabola :: proc(
     }
     vertices := world.draw_cache.curve_vertices[first:first + curve.CONIC_MAX_VERTICES]
     result := curve.parabola_explicate(lerped.vertex, lerped.value, vertices)
+    world_pose_curve_vertices(
+        world, source.entity, alpha, lerped.vertex, vertices[:result.vertex_count])
     draw_cache_finalize_curve_vertices_storage(
         &world.draw_cache, first, curve.CONIC_MAX_VERTICES, result.vertex_count)
     if result.status == .Invalid_Input || result.vertex_count < 2 {
@@ -191,6 +193,8 @@ world_cache_push_hyperbola :: proc(
             return
         }
     }
+    world_pose_curve_vertices(world, source.entity, alpha, lerped.center,
+        world.draw_cache.curve_vertices[first_vertex:world.draw_cache.curve_vertex_count])
 }
 
 // Interpolate the permanent parabola tool from its analytic parameter.

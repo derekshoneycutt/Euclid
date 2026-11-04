@@ -59,6 +59,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"cycloid_frontier_committed", .Cycloid_Frontier_Committed},
     {"parabola_frontier_committed", .Parabola_Frontier_Committed},
     {"hyperbola_frontier_committed", .Hyperbola_Frontier_Committed},
+    {"shape_orientation_committed", .Shape_Orientation_Committed},
     {"cycloid_tool_parameter_committed", .Cycloid_Tool_Parameter_Committed},
     {"presentation_cleared", .Presentation_Cleared},
     {"presentation_superseded", .Presentation_Superseded},

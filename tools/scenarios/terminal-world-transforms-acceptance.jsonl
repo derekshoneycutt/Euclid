@@ -1,0 +1,69 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"a=circle!([0.3,0.3,0],0.12;duration=0.1); f=circle!([0.7,0.3,0],0.12;filled=true,duration=0.1); "}
+{"type":"l=lens!([0.25,0.65,0],0.14,[0.38,0.65,0],0.12;duration=0.1); "}
+{"type":"u=lune!([0.6,0.65,0],0.14,[0.73,0.65,0],0.12;duration=0.1); "}
+{"type":"t=triangle!([0.4,0.4,0],[0.6,0.4,0],[0.5,0.65,0];duration=0.1); println(\"world-\"*\"admitted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-admitted","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"world-\"*\"constructed\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-constructed","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"for s in (a,f,l,u,t); @assert rotate_x!(s,pi/3;pivot=[0.5,0.5,0],duration=0.15)===s; end; "}
+{"type":"println(\"world-\"*\"tilting\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"world-tilting","timeout_ms":10000}
+{"set_splitters":{"vertical":900,"horizontal":500}}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"world-\"*\"tilted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-tilted","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"for s in (a,f,l,u); q=OdinJuliaBridge.get_shape_orientation(state_ptr,s.host_id); "}
+{"type":"@assert q.status==0 && isapprox(abs(q.orientation[1]),0.5;atol=1f-5); end; "}
+{"type":"@assert isapprox(OdinJuliaBridge.get_arc_geometry(state_ptr,a.host_id).arc.start_theta,0;atol=1f-5); "}
+{"type":"println(\"world-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-verified","timeout_ms":10000}
+{"screenshot":".build/world-transforms-tilted.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"for s in (a,f,l,u,t); rotate_x!(s,-pi/3;pivot=[0.5,0.5,0],duration=0.1); end; "}
+{"type":"println(\"world-\"*\"inverse\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-inverse","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; "}
+{"type":"reflect!(t,[0,0.5,0],[1,0.5,0];duration=0.3); reflect!(a,[0,0.5,0],[1,0.5,0];duration=0.3); "}
+{"type":"println(\"world-\"*\"reflecting\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-reflecting","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"world-\"*\"reflected\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-reflected","timeout_ms":20000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"@assert isapprox(OdinJuliaBridge.get_point(state_ptr,a.host_id).pos[2],0.7;atol=1f-5); "}
+{"type":"@assert isapprox(OdinJuliaBridge.get_arc_geometry(state_ptr,a.host_id).arc.start_theta,0;atol=1f-5); "}
+{"type":"println(\"world-\"*\"reflection-verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"world-reflection-verified","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

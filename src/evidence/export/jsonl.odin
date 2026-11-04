@@ -60,6 +60,7 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Parabola_Frontier_Committed = "parabola.frontier_committed",
     .Hyperbola_Geometry_Committed = "hyperbola.geometry_committed",
     .Hyperbola_Frontier_Committed = "hyperbola.frontier_committed",
+    .Shape_Orientation_Committed = "shape.orientation_committed",
     .Pen_Joint_Committed = "pen.joint_committed",
     .Pen_Active_Committed = "pen.active_committed",
     .Pen_Visibility_Committed = "pen.visibility_committed",

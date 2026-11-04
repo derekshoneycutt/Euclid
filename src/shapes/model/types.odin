@@ -121,6 +121,7 @@ Bridge_Pentagon_Vertices :: struct {
 Shape_Query_Snapshot :: struct {
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
+    orientations: Shape_Component_Set(Shape_Orientation),
     arcs: Shape_Component_Set(Shape_Arc),
     trochoids: Shape_Component_Set(Shape_Trochoid),
     trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
@@ -194,6 +195,7 @@ Shapes_Circle_Draw :: struct {
     radius: f32,
     start_theta: f32,
     sweep_theta: f32,
+    orientation: quaternion128,
 }
 
 Shapes_Filled_Circle_Draw :: struct {
@@ -202,6 +204,7 @@ Shapes_Filled_Circle_Draw :: struct {
     radius: f32,
     start_theta: f32,
     sweep_theta: f32,
+    orientation: quaternion128,
 }
 
 // Identify whether one frame-local curve point is ordinary or an analytic cusp.

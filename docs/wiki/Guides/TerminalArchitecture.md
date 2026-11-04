@@ -877,9 +877,8 @@ only: activation waits for the following tick's fresh snapshot. The display may
 have captured the first tick before Terminal evaluation reserved its entities.
 Same-evaluation motion and hide commands accept identities from successful queued
 construction reservations; they still revalidate against the snapshot at activation.
-The existing `start_positions` argument remains accepted and validated for signature
-compatibility, but no longer overrides those activation-time starts. Two queued
-translations therefore compose instead of both starting from the submission state.
+Point translation and rotation no longer accept redundant `start_positions`.
+Two queued translations compose instead of both starting from the submission state.
 `hide!` queues hiding a managed host. `clear!` queues hiding the hosts admitted before
 that command, preserving later admissions. Neither interrupts construction.
 Large ordered clears use the native 256-command capacity per captured tick and retain the
@@ -946,13 +945,47 @@ polygon; moving all vertices together preserves its native point dependencies an
 moves the polygon as a whole. Batch starts are sampled at activation, so successive
 queued edits compose.
 
-Point batches support 3D translation and rotation and XY reflection. `rotate_z!`
-coordinates defining-point rotation for lines, polygons, circle regions, and the
-literal Cycloid rail. Its analytic planar forms preserve native geometry and the
-directed frontier for circles/arcs, trochoids (including ellipses), parabolas, and
-hyperbolas. A rotation about the world-Z line moves an off-center analytic host and
-updates its in-plane orientation. No arbitrary-axis analytic posing or quaternion
-state is implied; unsupported analytic out-of-plane motion is not approximated.
+Geometry results share a world-space transformation API:
+
+```julia
+translate!(shape, displacement; duration=2.5)
+rotate_x!(shape, angle; pivot, duration=2.5)
+rotate_y!(shape, angle; pivot, duration=2.5)
+rotate_z!(shape, angle; pivot, duration=2.5)
+rotate!(shape, axis_start, axis_end, angle; duration=2.5)
+reflect!(shape, line_start, line_end; duration=2.5)
+```
+
+Each helper queues an animation and returns the original typed shape. Axis helpers
+require an explicit pivot. Axes, pivots, and displacements use world coordinates,
+not the shape's current local frame; motion is not clamped to `[0,1]`. Positive
+angles follow the right-hand rule in radians, including negative and multi-turn
+rotations. Compose operations by queueing them in the desired order; there is no
+compound-rotation or local-axis mode.
+
+Starts are sampled at activation after preceding actions finish. Each frame is
+evaluated from that sampled state, not by accumulating small frame deltas.
+Point-defined shapes move their defining points together. Analytic shapes move
+their defining positions and native plane orientation without changing radii,
+intrinsic planar rotation parameters, directed frontiers, or hyperbola branches.
+Labels and standalone instruments are not targets of these unified helpers.
+
+`reflect!` is a planar reflection animated by one right-handed `+pi` rotation about
+the directed line `line_start` to `line_end`. The line must lie in the target plane
+at activation. Reversing the endpoints reverses the intermediate lift direction
+but not the reflected endpoint. A shape straddling the line can pass both above
+and below the drawing surface. This is not a general 3D mirror-plane operation.
+
+Explicit point-batch edits remain available as
+`translate_points!(ids, displacement; duration)`,
+`rotate_points!(ids, axis_start, axis_end, angle; duration)`, and
+`reflect2d_points!(ids, line_start, line_end; duration)`, with at most 16 distinct
+targets and activation-time starts. Point-batch reflection uses the same directed
+rigid half-turn, not a separately chosen lift for each point.
+These edits do not automatically rotate a dependent analytic plane. Independent
+rail-endpoint and circle-region-center edits must remain compatible with that
+shape's current plane; whole-shape rotations update positions and orientation
+together.
 
 The bounded real-Terminal acceptance scenarios cover the
 [base constructors](../../../tools/scenarios/terminal-shapes-basic-acceptance.jsonl),

@@ -192,6 +192,17 @@ world_shape_publish_host :: proc(
     geometry_status := shapemodel.shape_component_insert(
         &world.geometries, &world.registry, entity, geometry)
     assert(style_status == .Ok && geometry_status == .Ok)
+    #partial switch geometry.kind {
+    case .Arc, .Filled_Arc, .Circle_Region, .Trochoid, .Cycloid, .Parabola, .Hyperbola:
+        orientation: shapemodel.Shape_Orientation = {
+            orientation = 1,
+            previous_orientation = 1,
+        }
+        status := shapemodel.shape_component_insert(
+            &world.orientations, &world.registry, entity, orientation)
+        assert(status == .Ok)
+    case:
+    }
 }
 
 // Create one standalone drawable point with no topology.

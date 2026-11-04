@@ -204,7 +204,9 @@ profile:
   elevated vertices.
 - Negative `z` is not the default way to communicate depth.
 
-Trochoid and cycloid constructions keep the analytic curve on one constant-z plane. The
+Trochoid and cycloid construction animations initially keep the analytic curve on
+one constant-z plane. Completed geometry can subsequently be tilted with world-space
+shape transformations. The
 permanent guide and compass descend together, remain aligned while drawing, then rise
 together before either tool is hidden. Hiding a guide is intentionally silent; hiding
 the finished curve is the operation that emits clear dust.
@@ -255,6 +257,13 @@ What that means in practice:
   (height/elevation).
 - Positive rotation follows the right-hand rule around each axis: curl your right-hand
   fingers in the rotation direction; your thumb points toward the positive axis.
+
+Queued shape transformations use world axes and explicit pivots. Compose rotations
+by queueing individual operations in the desired order rather than assuming an
+Euler/compound rotation convention. Planar reflection is a directed `+pi` half-turn
+about its in-plane world line; swapping the endpoints reverses the intermediate
+above/below-surface motion. Keep every defining point and the analytic plane on
+the same rigid path rather than choosing an independent lift direction per point.
 
 Projection note:
 

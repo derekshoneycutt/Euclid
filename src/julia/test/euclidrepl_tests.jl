@@ -34,9 +34,31 @@ end
 const TEST_STATE_PTR = Ptr{Cvoid}(0)
 const TEST_REPL_RUNTIME = EuclidRepl.create_runtime()
 const REPL_TEST_POSITIONS = Dict{UInt64,NTuple{3,Float32}}()
+const REPL_TEST_KINDS = Dict{UInt64,Int32}()
+const REPL_TEST_ORIENTATIONS = Dict{UInt64,NTuple{4,Float32}}()
 const REPL_TEST_HIDDEN = UInt64[]
 const REPL_TEST_REVEALED = UInt64[]
 const REPL_TEST_FRONTIERS = Dict{UInt64,Float32}()
+
+"""Return a copied native orientation for null-state motion fixtures."""
+function OdinJuliaBridge.get_shape_orientation(state::Ptr{Cvoid}, id::UInt64)
+    state == C_NULL || return OdinJuliaBridge.get_shape_orientation(state, Int(id))
+    found = haskey(REPL_TEST_ORIENTATIONS, id)
+    status = found ? OdinJuliaBridge.BRIDGE_STATUS_OK :
+        OdinJuliaBridge.BRIDGE_STATUS_NOT_FOUND
+    return OdinJuliaBridge.BridgeShapeOrientationResult(
+        status, get(REPL_TEST_ORIENTATIONS, id, (0f0, 0f0, 0f0, 1f0)))
+end
+
+"""Record native orientation writes for null-state motion fixtures."""
+function OdinJuliaBridge.set_shape_orientation(
+    state::Ptr{Cvoid}, id::UInt64, orientation::NTuple{4,Float32})
+    state == C_NULL ||
+        return OdinJuliaBridge.set_shape_orientation(state, Int(id), orientation)
+    haskey(REPL_TEST_ORIENTATIONS, id) || return OdinJuliaBridge.BRIDGE_STATUS_NOT_FOUND
+    REPL_TEST_ORIENTATIONS[id] = orientation
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
 
 """Record exact Cycloid completion frontiers in the null-state fixture."""
 function OdinJuliaBridge.set_cycloid_frontier(
@@ -83,11 +105,13 @@ end
 """Supply immutable native projections only for the null-state unit fixture."""
 function OdinJuliaBridge.get_point(state::Ptr{Cvoid}, id::UInt64)
     state == C_NULL || return OdinJuliaBridge.get_point(state, Int(id))
-    found = haskey(REPL_TEST_POSITIONS, id)
+    positioned = haskey(REPL_TEST_POSITIONS, id)
+    found = positioned || haskey(REPL_TEST_KINDS, id)
     status = found ? OdinJuliaBridge.BRIDGE_STATUS_OK :
         OdinJuliaBridge.BRIDGE_STATUS_INVALID_INDEX
     return OdinJuliaBridge.BridgePointView(
-        status, id, 0, 0, UInt8(found), 1, 0,
+        status, id, get(REPL_TEST_KINDS, id, OdinJuliaBridge.SHAPE_KIND_POINT),
+        0, UInt8(positioned), 1, 0,
         get(REPL_TEST_POSITIONS, id, (0f0, 0f0, 0f0)),
         OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
         OdinJuliaBridge.BridgeColor(0, 0, 0, 0), 0, 5f0, 0)
@@ -373,6 +397,8 @@ end
     end
     shape = OdinJuliaBridge.BridgeShapeTriangle(
         OdinJuliaBridge.BRIDGE_STATUS_OK, 800, ids...)
+    REPL_TEST_KINDS[800] = OdinJuliaBridge.SHAPE_KIND_POLYGON
+    EuclidRepl.track_managed_host!(runtime.session, UInt64(800))
     EuclidRepl.rotate_z!(runtime, TEST_STATE_PTR, shape, Float32(pi / 2);
         pivot=Float32[0.5, -0.5, 2], duration=1f0)
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
@@ -436,16 +462,19 @@ end
 
     runtime = EuclidRepl.create_runtime()
     host_id = UInt64(900)
+    REPL_TEST_POSITIONS[host_id] = (0.7f0, 0.7f0, 0f0)
+    REPL_TEST_KINDS[host_id] = OdinJuliaBridge.SHAPE_KIND_ARC
+    REPL_TEST_ORIENTATIONS[host_id] = (0f0, 0f0, 0f0, 1f0)
     EuclidRepl.track_managed_host!(runtime.session, host_id)
     shape = OdinJuliaBridge.BridgeShapeCircle(
         OdinJuliaBridge.BRIDGE_STATUS_OK, host_id)
     pivot = Float32[0.3, 0.4, 0]
     @test EuclidRepl.rotate_z!(runtime, TEST_STATE_PTR, shape, pi / 2;
-        pivot, duration=1f0) == host_id
+        pivot, duration=1f0) === shape
     payload = runtime.session.active_job.payload
-    @test payload.kind == :arc && payload.geometry === nothing
+    @test payload.host_id == host_id && payload.oriented
     pivot[1] = 9f0
-    @test payload.pivot == Float32[0.3, 0.4, 0]
+    @test payload.spec.axis_a == Float32[0.3, 0.4, 0]
     @test_throws ArgumentError EuclidRepl.rotate_z!(
         runtime, TEST_STATE_PTR,
         OdinJuliaBridge.BridgeShapeCircle(
@@ -616,7 +645,7 @@ end
             runtime = EuclidRepl.create_runtime()
             REPL_TEST_POSITIONS[42] = (0f0, 0f0, 0f0)
             EuclidRepl.translate_points!(
-                runtime, TEST_STATE_PTR, [42], [[0, 0, 0]], [0.1, 0, 0])
+                runtime, TEST_STATE_PTR, [42], [0.1, 0, 0])
             delete!(REPL_TEST_POSITIONS, UInt64(42))
             EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
             @test !EuclidRepl.status(runtime, TEST_STATE_PTR).failed
@@ -645,15 +674,13 @@ end
     runtime = EuclidRepl.create_runtime()
     REPL_TEST_POSITIONS[7] = (0.1f0, 0.2f0, 0f0)
     ids = UInt64[7]
-    starts = [[9f0, 9f0, 9f0]]
     displacement = [0.2f0, 0f0, 0f0]
     returned = EuclidRepl.translate_points!(
-        runtime, TEST_STATE_PTR, ids, starts, displacement; duration=1f0)
+        runtime, TEST_STATE_PTR, ids, displacement; duration=1f0)
     EuclidRepl.translate_points!(
-        runtime, TEST_STATE_PTR, ids, starts, displacement; duration=1f0)
+        runtime, TEST_STATE_PTR, ids, displacement; duration=1f0)
     ids[1] = 99
     returned[1] = 99
-    starts[1][1] = 99f0
     displacement[1] = 99f0
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
     @test REPL_TEST_POSITIONS[7] == (0.1f0, 0.2f0, 0f0)
@@ -666,11 +693,11 @@ end
     @test isapprox(REPL_TEST_POSITIONS[7][1], 0.5f0; atol=1f-6)
     @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
     @test_throws ArgumentError EuclidRepl.translate_points!(
-        runtime, TEST_STATE_PTR, [99], [[0, 0, 0]], [1, 0, 0])
+        runtime, TEST_STATE_PTR, [99], [1, 0, 0])
     @test_throws ArgumentError EuclidRepl.validated_point_ids(fill(7, 17))
     @test_throws ArgumentError EuclidRepl.validated_point_ids([7, 7])
     @test_throws ArgumentError EuclidRepl.rotate_points!(
-        runtime, TEST_STATE_PTR, [7], [[0, 0, 0]], [0, 0, 0], [0, 0, 1], Inf)
+        runtime, TEST_STATE_PTR, [7], [0, 0, 0], [0, 0, 1], Inf)
     @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 2
 end
 
@@ -741,7 +768,7 @@ end
     EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
     EuclidRepl.track_managed_host!(runtime.session, id)
     EuclidRepl.translate_points!(
-        runtime, TEST_STATE_PTR, [id], [[0, 0, 0]], [0.1, 0, 0])
+        runtime, TEST_STATE_PTR, [id], [0.1, 0, 0])
     EuclidRepl.hide!(runtime, TEST_STATE_PTR, id)
     @test runtime.session.pending_count == 2
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)

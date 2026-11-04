@@ -156,6 +156,7 @@ Circle_Arc_Geometry :: struct {
     sweep_delta: f32,
     radius: f32,
     start_theta: f32,
+    orientation: quaternion128,
 }
 
 //   Batch world points plus their SoA scratch and output slices.
@@ -482,36 +483,28 @@ draw_encoded_basic_label :: proc(
 draw_encoded_basic_circle :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Circle_Draw, high: bool) {
-    if draw_cached_circle_is_elevated(item) == high {
-        draw_encoded_cached_circle(state, encoder, item)
-    }
+    draw_encoded_cached_circle(state, encoder, item, high)
 }
 
 // draw_encoded_basic_filled_circle encodes one filled circle in its matching layer.
 draw_encoded_basic_filled_circle :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Filled_Circle_Draw, high: bool) {
-    if draw_cached_filledcircle_is_elevated(item) == high {
-        draw_encoded_cached_filled_circle(state, encoder, item)
-    }
+    draw_encoded_cached_filled_circle(state, encoder, item, high)
 }
 
 // draw_encoded_basic_curve encodes one curve in its matching depth layer.
 draw_encoded_basic_curve :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Curve_Draw, high: bool) {
-    if draw_cached_curve_is_elevated(state, item) == high {
-        draw_encoded_cached_curve(state, encoder, item, high)
-    }
+    draw_encoded_cached_curve(state, encoder, item, high)
 }
 
 // draw_encoded_basic_polygon encodes one polygon in its matching depth layer.
 draw_encoded_basic_polygon :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Polygon_Draw, high: bool) {
-    if draw_cached_polygon_is_elevated(state, item) == high {
-        draw_encoded_cached_polygon(state, encoder, item)
-    }
+    draw_encoded_cached_polygon(state, encoder, item, high)
 }
 
 // draw_encoded_cached_basic_item dispatches one item in a depth layer.
@@ -760,28 +753,6 @@ draw_encoded_cached_shadow_pass :: proc(
 draw_cached_point_is_elevated :: #force_inline proc(
     p: ^shapemodel.Shapes_Point_Draw) -> bool {
     return shadow_point_is_elevated(p^.point1)
-}
-
-//   Return true when a cached circle draw item belongs to the elevated layer.
-draw_cached_circle_is_elevated :: #force_inline proc(
-    c: ^shapemodel.Shapes_Circle_Draw) -> bool {
-    return shadow_point_is_elevated(c^.center)
-}
-
-//   Return true when a cached filled-circle draw item belongs to the elevated layer.
-draw_cached_filledcircle_is_elevated :: #force_inline proc(
-    c: ^shapemodel.Shapes_Filled_Circle_Draw) -> bool {
-    return shadow_point_is_elevated(c^.center)
-}
-
-// Return true when any explicated curve vertex belongs to the elevated layer.
-draw_cached_curve_is_elevated :: #force_inline proc(
-    state: ^core.Euclid_General_State,
-    curve: ^shapemodel.Shapes_Curve_Draw) -> bool {
-    cache := &state^.shape_world.draw_cache
-    vertices := cache^.curve_vertices[
-        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    return has_any_elevated_shadow_point(vertices)
 }
 
 //   Return true when any cached polygon vertex belongs to the elevated layer.
@@ -1881,12 +1852,14 @@ shadow_to_screen :: proc(
 //   Package direct canonical arc parameters for shared sampling passes.
 circle_arc_geometry :: #force_inline proc(
     center: geometry.Vector3,
-    radius, start_theta, sweep_theta: f32) -> Circle_Arc_Geometry {
+    radius, start_theta, sweep_theta: f32,
+    orientation: quaternion128 = 1) -> Circle_Arc_Geometry {
     return Circle_Arc_Geometry{
         center = center,
         sweep_delta = sweep_theta,
         radius = radius,
         start_theta = start_theta,
+        orientation = orientation,
     }
 }
 
@@ -1898,11 +1871,11 @@ circle_arc_sample_world :: proc(
     for i in 0..<len(arc_world) {
         t := f32(i) / seg_count
         theta := geom^.start_theta + geom^.sweep_delta * t
-        arc_world[i] = geometry.Vector3{
-            geom^.center.x + f32(math.cos(theta)) * geom^.radius,
-            geom^.center.y + f32(math.sin(theta)) * geom^.radius,
-            geom^.center.z,
-        }
+        local: geometry.Vector3 = {
+            f32(math.cos(theta)) * geom^.radius,
+            f32(math.sin(theta)) * geom^.radius, 0}
+        arc_world[i] = geom^.center +
+            linalg.mul(geom^.orientation, local)
     }
 }
 
@@ -2084,38 +2057,29 @@ circle_arc_polyline_topology :: #force_inline proc(
 // draw_encoded_cached_circle encodes one sampled projected circle or arc.
 draw_encoded_cached_circle :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    circle: ^shapemodel.Shapes_Circle_Draw) {
+    circle: ^shapemodel.Shapes_Circle_Draw, keep_above: bool) {
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
-        circle^.start_theta, circle^.sweep_theta)
+        circle^.start_theta, circle^.sweep_theta, circle^.orientation)
     circle_arc_sample_world(&geometry_value, arc_world[:])
-    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
-    projected: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector2
-    _ = project_iso_points_batch_with_components(state, {
-        world_points = arc_world[:],
-        xs = xs[:],
-        ys = ys[:],
-        zs = zs[:],
-        out = projected[:],
-    })
-    topology := circle_arc_polyline_topology(circle^.sweep_theta)
-    style: native.Draw_Polyline_Style = {
-        width = projection.effective_ink_size(circle^.brush_size, state^.iso_scale,
-            state^.ui_runtime.preferences.values.animation.scale_percent),
-        miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = resolve_animation_authored_ink(
-            state, color.Color_RGBA8(circle^.color)),
-        topology = topology,
-        start_cap = .Round,
-        finish_cap = .Round,
+    topology := shapemodel.Curve_Topology.Open
+    if circle_arc_polyline_topology(circle^.sweep_theta) == .Closed {
+        topology = .Closed
     }
-    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
+    width := projection.effective_ink_size(circle^.brush_size, state^.iso_scale,
+        state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw_sampled_surface_curve(state, encoder, arc_world[:], {
+        topology = topology,
+        keep_above = keep_above,
+        width = width,
+        color = color.Color_RGBA8(circle^.color),
+    })
 }
 
 // draw_encoded_cached_filled_circle encodes one projected filled sector.
 draw_encoded_cached_filled_circle :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
+    circle: ^shapemodel.Shapes_Filled_Circle_Draw, keep_above: bool) {
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
     owner: shapemodel.Shape_Entity = {
         slot = u32(circle^.source_index + 1),
@@ -2124,23 +2088,11 @@ draw_encoded_cached_filled_circle :: proc(
     sweep := particles.formation_sweep_fill(&state^.particle_system,
         shapemodel.shape_entity_pack(owner), circle^.sweep_theta)
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
-        circle^.start_theta, sweep)
+        circle^.start_theta, sweep, circle^.orientation)
     circle_arc_sample_world(&geometry_value, arc_world[:])
-    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
-    projected: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector2
-    _ = project_iso_points_batch_with_components(state, {
-        world_points = arc_world[:],
-        xs = xs[:],
-        ys = ys[:],
-        zs = zs[:],
-        out = projected[:],
-    })
-    center := geometry.Vector2(
-        projection.iso_to_cartesian(geometry_value.center, state^.iso_scale))
-    for index in 1..<len(projected) {
-        _ = native.draw_encoder_triangle(encoder, center,
-            geometry.Vector2(projected[index - 1]),
-            geometry.Vector2(projected[index]),
+    for index in 1..<len(arc_world) {
+        draw_encoded_split_triangle(state, encoder,
+            {circle^.center, arc_world[index - 1], arc_world[index]}, keep_above,
             resolve_animation_authored_ink(
                 state, color.Color_RGBA8(circle^.color)))
     }
@@ -2149,12 +2101,8 @@ draw_encoded_cached_filled_circle :: proc(
 // draw_encoded_cached_polygon encodes authoritative cached polygon triangles.
 draw_encoded_cached_polygon :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    polygon: ^shapemodel.Shapes_Polygon_Draw) {
+    polygon: ^shapemodel.Shapes_Polygon_Draw, keep_above: bool) {
     if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
-        return
-    }
-    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]geometry.Vector2
-    if !project_cached_polygon_vertices(state, polygon, projected[:]) {
         return
     }
     cache := &state^.shape_world.draw_cache
@@ -2178,9 +2126,10 @@ draw_encoded_cached_polygon :: proc(
             third >= polygon^.vertex_count {
             continue
         }
-        _ = native.draw_encoder_triangle(encoder,
-            geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
-            geometry.Vector2(projected[third]), draw_color)
+        vertices := cache^.polygon_vertices
+        draw_encoded_split_triangle(state, encoder,
+            {vertices[triangle.a], vertices[triangle.b], vertices[triangle.c]},
+            keep_above, draw_color)
     }
 }
 
@@ -2272,39 +2221,30 @@ draw_encoded_cached_curve_shadow :: proc(
 draw_encoded_cached_circle_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     circle: ^shapemodel.Shapes_Circle_Draw) {
-    if !shadow_point_is_elevated(circle^.center) {
-        return
-    }
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
-        circle^.start_theta, circle^.sweep_theta)
+        circle^.start_theta, circle^.sweep_theta, circle^.orientation)
     points: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
     circle_arc_sample_world(&geometry_value, points[:])
-    projected: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector2
-    for point, index in points {
-        projected[index] = shadow_to_screen(point, state)
+    topology := shapemodel.Curve_Topology.Open
+    if circle_arc_polyline_topology(circle^.sweep_theta) == .Closed {
+        topology = .Closed
     }
-    topology := circle_arc_polyline_topology(circle^.sweep_theta)
-    style: native.Draw_Polyline_Style = {
-        width = projection.effective_ink_size(
-            math.max(circle^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
-            state^.iso_scale,
-            state^.ui_runtime.preferences.values.animation.scale_percent),
-        miter_limit = COLORED_STROKE_MITER_LIMIT,
-        color = encoded_shadow_color(circle^.center.z),
+    width := projection.effective_ink_size(
+        math.max(circle^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        state^.iso_scale, state^.ui_runtime.preferences.values.animation.scale_percent)
+    draw_sampled_surface_curve(state, encoder, points[:], {
         topology = topology,
-        start_cap = .Round,
-        finish_cap = .Round,
-    }
-    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
+        keep_above = true,
+        width = width,
+        color = encoded_shadow_color(average_shadow_height(points[:])),
+        shadow = true,
+    })
 }
 
 // draw_encoded_cached_filled_circle_shadow encodes a projected filled shadow fan.
 draw_encoded_cached_filled_circle_shadow :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    if !shadow_point_is_elevated(circle^.center) {
-        return
-    }
     owner: shapemodel.Shape_Entity = {
         slot = u32(circle^.source_index + 1),
         generation = circle^.source_generation,
@@ -2312,15 +2252,12 @@ draw_encoded_cached_filled_circle_shadow :: proc(
     sweep := particles.formation_sweep_fill(&state^.particle_system,
         shapemodel.shape_entity_pack(owner), circle^.sweep_theta)
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
-        circle^.start_theta, sweep)
+        circle^.start_theta, sweep, circle^.orientation)
     points: [CIRCLE_ARC_SEGMENTS + 1]geometry.Vector3
     circle_arc_sample_world(&geometry_value, points[:])
-    center := geometry.Vector2(shadow_to_screen(geometry_value.center, state))
-    draw_color := encoded_shadow_color(circle^.center.z)
     for index in 1..<len(points) {
-        _ = native.draw_encoder_triangle(encoder, center,
-            geometry.Vector2(shadow_to_screen(points[index - 1], state)),
-            geometry.Vector2(shadow_to_screen(points[index], state)), draw_color)
+        draw_encoded_split_triangle_shadow(
+            state, encoder, circle^.center, points[index - 1], points[index])
     }
 }
 
@@ -2337,11 +2274,6 @@ draw_encoded_cached_polygon_shadow :: proc(
     if !has_any_elevated_shadow_point(vertices) {
         return
     }
-    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]geometry.Vector2
-    for index in 0..<polygon^.vertex_count {
-        projected[index] = shadow_to_screen(vertices[index], state)
-    }
-    draw_color := encoded_shadow_color(average_shadow_height(vertices))
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
     for triangle in triangles {
@@ -2353,34 +2285,9 @@ draw_encoded_cached_polygon_shadow :: proc(
             third >= polygon^.vertex_count {
             continue
         }
-        _ = native.draw_encoder_triangle(encoder,
-            geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
-            geometry.Vector2(projected[third]), draw_color)
+        draw_encoded_split_triangle_shadow(
+            state, encoder, vertices[first], vertices[second], vertices[third])
     }
-}
-
-//   Batch-project cached polygon vertices into screen space.
-project_cached_polygon_vertices :: #force_inline proc(
-    state: ^core.Euclid_General_State,
-    poly: ^shapemodel.Shapes_Polygon_Draw,
-    projected: []geometry.Vector2) -> bool {
-
-    cache := &state^.shape_world.draw_cache
-    vertices := cache^.polygon_vertices[
-        poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
-    xs, ys, zs: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]f32
-
-    _ = project_iso_points_batch_with_components(
-        state,
-        Iso_Batch_Project_Params{
-            world_points = vertices,
-            xs = xs[:],
-            ys = ys[:],
-            zs = zs[:],
-            out = projected,
-        })
-
-    return true
 }
 
 //   Compute the orthonormal arc basis, radius, and outside sweep for a compass.

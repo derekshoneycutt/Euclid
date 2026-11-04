@@ -492,7 +492,8 @@ draw_encoded_pen_crossing :: proc(
             compass = compass_caster,
         })
     }
-    draw_encoded_cached_polygon(state, encoder, &crossing^.polygon)
+    draw_encoded_cached_polygon(state, encoder, &crossing^.polygon, false)
+    draw_encoded_cached_polygon(state, encoder, &crossing^.polygon, true)
     if crossing^.has_front {
         first := projection.iso_to_cartesian(crossing^.front0, state^.iso_scale)
         second := projection.iso_to_cartesian(crossing^.front1, state^.iso_scale)

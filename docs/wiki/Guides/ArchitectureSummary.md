@@ -84,6 +84,15 @@ tables group code by the architectural question a contributor is likely to ask.
 | Fonts | Face loading, shaping support, worker preparation, display publication | [`src/view/font/`](../../../src/view/font/) |
 | Simulation and capture | Fixed-step execution, task joins, screenshots and GIF policy | [`src/view/simulation/`](../../../src/view/simulation/), [`src/view/capture/`](../../../src/view/capture/) |
 
+Analytic shape hosts carry an optional current/previous unit `quaternion128`
+plane orientation; defining transforms remain the sole position authority.
+Julia queues world-space rigid motion, and the bridge validates final positions
+and orientations together before native publication. Intrinsic analytic angles
+and domains remain unchanged. Rendering poses native samples before surface
+splitting, projection, and run reduction; both depth halves are retained.
+See [Shape System](ShapeSystem.md) and
+[Terminal Architecture](TerminalArchitecture.md).
+
 ### Content, persistence, and evidence
 
 | Area | Responsibility | Start in |

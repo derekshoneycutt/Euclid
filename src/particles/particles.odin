@@ -2,6 +2,7 @@ package particles
 
 import shapemodel "../shapes/model"
 import curve "../shapes/curve"
+import shapes "../shapes"
 import particlemodel "model"
 import color "../core/color"
 import geometry "../core/geometry"
@@ -22,6 +23,7 @@ import geometry "../core/geometry"
 //   and cool to the stroke color. Their look is a pure function of age over life.
 
 import "core:math"
+import "core:math/linalg"
 import rand "core:math/rand"
 import utf8 "core:unicode/utf8"
 
@@ -245,6 +247,7 @@ Circle_Dust_Emission :: struct {
     start_theta: f32,
     sweep_theta: f32,
     color: Color,
+    orientation: quaternion128,
 }
 
 // Group one world-backed clear burst and identify whether its dust is authored ink.
@@ -570,10 +573,12 @@ formation_add_sweep_particle :: proc(
         reveal^.covered_sweep) * formation_particle_unit(reveal^.seed, index, 10)
     reach := sector.radius *
         math.sqrt(formation_particle_unit(reveal^.seed, index, 11))
+    target := sector.center + linalg.mul(
+        sector.orientation, Vector3{math.cos(theta) * reach, math.sin(theta) * reach, 0})
     _, added := formation_add_particle(ps, {
-        target_x = sector.center.x + math.cos(theta) * reach,
-        target_y = sector.center.y + math.sin(theta) * reach,
-        target_z = sector.center.z,
+        target_x = target.x,
+        target_y = target.y,
+        target_z = target.z,
         offset_x = lifecycle.offset.x,
         offset_y = lifecycle.offset.y,
         height = lifecycle.height,
@@ -1302,7 +1307,13 @@ emit_shape_world_arc_burst :: proc(
         return
     }
     emission: Circle_Dust_Emission = {
-        center, arc.radius, arc.start_theta, arc.sweep_theta, ctx.color}
+        center, arc.radius, arc.start_theta, arc.sweep_theta, ctx.color,
+        1}
+    pose, has_pose := shapemodel.shape_component_get(
+        &ctx.world.orientations, &ctx.world.registry, entity)
+    if has_pose {
+        emission.orientation = pose.orientation
+    }
     if filled {
         emit_filled_circle_dust(ctx.particles, emission, ctx.authored_ink)
     } else {
@@ -1373,6 +1384,8 @@ emit_shape_world_trochoid_burst :: proc(
     vertices: [curve.TROCHOID_MAX_VERTICES]Vector3
     result := curve.trochoid_explicate(center, value^, vertices[:])
     if result.status != .Invalid_Input && result.vertex_count > 1 {
+        shapes.world_pose_curve_vertices(
+            ctx.world, entity, 1, center, vertices[:result.vertex_count])
         emit_curve_polyline_dust(
             ctx.particles, vertices[:result.vertex_count], ctx.color,
             ctx.authored_ink)
@@ -1392,8 +1405,13 @@ emit_shape_world_cycloid_burst :: proc(
         return
     }
     vertices: [curve.CYCLOID_MAX_VERTICES]Vector3
-    result := curve.cycloid_explicate(first, second, value^, vertices[:])
+    result := curve.cycloid_explicate(
+        {}, {linalg.length(second - first), 0, 0}, value^, vertices[:])
     if result.status != .Invalid_Input && result.vertex_count > 1 {
+        if !shapes.world_pose_endpoint_vertices(
+            ctx.world, entity, 1, {first, second}, vertices[:result.vertex_count]) {
+            return
+        }
         emit_curve_polyline_dust(
             ctx.particles, vertices[:result.vertex_count], ctx.color,
             ctx.authored_ink)
@@ -1412,6 +1430,8 @@ emit_shape_world_parabola_burst :: proc(
     vertices: [curve.CONIC_MAX_VERTICES]Vector3
     result := curve.parabola_explicate(vertex, value^, vertices[:])
     if result.status != .Invalid_Input && result.vertex_count > 1 {
+        shapes.world_pose_curve_vertices(
+            ctx.world, entity, 1, vertex, vertices[:result.vertex_count])
         emit_curve_polyline_dust(ctx.particles, vertices[:result.vertex_count],
             ctx.color, ctx.authored_ink)
     }
@@ -1434,6 +1454,8 @@ emit_shape_world_hyperbola_burst :: proc(
         }
         result := curve.hyperbola_explicate(center, value^, vertices[:], branch)
         if result.status != .Invalid_Input && result.vertex_count > 1 {
+            shapes.world_pose_curve_vertices(
+                ctx.world, entity, 1, center, vertices[:result.vertex_count])
             emit_curve_polyline_dust(ctx.particles, vertices[:result.vertex_count],
                 ctx.color, ctx.authored_ink)
         }
@@ -2475,9 +2497,10 @@ emit_circle_dust :: proc(
         t := f32(s) / denom
         theta := emission.start_theta + emission.sweep_theta * t
 
-        sample := emission.center
-        sample.x += f32(math.cos(theta)) * emission.radius
-        sample.y += f32(math.sin(theta)) * emission.radius
+        sample := emission.center + linalg.mul(
+            emission.orientation,
+            Vector3{f32(math.cos(theta)) * emission.radius,
+                f32(math.sin(theta)) * emission.radius, 0})
 
         spawn_dust_particle(ps, sample, emission.color, authored_ink)
     }
@@ -2497,9 +2520,9 @@ emit_filled_circle_dust :: proc(
         theta := emission.start_theta + emission.sweep_theta * t
         radius := emission.radius * f32(math.sqrt(random_f32_range(ps, 0.0, 1.0)))
 
-        sample := emission.center
-        sample.x += f32(math.cos(theta)) * radius
-        sample.y += f32(math.sin(theta)) * radius
+        sample := emission.center + linalg.mul(
+            emission.orientation,
+            Vector3{f32(math.cos(theta)) * radius, f32(math.sin(theta)) * radius, 0})
         spawn_dust_particle(ps, sample, emission.color, authored_ink)
     }
 }

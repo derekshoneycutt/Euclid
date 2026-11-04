@@ -109,12 +109,23 @@ shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
         world.transforms.values[index].previous_position =
             world.transforms.values[index].position
     }
+    for &value in world.orientations.values[:world.orientations.count] {
+        value.previous_orientation = value.orientation
+    }
     for index in 0..<world.arcs.count {
         arc := &world.arcs.values[index]
         arc.previous_radius = arc.radius
         arc.previous_start_theta = arc.start_theta
         arc.previous_sweep_theta = arc.sweep_theta
     }
+    shape_world_update_previous_trochoid_values(world)
+    shape_world_update_previous_conic_values(world)
+    shape_world_update_previous_conic_tool_values(world)
+    shape_world_update_previous_cycloid_values(world)
+}
+
+// Snapshot trochoid curves and their construction guides at the same fixed-step boundary.
+shape_world_update_previous_trochoid_values :: proc(world: ^shapemodel.Shape_World) {
     for index in 0..<world.trochoids.count {
         value := &world.trochoids.values[index]
         value.previous_fixed_radius = value.fixed_radius
@@ -134,9 +145,6 @@ shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
         value.previous_rotation = value.rotation
         value.previous_orientation_phase = value.orientation_phase
     }
-    shape_world_update_previous_conic_values(world)
-    shape_world_update_previous_conic_tool_values(world)
-    shape_world_update_previous_cycloid_values(world)
 }
 
 // Resolve one live transform and interpolate its previous and current positions.
@@ -296,12 +304,12 @@ world_cache_push_arc :: proc(
     if kind == .Arc {
         slot^ = Shapes_Circle_Draw{world_make_draw_base(source, .Circle),
             lerped.center, lerped.arc.radius, lerped.arc.start_theta,
-            lerped.arc.sweep_theta}
+            lerped.arc.sweep_theta, world_lerped_orientation(world, source.entity, alpha)}
     } else {
         slot^ = Shapes_Filled_Circle_Draw{
             world_make_draw_base(source, .Filled_Circle),
             lerped.center, lerped.arc.radius, lerped.arc.start_theta,
-            lerped.arc.sweep_theta}
+            lerped.arc.sweep_theta, world_lerped_orientation(world, source.entity, alpha)}
     }
 }
 
@@ -410,13 +418,24 @@ world_cache_push_circle_region :: proc(
     }
     vertices := world.draw_cache.polygon_vertices[
         reservation.first_vertex:reservation.first_vertex + CIRCLE_REGION_VERTEX_COUNT]
-    if !world_sample_circle_region(region, vertices) {
+    local_region := region
+    local_region.first_center = {}
+    local_region.second_center = {
+        linalg.length(region.second_center - region.first_center), 0, 0,
+    }
+    if !world_sample_circle_region(local_region, vertices) {
         rollback_polygon_cache_ranges_storage(&world.draw_cache,
             CIRCLE_REGION_VERTEX_COUNT, reservation.max_triangle_count)
         return
     }
     triangle_count := triangulate_polygon_ear_clip_storage(&world.draw_cache,
         reservation.first_vertex, vertices, reservation.first_triangle)
+    if !world_pose_endpoint_vertices(world, source.entity, alpha,
+        {region.first_center, region.second_center}, vertices) {
+        rollback_polygon_cache_ranges_storage(&world.draw_cache,
+            CIRCLE_REGION_VERTEX_COUNT, reservation.max_triangle_count)
+        return
+    }
     world_cache_commit_circle_region(
         world, source, region, reservation, triangle_count)
 }
@@ -473,8 +492,17 @@ world_cache_push_trochoid :: proc(
         first:first + curve.TROCHOID_MAX_VERTICES]
     result := curve.trochoid_explicate_marked(
         lerped.center, lerped.value, vertices, kinds)
-    draw_cache_finalize_curve_vertices_storage(&world.draw_cache,
-        first, curve.TROCHOID_MAX_VERTICES, result.vertex_count)
+    world_pose_curve_vertices(
+        world, source.entity, alpha, lerped.center, vertices[:result.vertex_count])
+    world_cache_commit_curve(world, source, first, curve.TROCHOID_MAX_VERTICES, result)
+}
+
+// Finalize reserved curve storage and publish its packet, rolling back rejected output.
+world_cache_commit_curve :: proc(
+    world: ^shapemodel.Shape_World, source: World_Draw_Source,
+    first, capacity: int, result: curve.Curve_Explication_Result) {
+    draw_cache_finalize_curve_vertices_storage(
+        &world.draw_cache, first, capacity, result.vertex_count)
     if result.status == .Invalid_Input || result.vertex_count < 2 {
         draw_cache_rollback_curve_vertices_storage(
             &world.draw_cache, first, result.vertex_count)
@@ -571,8 +599,9 @@ world_lerped_cycloid :: proc(world: ^shapemodel.Shape_World,
         draw_parameter = math.lerp(current.previous_draw_parameter,
             current.draw_parameter, alpha),
     }
+    rail_length := linalg.length(second - first)
     valid := shapemodel.shape_cycloid_is_valid(value) &&
-        shapemodel.shape_cycloid_line_is_valid(first, second,
+        shapemodel.shape_cycloid_line_is_valid({}, {rail_length, 0, 0},
             value.rolling_radius, value.parameter_start, value.parameter_finish)
     return {first, second, value}, valid
 }
@@ -595,27 +624,16 @@ world_cache_push_cycloid :: proc(world: ^shapemodel.Shape_World,
     kinds := world.draw_cache.curve_vertex_kinds[
         first_vertex:first_vertex + curve.CYCLOID_MAX_VERTICES]
     result := curve.cycloid_explicate_marked(
-        lerped.first, lerped.second, lerped.value, vertices, kinds)
-    draw_cache_finalize_curve_vertices_storage(&world.draw_cache,
-        first_vertex, curve.CYCLOID_MAX_VERTICES, result.vertex_count)
-    if result.status == .Invalid_Input || result.vertex_count < 2 {
+        {}, {linalg.length(lerped.second - lerped.first), 0, 0},
+        lerped.value, vertices, kinds)
+    if !world_pose_endpoint_vertices(world, source.entity, alpha,
+        {lerped.first, lerped.second}, vertices[:result.vertex_count]) {
         draw_cache_rollback_curve_vertices_storage(
-            &world.draw_cache, first_vertex, result.vertex_count)
+            &world.draw_cache, first_vertex, curve.CYCLOID_MAX_VERTICES)
         return
     }
-    slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
-    if !has_slot {
-        draw_cache_rollback_curve_vertices_storage(
-            &world.draw_cache, first_vertex, result.vertex_count)
-        return
-    }
-    slot^ = Shapes_Curve_Draw{
-        base = world_make_draw_base(source, .Curve),
-        first_vertex = first_vertex,
-        vertex_count = result.vertex_count,
-        capacity_limited = result.status == .Capacity_Limited,
-        topology = result.topology,
-    }
+    world_cache_commit_curve(
+        world, source, first_vertex, curve.CYCLOID_MAX_VERTICES, result)
 }
 
 // Resolve and interpolate the permanent literal-line cycloid guide.

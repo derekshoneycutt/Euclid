@@ -142,7 +142,10 @@ result. The exact sampling policy and bounds belong in
 
 Parabolas use local coordinates `(f*t*t, 2*f*t)` with `f > 0`. Hyperbola branches use
 `sign * (a*cosh(t), b*sinh(t))` with positive semiaxes and sign `+1` or `-1`.
-Translation and planar rotation are applied after evaluation. Both families retain
+Intrinsic planar rotation is applied inside the local analytic plane. A native
+unit-quaternion orientation then maps the plane into world space, followed by the
+existing authoritative host position. Whole-shape rigid motion changes positions
+and plane orientation, not intrinsic curve parameters. Both families retain
 finite directed domains even though the mathematical curves are unbounded.
 One hyperbola host owns the common geometry. Julia construction accepts
 `branches=:both` (default), `:positive`, or `:negative`, fixed for that host's

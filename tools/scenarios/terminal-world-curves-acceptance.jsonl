@@ -1,0 +1,65 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"c=cycloid!([0.1,0.3,0],[0.9,0.3,0];rolling_radius=0.02,duration=0.1); "}
+{"type":"e=ellipse!([0.3,0.6,0],0.12,0.08;duration=0.1); "}
+{"type":"p=parabola!([0.6,0.5,0];focal_distance=0.1,parameter_start=-0.3,parameter_finish=0.3,duration=0.1); "}
+{"type":"h=hyperbola!([0.7,0.7,0];semimajor=0.1,semiminor=0.05,parameter_start=-0.3,"}
+{"type":"parameter_finish=0.3,duration=0.1); println(\"curves-\"*\"admitted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-admitted","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"curves-\"*\"constructed\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-constructed","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"for s in (c,e,p,h); rotate_y!(s,pi/2;pivot=[0.5,0.5,0],duration=0.2); end; "}
+{"type":"println(\"curves-\"*\"tilting\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-tilting","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"curves-\"*\"tilted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-tilted","timeout_ms":20000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"for s in (c,e,p,h); q=OdinJuliaBridge.get_shape_orientation(state_ptr,s.host_id); "}
+{"type":"@assert q.status==0 && isapprox(abs(q.orientation[2]),sqrt(0.5);atol=1f-5); end; "}
+{"type":"@assert isapprox(OdinJuliaBridge.get_point(state_ptr,c.first_id).pos[3],0.4;atol=1f-5); "}
+{"type":"@assert isapprox(OdinJuliaBridge.get_point(state_ptr,c.second_id).pos[3],-0.4;atol=1f-5); "}
+{"type":"println(\"curves-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-verified","timeout_ms":10000}
+{"screenshot":".build/world-curves-vertical.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"type":"for s in (c,e,p,h); translate!(s,[0,0,0.03];duration=0.1); "}
+{"type":"rotate!(s,[0.5,0.5,0],[1,1,1],-pi/4;duration=0.1); end; println(\"curves-\"*\"oblique\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-oblique","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"curves-\"*\"settled\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-settled","timeout_ms":20000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"screenshot":".build/world-curves-oblique.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"type":"clear!(); println(\"curves-\"*\"departing\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-departing","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; println(\"curves-\"*\"cleared\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"curves-cleared","timeout_ms":20000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -20,9 +20,9 @@
 {"key":"enter"}
 {"wait_terminal_contains":"verified-terminal-shapes-motion-acceptance-2","timeout_ms":20000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
-{"type":"translate_points!(UInt64[vertex_ids[2]],[[0,0,0]],[0.05,0,0];duration=0.2); translate_points!(UInt64"}
-{"type":"[vertex_ids[1]],[[0,0,0]],[-0.05,-0.05,0];duration=0.2); translate_points!(UInt64[vertex_ids[2]],[[0"}
-{"type":",0,0]],[0.05,0.05,0];duration=0.2); translate_points!(UInt64[vertex_ids[3]],[[0,0,0]],[0.05,0.05,0];"}
+{"type":"translate_points!(UInt64[vertex_ids[2]],[0.05,0,0];duration=0.2); translate_points!(UInt64"}
+{"type":"[vertex_ids[1]],[-0.05,-0.05,0];duration=0.2); translate_points!(UInt64[vertex_ids[2]],"}
+{"type":"[0.05,0.05,0];duration=0.2); translate_points!(UInt64[vertex_ids[3]],[0.05,0.05,0];"}
 {"type":"duration=0.2); while !status().drained && !status().failed; sleep(0.01); end; @assert !status().fail"}
 {"type":"ed && polygon_vertex_ids(polygon)==vertex_ids; final=[OdinJuliaBridge.get_point(state_ptr,id).pos fo"}
 {"type":"r id in vertex_ids]; @assert final[1][1]\u22480.2 && final[2][1]\u22480.6 && final[3][2]\u22480.55; \"verified-termi"}
@@ -45,17 +45,17 @@
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"wait_event":"animation_tick_committed","timeout_ms":10000}
 {"type":"@assert !status().failed && polygon_vertex_ids(polygon)==vertex_ids; rotate_points!(UInt64[probe.ind"}
-{"type":"ex],[[0,0,0]],[0,0,0],[1,0,0],pi/2;duration=0.2); while !status().drained && !status().failed; sleep"}
+{"type":"ex],[0,0,0],[1,0,0],pi/2;duration=0.2); while !status().drained && !status().failed; sleep"}
 {"type":"(0.01); end; @assert OdinJuliaBridge.get_point(state_ptr,probe.index).pos[3]>0.3; \"verified-terminal"}
 {"type":"\"*\"-shapes-motion-acceptance-5\""}
 {"key":"enter"}
 {"wait_terminal_contains":"verified-terminal-shapes-motion-acceptance-5","timeout_ms":20000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"type":"rotate_z!(arc,2pi;pivot=[0.5,0.5,0],duration=0.4); rotate_z!(curve,-pi/3;pivot=[0.5,0.5,0],duration="}
-{"type":"0.4); sleep(0.12); angle=OdinJuliaBridge.get_arc_geometry(state_ptr,arc.host_id).arc.start_theta-0.2"}
-{"type":"5; @assert 0<angle<2pi; observed=OdinJuliaBridge.get_point(state_ptr,arc.host_id).pos; expected=Eucl"}
-{"type":"idRepl.rotated_xy_position(Float32[0.7,0.7,0],[0.5,0.5,0],angle); @assert status().kind==:analytic_r"}
-{"type":"otation && isapprox(Float32[observed...],expected;atol=0.002); \"verified-terminal\"*\"-shapes-motion-a"}
+{"type":"0.4); sleep(0.12); q=OdinJuliaBridge.get_shape_orientation(state_ptr,arc.host_id).orientation;"}
+{"type":" @assert abs(q[3])>0.01; observed=OdinJuliaBridge.get_point(state_ptr,arc.host_id).pos; v=EuclidRepl."}
+{"type":"motion_rotate(q,(0.2f0,0.2f0,0f0)); expected=Float32[0.5+v[1],0.5+v[2],v[3]]; @assert status().kind"}
+{"type":"==:transform && isapprox(Float32[observed...],expected;atol=0.002); \"verified-terminal\"*\"-shapes-motion-a"}
 {"type":"cceptance-6\""}
 {"key":"enter"}
 {"wait_terminal_contains":"verified-terminal-shapes-motion-acceptance-6","timeout_ms":15000}
@@ -68,8 +68,8 @@
 {"type":"@assert !status().failed; aq=OdinJuliaBridge.get_arc_geometry(state_ptr,arc.host_id); tq=OdinJuliaBr"}
 {"type":"idge.get_trochoid_geometry(state_ptr,curve.host_id); @assert isapprox(OdinJuliaBridge.get_point(stat"}
 {"type":"e_ptr,arc.host_id).pos[1],0.7;atol=1f-4) && isapprox(OdinJuliaBridge.get_point(state_ptr,arc.host_id"}
-{"type":").pos[2],0.7;atol=1f-4); @assert isapprox(aq.arc.start_theta,0.25+2pi;atol=1f-4) && isapprox(aq.arc."}
-{"type":"sweep_theta,-2pi;atol=1f-4); @assert isapprox(tq.geometry.rotation,-pi/3;atol=1f-4) && isapprox(tq.g"}
+{"type":").pos[2],0.7;atol=1f-4); @assert isapprox(aq.arc.start_theta,0.25;atol=1f-4) && isapprox(aq.arc."}
+{"type":"sweep_theta,-2pi;atol=1f-4); @assert isapprox(tq.geometry.rotation,0;atol=1f-4) && isapprox(tq.g"}
 {"type":"eometry.draw_parameter,pi/2;atol=1f-4); \"verified-terminal\"*\"-shapes-motion-acceptance-7\""}
 {"key":"enter"}
 {"wait_terminal_contains":"verified-terminal-shapes-motion-acceptance-7","timeout_ms":20000}

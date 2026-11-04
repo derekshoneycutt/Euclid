@@ -10,6 +10,7 @@ end
         relpath.(sysimage_stable_input_paths(), JULIA_TEST_PROJECT), '\\' => '/')
     @test "animation_catalog.jl" in relative_inputs
     @test "localized_content.jl" in relative_inputs
+    @test "repl_transforms.jl" in relative_inputs
     @test "animations/trochoids.jl" in relative_inputs
     @test "animations/cycloids.jl" in relative_inputs
     @test "animations/conics.jl" in relative_inputs

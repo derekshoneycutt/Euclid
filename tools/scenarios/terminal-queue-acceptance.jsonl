@@ -17,7 +17,7 @@
 {"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==3; @assert all(h->EuclidRepl.OdinJuliaBridge.get_point(state_ptr,h).do_draw==1,(p.index,l.host_id,c.host_id)); println(\"queue-\"*\"drawn\")"}
 {"key":"enter"}
 {"wait_terminal_contains":"queue-drawn","timeout_ms":15000}
-{"type":"d=Float32[0.1,0,0]; ids=UInt64[p.index]; starts=[[9,9,9]]; translate_points!(ids,starts,d;duration=1); translate_points!(ids,starts,d;duration=1); d[1]=99; ids[1]=0; starts[1][1]=99; while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; @assert isapprox(EuclidRepl.OdinJuliaBridge.get_point(state_ptr,p.index).pos[1],0.5f0;atol=1f-5); println(\"queue-\"*\"composed\")"}
+{"type":"d=Float32[0.1,0,0]; ids=UInt64[p.index]; translate_points!(ids,d;duration=1); translate_points!(ids,d;duration=1); d[1]=99; ids[1]=0; while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; @assert isapprox(EuclidRepl.OdinJuliaBridge.get_point(state_ptr,p.index).pos[1],0.5f0;atol=1f-5); println(\"queue-\"*\"composed\")"}
 {"key":"enter"}
 {"wait_terminal_contains":"queue-composed","timeout_ms":15000}
 {"screenshot":".build/terminal-queue-finished.png"}

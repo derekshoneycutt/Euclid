@@ -126,6 +126,43 @@ world_render_builds_trochoid_curve_packet :: proc(t: ^testing.T) {
     }
 }
 
+// Verify shared curve publication preserves prior storage on invalid or full output.
+@(test)
+world_render_curve_publication_is_transactional :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    results := [?]curve.Curve_Explication_Result{
+        {1, .Complete, .Open}, {2, .Invalid_Input, .Open},
+        {2, .Complete, .Closed}, {2, .Capacity_Limited, .Open},
+    }
+    full_cases := [?]bool{false, true}
+    for result in results {
+        for full in full_cases {
+            world.draw_cache.curve_vertex_count = 2
+            previous_items := 3
+            if full {
+                previous_items = len(world.draw_cache.items)
+            }
+            world.draw_cache.item_count = previous_items
+            first, reserved := draw_cache_reserve_curve_vertices_storage(
+                &world.draw_cache, 4)
+            testing.expect(t, reserved)
+            world_cache_commit_curve(world, {}, first, 4, result)
+            accepted := !full && result.vertex_count >= 2 &&
+                result.status != .Invalid_Input
+            expected_vertices := 2
+            expected_items := previous_items
+            if accepted {
+                expected_vertices += result.vertex_count
+                expected_items += 1
+            }
+            testing.expect_value(t,
+                world.draw_cache.curve_vertex_count, expected_vertices)
+            testing.expect_value(t, world.draw_cache.item_count, expected_items)
+        }
+    }
+}
+
 // Verify curve storage rollback leaves one aligned frontier for points and kinds.
 @(test)
 world_render_curve_storage_rollback_preserves_alignment :: proc(t: ^testing.T) {

@@ -187,6 +187,7 @@ const SYSIMAGE_STABLE_INPUTS = String[
     "terminal.jl",
     "ticks.jl",
     "euclidrepl.jl",
+    "repl_transforms.jl",
     "terminal_container.jl",
     "eval.jl",
     "interpolation.jl",
