@@ -879,10 +879,14 @@ Same-evaluation motion and hide commands accept identities from successful queue
 construction reservations; they still revalidate against the snapshot at activation.
 Point translation and rotation no longer accept redundant `start_positions`.
 Two queued translations compose instead of both starting from the submission state.
-`hide!` queues hiding a managed host. `clear!` queues hiding the hosts admitted before
-that command, preserving later admissions. Neither interrupts construction.
-Large ordered clears use the native 256-command capacity per captured tick and retain the
-active action until all copied hosts have been processed.
+`hide!` and `show!` queue visibility changes for a managed host. `clear!` queues hiding
+the managed hosts admitted before that command, preserving later admissions; cleared
+hosts remain managed and can be shown again during the same Terminal session. These
+helpers affect Terminal-managed geometry, not every application shape, and do not
+interrupt construction. Closing the Terminal session resets its managed-host registry;
+the existing animation-generation lifecycle retires that session's shapes.
+Large ordered clears use the native 256-command capacity per captured tick and retain
+the active action until all copied hosts have been processed.
 The legacy finish-now `stop!()` helper has been removed; use the ordinary animation
 pause/resume controls to inspect progress without changing order.
 

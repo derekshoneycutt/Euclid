@@ -37,6 +37,7 @@ const REPL_TEST_POSITIONS = Dict{UInt64,NTuple{3,Float32}}()
 const REPL_TEST_KINDS = Dict{UInt64,Int32}()
 const REPL_TEST_ORIENTATIONS = Dict{UInt64,NTuple{4,Float32}}()
 const REPL_TEST_HIDDEN = UInt64[]
+const REPL_TEST_SHOWN = UInt64[]
 const REPL_TEST_REVEALED = UInt64[]
 const REPL_TEST_FRONTIERS = Dict{UInt64,Float32}()
 
@@ -99,6 +100,7 @@ end
 """Accept completion visibility only for the null-state frontier fixture."""
 function OdinJuliaBridge.show_point(state::Ptr{Cvoid}, id::UInt64)
     state == C_NULL || return OdinJuliaBridge.show_point(state, Int(id))
+    push!(REPL_TEST_SHOWN, id)
     return OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -308,11 +310,12 @@ end
     @test EuclidRepl.status(runtime, TEST_STATE_PTR).managed_shape_count == 0
 end
 
-@testset "EuclidRepl hide helpers" begin
+@testset "EuclidRepl visibility helpers" begin
     EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     empty!(REPL_TEST_HIDDEN)
+    empty!(REPL_TEST_SHOWN)
     session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
-    for id in UInt64[5, 7, 11, 21, 31]
+    for id in UInt64[5, 7, 11, 21, 31, 41]
         REPL_TEST_POSITIONS[id] = (0f0, 0f0, 0f0)
         EuclidRepl.track_managed_host!(session, id)
     end
@@ -335,6 +338,8 @@ end
     line_shape = OdinJuliaBridge.BridgeShapeLine(0, 11, 12, 13)
     circle_shape = OdinJuliaBridge.BridgeShapeCircle(0, 21)
     filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(0, 31)
+    triangle_shape = OdinJuliaBridge.BridgeShapeTriangle(
+        OdinJuliaBridge.BRIDGE_STATUS_OK, 41, 42, 43, 44)
 
     @test isnothing(EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 5))
     @test isnothing(EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, point))
@@ -346,15 +351,58 @@ end
         TEST_REPL_RUNTIME, TEST_STATE_PTR, circle_shape))
     @test isnothing(EuclidRepl.hide!(
         TEST_REPL_RUNTIME, TEST_STATE_PTR, filled_circle_shape))
+    @test isnothing(EuclidRepl.hide!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, triangle_shape))
     @test isempty(REPL_TEST_HIDDEN)
-    @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).pending_count == 5
+    @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).pending_count == 6
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     @test isempty(REPL_TEST_HIDDEN)
-    for _ in 1:6
+    for _ in 1:7
         EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     end
-    @test REPL_TEST_HIDDEN == UInt64[5, 7, 7, 11, 21, 31]
+    @test REPL_TEST_HIDDEN == UInt64[5, 7, 7, 11, 21, 31, 41]
     @test_throws ArgumentError EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 99)
+    invalid_triangle = OdinJuliaBridge.BridgeShapeTriangle(
+        OdinJuliaBridge.BRIDGE_STATUS_NOT_FOUND, 41, 42, 43, 44)
+    @test_throws ArgumentError EuclidRepl.hide!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, invalid_triangle)
+
+    @test isnothing(EuclidRepl.show!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 5))
+    @test isnothing(EuclidRepl.show!(TEST_REPL_RUNTIME, TEST_STATE_PTR, point))
+    @test isnothing(EuclidRepl.show!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, point_view))
+    @test isnothing(EuclidRepl.show!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, line_shape))
+    @test isnothing(EuclidRepl.show!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, circle_shape))
+    @test isnothing(EuclidRepl.show!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, filled_circle_shape))
+    @test isnothing(EuclidRepl.show!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, triangle_shape))
+    @test isempty(REPL_TEST_SHOWN)
+    @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).pending_count == 6
+    EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+    @test isempty(REPL_TEST_SHOWN)
+    for _ in 1:7
+        EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
+    end
+    @test REPL_TEST_SHOWN == UInt64[5, 7, 7, 11, 21, 31, 41]
+    @test_throws ArgumentError EuclidRepl.show!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 99)
+    @test_throws ArgumentError EuclidRepl.show!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, invalid_triangle)
+end
+
+@testset "EuclidRepl installs Terminal show helper" begin
+    runtime = EuclidRepl.create_runtime()
+    context_module = Module(:EuclidReplVisibilityHelperTest)
+    REPL_TEST_POSITIONS[51] = (0f0, 0f0, 0f0)
+    EuclidRepl.track_managed_host!(runtime.session, UInt64(51))
+    EuclidRepl.install_drawing_helpers!(
+        context_module, runtime, TEST_STATE_PTR)
+
+    @test isdefined(context_module, :show!)
+    @test isnothing(getfield(context_module, :show!)(51))
+    @test runtime.session.active_job.payload.visible
 end
 
 @testset "EuclidRepl typed shape identities and admissions" begin
@@ -575,7 +623,7 @@ end
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     EuclidRepl.run_active_job_frame!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 1f0)
     @test EuclidRepl.status(
-        TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 0
+        TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 2
 
     EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     state_after_reset = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
@@ -726,6 +774,7 @@ end
     runtime = EuclidRepl.create_runtime()
     session = runtime.session
     empty!(REPL_TEST_HIDDEN)
+    empty!(REPL_TEST_SHOWN)
     REPL_TEST_POSITIONS[8] = (0f0, 0f0, 0f0)
     REPL_TEST_POSITIONS[9] = (0f0, 0f0, 0f0)
     EuclidRepl.track_managed_host!(session, UInt64(8))
@@ -736,9 +785,13 @@ end
     @test isempty(REPL_TEST_HIDDEN)
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test REPL_TEST_HIDDEN == UInt64[8]
-    @test session.managed_host_ids == UInt64[9]
+    @test session.managed_host_ids == UInt64[8, 9]
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test REPL_TEST_HIDDEN == UInt64[8, 9]
+    EuclidRepl.show!(runtime, TEST_STATE_PTR, 8)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test REPL_TEST_SHOWN == UInt64[8]
 end
 
 @testset "EuclidRepl large clear uses bounded captured batches" begin
@@ -756,7 +809,7 @@ end
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
     @test REPL_TEST_HIDDEN == UInt64.(100:356)
     @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
-    @test isempty(runtime.session.managed_host_ids)
+    @test runtime.session.managed_host_ids == UInt64.(100:356)
 end
 
 @testset "EuclidRepl same-evaluation construction dependencies use reservations" begin

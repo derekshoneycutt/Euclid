@@ -12,9 +12,9 @@ Key behavior:
 Use ordinary animation pause/resume; the former finish-now `stop!` is removed.
 
 Use `?point!`, `?line!`, `?circle!`, `?label!`, `?triangle!`, `?cycloid!`,
-`?trochoid!`, `?parabola!`, `?hyperbola!`, and `?rotate_z!` in the Terminal
-for API details. See TerminalArchitecture.md for the supported shape and motion
-boundary.
+`?trochoid!`, `?parabola!`, `?hyperbola!`, `?hide!`, `?show!`, `?clear!`, and
+`?rotate_z!` in the Terminal for API details. See TerminalArchitecture.md for
+the supported shape and motion boundary.
 """
 module EuclidRepl
 
@@ -27,7 +27,7 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_CURVE_DURATION,
     DEFAULT_TRANSFORM_DURATION, DEFAULT_HIGHLIGHT_DURATION,
     DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
-    euclidcolors, hide!, point!, line!, circle!, label!, triangle!, square!,
+    euclidcolors, hide!, show!, point!, line!, circle!, label!, triangle!, square!,
     pentagon!, lens!, lune!, polygon_vertex_ids, line_endpoint_ids,
     circle_region_center_ids, cycloid!, ordinary_cycloid!,
     curtate_cycloid!, prolate_cycloid!, trochoid!, ellipse!, cardioid!,
@@ -44,7 +44,7 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
 
 const ACTION_QUEUE_CAPACITY = 32
 const TRANSFORM_POINT_CAPACITY = 16
-"""Native scene-command ceiling from bridge/model/model.odin; a clear emits only hides."""
+"""Native scene-command ceiling from bridge/model/model.odin for ordered clears."""
 const CLEAR_COMMAND_CAPACITY = 256
 
 const DEFAULT_POINT_DURATION = 5.5f0
@@ -233,13 +233,13 @@ point_transform_payload(ids, starts, spec) = TransformPayload(
 """Copied visibility intent with bounded per-tick progress for large ordered clears."""
 mutable struct VisibilityPayload <: ReplDrawPayload
     host_ids::Vector{UInt64}
-    clear::Bool
+    visible::Bool
     next_host::Int
 end
 
 """Start an ordered visibility action at its first copied host."""
-function visibility_payload(host_ids, clear)
-    return VisibilityPayload(host_ids, clear, 1)
+function visibility_payload(host_ids, visible)
+    return VisibilityPayload(host_ids, visible, 1)
 end
 
 """One admitted action, with activation deferred until its first captured tick."""
@@ -298,8 +298,11 @@ end
 """Install point, line, circle, visibility, and palette helpers."""
 function install_primitive_helpers!(context_module::Module)
     Core.eval(context_module, quote
-        """Hide one REPL-managed geometry target."""
+        """Hide one Terminal-managed geometry target."""
         hide!(args...; kwargs...) = EuclidRepl.hide!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Show one Terminal-managed geometry target."""
+        show!(args...; kwargs...) = EuclidRepl.show!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
         """Return the curated Euclid drawing colors."""
         euclidcolors(args...; kwargs...) = EuclidRepl.euclidcolors(args...; kwargs...)
@@ -447,7 +450,7 @@ function install_conic_and_control_helpers!(context_module::Module)
         """Animate a compass highlight."""
         highlight_compass!(args...; kwargs...) = EuclidRepl.highlight_compass!(
             EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
-        """Queue a clear of geometry admitted before this command."""
+        """Queue hiding geometry admitted before this command."""
         clear!() = EuclidRepl.clear!(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
         """Return Euclid drawing status for this Terminal generation."""
         status() = EuclidRepl.status(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
@@ -1244,14 +1247,17 @@ finalize_payload!(
 """Visibility has already been emitted by its bounded execution frames."""
 finalize_payload!(_::Ptr{Cvoid}, _::VisibilityPayload) = nothing
 
-"""Emit ordered hiding, retaining identities admitted after an ordered clear."""
+"""Apply ordered visibility changes in bounded captured batches."""
 function render_payload!(
     state_ptr::Ptr{Cvoid}, _::Real, _::Real, payload::VisibilityPayload)
     last_host = min(length(payload.host_ids),
         payload.next_host + CLEAR_COMMAND_CAPACITY - 1)
     for index in payload.next_host:last_host
         id = payload.host_ids[index]
-        OdinJuliaBridge.hide_point(state_ptr, id) == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        status = payload.visible ?
+            OdinJuliaBridge.show_point(state_ptr, id) :
+            OdinJuliaBridge.hide_point(state_ptr, id)
+        status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
             error("Terminal visibility execution failed for entity $id")
     end
     payload.next_host = last_host + 1
@@ -1500,9 +1506,6 @@ function execute_job_frame!(
         job.payload.next_host > length(job.payload.host_ids)
     if job.elapsed >= job.duration && visibility_complete
         finalize_job!(state_ptr, job)
-        if job.payload isa VisibilityPayload && job.payload.clear
-            filter!(id -> !(id in job.payload.host_ids), session.managed_host_ids)
-        end
         session.completed_count += 1
         session.active_job = nothing
     end
@@ -1551,8 +1554,9 @@ function reset_session!(runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
 end
 
 """
-Queue a clear of geometry admitted before this command, without interrupting actions.
+Queue hiding hosts currently managed by this Terminal session.
 
+Hosts remain managed, so `show!` can reveal them later in the same session.
 Returns `true` when admitted. Large clears use the native 256-command tick capacity.
 """
 function clear!(
@@ -1560,32 +1564,33 @@ function clear!(
 
     session = ensure_session!(host_runtime)
     require_action_capacity(session)
-    payload = visibility_payload(copy(session.managed_host_ids), true)
+    payload = visibility_payload(copy(session.managed_host_ids), false)
     start_job!(host_runtime, state_ptr, ReplDrawJob(:clear, eps(Float32), 0f0, payload))
     return true
 end
 
-"""Queue hiding a valid managed host without interrupting accepted work."""
-function _hide_bridge_point(
-    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, id::UInt64)
+"""Queue one visibility change for a valid managed host."""
+function _set_bridge_visibility(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, id::UInt64, visible::Bool)
     session = ensure_session!(runtime)
     require_action_capacity(session)
     id in session.managed_host_ids ||
-        throw(ArgumentError("hide! requires a Terminal-managed geometry host"))
+        throw(ArgumentError("visibility changes require a Terminal-managed geometry host"))
     queued_construction_target(session, id) || validated_target(state_ptr, id)
-    payload = visibility_payload(UInt64[id], false)
-    start_job!(runtime, state_ptr, ReplDrawJob(:hide, eps(Float32), 0f0, payload))
+    payload = visibility_payload(UInt64[id], visible)
+    kind = visible ? :show : :hide
+    start_job!(runtime, state_ptr, ReplDrawJob(kind, eps(Float32), 0f0, payload))
     return nothing
 end
 
-"""Hide a REPL-managed geometry target by integer index or bridge entity/view handle."""
+"""Hide a Terminal-managed geometry target by its packed host identity."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     index::Integer)
 
     _ = host_runtime
-    _hide_bridge_point(host_runtime, state_ptr, UInt64(index))
+    _set_bridge_visibility(host_runtime, state_ptr, UInt64(index), false)
     return nothing
 end
 
@@ -1596,44 +1601,40 @@ function hide!(
     point::OdinJuliaBridge.BridgeShapeEntityResult)
 
     _ = host_runtime
-    _hide_bridge_point(host_runtime, state_ptr, point.index)
+    _set_bridge_visibility(host_runtime, state_ptr, point.index, false)
     return nothing
 end
 
+"""Hide a point-view target by its packed host identity."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     view::OdinJuliaBridge.BridgePointView)
 
     _ = host_runtime
-    _hide_bridge_point(host_runtime, state_ptr, view.index)
+    _set_bridge_visibility(host_runtime, state_ptr, view.index, false)
     return nothing
 end
+
+"""Hide a line target by its managed host identity."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     shape::OdinJuliaBridge.BridgeShapeLine)
 
     _ = host_runtime
-    _hide_bridge_point(host_runtime, state_ptr, shape.host_id)
+    _set_bridge_visibility(host_runtime, state_ptr, shape.host_id, false)
     return nothing
 end
+
+"""Hide a circle target by its managed host identity."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     shape::OdinJuliaBridge.BridgeShapeCircle)
 
     _ = host_runtime
-    _hide_bridge_point(host_runtime, state_ptr, shape.host_id)
-    return nothing
-end
-function hide!(
-    host_runtime::EuclidReplRuntime,
-    state_ptr::Ptr{Cvoid},
-    shape::OdinJuliaBridge.BridgeShapeFilledCircle)
-
-    _ = host_runtime
-    _hide_bridge_point(host_runtime, state_ptr, shape.host_id)
+    _set_bridge_visibility(host_runtime, state_ptr, shape.host_id, false)
     return nothing
 end
 
@@ -1650,7 +1651,63 @@ function hide!(
         OdinJuliaBridge.BridgeShapePentagon})
     shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
         throw(ArgumentError("hide! requires a successful typed shape result"))
-    _hide_bridge_point(runtime, state_ptr, shape.host_id)
+    _set_bridge_visibility(runtime, state_ptr, shape.host_id, false)
+    return nothing
+end
+
+"""Show a Terminal-managed geometry target by its packed host identity."""
+function show!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, index::Integer)
+    _set_bridge_visibility(runtime, state_ptr, UInt64(index), true)
+    return nothing
+end
+
+"""Show a standalone entity returned by `point!` using its packed index."""
+function show!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    point::OdinJuliaBridge.BridgeShapeEntityResult)
+    _set_bridge_visibility(runtime, state_ptr, point.index, true)
+    return nothing
+end
+
+"""Show a point-view target by its packed host identity."""
+function show!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    view::OdinJuliaBridge.BridgePointView)
+    _set_bridge_visibility(runtime, state_ptr, view.index, true)
+    return nothing
+end
+
+"""Show a line target by its managed host identity."""
+function show!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeLine)
+    _set_bridge_visibility(runtime, state_ptr, shape.host_id, true)
+    return nothing
+end
+
+"""Show a circle target by its managed host identity."""
+function show!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeCircle)
+    _set_bridge_visibility(runtime, state_ptr, shape.host_id, true)
+    return nothing
+end
+
+"""Show any newly supported typed shape result by its single host identity."""
+function show!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    shape::Union{
+        OdinJuliaBridge.BridgeShapeCircleRegion,
+        OdinJuliaBridge.BridgeShapeTrochoidResult,
+        OdinJuliaBridge.BridgeShapeCycloidResult,
+        OdinJuliaBridge.BridgeShapeConicResult,
+        OdinJuliaBridge.BridgeShapeTriangle,
+        OdinJuliaBridge.BridgeShapeSquare,
+        OdinJuliaBridge.BridgeShapePentagon})
+    shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        throw(ArgumentError("show! requires a successful typed shape result"))
+    _set_bridge_visibility(runtime, state_ptr, shape.host_id, true)
     return nothing
 end
 
