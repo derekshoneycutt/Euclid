@@ -52,6 +52,44 @@ world_render_snapshots_dense_transforms_for_interpolation :: proc(t: ^testing.T)
     }
 }
 
+// Verify empty reservations reveal only the first draw increment at every render alpha.
+@(test)
+world_render_empty_arcs_reveal_without_completed_sweep_history :: proc(t: ^testing.T) {
+    kinds: [2]shapemodel.Shape_Geometry_Kind = {.Arc, .Filled_Arc}
+    for kind in kinds {
+        for sweep in ([2]f32{0.05, -0.05}) {
+            world := new(shapemodel.Shape_World, context.allocator)
+            defer free(world, context.allocator)
+            handle, status := world_create_arc_kind(world, {
+                center = {0.5, 0.5, 0},
+                radius = 0.25,
+                start_theta = 0.75,
+            }, kind)
+            testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+            shape_world_update_previous_values(world)
+            arc, found := shapemodel.shape_component_get_mut(
+                &world.arcs, &world.registry, handle.shape)
+            testing.expect(t, found)
+            testing.expect_value(t, arc.previous_sweep_theta, f32(0))
+            arc.sweep_theta = sweep
+            world_render_test_show(world, handle.shape)
+            for alpha in ([5]f32{0, 0.25, 0.5, 0.75, 1}) {
+                build_shape_world_draw_cache(world, alpha)
+                testing.expect_value(t, world.draw_cache.item_count, 1)
+                item := world.draw_cache.items[0]
+                #partial switch typed in item {
+                case Shapes_Circle_Draw:
+                    testing.expect_value(t, typed.sweep_theta, sweep * alpha)
+                case Shapes_Filled_Circle_Draw:
+                    testing.expect_value(t, typed.sweep_theta, sweep * alpha)
+                case:
+                    testing.expect(t, false, "expected outlined or filled arc draw item")
+                }
+            }
+        }
+    }
+}
+
 // Verify fixed-arity geometry resolves direct entities into the existing draw union.
 @(test)
 world_render_builds_direct_line_and_arc_items :: proc(t: ^testing.T) {
@@ -87,6 +125,40 @@ world_render_builds_direct_line_and_arc_items :: proc(t: ^testing.T) {
     }
     testing.expect(t, line_found)
     testing.expect(t, arc_found)
+}
+
+// Verify both rolling modes interpolate the first frontier from an undrawn domain.
+@(test)
+world_render_trochoids_begin_at_the_reserved_start_parameter :: proc(t: ^testing.T) {
+    modes: [2]shapemodel.Shape_Trochoid_Mode = {.External, .Internal}
+    for mode in modes {
+        for finish in ([2]f32{-1, 3}) {
+            world := new(shapemodel.Shape_World, context.allocator)
+            defer free(world, context.allocator)
+            handle, status := world_create_trochoid(world, {
+                mode = mode,
+                fixed_radius = 0.1,
+                rolling_radius = 0.05,
+                tracer_distance = 0.02,
+                parameter_start = 1,
+                parameter_finish = finish,
+                draw_parameter = 1,
+            })
+            testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+            shape_world_update_previous_values(world)
+            value, found := shapemodel.shape_component_get_mut(
+                &world.trochoids, &world.registry, handle.shape)
+            testing.expect(t, found)
+            increment := (finish - 1) * 0.01
+            value.draw_parameter = 1 + increment
+            for alpha in ([5]f32{0, 0.25, 0.5, 0.75, 1}) {
+                lerped, valid := world_lerped_trochoid(world, handle.shape, alpha)
+                testing.expect(t, valid)
+                testing.expect(t, math.abs(
+                    lerped.value.draw_parameter - (1 + increment * alpha)) < 0.000001)
+            }
+        }
+    }
 }
 
 // Verify a revealed trochoid compiles once into the dedicated curve vertex pool.

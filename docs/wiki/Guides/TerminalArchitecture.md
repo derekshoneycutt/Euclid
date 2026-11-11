@@ -870,6 +870,14 @@ Constructor admission reserves native identities using the existing transactiona
 constructors; these hosts remain hidden until their drawing action runs. Full or
 invalid submissions raise an error without replacing earlier work.
 
+Terminal circles and filled sectors reserve an empty native sweep while retaining
+the requested signed sweep in their queued payload. Both interpolation samples
+therefore start undrawn; the first visible draw tick cannot blend backward from
+the completed circle into its initial arc.
+Trochoids (including all named rolling-circle helpers), Cycloids, parabolas, and
+hyperbolas likewise reserve their frontier at `parameter_start`, retaining the
+requested final `draw_parameter` in the queued payload for drawing and completion.
+
 Submitted vectors and styles are copied. Motion targets are revalidated and their
 starts sampled from the immutable native query at activation, after earlier actions.
 When an idle queue receives work, its first captured tick is an admission boundary

@@ -7,9 +7,9 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Terminal animation recording
 - Terminal exercises
 - Animation builder
+- Terminal animation recording
 - Accessibility completion work
 
 -----------------
@@ -230,10 +230,10 @@ General features:
   - [X] Julia syntax highlighting
   - [X] History explorer, Julia-familiar
   - [X] Complete Terminal shape suite
-  - [ ] Terminal animation recorder w/ playback & save (e.g. start_recording! ...
-     end_recording! ... replay_recording!)
   - [ ] REPL-focused exercises
   - [ ] Animation builder
+  - [ ] Terminal animation recorder w/ playback & save (e.g. start_recording! ...
+     end_recording! ... replay_recording!)
 - [ ] Accessibility Support
   - [X] Basic initial accesibility support
   - [X] Reduced motion support

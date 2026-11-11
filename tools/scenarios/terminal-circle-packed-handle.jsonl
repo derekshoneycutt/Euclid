@@ -2,29 +2,38 @@
 {"select_animation":"Terminal","as":"terminal"}
 {"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
 {"wait_state":"terminal_ready","timeout_ms":10000}
-{"type":"c=circle!([0.25,0.25,0],0.12; sweep_theta=0f0, duration=0.1); println(c.host_id isa UInt64)"}
+{"type":"c=circle!([0.25,0.25,0],0.12; sweep_theta=0f0, duration=0.1); @assert c.host_id isa UInt64; println(\"circle-\"*\"reserved\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":10000}
-{"wait_terminal_contains":"true","timeout_ms":10000}
-{"type":"while status().active; sleep(0.01); end; circle!([0.5,0.25,0],0.12; start_theta=0f0,sweep_theta=1.5707964f0,duration=0.1,color=:steelblue); println(\"positive-started\")"}
+{"wait_terminal_contains":"circle-reserved","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; positive=circle!([0.5,0.25,0],0.12; start_theta=0f0,sweep_theta=1.5707964f0,duration=0.1,color=:steelblue); println(\"positive-\"*\"started\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":15000}
 {"wait_terminal_contains":"positive-started","timeout_ms":10000}
-{"type":"while status().active; sleep(0.01); end; circle!([0.25,0.55,0],0.12; start_theta=0f0,sweep_theta=-1.5707964f0,duration=0.1,color=:palevioletred1); println(\"negative-started\")"}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; negative=circle!([0.25,0.55,0],0.12; start_theta=0f0,sweep_theta=-1.5707964f0,duration=0.1,color=:palevioletred1); println(\"negative-\"*\"started\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":15000}
 {"wait_terminal_contains":"negative-started","timeout_ms":10000}
-{"type":"while status().active; sleep(0.01); end; circle!([0.5,0.55,0],0.12; sweep_theta=6.2831855f0,duration=0.1,color=:khaki3); println(\"full-started\")"}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; full=circle!([0.5,0.55,0],0.12; sweep_theta=6.2831855f0,duration=0.1,color=:khaki3); println(\"full-\"*\"started\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":15000}
 {"wait_terminal_contains":"full-started","timeout_ms":10000}
-{"type":"while status().active; sleep(0.01); end; println(\"circle-finished\")"}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; sector=circle!([0.75,0.55,0],0.12; start_theta=0.75f0,sweep_theta=-1.5707964f0,filled=true,duration=0.1); println(\"sector-\"*\"started\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":15000}
+{"wait_terminal_contains":"sector-started","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; println(\"circle-\"*\"finished\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":15000}
 {"wait_terminal_contains":"circle-finished","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"for (shape,sweep) in ((c,0f0),(positive,1.5707964f0),(negative,-1.5707964f0),(full,6.2831855f0),(sector,-1.5707964f0)); arc=OdinJuliaBridge.get_arc_geometry(state_ptr,shape.host_id); @assert arc.status==0 && arc.arc.sweep_theta==sweep; end; println(\"sweeps-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":15000}
+{"wait_terminal_contains":"sweeps-verified","timeout_ms":10000}
 {"screenshot":".build/terminal-signed-sweep-arcs.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}
-{"type":"hide!(c); println(\"circle-hidden\")"}
+{"type":"hide!(c); println(\"circle-\"*\"hidden\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"wait_terminal_contains":"circle-hidden","timeout_ms":10000}

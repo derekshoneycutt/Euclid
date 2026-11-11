@@ -40,6 +40,67 @@ const REPL_TEST_HIDDEN = UInt64[]
 const REPL_TEST_SHOWN = UInt64[]
 const REPL_TEST_REVEALED = UInt64[]
 const REPL_TEST_FRONTIERS = Dict{UInt64,Float32}()
+const REPL_TEST_ARCS = Tuple{Bool,Float32,Float32,Float32}[]
+const REPL_TEST_CURVE_DOMAINS = Tuple{Float32,Float32,Float32}[]
+
+"""Record a curve's reserved domain and return a unique null-state host identity."""
+function record_test_curve_domain!(parameters)
+    push!(REPL_TEST_CURVE_DOMAINS, (parameters[:parameter_start],
+        parameters[:parameter_finish], parameters[:draw_parameter]))
+    return UInt64(10000 + length(REPL_TEST_CURVE_DOMAINS))
+end
+
+"""Record trochoid reservations while preserving native calls for real states."""
+function OdinJuliaBridge.create_new_trochoid(
+    state::Ptr{Cvoid}, center::Vector{Float32}; kwargs...)
+    state == C_NULL ||
+        return OdinJuliaBridge.create_new_trochoid(state, Tuple(center); kwargs...)
+    id = record_test_curve_domain!(kwargs)
+    return OdinJuliaBridge.BridgeShapeTrochoidResult(OdinJuliaBridge.BRIDGE_STATUS_OK, id)
+end
+
+"""Record Cycloid reservations while preserving native calls for real states."""
+function OdinJuliaBridge.create_new_cycloid(
+    state::Ptr{Cvoid}, first::Vector{Float32}, second::Vector{Float32}; kwargs...)
+    state == C_NULL || return OdinJuliaBridge.create_new_cycloid(
+        state, Tuple(first), Tuple(second); kwargs...)
+    id = record_test_curve_domain!(kwargs)
+    return OdinJuliaBridge.BridgeShapeCycloidResult(
+        OdinJuliaBridge.BRIDGE_STATUS_OK, id, id + 100, id + 200)
+end
+
+"""Record parabola reservations while preserving native calls for real states."""
+function OdinJuliaBridge.create_new_parabola(
+    state::Ptr{Cvoid}, vertex::Vector{Float32}; kwargs...)
+    state == C_NULL ||
+        return OdinJuliaBridge.create_new_parabola(state, Tuple(vertex); kwargs...)
+    id = record_test_curve_domain!(kwargs)
+    return OdinJuliaBridge.BridgeShapeConicResult(OdinJuliaBridge.BRIDGE_STATUS_OK, id)
+end
+
+"""Record hyperbola reservations while preserving native calls for real states."""
+function OdinJuliaBridge.create_new_hyperbola(
+    state::Ptr{Cvoid}, center::Vector{Float32}; kwargs...)
+    state == C_NULL ||
+        return OdinJuliaBridge.create_new_hyperbola(state, Tuple(center); kwargs...)
+    id = record_test_curve_domain!(kwargs)
+    return OdinJuliaBridge.BridgeShapeConicResult(OdinJuliaBridge.BRIDGE_STATUS_OK, id)
+end
+
+"""Record reserved arc geometry without replacing native non-null constructors."""
+function OdinJuliaBridge._create_arc(
+    filled::Bool, state::Ptr{Cvoid}, center::Vector{Float32},
+    radius::Real, start_theta::Real, sweep_theta::Real, color, brush_size::Real)
+    state == C_NULL || return OdinJuliaBridge._create_arc(
+        filled, state, Tuple(center), radius, start_theta, sweep_theta, color, brush_size)
+    push!(REPL_TEST_ARCS, (filled, radius, start_theta, sweep_theta))
+    id = UInt64(9000 + length(REPL_TEST_ARCS))
+    if filled
+        return OdinJuliaBridge.BridgeShapeFilledCircle(
+            OdinJuliaBridge.BRIDGE_STATUS_OK, id)
+    end
+    return OdinJuliaBridge.BridgeShapeCircle(OdinJuliaBridge.BRIDGE_STATUS_OK, id)
+end
 
 """Return a copied native orientation for null-state motion fixtures."""
 function OdinJuliaBridge.get_shape_orientation(state::Ptr{Cvoid}, id::UInt64)
@@ -434,6 +495,65 @@ end
     @test EuclidRepl.circle_region_center_ids(region) == (UInt64(701), UInt64(702))
     @test region_runtime.session.active_job.payload.center_ids ==
         (UInt64(701), UInt64(702))
+end
+
+@testset "EuclidRepl circles reserve undrawn interpolation geometry" begin
+    runtime = EuclidRepl.create_runtime()
+    empty!(REPL_TEST_ARCS)
+    sweeps = (0f0, Float32(pi / 2), -Float32(pi / 2), Float32(2pi), -Float32(2pi))
+    for filled in (false, true), sweep in sweeps
+        shape = EuclidRepl.circle!(runtime, TEST_STATE_PTR, [0.5, 0.5, 0], 0.25;
+            start_theta=0.75f0, sweep_theta=sweep, filled=filled)
+        @test shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK
+        @test last(REPL_TEST_ARCS) == (filled, 0.25f0, 0.75f0, 0f0)
+    end
+    jobs = [runtime.session.active_job;
+        runtime.session.pending[1:runtime.session.pending_count]]
+    @test length(jobs) == 10
+    for (job, (filled, sweep)) in zip(jobs,
+        ((filled, sweep) for filled in (false, true) for sweep in sweeps))
+        @test job.payload.filled == filled
+        @test job.payload.sweep_theta == sweep
+        @test job.payload.radius == 0.25f0
+        @test job.payload.start_pos ≈ Float32[
+            0.5 + 0.25cos(0.75f0), 0.5 + 0.25sin(0.75f0), 0]
+    end
+end
+
+@testset "EuclidRepl curves reserve undrawn interpolation geometry" begin
+    center = Float32[0.5, 0.5, 0]
+    constructors = (
+        (runtime; domain...) -> EuclidRepl.trochoid!(runtime,
+            TEST_STATE_PTR, center; fixed_radius=0.1, rolling_radius=0.05,
+            tracer_distance=0.02, domain...),
+        (runtime; domain...) -> EuclidRepl.trochoid!(runtime,
+            TEST_STATE_PTR, center; mode=:internal, fixed_radius=0.1,
+            rolling_radius=0.05, tracer_distance=0.02, domain...),
+        (runtime; domain...) -> EuclidRepl.cycloid!(runtime,
+            TEST_STATE_PTR, [0, 0, 0], [1, 0, 0]; rolling_radius=0.02, domain...),
+        (runtime; domain...) -> EuclidRepl.parabola!(runtime,
+            TEST_STATE_PTR, center; focal_distance=0.05, domain...),
+        (runtime; domain...) -> EuclidRepl.hyperbola!(runtime,
+            TEST_STATE_PTR, center; semimajor=0.05, semiminor=0.03, domain...))
+    for construct in constructors, (start, finish, frontier) in
+        ((-1f0, 1f0, 1f0), (1f0, -1f0, 0f0), (1f0, -1f0, 1f0))
+        runtime = EuclidRepl.create_runtime()
+        shape = construct(runtime; parameter_start=start, parameter_finish=finish,
+            draw_parameter=frontier)
+        @test shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK
+        @test last(REPL_TEST_CURVE_DOMAINS) == (start, finish, start)
+        @test runtime.session.active_job.payload.draw_parameter == frontier
+    end
+    for construct in (EuclidRepl.ellipse!, EuclidRepl.cardioid!, EuclidRepl.deltoid!)
+        runtime = EuclidRepl.create_runtime()
+        if construct === EuclidRepl.ellipse!
+            construct(runtime, TEST_STATE_PTR, center, 0.08, 0.05)
+        else
+            construct(runtime, TEST_STATE_PTR, center, 0.1)
+        end
+        @test last(REPL_TEST_CURVE_DOMAINS)[3] == 0f0
+        @test runtime.session.active_job.payload.draw_parameter > 0f0
+    end
 end
 
 @testset "EuclidRepl coordinated polygon rotation" begin

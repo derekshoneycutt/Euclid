@@ -1824,7 +1824,8 @@ end
 """
 Draw a circle, arc, or sector with compass animation and return a circle handle.
 
-Append to the bounded FIFO; the reserved host is hidden until its action runs.
+Append to the bounded FIFO; the reserved host is hidden with an empty sweep until
+its action draws, so interpolation starts from undrawn geometry.
 Keywords:
 - `start_theta=0f0`
 - `sweep_theta=2pi`
@@ -1855,10 +1856,10 @@ function circle!(
     require_action_capacity(ensure_session!(host_runtime))
     shape = if filled
         OdinJuliaBridge.create_new_filledcircle(state_ptr, center3, radius_valid,
-            start_theta_valid, sweep_theta_valid, color, brush_value)
+            start_theta_valid, 0f0, color, brush_value)
     else
         OdinJuliaBridge.create_new_circle(state_ptr, center3, radius_valid,
-            start_theta_valid, sweep_theta_valid, color, brush_value)
+            start_theta_valid, 0f0, color, brush_value)
     end
 
     shape.status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
@@ -2052,7 +2053,8 @@ end
 Construct a finite literal-rail Cycloid and animate its guide and compass.
 
 The rolling distance may not exceed the rail length. `draw_parameter` selects
-the initial visible frontier within the directed parameter domain.
+the final animated frontier within the directed parameter domain. The hidden
+reservation starts at `parameter_start` so interpolation begins undrawn.
 """
 function cycloid!(
     runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
@@ -2085,7 +2087,7 @@ function cycloid!(
         state_ptr, first3, second3; rolling_radius=radius,
         tracer_distance=distance, tracer_phase=phase,
         parameter_start=start, parameter_finish=finish,
-        draw_parameter=frontier, color=shape_color, brush_size=brush_value),
+        draw_parameter=start, color=shape_color, brush_size=brush_value),
         "Cycloid")
     payload = CycloidPayload(result.host_id, (result.first_id, result.second_id),
         first3, second3, radius, distance, phase, start, finish, frontier,
@@ -2133,7 +2135,8 @@ Construct and animate an analytic external or internal trochoid.
 
 Use `mode=:external` or `:internal`; the returned typed result contains the
 single curve host. All finite frontier and geometry parameters are validated
-before reserving native identities.
+before reserving native identities. The hidden reservation starts at
+`parameter_start`; `draw_parameter` remains the final animated frontier.
 """
 function trochoid!(
     runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
@@ -2165,7 +2168,7 @@ function trochoid!(
         rolling_radius=rolling, tracer_distance=distance,
         tracer_phase=phase, rotation=rotation_value,
         parameter_start=start, parameter_finish=finish,
-        draw_parameter=frontier, color=shape_color, brush_size=brush_value),
+        draw_parameter=start, color=shape_color, brush_size=brush_value),
         "trochoid")
     payload = TrochoidPayload(result.host_id, center3, mode_value, fixed,
         rolling, distance, phase, rotation_value, start, finish, frontier,
@@ -2355,7 +2358,7 @@ function parabola!(
     result = checked_constructor_result(OdinJuliaBridge.create_new_parabola(
         state_ptr, vertex3; focal_distance=focal, rotation=rotation_value,
         parameter_start=start, parameter_finish=finish,
-        draw_parameter=frontier, color=shape_color, brush_size=brush_value),
+        draw_parameter=start, color=shape_color, brush_size=brush_value),
         "parabola")
     payload = ParabolaPayload(result.host_id, vertex3, focal, rotation_value,
         start, finish, frontier, link_length, shape_color, brush_value)
@@ -2398,7 +2401,7 @@ function hyperbola!(
     result = checked_constructor_result(OdinJuliaBridge.create_new_hyperbola(
         state_ptr, center3; semimajor=major, semiminor=minor,
         rotation=rotation_value, parameter_start=start,
-        parameter_finish=finish, draw_parameter=frontier,
+        parameter_finish=finish, draw_parameter=start,
         color=shape_color, brush_size=brush_value, branches),
         "hyperbola")
     payload = HyperbolaPayload(result.host_id, center3, major, minor,
