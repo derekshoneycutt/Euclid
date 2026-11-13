@@ -36,6 +36,7 @@ import capturemodel "../capture/model"
 import geometry "../../core/geometry"
 import uianimation "../ui/animation"
 import viewsharing "../sharing"
+import exerciseheader "../../core/exercise_header"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -662,10 +663,14 @@ scenario_issue_display_action :: proc(
     return scenario_issue_owner_action(runtime, command, identity)
 }
 
-//   Route presentation overrides, checkpoints, and shutdown to their display owners.
+// Route display-owned header actions, presentation overrides, checkpoints, and shutdown.
 scenario_issue_owner_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
+    if handled, accepted := scenario_issue_exercise_header_action(
+        runtime, command); handled {
+        return handled, accepted
+    }
     #partial switch command.kind {
     case .Set_Arrival_Style:
         return true, scenario_issue_arrival_style_action(runtime, command)
@@ -677,6 +682,79 @@ scenario_issue_owner_action :: proc(
     case:
         return false, false
     }
+}
+
+// Route bounded exercise-header scenario operations through display-owned state.
+scenario_issue_exercise_header_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command) -> (bool, bool) {
+    #partial switch command.kind {
+    case .Set_Exercise_Header:
+        return true, scenario_set_exercise_header(runtime, command)
+    case .Hide_Exercise_Header:
+        return true, scenario_hide_exercise_header(runtime.state)
+    case .Expand_Exercise_Header:
+        return true, scenario_expand_exercise_header(runtime.state)
+    case .Set_Exercise_Header_Scroll:
+        return true, scenario_set_exercise_header_scroll(runtime.state, command.value)
+    case .Assert_Exercise_Header:
+        return true, scenario_assert_exercise_header(runtime.state, command)
+    case:
+        return false, false
+    }
+}
+
+// Replace the visible header after invalidating earlier queued producer updates.
+scenario_set_exercise_header :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command) -> bool {
+    state := runtime.state
+    if service := state^.julia_runtime_service; service != nil {
+        bridgemodel.exercise_header_invalidate_requests(
+            &service^.exercise_header_request_sequence,
+            &state^.exercise_header.last_request_id)
+    }
+    return exerciseheader.show(
+        &state^.exercise_header,
+        transmute([]u8)scenario.text_string(&command.text))
+}
+
+// Hide the header and invalidate all producer requests issued before the hide.
+scenario_hide_exercise_header :: proc(state: ^core.Euclid_General_State) -> bool {
+    if service := state^.julia_runtime_service; service != nil {
+        bridgemodel.exercise_header_invalidate_requests(
+            &service^.exercise_header_request_sequence,
+            &state^.exercise_header.last_request_id)
+    }
+    exerciseheader.hide(&state^.exercise_header)
+    return true
+}
+
+// Expand the visible exercise header for bounded lifecycle scenarios.
+scenario_expand_exercise_header :: proc(state: ^core.Euclid_General_State) -> bool {
+    header := &state^.exercise_header
+    if !header^.visible {
+        return false
+    }
+    header^.expanded = true
+    return true
+}
+
+// Inject a bounded retained offset that the next prepared viewport must clamp.
+scenario_set_exercise_header_scroll :: proc(
+    state: ^core.Euclid_General_State, scroll_y: f32) -> bool {
+    header := &state^.exercise_header
+    if !header^.visible || !header^.expanded {
+        return false
+    }
+    header^.scroll_y = scroll_y
+    return true
+}
+
+// Compare the visible header's exact bounded source with one scenario assertion.
+scenario_assert_exercise_header :: proc(
+    state: ^core.Euclid_General_State, command: ^scenario.Command) -> bool {
+    header := &state^.exercise_header
+    text := scenario.text_string(&command.text)
+    return header^.visible && string(header^.text[:header^.count]) == text
 }
 
 // Apply a debug arrival-style override through the borrowed presentation owner.

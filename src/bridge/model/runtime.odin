@@ -11,6 +11,7 @@ import storage "../../core/storage"
 
 import "core:encoding/uuid"
 import "core:mem"
+import "core:sync"
 import "core:mem/tlsf"
 import "core:sync/chan"
 import "core:thread"
@@ -218,6 +219,20 @@ View_Content_Ready :: struct {
     content: presentationmodel.Presented_Text,
 }
 
+// Exercise_Header_Update carries bounded text to the display-owned header state.
+Exercise_Header_Update :: struct {
+    animation_generation: u64,
+    request_id: u64,
+    visible: bool,
+    text: []u8,
+}
+
+// Exercise_Header_Request_Sequence synchronizes request ordering across owners.
+Exercise_Header_Request_Sequence :: struct {
+    mutex: sync.Mutex,
+    last_issued: u64,
+}
+
 // Communication_Send_Outcome distinguishes pressure, allocation, and closure failures.
 Communication_Send_Outcome :: enum u8 {
     Sent,
@@ -257,6 +272,7 @@ Julia_Host_Egress :: union {
     Harness_Scenario_Completed,
     Runtime_Shutdown_Completed,
     View_Content_Ready,
+    Exercise_Header_Update,
     protocol.Terminal_Output_Batch,
     protocol.Evaluation_Incomplete,
     protocol.Evaluation_Completed,
@@ -314,6 +330,7 @@ Julia_Runtime_Service :: struct {
 
     // Request identity, active work, and admission/failure diagnostics.
     next_request_id: u64,
+    exercise_header_request_sequence: Exercise_Header_Request_Sequence,
     active_request_id: u64,
     active_request_kind: Julia_Request_Kind,
     failed_request_count: u64,
@@ -334,6 +351,7 @@ Julia_Runtime_Service :: struct {
     presentation_generation: u64,
     presentation_animation_generation_override: u64,
     presentation_animation_override: ^Euclid_Julia_Animation_Interface,
+    host_exercise_header_animation_generation: u64,
 
     // Double-buffered view snapshots and their publication generation.
     view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
@@ -360,6 +378,33 @@ Julia_Runtime_Service :: struct {
     animation_queue_high_water: u64,
     animation_last_latency_ms: f64,
     animation_max_latency_ms: f64,
+}
+
+// Reserve an exercise-header request identity on its producer thread.
+exercise_header_request_next :: proc(sequence: ^Exercise_Header_Request_Sequence) -> u64 {
+    sync.mutex_lock(&sequence^.mutex)
+    defer sync.mutex_unlock(&sequence^.mutex)
+    sequence^.last_issued += 1
+    if sequence^.last_issued == 0 {
+        sequence^.last_issued = 1
+    }
+    return sequence^.last_issued
+}
+
+// Snapshot the latest issued request before a lifecycle transition begins.
+exercise_header_request_latest :: proc(
+    sequence: ^Exercise_Header_Request_Sequence) -> u64 {
+    sync.mutex_lock(&sequence^.mutex)
+    defer sync.mutex_unlock(&sequence^.mutex)
+    return sequence^.last_issued
+}
+
+// Invalidate producer requests issued before a display-owned hide or navigation.
+exercise_header_invalidate_requests :: proc(
+    sequence: ^Exercise_Header_Request_Sequence, last_applied: ^u64) {
+    sync.mutex_lock(&sequence^.mutex)
+    defer sync.mutex_unlock(&sequence^.mutex)
+    last_applied^ = max(last_applied^, sequence^.last_issued)
 }
 
 // animation_capture_rate_ready excludes accelerated work from a new recording cycle.

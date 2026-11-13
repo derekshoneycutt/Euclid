@@ -1135,6 +1135,73 @@ publish_presented_text_clones_exact_counted_bytes :: proc(t: ^testing.T) {
         i32(BRIDGE_STATUS_INVALID_ARGUMENT))
 }
 
+// Verify malformed, blank, and oversized instructions fail before event publication.
+communication_link_test_rejects_invalid_exercise_header :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    blank: [3]u8 = {' ', '\t', '\n'}
+    invalid_utf8: [2]u8 = {0xc3, 0x28}
+    oversized: [32 * 1024 + 1]u8
+    testing.expect_value(t, publish_exercise_header(
+        state, raw_data(blank[:]), i32(len(blank))),
+        i32(BRIDGE_STATUS_INVALID_ARGUMENT))
+    testing.expect_value(t, publish_exercise_header(
+        state, raw_data(invalid_utf8[:]), i32(len(invalid_utf8))),
+        i32(BRIDGE_STATUS_INVALID_ARGUMENT))
+    testing.expect_value(t, publish_exercise_header(
+        state, raw_data(oversized[:]), i32(len(oversized))),
+        i32(BRIDGE_STATUS_INVALID_ARGUMENT))
+}
+
+// Verify exercise-header admission clones the exact accepted bounded bytes.
+@(test)
+publish_exercise_header_clones_validated_bytes :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state.saved_context = context
+    state.julia_runtime_service = service
+    state.terminal.initialized = true
+    state.terminal.animation_generation = 9
+    service.host_exercise_header_animation_generation = 9
+    communication_link_test_rejects_invalid_exercise_header(t, state)
+
+    exact: [32 * 1024]u8
+    for index in 0..<len(exact) {
+        exact[index] = 'x'
+    }
+    testing.expect_value(t, publish_exercise_header(
+        state, raw_data(exact[:]), i32(len(exact))), i32(BRIDGE_STATUS_OK))
+    message, received := communication_link_try_recv(&service.event_link)
+    update, is_update := message^.(bridgemodel.Exercise_Header_Update)
+    testing.expect(t, received && is_update)
+    testing.expect_value(t, update.animation_generation, u64(9))
+    testing.expect_value(t, update.request_id, u64(1))
+    testing.expect(t, update.visible)
+    testing.expect_value(t, len(update.text), len(exact))
+    testing.expect_value(t, update.text[0], u8('x'))
+    testing.expect_value(t, update.text[len(update.text)-1], u8('x'))
+    testing.expect(t, communication_link_return(&service.event_link, message))
+    testing.expect_value(t, drain_julia_egress_returns(service), 1)
+
+    communication_link_test_expect_header_hide(t, state, service)
+}
+
+// Verify hide publication carries a fresh request identity and no retained payload.
+communication_link_test_expect_header_hide :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    service: ^bridgemodel.Julia_Runtime_Service) {
+    testing.expect_value(t, hide_exercise_header(state), i32(BRIDGE_STATUS_OK))
+    message, received := communication_link_try_recv(&service.event_link)
+    update, is_update := message^.(bridgemodel.Exercise_Header_Update)
+    testing.expect(t, received && is_update)
+    testing.expect(t, !update.visible)
+    testing.expect_value(t, update.request_id, u64(2))
+    testing.expect_value(t, len(update.text), 0)
+    testing.expect(t, communication_link_return(&service.event_link, message))
+    testing.expect_value(t, drain_julia_egress_returns(service), 1)
+}
+
 // Verify the egress pool covers sixteen maximum payloads plus one retained replacement.
 @(test)
 julia_event_link_covers_maximum_presentation_budget :: proc(t: ^testing.T) {

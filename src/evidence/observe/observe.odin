@@ -113,6 +113,10 @@ Display :: struct {
     animation_completion_pending: bool,
     animation_completion_failed: bool,
     animation_controls_hidden: bool,
+    exercise_header_visible: bool,
+    exercise_header_expanded: bool,
+    exercise_header_scroll_clamped: bool,
+    exercise_header_scroll_at_limit: bool,
     animation_playback_rate: animationmodel.Playback_Rate,
     animation_effective_rate: animationmodel.Playback_Rate,
 

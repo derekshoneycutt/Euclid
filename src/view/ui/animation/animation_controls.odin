@@ -3,6 +3,7 @@ package uianimation
 import native "../../native"
 import core "../../../core"
 import color "../../../core/color"
+import view_font "../../font"
 import geometry "../../../core/geometry"
 import math "core:math"
 import capturemodel "../../capture/model"
@@ -22,6 +23,8 @@ import viewpreferences "../../preferences"
 import log "core:log"
 import contentdata "../../../core/content"
 import animationmodel "../../../core/animation"
+import exerciseheader "../../../core/exercise_header"
+import viewtext "../text"
 
 ANIMATION_REFRESH_BUTTON_ID :: 2101
 ANIMATION_PAUSE_BUTTON_ID :: 2102
@@ -46,6 +49,7 @@ Animation_Control_Slots :: struct {
 Animation_Control_Preparation :: struct {
     visible: bool,
     overlay_visible: bool,
+    exercise_header: Exercise_Header_Preparation,
     eye: uiwidgets.Icon_Button_Result,
     speed: uiwidgets.Icon_Button_Result,
     speed_locked: bool,
@@ -57,6 +61,15 @@ Animation_Control_Preparation :: struct {
     favorite: uiwidgets.Icon_Button_Result,
     membership_visible: bool,
     membership: uiwidgets.Icon_Button_Result,
+}
+
+// Prepared board header layout and close-button interaction.
+Exercise_Header_Preparation :: struct {
+    visible: bool,
+    layout: Exercise_Header_Layout,
+    close_button: uiwidgets.Icon_Button_Result,
+    disclosure_button: uiwidgets.Icon_Button_Result,
+    scroll: uiwidgets.Scroll_Container_Update_Result,
 }
 
 // Actions emitted by one prepared animation-control frame.
@@ -71,6 +84,8 @@ Animation_Control_Visibility :: struct {
     favorite: bool,
     membership: bool,
     hidden: bool,
+    exercise_header_visible: bool,
+    exercise_header: Exercise_Header_Layout,
 }
 
 ANIMATION_CONTROL_CORNER_SEGMENTS :: native.DRAW_CIRCLE_SEGMENTS / 4
@@ -91,6 +106,7 @@ Animation_Control_Descriptor :: struct {
     toggle: bool,
     label: string,
     order: u32,
+    expanded: bool,
 }
 
 // Report whether animation controls should be presented and interactive.
@@ -199,6 +215,23 @@ animation_control_hit_test :: proc(
     point: geometry.Vector2,
     visibility: Animation_Control_Visibility,
     control_size_percent := theme.CONTROL_SIZE_DEFAULT_PERCENT) -> (int, bool) {
+    if !visibility.hidden && visibility.exercise_header_visible {
+        header := visibility.exercise_header
+        if header.slots.panel.width <= 0 {
+            header.slots = exercise_header_layout_slots(
+                world_rect, control_size_percent)
+        }
+        if geometry.rectangle_contains(header.slots.close, point) {
+            return EXERCISE_HEADER_CLOSE_BUTTON_ID, true
+        }
+        if header.overflow &&
+            geometry.rectangle_contains(header.slots.disclosure, point) {
+            return EXERCISE_HEADER_DISCLOSURE_BUTTON_ID, true
+        }
+        if geometry.rectangle_contains(header.slots.panel, point) {
+            return EXERCISE_HEADER_PANEL_ID, true
+        }
+    }
     if !animation_controls_visible(phase) {
         return 0, false
     }
@@ -272,7 +305,10 @@ animation_control_hover_geometry :: proc(
 animation_control_id :: #force_inline proc(id: int) -> bool {
     return id == ANIMATION_REFRESH_BUTTON_ID || id == ANIMATION_PAUSE_BUTTON_ID ||
         id == ANIMATION_FAVORITE_BUTTON_ID || id == ANIMATION_MEMBERSHIP_BUTTON_ID ||
-        id == ANIMATION_VISIBILITY_BUTTON_ID || id == ANIMATION_SPEED_BUTTON_ID
+        id == ANIMATION_VISIBILITY_BUTTON_ID || id == ANIMATION_SPEED_BUTTON_ID ||
+        id == EXERCISE_HEADER_PANEL_ID ||
+        id == EXERCISE_HEADER_CLOSE_BUTTON_ID ||
+        id == EXERCISE_HEADER_DISCLOSURE_BUTTON_ID
 }
 
 // Build shared icon-button parameters for one animation control.
@@ -284,6 +320,9 @@ animation_control_button_params :: #force_inline proc(
     states: viewmodel.Ui_Node_State = {.Visible, .Enabled, .Focusable, .Tab_Stop}
     if descriptor.toggle {
         states += {.Checked}
+    }
+    if descriptor.expanded {
+        states += {.Expanded}
     }
     if !enabled {
         states -= {.Enabled}
@@ -392,7 +431,7 @@ prepare_animation_favorite_control :: proc(
     }
     result := prepare_animation_control_button(&state^.ui_runtime,
         {ANIMATION_FAVORITE_BUTTON_ID, slots.favorite, .Star, true,
-            viewmessages.shell_message(state, label_id), 3},
+            viewmessages.shell_message(state, label_id), 3, false},
         mouse_input, slots.favorite_panel)
     return result, active
 }
@@ -415,11 +454,11 @@ prepare_animation_transport_controls :: proc(
     }
     refresh := prepare_animation_control_button(runtime,
         {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
-            viewmessages.shell_message(state, .Animation_Restart), 0},
+            viewmessages.shell_message(state, .Animation_Restart), 0, false},
         mouse_input, slots.panel)
     pause := prepare_animation_control_button(runtime,
         {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
-            runtime^.playback.construction_paused, pause_label, 1},
+            runtime^.playback.construction_paused, pause_label, 1, false},
         mouse_input, slots.panel)
     return refresh, pause
 }
@@ -494,7 +533,13 @@ prepare_animation_controls :: proc(
     mouse_input: input.Input_Frame) -> Animation_Control_Preparation {
     ui_runtime := &state^.ui_runtime
     if !animation_controls_visible(state^.gif_capture_status.gif_capture_phase) {
-        return {}
+        header_prepared: Exercise_Header_Preparation
+        if !ui_runtime^.playback.controls_hidden {
+            header_prepared = prepare_exercise_header(state, mouse_input)
+        }
+        return {
+            exercise_header = header_prepared,
+        }
     }
     favorite_target := animation_favorite_target(state^.julia_interface)
     favorite_visible := favorite_target != nil
@@ -511,9 +556,11 @@ prepare_animation_controls :: proc(
             eye = eye,
         }
     }
+    header_prepared := prepare_exercise_header(state, mouse_input)
     prepared: Animation_Control_Preparation = {
         visible = true,
         overlay_visible = true,
+        exercise_header = header_prepared,
         slots = slots,
         eye = eye,
         favorite_visible = favorite_visible,
@@ -521,6 +568,203 @@ prepare_animation_controls :: proc(
     }
     prepare_animation_overlay(state, mouse_input, favorite_target, &prepared)
     return prepared
+}
+
+// Prepare the persistent header while the animation-control eye is showing it.
+prepare_exercise_header :: proc(
+    state: ^core.Euclid_General_State,
+    mouse_input: input.Input_Frame) -> Exercise_Header_Preparation {
+    header := &state^.exercise_header
+    if !header.visible {
+        return {}
+    }
+    source := string(header.text[:header.count])
+    layout := prepare_exercise_header_layout(state, source)
+    disclosure := prepare_exercise_header_disclosure(
+        state, source, mouse_input, &layout)
+    close := prepare_exercise_header_close(state, layout, mouse_input)
+    if close.action.activated {
+        if state^.julia_runtime_service != nil {
+            bridgemodel.exercise_header_invalidate_requests(
+                &state^.julia_runtime_service^.exercise_header_request_sequence,
+                &state^.exercise_header.last_request_id)
+        }
+        exerciseheader.hide(header)
+    }
+    scroll: uiwidgets.Scroll_Container_Update_Result
+    if header^.visible {
+        scroll = exercise_header_prepare_scroll(state, layout, mouse_input)
+        exercise_header_register_prompt(state, layout, source, scroll)
+    }
+    return {
+        visible = true,
+        layout = layout,
+        close_button = close,
+        disclosure_button = disclosure,
+        scroll = scroll,
+    }
+}
+
+// Resolve the current header geometry and retire scroll capture if expansion no longer fits.
+prepare_exercise_header_layout :: proc(
+    state: ^core.Euclid_General_State, source: string) -> Exercise_Header_Layout {
+    header := &state^.exercise_header
+    world := geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect)
+    preferences := state^.ui_runtime.preferences.values.interface
+    layout := exercise_header_layout(world, source, header.expanded,
+        preferences.control_size_percent, preferences.text_size_percent)
+    if header.expanded && !layout.expanded {
+        exercise_header_release_scroll(state)
+        layout = exercise_header_layout(world, source, false,
+            preferences.control_size_percent, preferences.text_size_percent)
+    }
+    header^.scroll_max = max(
+        f32(0), layout.content_height-layout.slots.scroll.height)
+    return layout
+}
+
+// Register and apply disclosure activation before preparing the body viewport.
+prepare_exercise_header_disclosure :: proc(
+    state: ^core.Euclid_General_State, source: string,
+    mouse_input: input.Input_Frame,
+    layout: ^Exercise_Header_Layout) -> uiwidgets.Icon_Button_Result {
+    header := &state^.exercise_header
+    if !layout^.overflow {
+        return {}
+    }
+    label := "Show full exercise instructions"
+    if header.expanded {
+        label = "Collapse exercise instructions"
+    }
+    result := prepare_animation_control_button(&state^.ui_runtime, {
+        id = EXERCISE_HEADER_DISCLOSURE_BUTTON_ID,
+        rect = layout^.slots.disclosure,
+        icon_id = .None,
+        toggle = true,
+        label = label,
+        order = 6,
+        expanded = header.expanded,
+    }, mouse_input, layout^.slots.panel)
+    if result.action.activated {
+        header.expanded = !header.expanded
+        if !header.expanded {
+            exercise_header_release_scroll(state)
+        }
+        layout^ = prepare_exercise_header_layout(state, source)
+    }
+    return result
+}
+
+// Register the independent close button and return its pointer result.
+prepare_exercise_header_close :: proc(
+    state: ^core.Euclid_General_State, layout: Exercise_Header_Layout,
+    mouse_input: input.Input_Frame) -> uiwidgets.Icon_Button_Result {
+    return prepare_animation_control_button(&state^.ui_runtime, {
+        id = EXERCISE_HEADER_CLOSE_BUTTON_ID,
+        rect = layout.slots.close,
+        icon_id = .None,
+        label = "Close exercise instructions",
+        order = 7,
+    }, mouse_input, layout.slots.panel, layout.slots.close.width > 0)
+}
+
+// Release the shared scrollbar capture when the header collapses or becomes hidden.
+exercise_header_release_scroll :: proc(state: ^core.Euclid_General_State) {
+    header := &state^.exercise_header
+    uiwidgets.scroll_container_release_press(
+        &state^.ui_runtime.input.press_owner, EXERCISE_HEADER_SCROLLBAR_ID,
+        &header^.scroll_dragging, &header^.scroll_drag_off)
+    header^.scroll_y = 0
+}
+
+// Prepare bounded header scrolling through the shared UI scroll-container owner.
+exercise_header_prepare_scroll :: proc(
+    state: ^core.Euclid_General_State, layout: Exercise_Header_Layout,
+    mouse_input: input.Input_Frame) -> uiwidgets.Scroll_Container_Update_Result {
+    if !layout.expanded {
+        return {}
+    }
+    header := &state^.exercise_header
+    ui := &state^.ui_runtime
+    text_percent := ui^.preferences.values.interface.text_size_percent
+    result := uiwidgets.scroll_container_update({
+        id = EXERCISE_HEADER_SCROLLBAR_ID,
+        rect = layout.slots.scroll,
+        scroll_y_in = header^.scroll_y,
+        content_height = layout.content_height,
+        mouse_input = mouse_input,
+        interaction_space_rect = layout.slots.scroll,
+        wheel_step = theme.ui_scaled_metric(theme.TEXT_ROW_HEIGHT, text_percent) *
+            theme.WHEEL_SCROLL_MULTIPLIER,
+        control_size_percent =
+            ui^.preferences.values.interface.control_size_percent,
+        press_owner = &ui^.input.press_owner,
+        state_in = {header^.scroll_dragging, header^.scroll_drag_off},
+        semantic_focus = ui^.semantic_focus,
+        semantic_id = uisemantics.semantic_control_id(
+            .Animation_Control, EXERCISE_HEADER_PROMPT_ID),
+    })
+    header^.scroll_y = result.scroll_y_out
+    header^.scroll_max = result.maximum
+    header^.scroll_dragging = result.state_out.is_dragging_thumb
+    header^.scroll_drag_off = result.state_out.drag_offset_y
+    exercise_header_refine_scroll_route(ui, result, mouse_input)
+    return result
+}
+
+// Refine pointer and wheel ownership after the prepared scrollbar geometry is known.
+exercise_header_refine_scroll_route :: proc(
+    ui: ^viewmodel.Euclid_Ui_Runtime_State,
+    scroll: uiwidgets.Scroll_Container_Update_Result,
+    mouse_input: input.Input_Frame) {
+    interaction := &ui^.input.interaction_frame
+    point := uiwidgets.input_frame_mouse_position(mouse_input)
+    over_track := scroll.scrollbar.has_scrollbar &&
+        geometry.rectangle_contains(scroll.scrollbar.track_rect, point)
+    target := viewmodel.ui_interaction_target(
+        .Scrollbar, .None, EXERCISE_HEADER_SCROLLBAR_ID)
+    if over_track {
+        interaction^.hover = target
+    }
+    capture := interaction^.pointer_capture
+    capture_allows := capture.kind == .None ||
+        capture.kind == .Scrollbar && capture.id == EXERCISE_HEADER_SCROLLBAR_ID
+    if scroll.pointer_reserved && capture_allows {
+        interaction^.pointer_target = target
+    }
+    if over_track && mouse_input.mouse_wheel_delta != 0 &&
+        capture.kind == .None {
+        interaction^.wheel_target = target
+    }
+    viewmodel.ui_refresh_surface_interaction(interaction)
+}
+
+// Publish the full plain-text prompt and its current scroll range to accessibility.
+exercise_header_register_prompt :: proc(
+    state: ^core.Euclid_General_State, layout: Exercise_Header_Layout,
+    source: string, scroll: uiwidgets.Scroll_Container_Update_Result) {
+    actions: viewmodel.Ui_Node_Action_Set = {.Focus}
+    if layout.expanded {
+        actions += {.Scroll}
+    }
+    _ = uisemantics.semantic_register_control(
+        state^.ui_runtime.semantic_focus, {
+            id = uisemantics.semantic_control_id(
+                .Animation_Control, EXERCISE_HEADER_PROMPT_ID),
+            role = .Document,
+            states = {.Visible, .Enabled, .Focusable},
+            actions = actions,
+            region = .Animation_Overlay,
+            bounds = layout.slots.panel,
+            clip_bounds = geometry.Rectangle(
+                state^.ui_runtime.layout.ui_regions.world_rect),
+            numeric_range = {
+                f64(scroll.minimum), f64(scroll.maximum), f64(scroll.scroll_y_out),
+                f64(scroll.step), .Vertical, layout.expanded,
+            },
+            label = "Exercise instructions",
+            value = source,
+        })
 }
 
 // Prepare expanded controls and commit their transport and collection actions.
@@ -567,7 +811,7 @@ prepare_animation_visibility_control :: proc(
     }
     result := prepare_animation_control_button(&state.ui_runtime, {
         ANIMATION_VISIBILITY_BUTTON_ID, slots.eye, .None, false,
-        viewmessages.shell_message(state, label), 5,
+        viewmessages.shell_message(state, label), 5, false,
     }, mouse_input, slots.eye)
     if result.action.activated {
         state.ui_runtime.playback.controls_hidden =
@@ -588,6 +832,13 @@ animation_controls_retire_overlay :: proc(state: ^core.Euclid_General_State) {
             focus.logical_focus.domain == .Collection_Membership)
     uioverlay.membership_close(state, false)
     owner := &runtime.input.press_owner
+    header := &state.exercise_header
+    if owner.active && owner.kind == .Scrollbar &&
+        owner.id == EXERCISE_HEADER_SCROLLBAR_ID {
+        uiwidgets.scroll_container_release_press(
+            owner, EXERCISE_HEADER_SCROLLBAR_ID,
+            &header.scroll_dragging, &header.scroll_drag_off)
+    }
     if owner.active && animation_control_id(owner.id) {
         owner^ = {}
     }
@@ -611,7 +862,7 @@ prepare_animation_membership_control :: proc(
     }
     result := prepare_animation_control_button(&state.ui_runtime, {
             ANIMATION_MEMBERSHIP_BUTTON_ID, slots.membership, .None, false,
-            viewmessages.shell_message(state, .Animation_Add_Collections), 4,
+            viewmessages.shell_message(state, .Animation_Add_Collections), 4, false,
         },
         mouse_input, slots.favorite_panel)
     if result.action.activated {
@@ -648,7 +899,7 @@ prepare_animation_speed_control :: proc(
     }
     result := prepare_animation_control_button(&state.ui_runtime, {
         ANIMATION_SPEED_BUTTON_ID, slots.speed, .None, false,
-        viewmessages.shell_message(state, label), 2,
+        viewmessages.shell_message(state, label), 2, false,
     }, mouse_input, slots.panel, !locked && !state.ui_runtime.playback.completed &&
         !state.ui_runtime.playback.completion_requested)
     return result, locked
@@ -879,6 +1130,7 @@ draw_encoded_animation_control_panel :: proc(
 draw_encoded_animation_controls :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Animation_Control_Preparation) {
+    draw_encoded_exercise_header(state, encoder, prepared.exercise_header)
     if !prepared.visible {
         return
     }
@@ -903,6 +1155,129 @@ draw_encoded_animation_controls :: proc(
     if prepared.membership_visible {
         draw_encoded_membership_control(encoder, prepared)
     }
+}
+
+// Draw a bounded one-line preview and close control in the shared board-control style.
+draw_encoded_exercise_header :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Exercise_Header_Preparation) {
+    if !prepared.visible {
+        return
+    }
+    scale := theme.ui_control_size_scale(
+        state^.ui_runtime.preferences.values.interface.control_size_percent)
+    _ = native.draw_encoder_push_scissor(encoder,
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect))
+    draw_encoded_animation_control_panel(
+        encoder, prepared.layout.slots.panel, scale)
+    draw_encoded_exercise_header_row(state, encoder, prepared)
+    draw_encoded_exercise_header_content(state, encoder, prepared)
+    _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+// Draw a one-line preview or expanded title and the two accessible controls.
+draw_encoded_exercise_header_row :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Exercise_Header_Preparation) {
+    slots := prepared.layout.slots
+    percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    if slots.text.width > 0 {
+        _ = native.draw_encoder_push_scissor(encoder, slots.text)
+        text := "Exercise instructions"
+        if !prepared.layout.expanded {
+            count := min(state^.exercise_header.count, prepared.layout.preview_length)
+            text = string(state^.exercise_header.text[:count])
+        }
+        viewtext.draw_encoded_label(&state^.font_cache, encoder, text,
+            slots.text.x,
+            slots.panel.y + (slots.panel.height-theme.ui_font_size(percent))*0.5)
+        _ = native.draw_encoder_pop_scissor(encoder)
+    }
+    if prepared.layout.overflow {
+        draw_encoded_exercise_header_disclosure(
+            encoder, slots.disclosure, prepared.disclosure_button,
+            prepared.layout.expanded)
+    }
+    draw_encoded_exercise_header_close(
+        encoder, prepared.close_button.icon_drawn_rect,
+        prepared.close_button, slots.close)
+}
+
+// Draw the wrapped body, its bounded viewport, and its shared scrollbar.
+draw_encoded_exercise_header_content :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Exercise_Header_Preparation) {
+    if !prepared.layout.expanded || prepared.layout.slots.content.height <= 0 {
+        return
+    }
+    slots := prepared.layout.slots
+    percent := state^.ui_runtime.preferences.values.interface.text_size_percent
+    source := string(state^.exercise_header.text[:state^.exercise_header.count])
+    _ = native.draw_encoder_push_scissor(encoder, slots.content)
+    viewtext.draw_wrapped_text_content(source, {
+        encoder = encoder,
+        panel = slots.content,
+        scroll_y = prepared.scroll.scroll_y_out,
+        font = view_font.cache_borrow(&state^.font_cache, .Regular),
+        text_padding = theme.ui_scaled_metric(theme.TEXT_PADDING, percent),
+        text_row_height = theme.ui_scaled_metric(theme.TEXT_ROW_HEIGHT, percent),
+        text_color = theme.draw_color(encoder, .Text),
+        wrap_advance = theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, percent),
+        font_size = theme.ui_font_size(percent),
+        font_cache = &state^.font_cache,
+        font_key = .Regular,
+    })
+    _ = native.draw_encoder_pop_scissor(encoder)
+    uiwidgets.draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
+}
+
+// Draw the directional chevron while preserving the registered button state.
+draw_encoded_exercise_header_disclosure :: proc(
+    encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
+    button: uiwidgets.Icon_Button_Result, expanded: bool) {
+    tint := draw_encoded_animation_control_backing(
+        encoder, rect, button.hovered, button.pressed, expanded)
+    glyph := button.icon_drawn_rect
+    inset := min(glyph.width, glyph.height)*0.3
+    center: geometry.Vector2 = {
+        glyph.x+glyph.width*0.5, glyph.y+glyph.height*0.5}
+    first, second, third: geometry.Vector2
+    if expanded {
+        first = {center.x-inset, center.y-inset*0.5}
+        second = center
+        third = {center.x+inset, center.y-inset*0.5}
+        _ = native.draw_encoder_line(encoder, first, second, 2, tint)
+        _ = native.draw_encoder_line(encoder, second, third, 2, tint)
+        return
+    }
+    first = {center.x-inset*0.5, center.y-inset}
+    second = center
+    third = {center.x-inset*0.5, center.y+inset}
+    _ = native.draw_encoder_line(encoder, first, second, 2, tint)
+    _ = native.draw_encoder_line(encoder, second, third, 2, tint)
+}
+
+// Draw the shared close control as an X inside its captured button geometry.
+draw_encoded_exercise_header_close :: proc(
+    encoder: ^native.Draw_Encoder,
+    rect: geometry.Rectangle,
+    button: uiwidgets.Icon_Button_Result,
+    slot: geometry.Rectangle) {
+    if slot.width <= 0 || slot.height <= 0 {
+        return
+    }
+    tint := draw_encoded_animation_control_backing(
+        encoder, slot, button.hovered, button.pressed, false)
+    inset := min(rect.width, rect.height) * 0.28
+    weight := max(f32(1), min(rect.width, rect.height) * 0.07)
+    first: geometry.Vector2 = {rect.x + inset, rect.y + inset}
+    second: geometry.Vector2 = {
+        rect.x + rect.width - inset, rect.y + rect.height - inset,
+    }
+    third: geometry.Vector2 = {rect.x + rect.width - inset, rect.y + inset}
+    fourth: geometry.Vector2 = {rect.x + inset, rect.y + rect.height - inset}
+    _ = native.draw_encoder_line(encoder, first, second, weight, tint)
+    _ = native.draw_encoder_line(encoder, third, fourth, weight, tint)
 }
 
 // Encode the transport panel and its restart, pause and speed controls.

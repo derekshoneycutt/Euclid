@@ -27,6 +27,7 @@ import viewmodel "../view/ui/model"
 import capturemodel "../view/capture/model"
 import inputmodel "../view/input"
 import historyruntime "../terminal/history/runtime"
+import exerciseheader "exercise_header"
 
 // Defines the core structures used in the Euclid application.
 // Euclid_General_State owns its same-lifetime runtime values directly.
@@ -115,6 +116,7 @@ Euclid_General_State :: struct {
     user_drawing_sound_enabled: bool,
     
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
+    exercise_header: exerciseheader.State,
     preferences_runtime: preferencesmodel.Settings_Save_Runtime,
     user_data_admission: protocol.User_Data_Connection_Admission,
     terminal_history_runtime: historyruntime.History_Runtime,

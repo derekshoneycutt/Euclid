@@ -112,6 +112,7 @@ events such as screenshot completion that do not match the initiating action's i
 | Scenario need | Common actions |
 | --- | --- |
 | Change runtime or animation state | `select_animation`, `{"do":"reset_animation"}`, `{"do":"reload_runtime"}` |
+| Exercise header lifecycle | `set_exercise_header`, `{"do":"expand_exercise_header"}`, `{"do":"hide_exercise_header"}`, `set_exercise_header_scroll` |
 | Submit Terminal or presentation content | `scratchpad`, `set_view_content` |
 | Wait for progress or verify an observation | `wait_event`, `wait_state`, `assert_state`, `assert_focus` |
 | Exercise viewport or input behavior | `set_view_scroll`, `set_splitters`, `key`, `contact_dust` |

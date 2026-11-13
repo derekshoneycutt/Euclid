@@ -20,14 +20,16 @@ import uilibrary "library"
 Ui_Animation_Control_Eligibility :: struct {
     favorite: bool,
     membership: bool,
+    exercise_header_visible: bool,
+    exercise_header: uianimation.Exercise_Header_Layout,
+    exercise_header_scroll_dragging: bool,
 }
 
 // Inputs needed to resolve one immutable device frame against current UI geometry.
 Ui_Interaction_Route_Input :: struct {
     frame: input.Input_Frame,
     terminal_present: bool,
-    animation_favorite_eligible: bool,
-    animation_membership_eligible: bool,
+    animation_controls: Ui_Animation_Control_Eligibility,
     capture: viewmodel.Ui_Press_Owner_State,
     capture_view: capturemodel.Gif_Capture_View,
 }
@@ -43,6 +45,9 @@ ui_icon_button_capture_target :: proc(
 // ui_scrollbar_capture_target classifies one scrollbar by its owning surface.
 ui_scrollbar_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
+    if capture.id == uianimation.EXERCISE_HEADER_SCROLLBAR_ID {
+        return viewmodel.ui_interaction_target(.Scrollbar, .None, capture.id)
+    }
     focus := viewmodel.Ui_Focus_Kind.Accordion
     if capture.id == uipresentation.UI_PRESENTATION_SCROLLBAR_ID {
         focus = .Presentation
@@ -117,14 +122,15 @@ ui_world_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse: geometry.Vector2,
     phase: capturemodel.Gif_Capture_Phase,
-    animation_favorite_eligible: bool,
-    animation_membership_eligible := false) -> viewmodel.Ui_Interaction_Target {
+    controls: Ui_Animation_Control_Eligibility) -> viewmodel.Ui_Interaction_Target {
     control_id, over_control := uianimation.animation_control_hit_test(
         geometry.Rectangle(runtime^.layout.ui_regions.world_rect),
         phase, mouse, {
-            favorite = animation_favorite_eligible,
-            membership = animation_membership_eligible,
+            favorite = controls.favorite,
+            membership = controls.membership,
             hidden = runtime.playback.controls_hidden,
+            exercise_header_visible = controls.exercise_header_visible,
+            exercise_header = controls.exercise_header,
         },
         runtime^.preferences.values.interface.control_size_percent)
     if over_control {
@@ -194,7 +200,7 @@ ui_hover_target :: proc(
         return accordion
     }
     return ui_world_hover_target(runtime, geometry.Vector2(mouse),
-        capture_view.phase, controls.favorite, controls.membership)
+        capture_view.phase, controls)
 }
 
 // Resolve the editor and splitter before the presentation backing under them.
@@ -335,7 +341,16 @@ ui_note_focus_is_valid :: proc(
 ui_valid_capture_owner :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     owner: viewmodel.Ui_Press_Owner_State,
-    capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Press_Owner_State {
+    capture_view: capturemodel.Gif_Capture_View,
+    header_scroll_valid := false) -> viewmodel.Ui_Press_Owner_State {
+    if owner.kind == .Scrollbar &&
+        owner.id == uianimation.EXERCISE_HEADER_SCROLLBAR_ID {
+        if header_scroll_valid {
+            return owner
+        }
+        runtime^.input.press_owner = {}
+        return {}
+    }
     if owner.kind != .Input_Box ||
         owner.id == uisharing.PNG_PATH_INPUT_ID &&
         uisharing.png_path_input_visible(runtime) ||
@@ -373,8 +388,12 @@ ui_route_interaction_frame :: proc(
     input: Ui_Interaction_Route_Input) -> viewmodel.Ui_Interaction_Frame {
     hover := ui_hover_target(
         runtime, input.frame, input.terminal_present, input.capture_view,
-        {input.animation_favorite_eligible, input.animation_membership_eligible})
-    capture_owner := ui_valid_capture_owner(runtime, input.capture, input.capture_view)
+        input.animation_controls)
+    header_scroll_valid := input.animation_controls.exercise_header_visible &&
+        input.animation_controls.exercise_header.expanded &&
+        input.animation_controls.exercise_header_scroll_dragging
+    capture_owner := ui_valid_capture_owner(
+        runtime, input.capture, input.capture_view, header_scroll_valid)
     capture := ui_capture_target(capture_owner)
     pointer_target := hover
     if capture.kind != .None {

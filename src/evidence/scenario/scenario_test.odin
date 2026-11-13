@@ -15,6 +15,7 @@ scenario_test_scalar_state_dispatch :: proc(t: ^testing.T) {
     display: observe.Display = {
         construction_paused = true,
         animation_tick_pending = true,
+        exercise_header_scroll_clamped = true,
     }
     testing.expect(t, !state_matches("construction_paused", display))
     testing.expect(t, !state_matches("construction_playing", display))
@@ -33,6 +34,17 @@ scenario_test_scalar_state_dispatch :: proc(t: ^testing.T) {
     testing.expect(t, state_matches("construction_playing", display))
     testing.expect(t, state_matches("tooltip_hidden", display))
     testing.expect(t, state_matches("gif_idle", display))
+    testing.expect(t, state_matches("exercise_header_hidden", display))
+    testing.expect(t, state_matches("exercise_header_collapsed", display))
+    testing.expect(t, state_matches("exercise_header_scroll_clamped", display))
+    display.exercise_header_visible = true
+    display.exercise_header_expanded = true
+    display.exercise_header_scroll_clamped = false
+    display.exercise_header_scroll_at_limit = true
+    testing.expect(t, state_matches("exercise_header_visible", display))
+    testing.expect(t, state_matches("exercise_header_expanded", display))
+    testing.expect(t, !state_matches("exercise_header_scroll_clamped", display))
+    testing.expect(t, state_matches("exercise_header_scroll_at_limit", display))
     display.gif_capture_active = true
     testing.expect(t, state_matches("gif_active", display))
     testing.expect(t, !state_matches("gif_idle", display))
@@ -120,6 +132,34 @@ scenario_test_playback_state_predicates :: proc(t: ^testing.T) {
     display.animation_effective_rate = .Quadruple
     testing.expect(t, state_matches("animation_speed_1x", display))
     testing.expect(t, state_matches("animation_effective_speed_4x", display))
+}
+
+// Verify the lifecycle fixture parses all display-owned header actions.
+@(test)
+scenario_test_exercise_header_lifecycle_fixture :: proc(t: ^testing.T) {
+    source := #load(
+        "../../../tools/scenarios/exercise-header-lifecycle-acceptance.jsonl",
+        string)
+    program: Program
+    testing.expect_value(t, parse(source, &program), Parse_Error.None)
+    found_set := false
+    found_replace_assertion := false
+    found_expand := false
+    found_scroll := false
+    found_reset := false
+    found_hide := false
+    for command in program.commands[:program.count] {
+        found_set = found_set || command.kind == .Set_Exercise_Header
+        found_replace_assertion = found_replace_assertion ||
+            command.kind == .Assert_Exercise_Header
+        found_expand = found_expand || command.kind == .Expand_Exercise_Header
+        found_scroll = found_scroll ||
+            command.kind == .Set_Exercise_Header_Scroll && command.value == 100000
+        found_reset = found_reset || command.kind == .Reset_Animation
+        found_hide = found_hide || command.kind == .Hide_Exercise_Header
+    }
+    testing.expect(t, found_set && found_replace_assertion && found_expand)
+    testing.expect(t, found_scroll && found_reset && found_hide)
 }
 
 // Verify the checked-in selection fixture stays accepted by the shipped scenario parser.

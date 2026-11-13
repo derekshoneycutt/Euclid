@@ -436,6 +436,24 @@ All world controls share the prepared icon-button path and viewport-relative sty
 | Bottom right | Favorites star | Eligible selected animation |
 | Beside the star | Collection ellipsis | Eligible selection with custom collections |
 
+The optional plain-text exercise header occupies the upper-left world overlay. Its
+preview is measured using the current board width and text scale; disclosure appears
+only when the full source wraps beyond the preview. Expansion is capped at one-third
+of board height and uses an internal scroll container whose offset is clamped when
+geometry changes. The close button dismisses the header; the eye hides and reveals it
+with the other animation controls while preserving its prompt and disclosure state.
+Visible header press, wheel, and scrollbar capture are resolved before world tools and
+Terminal scrollback; its accessible prompt exposes the full text and scroll action,
+alongside semantic disclosure and close buttons. See
+[Terminal Architecture](TerminalArchitecture.md#euclidrepl-and-tick-streams) for the
+Julia API and ownership boundary.
+
+A committed animation selection clears the prior header and invalidates requests issued
+before that transition; a restart preserves its prompt, disclosure, and scroll offset.
+The next prepared geometry clamps the retained offset to the rebuilt viewport. The
+[exercise-header lifecycle acceptance](../../../tools/scenarios/exercise-header-lifecycle-acceptance.jsonl)
+checks replacement, dismissal, restart, navigation, capture, and allocation cleanup.
+
 The star reads accepted placement state and submits edits through the serialized
 user-data save flow. Re-adding a favorite creates a fresh placement without resetting
 playback. Both control boxes share insets, padding, background, and border.

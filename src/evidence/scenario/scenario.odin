@@ -128,6 +128,11 @@ Command_Kind :: enum u8 {
     Pause_Construction,
     Resume_Construction,
     Show_Completed,
+    Set_Exercise_Header,
+    Hide_Exercise_Header,
+    Expand_Exercise_Header,
+    Set_Exercise_Header_Scroll,
+    Assert_Exercise_Header,
 }
 
 // Payload-free action names accepted by the `do` scenario field.
@@ -143,6 +148,8 @@ ACTION_KINDS :: [?]Action_Kind_Entry {
     {"show_completed", .Show_Completed},
     {"kick_dust", .Kick_Dust},
     {"stop_gif", .Stop_Gif},
+    {"hide_exercise_header", .Hide_Exercise_Header},
+    {"expand_exercise_header", .Expand_Exercise_Header},
 }
 
 // Canonical presentation MIME accepted by scenario-authored view content.
@@ -347,6 +354,7 @@ Raw_Command :: struct {
     screenshot: string,
     start_gif: string,
     set_arrival_style: string,
+    set_exercise_header: string,
     set_library_search: string,
     favorite_control: string,
     library_placement: string,
@@ -369,6 +377,7 @@ Raw_Command :: struct {
     assert_focus: string,
     assert_library_search: string,
     assert_terminal_contains: string,
+    assert_exercise_header: string,
 
     // State checkpoint action.
     checkpoint: string,
@@ -627,19 +636,15 @@ scenario_json_f32 :: proc(value: json.Value) -> (f32, bool) {
 scenario_numeric_action_select :: proc(
     root: json.Object, command: ^Command) -> (int, bool) {
     selected := 0
-    if value, present := root["set_view_scroll"]; present {
-        payload, payload_ok := value.(json.Object)
-        if !payload_ok || len(payload) != 1 {
-            return 0, false
-        }
-        y_value, y_present := payload["y"]
-        y, y_ok := scenario_json_f32(y_value)
-        if !y_present || !y_ok {
-            return 0, false
-        }
-        command^.kind = .Set_View_Scroll
-        command^.value = y
-        selected += 1
+    if count, valid := scenario_view_scroll_action_select(root, command); !valid {
+        return 0, false
+    } else {
+        selected += count
+    }
+    if count, valid := scenario_header_scroll_action_select(root, command); !valid {
+        return 0, false
+    } else {
+        selected += count
     }
     if value, present := root["set_splitters"]; present {
         payload, payload_ok := value.(json.Object)
@@ -660,6 +665,43 @@ scenario_numeric_action_select :: proc(
         selected += 1
     }
     return selected, true
+}
+
+// Decode one exact named-object view-scroll action.
+scenario_view_scroll_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    value, present := root["set_view_scroll"]
+    if !present {
+        return 0, true
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 1 {
+        return 0, false
+    }
+    y_value, y_present := payload["y"]
+    y, y_ok := scenario_json_f32(y_value)
+    if !y_present || !y_ok {
+        return 0, false
+    }
+    command^.kind = .Set_View_Scroll
+    command^.value = y
+    return 1, true
+}
+
+// Decode one bounded exercise-header scroll offset.
+scenario_header_scroll_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    value, present := root["set_exercise_header_scroll"]
+    if !present {
+        return 0, true
+    }
+    scroll_y, valid := scenario_json_f32(value)
+    if !valid || scroll_y < 0 || scroll_y > 1_000_000 {
+        return 0, false
+    }
+    command^.kind = .Set_Exercise_Header_Scroll
+    command^.value = scroll_y
+    return 1, true
 }
 
 //   Decode one JSONL command line into its temporary struct and structured object.
@@ -862,7 +904,7 @@ runner_update_command :: proc(
     case .Assert_Focus, .Assert_Library_Search, .Assert_Terminal_Contains,
          .Assert_Terminal_Editor, .Assert_Terminal_Preview,
          .Assert_Allocation_Baseline, .Assert_Setting, .Assert_Favorites,
-         .Assert_No_Bad_Frees:
+         .Assert_No_Bad_Frees, .Assert_Exercise_Header:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
@@ -878,7 +920,9 @@ runner_update_command :: proc(
          .Allocation_Checkpoint, .Shutdown, .Set_Setting,
          .Favorite_Control, .Library_Placement, .Type_Library_Name,
          .Type_Collection_Note,
-         .Set_Arrival_Style:
+         .Set_Arrival_Style, .Set_Exercise_Header,
+         .Hide_Exercise_Header, .Expand_Exercise_Header,
+         .Set_Exercise_Header_Scroll:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -940,7 +984,9 @@ command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
          .Apply_Library_Search_Suggestion, .Clear_Library_Search, .Emit_Dust,
         .Contact_Dust, .Kick_Dust, .Set_View_Scroll, .Set_Splitters,
         .Favorite_Control, .Library_Placement, .Set_Arrival_Style, .Set_Setting,
-        .Pause_Construction, .Resume_Construction, .Show_Completed:
+        .Pause_Construction, .Resume_Construction, .Show_Completed,
+        .Set_Exercise_Header, .Hide_Exercise_Header,
+        .Expand_Exercise_Header:
         return true
     case:
         return false
@@ -1041,6 +1087,8 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
     selected += raw_arrival_style_command_select(raw.set_arrival_style, command)
+    selected += raw_text_command_select(
+        raw.set_exercise_header, .Set_Exercise_Header, command)
     selected += raw_library_search_command_select(raw, command)
     selected += raw_favorites_command_select(raw, command)
     selected += raw_wait_command_select(raw, command)
@@ -1076,6 +1124,8 @@ raw_wait_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_text_command_select(raw.assert_focus, .Assert_Focus, command)
     selected += raw_text_command_select(raw.assert_terminal_contains,
         .Assert_Terminal_Contains, command)
+    selected += raw_text_command_select(
+        raw.assert_exercise_header, .Assert_Exercise_Header, command)
     selected += raw_text_command_select(
         raw.wait_terminal_explorer, .Wait_Terminal_Explorer, command)
     selected += raw_text_command_select(
@@ -1267,7 +1317,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Apply_Library_Search_Suggestion, .Clear_Library_Search,
          .Wait_Terminal_History_Idle,
          .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting,
-         .Assert_Terminal_Editor:
+         .Assert_Terminal_Editor, .Hide_Exercise_Header,
+         .Expand_Exercise_Header, .Set_Exercise_Header_Scroll:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
@@ -1279,6 +1330,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
          .Wait_State, .Wait_Terminal_Contains, .Wait_Terminal_Explorer,
          .Assert_Terminal_Preview, .Confirm_Terminal_History_Delete,
+         .Set_Exercise_Header, .Assert_Exercise_Header,
          .Assert_State, .Assert_Focus,
          .Assert_Terminal_Contains, .Assert_Library_Search,
          .Checkpoint, .Allocation_Checkpoint,
@@ -1492,6 +1544,18 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
         return display.animation_controls_hidden
     case "animation_controls_visible":
         return !display.animation_controls_hidden
+    case "exercise_header_visible":
+        return display.exercise_header_visible
+    case "exercise_header_hidden":
+        return !display.exercise_header_visible
+    case "exercise_header_expanded":
+        return display.exercise_header_expanded
+    case "exercise_header_collapsed":
+        return !display.exercise_header_expanded
+    case "exercise_header_scroll_clamped":
+        return display.exercise_header_scroll_clamped
+    case "exercise_header_scroll_at_limit":
+        return display.exercise_header_scroll_at_limit
     case "animation_speed_1x":
         return animation_speed_normal(display)
     case "animation_speed_2x":

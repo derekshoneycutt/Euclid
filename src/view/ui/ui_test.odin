@@ -838,7 +838,9 @@ ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
             mouse_position = {
                 favorites.favorite.x + 1, favorites.favorite.y + 1},
         },
-        animation_favorite_eligible = true,
+        animation_controls = {
+            favorite = true,
+        },
     })
     testing.expect_value(t, favorite.hover.kind,
         viewmodel.Ui_Interaction_Target_Kind.Control)
@@ -847,11 +849,73 @@ ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
     ineligible := ui_route_interaction_frame(&runtime, {
         frame = {
             mouse_position = {
-                favorites.favorite.x + 1, favorites.favorite.y + 1},
+                favorites.favorite.x + 1, favorites.favorite.y + 1,
+            },
         },
     })
     testing.expect_value(t, ineligible.hover.kind,
         viewmodel.Ui_Interaction_Target_Kind.World)
+}
+
+// Header press and wheel routes remain local while suppressing Terminal ownership.
+@(test)
+ui_router_claims_exercise_header_input_before_terminal :: proc(t: ^testing.T) {
+    runtime: viewmodel.Euclid_Ui_Runtime_State = {
+        layout = make_baseline_layout_state(),
+        presentation = {
+            visible = true,
+        },
+    }
+    source_buffer: [512]u8
+    for index in 0..<256 {
+        source_buffer[index] = 'x'
+    }
+    source := string(source_buffer[:256])
+    world := geometry.Rectangle(runtime.layout.ui_regions.world_rect)
+    layout := uianimation.exercise_header_layout(world, source, false)
+    frame: input.Input_Frame = {
+        mouse_position = {layout.slots.text.x+1, layout.slots.text.y+1},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+        mouse_wheel_delta = -1,
+    }
+    routed := ui_route_interaction_frame(&runtime, {
+        frame = frame,
+        terminal_present = true,
+        animation_controls = {
+            exercise_header_visible = true,
+            exercise_header = layout,
+        },
+    })
+    testing.expect_value(t, routed.pointer_target.id,
+        uianimation.EXERCISE_HEADER_PANEL_ID)
+    testing.expect(t, !routed.terminal.pointer && !routed.terminal.wheel)
+    filtered := ui_animation_control_input_frame(frame, routed)
+    testing.expect(t, uiwidgets.input_frame_left_pressed(filtered))
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(-1))
+    expanded := uianimation.exercise_header_layout(world, source, true)
+    runtime.input.press_owner = {
+        active = true,
+        kind = .Scrollbar,
+        id = uianimation.EXERCISE_HEADER_SCROLLBAR_ID,
+    }
+    frame.mouse_pressed = {}
+    frame.mouse_position = {expanded.slots.scroll.x+1, expanded.slots.scroll.y+1}
+    routed = ui_route_interaction_frame(&runtime, {
+        frame = frame,
+        terminal_present = true,
+        capture = runtime.input.press_owner,
+        animation_controls = {
+            exercise_header_visible = true,
+            exercise_header = expanded,
+            exercise_header_scroll_dragging = true,
+        },
+    })
+    testing.expect_value(t, routed.pointer_target.kind,
+        viewmodel.Ui_Interaction_Target_Kind.Scrollbar)
+    testing.expect_value(t, routed.pointer_target.id,
+        uianimation.EXERCISE_HEADER_SCROLLBAR_ID)
+    testing.expect(t, !routed.terminal.pointer && !routed.terminal.wheel)
 }
 
 // Verify capture from frame start outranks new hover and suppresses wheel routing.

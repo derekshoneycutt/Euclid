@@ -43,14 +43,30 @@ prepare_ui_static_interaction :: proc(
     frame: input.Input_Frame,
     capture: viewmodel.Ui_Press_Owner_State) {
     state.ui_runtime.sharing.png_path_available = state.png_capture_status.path_len > 0
+    header_layout: uianimation.Exercise_Header_Layout
+    header_visible := state^.exercise_header.visible &&
+        !state^.ui_runtime.playback.controls_hidden
+    if header_visible {
+        preferences := state^.ui_runtime.preferences.values.interface
+        header_layout = uianimation.exercise_header_layout(
+            geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect),
+            string(state^.exercise_header.text[:state^.exercise_header.count]),
+            state^.exercise_header.expanded,
+            preferences.control_size_percent, preferences.text_size_percent)
+    }
     _ = ui_route_interaction_frame(&state^.ui_runtime, {
         frame = frame,
         terminal_present = uiterminal.is_terminal_selected(state),
-        animation_favorite_eligible =
-            uianimation.animation_favorite_eligible(state^.julia_interface),
-        animation_membership_eligible =
-            uianimation.animation_favorite_eligible(state.julia_interface) &&
-            uioverlay.membership_available(state),
+        animation_controls = {
+            favorite = uianimation.animation_favorite_eligible(
+                state^.julia_interface),
+            membership = uianimation.animation_favorite_eligible(
+                state.julia_interface) && uioverlay.membership_available(state),
+            exercise_header_visible = header_visible,
+            exercise_header = header_layout,
+            exercise_header_scroll_dragging =
+                state^.exercise_header.scroll_dragging,
+        },
         capture = capture,
         capture_view = capturemodel.gif_capture_view(&state^.gif_capture_status),
     })
@@ -82,9 +98,21 @@ ui_animation_control_input_frame :: proc(
     frame: input.Input_Frame,
     routed: viewmodel.Ui_Interaction_Frame) -> input.Input_Frame {
     target := routed.pointer_target
+    header_scroll := target.kind == .Scrollbar &&
+        target.id == uianimation.EXERCISE_HEADER_SCROLLBAR_ID
     if target.kind == .Control && uianimation.animation_control_id(target.id) {
+        fields: input.Input_Pointer_Fields = {
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels,
+        }
+        if target.id == uianimation.EXERCISE_HEADER_PANEL_ID {
+            fields += {.Wheel}
+        }
+        return input.input_frame_filter_pointer(frame, fields)
+    }
+    if header_scroll {
         return input.input_frame_filter_pointer(frame, {
-            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels})
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels,
+        })
     }
     return input.input_frame_filter_pointer(frame, {.Screen_Position})
 }

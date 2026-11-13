@@ -1,0 +1,30 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"exercise"}
+{"wait_event":"animation_selected","correlation":"exercise","timeout_ms":10000}
+{"wait_state":"animation_controls_visible","timeout_ms":10000}
+{"set_exercise_header":"Construct an equilateral triangle on a given finite straight line. First draw a circle centered at each endpoint with radius equal to the segment. Mark one of the intersections of the circles, then join that point to both endpoints. The instructions remain available when the construction is restarted and must be cleared when another animation is selected. Verify the construction by comparing all three side lengths and confirm that the original segment is unchanged."}
+{"wait_state":"exercise_header_visible","timeout_ms":10000}
+{"set_exercise_header":"Replacement instructions: construct an equilateral triangle on the given line by drawing equal-radius circles at both endpoints. Mark a circle intersection, join it to the endpoints, and verify all three side lengths. Keep the original segment fixed throughout the construction. The replacement text must survive disclosure and restart, while navigation to another animation removes the old instructions. Check that both circle intersections are equally distant from the endpoints and that choosing either one yields a congruent triangle. Do not rely on appearance alone; compare the segment lengths in the completed construction. Keep all auxiliary circles visible until the side checks are complete, then review the result before continuing."}
+{"assert_exercise_header":"Replacement instructions: construct an equilateral triangle on the given line by drawing equal-radius circles at both endpoints. Mark a circle intersection, join it to the endpoints, and verify all three side lengths. Keep the original segment fixed throughout the construction. The replacement text must survive disclosure and restart, while navigation to another animation removes the old instructions. Check that both circle intersections are equally distant from the endpoints and that choosing either one yields a congruent triangle. Do not rely on appearance alone; compare the segment lengths in the completed construction. Keep all auxiliary circles visible until the side checks are complete, then review the result before continuing."}
+{"do":"expand_exercise_header"}
+{"wait_state":"exercise_header_expanded","timeout_ms":10000}
+{"do":"hide_exercise_header"}
+{"wait_state":"exercise_header_hidden","timeout_ms":10000}
+{"set_exercise_header":"Replacement instructions: construct an equilateral triangle on the given line by drawing equal-radius circles at both endpoints. Mark a circle intersection, join it to the endpoints, and verify all three side lengths. Keep the original segment fixed throughout the construction. The replacement text must survive disclosure and restart, while navigation to another animation removes the old instructions. Check that both circle intersections are equally distant from the endpoints and that choosing either one yields a congruent triangle. Do not rely on appearance alone; compare the segment lengths in the completed construction. Keep all auxiliary circles visible until the side checks are complete, then review the result before continuing."}
+{"wait_state":"exercise_header_visible","timeout_ms":10000}
+{"do":"expand_exercise_header"}
+{"wait_state":"exercise_header_expanded","timeout_ms":10000}
+{"set_exercise_header_scroll":100000}
+{"do":"reset_animation"}
+{"wait_event":"animation_reset_committed","timeout_ms":10000}
+{"wait_state":"exercise_header_visible","timeout_ms":10000}
+{"wait_state":"exercise_header_expanded","timeout_ms":10000}
+{"assert_state":"exercise_header_scroll_clamped"}
+{"assert_state":"exercise_header_scroll_at_limit"}
+{"screenshot":".build/exercise-header-lifecycle.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"select_animation":"Axiom I,1","as":"leave-exercise"}
+{"wait_event":"animation_selected","correlation":"leave-exercise","timeout_ms":10000}
+{"wait_state":"exercise_header_hidden","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

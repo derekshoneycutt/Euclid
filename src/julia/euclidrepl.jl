@@ -10,6 +10,8 @@ Key behavior:
 
 `status().drained` reports successful command capture, not native publication.
 Use ordinary animation pause/resume; the former finish-now `stop!` is removed.
+Use `show_exercise!` and `hide_exercise!` to control the persistent plain-text
+instruction header without resetting the Terminal session.
 
 Use `?point!`, `?line!`, `?circle!`, `?label!`, `?triangle!`, `?cycloid!`,
 `?trochoid!`, `?parabola!`, `?hyperbola!`, `?hide!`, `?show!`, `?clear!`, and
@@ -27,7 +29,8 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_CURVE_DURATION,
     DEFAULT_TRANSFORM_DURATION, DEFAULT_HIGHLIGHT_DURATION,
     DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
-    euclidcolors, hide!, show!, point!, line!, circle!, label!, triangle!, square!,
+    euclidcolors, hide!, show!, show_exercise!, hide_exercise!,
+    point!, line!, circle!, label!, triangle!, square!,
     pentagon!, lens!, lune!, polygon_vertex_ids, line_endpoint_ids,
     circle_region_center_ids, cycloid!, ordinary_cycloid!,
     curtate_cycloid!, prolate_cycloid!, trochoid!, ellipse!, cardioid!,
@@ -552,6 +555,25 @@ function install_session_helpers!(
 
     install_drawing_helpers!(context_module, runtime, state_ptr)
     install_transform_helpers!(context_module)
+    Core.eval(context_module, quote
+        """Show or replace plain-text exercise instructions without resetting Terminal."""
+        show_exercise!(text) =
+            EuclidRepl.show_exercise!(EUCLID_STATE_PTR, text)
+        """Hide exercise instructions without resetting Terminal."""
+        hide_exercise!() = EuclidRepl.hide_exercise!(EUCLID_STATE_PTR)
+    end)
+    return nothing
+end
+
+"""Request the display-owned header to show validated plain-text instructions."""
+function show_exercise!(state_ptr::Ptr{Cvoid}, text::AbstractString)
+    OdinJuliaBridge.publish_exercise_header(state_ptr, text)
+    return nothing
+end
+
+"""Request the display-owned header to dismiss its current instructions."""
+function hide_exercise!(state_ptr::Ptr{Cvoid})
+    OdinJuliaBridge.hide_exercise_header(state_ptr)
     return nothing
 end
 

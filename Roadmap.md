@@ -14,10 +14,6 @@ there are some things that do need to start early.
 
 -----------------
 
-- UI animation polish
-
------------------
-
 - v1 Logic/Tarski animations
 - v1 Algebra animations
 - v1 Veblen?
@@ -78,7 +74,7 @@ Core Content (>260 animations; 119 complete):
   - [X] Section 6 (8 animations)
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
-- [ ] Tarski Chap 1-4 Intro to Logic (9+; 2 prelim complete, to be redone generally tho)
+- [ ] Tarski Chap 1-5 Intro to Logic (9+; 2 prelim complete, to be redone generally tho)
   - [X] And
   - [X] Not
   - [ ] Or

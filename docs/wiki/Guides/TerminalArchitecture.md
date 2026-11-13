@@ -851,11 +851,29 @@ remain display concerns.
 Those closures retain the generation-local `EuclidReplRuntime` and the lifetime-stable,
 borrowed Odin state pointer. There is no process-global registry of user-session state.
 
+`show_exercise!(text)` and `hide_exercise!()` control the optional plain-text board
+header. Showing or replacing instructions does not reset Terminal or construction.
+The Julia wrapper validates nonblank UTF-8 text up to 32 KiB, then submits a typed
+Julia-egress update; the display copies accepted bytes into one fixed application-owned
+buffer before returning the transport envelope. The header has its own close control,
+and close uses the same display-side dismissal operation as `hide_exercise!()`. The
+animation-control eye hides and reveals the header with the other animation controls
+without discarding its text or disclosure state. The display measures the preview
+against current board and text geometry, shows disclosure only on actual wrapped
+overflow, and limits expanded content to one-third of the board height with its own
+scroll state. The UI interaction router gives visible header presses and wheel input
+priority over world tools and Terminal scrollback.
+
 EuclidRepl animated jobs advance through Terminal's native animation callback, inside
 the ordinary bounded scene-command capture. The display commits those commands before
 constraint solving and frame preparation. Independent `Ticks` callbacks do not advance
 drawing jobs: they run outside capture and must not mutate display-owned tool state.
 Animation pause also pauses drawing-job progress.
+
+```julia
+show_exercise!("On a given finite straight line to construct an equilateral triangle.")
+hide_exercise!()
+```
 
 `point!` returns a `BridgeShapeEntityResult` with the point's packed entity index.
 Like line and circle handles, this handle can be passed directly to `hide!` after

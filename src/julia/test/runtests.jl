@@ -8,6 +8,7 @@ using Test
     @testset "EuclidRepl" begin
         include("euclidrepl_tests.jl")
         include("repl_transforms_tests.jl")
+        include("exercise_header_tests.jl")
     end
 
     @testset "Syntax Highlighting Adapter" begin

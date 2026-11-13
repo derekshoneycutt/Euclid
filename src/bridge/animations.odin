@@ -5,6 +5,7 @@ import shapemodel "../shapes/model"
 import audio "../audio"
 import julialib "../../libs/julia/bindings"
 import core "../core"
+import exerciseheader "../core/exercise_header"
 import animation_model "../core/animation"
 import protocol "../core/protocol"
 import files "../files"
@@ -219,6 +220,7 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
         state^.julia_interface^.current_animation
     reopening_completed := !selecting && state^.ui_runtime.playback.completed &&
         !state^.julia_interface^.pending_animation_reset
+    header_request_floor := animation_header_request_floor(service, selecting)
     service^.reload_state = .Quiescing
     if !invoke_animation_lifecycle_transaction(state) {
         if service^.reload_state == .Quiescing {
@@ -238,10 +240,33 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     service^.animation_progress = 0
     particles.formation_reset_generation(
         &state^.particle_system, service^.animation_generation)
+    animation_clear_header_after_navigation(state, selecting, header_request_floor)
     restore_animation_completion_intent(state, selecting, reopening_completed)
     release_completed_animation_ticks(service)
     route_retained_display_view_content(service)
     return true
+}
+
+// Snapshot pre-transition header traffic so newly selected content remains eligible.
+animation_header_request_floor :: proc(
+    service: ^Julia_Runtime_Service, selecting: bool) -> u64 {
+    if !selecting {
+        return 0
+    }
+    return bridgemodel.exercise_header_request_latest(
+        &service^.exercise_header_request_sequence)
+}
+
+// Clear instructions only after a committed selection, never for a restart.
+animation_clear_header_after_navigation :: proc(
+    state: ^core.Euclid_General_State, selecting: bool, request_floor: u64) {
+    if !selecting {
+        return
+    }
+    if request_floor > state^.exercise_header.last_request_id {
+        state^.exercise_header.last_request_id = request_floor
+    }
+    exerciseheader.hide(&state^.exercise_header)
 }
 
 // Restore held completion after reload or apply completed-first to a new selection.
@@ -351,15 +376,24 @@ update_animation_lifecycle :: proc(
     if animation == nil {
         animation = &state^.julia_interface^.null_animation
     }
-    service^.presentation_animation_generation_override =
-        service^.animation_generation + 1
-    service^.presentation_animation_override = animation
+    animation_prepare_lifecycle_host_context(
+        service, request.animation_generation, animation)
     defer service^.presentation_animation_generation_override = 0
     defer service^.presentation_animation_override = nil
     succeeded := execute_animation_lifecycle_transition(
         state, service, host, request, animation)
     complete_animation_lifecycle_slot(slot, succeeded)
     return succeeded
+}
+
+// Bind callback-scoped content and header requests to the candidate generation.
+animation_prepare_lifecycle_host_context :: proc(
+    service: ^Julia_Runtime_Service, generation: u64,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface) {
+    service^.presentation_animation_generation_override =
+        service^.animation_generation + 1
+    service^.presentation_animation_override = animation
+    service^.host_exercise_header_animation_generation = generation
 }
 
 //   Report whether explicit or archive-driven reload work owns this lifecycle turn.
@@ -527,11 +561,7 @@ generate_animation_tick :: proc(
     state := cast(^core.Euclid_General_State)slot^.host_state
     assert_julia_runtime_owner(state)
     context = state^.saved_context
-    state^.animation_query_snapshot_target = &slot^.query_snapshot
-    begin_scene_command_batch(state, &slot^.scene_batch)
-    slot^.scene_batch.animation_generation = request.animation_generation
-    slot^.scene_batch.tick_sequence = request.sequence
-    slot^.scene_batch.animation_progress = slot^.effective_progress
+    animation_prepare_tick_scene_batch(state, service, slot, request)
     defer end_scene_command_batch(state)
     defer state^.animation_query_snapshot_target = nil
     if !slot^.show_completed {
@@ -545,6 +575,19 @@ generate_animation_tick :: proc(
     }
     slot^.state = .Complete
     return callback_succeeded
+}
+
+// Prepare one tick's immutable scene batch and callback-scoped header generation.
+animation_prepare_tick_scene_batch :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    slot: ^bridgemodel.Animation_Tick_Slot,
+    request: bridgemodel.Animation_Tick_Requested) {
+    state^.animation_query_snapshot_target = &slot^.query_snapshot
+    begin_scene_command_batch(state, &slot^.scene_batch)
+    slot^.scene_batch.animation_generation = request.animation_generation
+    slot^.scene_batch.tick_sequence = request.sequence
+    slot^.scene_batch.animation_progress = slot^.effective_progress
+    service^.host_exercise_header_animation_generation = request.animation_generation
 }
 
 //   Build one primitive tick payload for the reserved immutable slot.

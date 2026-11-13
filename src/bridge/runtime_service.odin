@@ -4,6 +4,7 @@ import bridgemodel "model"
 import dynviewmodel "../dynview/model"
 
 import presentation_model "presentation"
+import exerciseheader "../core/exercise_header"
 
 import storage "../core/storage"
 import animationmodel "../core/animation"
@@ -2237,6 +2238,9 @@ destroy_julia_egress_message :: proc(
     service: ^Julia_Runtime_Service, message: ^bridgemodel.Julia_Host_Egress) {
     if content, content_ok := message^.(bridgemodel.View_Content_Ready); content_ok {
         communication_link_free_bytes(&service^.event_link, content.content.bytes)
+    } else if update, update_ok := message^.(bridgemodel.Exercise_Header_Update);
+        update_ok && len(update.text) > 0 {
+        communication_link_free_bytes(&service^.event_link, update.text)
     } else if output, output_ok := message^.(protocol.Terminal_Output_Batch); output_ok {
         communication_link_free_bytes(&service^.event_link,
             transmute([]u8)output.bytes)
@@ -2264,6 +2268,55 @@ drain_julia_egress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
         destroy_julia_egress_message(service, message)
         count += 1
     }
+}
+
+// Clone one validated header update into Julia-owned egress storage.
+send_exercise_header_update :: proc(
+    state: ^core.Euclid_General_State, visible: bool,
+    source: []u8) -> bridgemodel.Communication_Send_Outcome {
+    if !exercise_header_update_request_valid(state, visible, source) {
+        return .Allocation_Failed
+    }
+    service := state^.julia_runtime_service
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_egress_returns(service)
+    message, message_error := communication_link_alloc(&service^.event_link)
+    if message_error != .None {
+        return .Allocation_Failed
+    }
+    bytes: []u8
+    if visible {
+        allocated_bytes, bytes_error := communication_link_alloc_bytes(
+            &service^.event_link, len(source))
+        if bytes_error != .None {
+            communication_link_free(&service^.event_link, message)
+            return .Allocation_Failed
+        }
+        bytes = allocated_bytes
+        copy(bytes, source)
+    }
+    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Exercise_Header_Update{
+        animation_generation = service^.host_exercise_header_animation_generation,
+        request_id = bridgemodel.exercise_header_request_next(
+            &service^.exercise_header_request_sequence),
+        visible = visible,
+        text = bytes,
+    })
+    if !communication_link_try_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+// Validate the producer boundary before it reserves Julia-owned message storage.
+exercise_header_update_request_valid :: proc(
+    state: ^core.Euclid_General_State, visible: bool, source: []u8) -> bool {
+    return state != nil && state^.julia_runtime_service != nil &&
+        visible == (len(source) > 0) &&
+        (!visible || exerciseheader.text_is_valid(source))
 }
 
 //   Clone canonical presentation bytes into the Julia-owned egress pool.

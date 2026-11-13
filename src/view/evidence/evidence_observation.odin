@@ -40,10 +40,24 @@ observe_display_state :: proc(
         evidence_ring = &state.evidence_ring,
     }
     result := observe.display(&source)
+    observe_exercise_header_state(state, &result)
     observe_collection_delete_state(state, &result)
     viewgraphics.service_observe(
         cast(^viewgraphics.Service)state.terminal_graphics_user_data, &result)
     return result
+}
+
+// Copy exercise-header visibility and retained-scroll assertions into evidence.
+observe_exercise_header_state :: proc(
+    state: ^core.Euclid_General_State, result: ^observe.Display) {
+    header := &state^.exercise_header
+    result^.exercise_header_visible = header^.visible
+    result^.exercise_header_expanded = header^.expanded
+    result^.exercise_header_scroll_clamped =
+        !header^.visible || !header^.expanded || header^.scroll_y <= header^.scroll_max
+    result^.exercise_header_scroll_at_limit =
+        header^.visible && header^.expanded && header^.scroll_max > 0 &&
+        header^.scroll_y == header^.scroll_max
 }
 
 // Copy the display-owned destructive-intent guard using the same SDL clock as input.

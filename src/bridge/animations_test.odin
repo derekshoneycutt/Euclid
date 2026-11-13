@@ -1,6 +1,7 @@
 package bridge
 
 import bridgemodel "model"
+import exerciseheader "../core/exercise_header"
 
 import shapemodel "../shapes/model"
 import contentdata "../core/content"
@@ -318,4 +319,35 @@ animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
     testing.expect_value(t, world.registry.entity_count, u32(0))
     testing.expect_value(t, world.transforms.count, u16(0))
     testing.expect(t, !shapemodel.shape_registry_resolves(&world.registry, line.shape))
+}
+
+// Verify restart retains the header while committed navigation invalidates it.
+@(test)
+animation_header_survives_restart_and_clears_on_selection :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
+    defer free(service, context.allocator)
+    state^.julia_runtime_service = service
+    instructions := "restart instructions"
+    testing.expect(t, exerciseheader.show(
+        &state^.exercise_header, transmute([]u8)instructions))
+    state^.exercise_header.expanded = true
+    state^.exercise_header.scroll_y = 40
+    service^.exercise_header_request_sequence.last_issued = 7
+
+    animation_clear_header_after_navigation(state, false, 0)
+
+    testing.expect(t, state^.exercise_header.visible)
+    testing.expect(t, state^.exercise_header.expanded)
+    testing.expect_value(t, state^.exercise_header.scroll_y, f32(40))
+    testing.expect_value(t, state^.exercise_header.last_request_id, u64(0))
+
+    animation_clear_header_after_navigation(state, true, 7)
+
+    testing.expect(t, !state^.exercise_header.visible)
+    testing.expect_value(t, state^.exercise_header.count, 0)
+    testing.expect(t, !state^.exercise_header.expanded)
+    testing.expect_value(t, state^.exercise_header.scroll_y, f32(0))
+    testing.expect_value(t, state^.exercise_header.last_request_id, u64(7))
 }

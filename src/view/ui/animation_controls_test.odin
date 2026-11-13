@@ -7,9 +7,11 @@ import collections "../../collections"
 import userdata "../../persistence/userdata"
 import geometry "../../core/geometry"
 import app_core "../../core"
+import exerciseheader "../../core/exercise_header"
 import testing "core:testing"
 import uianimation "animation"
 import uisemantics "semantics"
+import uiwidgets "widgets"
 import theme "theme"
 import uuid "core:encoding/uuid"
 import native "../native"
@@ -448,6 +450,7 @@ animation_controls_active_backing_uses_contrasting_pair :: proc(t: ^testing.T) {
     loop_flags: [3][3]bool = {
         {false, true, false}, {false, false, true}, {true, true, true},
     }
+
     for flags in loop_flags {
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
@@ -460,6 +463,210 @@ animation_controls_active_backing_uses_contrasting_pair :: proc(t: ^testing.T) {
             vertices[encoder.vertex_count - 1].color,
             theme.UI_SELECTION_BACKGROUND_COLOR)
     }
+}
+
+// The eye toggle hides and restores the exercise header without discarding it.
+@(test)
+exercise_header_obeys_animation_control_visibility :: proc(t: ^testing.T) {
+    ji: bridgemodel.Euclid_Julia_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    state, store := animation_controls_test_state(t, &ji, &animation)
+    defer {
+        free(store, context.allocator)
+        destroy_shell_test_state(state)
+    }
+    header_text: [5]u8 = "Task!"
+    testing.expect(t, exerciseheader.show(&state^.exercise_header, header_text[:]))
+    exercise_header_eye_toggle_preserves_prompt(t, state, len(header_text))
+    slots := uianimation.exercise_header_layout_slots(
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect))
+    close_point: geometry.Vector2 = {
+        slots.close.x + slots.close.width * 0.5,
+        slots.close.y + slots.close.height * 0.5,
+    }
+    _ = uianimation.prepare_animation_controls(state, {
+        mouse_position = {close_point.x, close_point.y},
+        mouse_pressed = {.Left},
+    })
+    testing.expect(t, !state^.exercise_header.visible)
+    testing.expect_value(t, state^.exercise_header.count, 0)
+}
+
+// Verify eye toggling hides and restores the retained prompt and disclosure state.
+exercise_header_eye_toggle_preserves_prompt :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State, text_length: int) {
+    prepared := uianimation.prepare_animation_controls(state, {})
+    testing.expect(t, prepared.exercise_header.visible)
+    eye_point: geometry.Vector2 = {
+        prepared.slots.eye.x + prepared.slots.eye.width * 0.5,
+        prepared.slots.eye.y + prepared.slots.eye.height * 0.5,
+    }
+
+    prepared = uianimation.prepare_animation_controls(state, {
+        mouse_position = {eye_point.x, eye_point.y},
+        mouse_pressed = {.Left},
+    })
+    testing.expect(t, state^.ui_runtime.playback.controls_hidden)
+    testing.expect(t, state^.exercise_header.visible)
+    testing.expect_value(t, state^.exercise_header.count, text_length)
+    testing.expect(t, !prepared.exercise_header.visible)
+
+    exercise_header_hidden_pointer_routes_to_world(t, state)
+    prepared = uianimation.prepare_animation_controls(state, {})
+    testing.expect(t, !prepared.exercise_header.visible)
+    _ = uianimation.prepare_animation_controls(state, {
+        mouse_position = {eye_point.x, eye_point.y},
+        mouse_pressed = {.Left},
+    })
+    testing.expect(t, !state^.ui_runtime.playback.controls_hidden)
+    testing.expect(t, state^.exercise_header.visible)
+    prepared = uianimation.prepare_animation_controls(state, {})
+    testing.expect(t, prepared.exercise_header.visible)
+}
+
+// Verify a hidden header yields pointer routing to the underlying world.
+exercise_header_hidden_pointer_routes_to_world :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State) {
+    slots := uianimation.exercise_header_layout_slots(
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect))
+    close_point: geometry.Vector2 = {
+        slots.close.x + slots.close.width * 0.5,
+        slots.close.y + slots.close.height * 0.5,
+    }
+    hit_id, hit := uianimation.animation_control_hit_test(
+        geometry.Rectangle(state^.ui_runtime.layout.ui_regions.world_rect),
+        .Idle, close_point, {
+            hidden = true,
+            exercise_header_visible = true,
+        })
+    testing.expect(t, !hit)
+    testing.expect_value(t, hit_id, 0)
+    body_point: geometry.Vector2 = {
+        slots.text.x + slots.text.width * 0.5,
+        slots.text.y + slots.text.height * 0.5,
+    }
+    target := ui_world_hover_target(
+        &state^.ui_runtime, body_point, .Recording, {
+            exercise_header_visible = true,
+        })
+    testing.expect_value(t, target.kind, viewmodel.Ui_Interaction_Target_Kind.World)
+}
+
+// Exact-fit text stays collapsed; the first wrapped row exposes disclosure.
+@(test)
+exercise_header_disclosure_uses_measured_overflow :: proc(t: ^testing.T) {
+    world: geometry.Rectangle = {0, 0, 640, 480}
+    baseline := uianimation.exercise_header_layout(world, "x", false)
+    maximum := int(baseline.slots.text.width /
+        theme.ui_scaled_metric(theme.TEXT_WRAP_ADVANCE, 100))
+    text: [512]u8
+    for index in 0..<maximum+1 {
+        text[index] = 'x'
+    }
+    exact := uianimation.exercise_header_layout(
+        world, string(text[:maximum]), false)
+    overflow := uianimation.exercise_header_layout(
+        world, string(text[:maximum+1]), false)
+    testing.expect(t, !exact.overflow)
+    testing.expect_value(t, exact.preview_rows, 1)
+    testing.expect(t, overflow.overflow)
+    testing.expect_value(t, overflow.preview_rows, 2)
+    testing.expect(t, overflow.slots.disclosure.width > 0)
+    testing.expect(t, overflow.preview_length < maximum+1)
+}
+
+// Expanded geometry stays within one third of compact boards and clamps scroll.
+@(test)
+exercise_header_expansion_caps_height_and_clamps_scroll :: proc(t: ^testing.T) {
+    world: geometry.Rectangle = {0, 0, 320, 240}
+    text: [512]u8
+    for index in 0..<256 {
+        text[index] = 'x'
+    }
+    layout := uianimation.exercise_header_layout(
+        world, string(text[:256]), true, 100, 175)
+    testing.expect(t, layout.expanded && layout.overflow)
+    testing.expect(t, layout.slots.panel.height <= world.height/3)
+    testing.expect(t, layout.content_height > layout.slots.scroll.height)
+    owner: viewmodel.Ui_Press_Owner_State
+    result := uiwidgets.scroll_container_update({
+        id = uianimation.EXERCISE_HEADER_SCROLLBAR_ID,
+        rect = layout.slots.scroll,
+        scroll_y_in = 100000,
+        content_height = layout.content_height,
+        interaction_space_rect = layout.slots.scroll,
+        wheel_step = 20,
+        control_size_percent = 100,
+        press_owner = &owner,
+    })
+    testing.expect_value(t, result.scroll_y_out,
+        result.maximum)
+}
+
+// Semantic disclosure and close commands control the header and expose its text.
+@(test)
+exercise_header_keyboard_and_accessibility_actions :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    state^.ui_runtime.layout.ui_regions.world_rect = {0, 0, 640, 480}
+    source_text: string = "Construct an equilateral triangle on a given finite straight line, then verify the construction by comparing all three side lengths."
+    source := transmute([]u8)source_text
+    testing.expect(t, exerciseheader.show(&state^.exercise_header, source))
+    focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(focus, context.allocator)
+    defer viewmodel.ui_semantic_focus_destroy(focus)
+    state^.ui_runtime.semantic_focus = focus
+    exercise_header_publish_controls(t, state, focus)
+    disclosure := uisemantics.semantic_control_id(
+        .Animation_Control, uianimation.EXERCISE_HEADER_DISCLOSURE_BUTTON_ID)
+    testing.expect(t, uisemantics.semantic_append_command(focus, {
+        target = disclosure,
+        kind = .Activate,
+    }))
+    testing.expect(t, uisemantics.semantic_begin(focus))
+    _ = uianimation.prepare_animation_controls(state, {})
+    testing.expect(t, state^.exercise_header.expanded)
+    focus^.command_count = 0
+    exercise_header_publish_controls(t, state, focus)
+    exercise_header_accessible_prompt_has_scroll(t, focus, source)
+    close := uisemantics.semantic_control_id(
+        .Animation_Control, uianimation.EXERCISE_HEADER_CLOSE_BUTTON_ID)
+    testing.expect(t, uisemantics.semantic_append_command(focus, {
+        target = close,
+        kind = .Activate,
+    }))
+    testing.expect(t, uisemantics.semantic_begin(focus))
+    _ = uianimation.prepare_animation_controls(state, {})
+    testing.expect(t, !state^.exercise_header.visible)
+}
+
+// Re-publish one header semantic tree after a display-side action.
+exercise_header_publish_controls :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    focus: ^viewmodel.Ui_Semantic_Focus_State) {
+    testing.expect_value(t, uisemantics.semantic_begin(focus), true)
+    _ = uianimation.prepare_animation_controls(state, {})
+    testing.expect_value(t, uisemantics.semantic_publish(focus),
+        viewmodel.Ui_Semantic_Status.Ok)
+}
+
+// The accessible prompt retains the full UTF-8 value and current scroll action.
+exercise_header_accessible_prompt_has_scroll :: proc(
+    t: ^testing.T, focus: ^viewmodel.Ui_Semantic_Focus_State, source: []u8) {
+    id := uisemantics.semantic_control_id(
+        .Animation_Control, uianimation.EXERCISE_HEADER_PROMPT_ID)
+    snapshot := uisemantics.semantic_snapshot(focus)
+    index := uisemantics.semantic_node_index(snapshot, id)
+    testing.expect(t, index >= 0)
+    node := snapshot^.nodes[index]
+    testing.expect(t, .Scroll in node.actions)
+    testing.expect_value(t, uisemantics.semantic_node_text(
+        snapshot, node.value_offset, node.value_length), string(source))
+    disclosure := uisemantics.semantic_control_id(
+        .Animation_Control, uianimation.EXERCISE_HEADER_DISCLOSURE_BUTTON_ID)
+    disclosure_index := uisemantics.semantic_node_index(snapshot, disclosure)
+    testing.expect(t, disclosure_index >= 0)
+    testing.expect(t, .Expanded in snapshot^.nodes[disclosure_index].states)
 }
 
 // Return the oriented edge area used to test encoded triangle coverage.
