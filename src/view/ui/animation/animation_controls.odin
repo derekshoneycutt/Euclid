@@ -584,6 +584,7 @@ prepare_exercise_header :: proc(
         state, source, mouse_input, &layout)
     close := prepare_exercise_header_close(state, layout, mouse_input)
     if close.action.activated {
+        exercise_header_release_close_press(state)
         if state^.julia_runtime_service != nil {
             bridgemodel.exercise_header_invalidate_requests(
                 &state^.julia_runtime_service^.exercise_header_request_sequence,
@@ -602,6 +603,15 @@ prepare_exercise_header :: proc(
         close_button = close,
         disclosure_button = disclosure,
         scroll = scroll,
+    }
+}
+
+// Release the close button's capture before hiding the widget that owns it.
+exercise_header_release_close_press :: proc(state: ^core.Euclid_General_State) {
+    owner := &state^.ui_runtime.input.press_owner
+    if owner^.active && owner^.kind == .Icon_Button &&
+        owner^.id == EXERCISE_HEADER_CLOSE_BUTTON_ID {
+        owner^ = {}
     }
 }
 

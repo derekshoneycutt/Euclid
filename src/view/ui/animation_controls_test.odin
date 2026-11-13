@@ -487,9 +487,25 @@ exercise_header_obeys_animation_control_visibility :: proc(t: ^testing.T) {
     _ = uianimation.prepare_animation_controls(state, {
         mouse_position = {close_point.x, close_point.y},
         mouse_pressed = {.Left},
+        mouse_down = {.Left},
     })
     testing.expect(t, !state^.exercise_header.visible)
     testing.expect_value(t, state^.exercise_header.count, 0)
+    testing.expect(t, !state^.ui_runtime.input.press_owner.active)
+    close_release := uianimation.prepare_animation_controls(state, {
+        mouse_position = {close_point.x, close_point.y},
+    })
+    testing.expect(t, !close_release.exercise_header.visible)
+    eye_point := geometry.Vector2{
+        close_release.slots.eye.x + close_release.slots.eye.width * 0.5,
+        close_release.slots.eye.y + close_release.slots.eye.height * 0.5,
+    }
+    _ = uianimation.prepare_animation_controls(state, {
+        mouse_position = {eye_point.x, eye_point.y},
+        mouse_pressed = {.Left},
+        mouse_down = {.Left},
+    })
+    testing.expect(t, state^.ui_runtime.playback.controls_hidden)
 }
 
 // Verify eye toggling hides and restores the retained prompt and disclosure state.
