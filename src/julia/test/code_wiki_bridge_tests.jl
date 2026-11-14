@@ -107,14 +107,16 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 109
-    @test sum(length(pair.julia_calls) for pair in pairs) == 118
+    @test length(pairs) == 112
+    @test sum(length(pair.julia_calls) for pair in pairs) == 121
     @test all(name -> any(pair -> pair.abi_name == name, pairs),
         ("shape_create_parabola", "shape_create_hyperbola",
             "set_parabola_tool_geometry", "set_hyperbola_tool_geometry",
             "shape_get_orientation", "shape_set_orientation",
             "publish_exercise_header", "hide_exercise_header",
-            "begin_exercise_query", "poll_exercise_query", "cancel_exercise_query"))
+            "begin_exercise_query", "poll_exercise_query", "cancel_exercise_query",
+            "begin_user_exercise_operation", "poll_user_exercise_operation",
+            "cancel_user_exercise_operation"))
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)

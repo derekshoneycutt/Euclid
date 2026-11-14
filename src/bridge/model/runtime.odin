@@ -8,6 +8,7 @@ import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import julialib "../../../libs/julia/bindings"
 import storage "../../core/storage"
+import userdata "../../persistence/userdata"
 
 import "core:encoding/uuid"
 import "core:mem"
@@ -256,6 +257,51 @@ Exercise_Operation :: struct {
     result: contentmodel.Exercise_Query_Result,
 }
 
+// User_Exercise_Intent crosses Julia egress with one fully copied user-store task.
+User_Exercise_Intent :: struct {
+    request_id: u64,
+    animation_generation: u64,
+    header_request_id: u64,
+    load: bool,
+}
+
+// User_Exercise_Operation_State separates egress admission and joined completion.
+User_Exercise_Operation_State :: enum u8 {
+    Idle,
+    Queued,
+    Waiting,
+    Ready,
+}
+
+// User_Exercise_Result_Status keeps store, alias, and owner failures distinguishable.
+User_Exercise_Result_Status :: enum u8 {
+    Unavailable,
+    Ready,
+    Invalid_Request,
+    Not_Found,
+    Retired,
+    Database_Failed,
+    Missing_Animation,
+    Busy,
+    Reference_Collision,
+    Identity_Collision,
+    Read_Only,
+    Superseded,
+}
+
+// User_Exercise_Operation owns the one bounded reply slot for user exercises.
+User_Exercise_Operation :: struct {
+    mutex: sync.Mutex,
+    next_request_id: u64,
+    state: User_Exercise_Operation_State,
+    intent: User_Exercise_Intent,
+    task: userdata.User_Exercise_Task,
+    status: User_Exercise_Result_Status,
+    result: userdata.User_Exercise_Task,
+    animation_available: bool,
+    page_animation_available: [userdata.USER_EXERCISE_LIST_PAGE_CAPACITY]bool,
+}
+
 // Exercise_Header_Request_Sequence synchronizes request ordering across owners.
 Exercise_Header_Request_Sequence :: struct {
     mutex: sync.Mutex,
@@ -303,6 +349,7 @@ Julia_Host_Egress :: union {
     View_Content_Ready,
     Exercise_Header_Update,
     Exercise_Query_Intent,
+    User_Exercise_Intent,
     protocol.Terminal_Output_Batch,
     protocol.Evaluation_Incomplete,
     protocol.Evaluation_Completed,
@@ -362,6 +409,7 @@ Julia_Runtime_Service :: struct {
     next_request_id: u64,
     exercise_header_request_sequence: Exercise_Header_Request_Sequence,
     exercise_operation: Exercise_Operation,
+    user_exercise_operation: User_Exercise_Operation,
     active_request_id: u64,
     active_request_kind: Julia_Request_Kind,
     failed_request_count: u64,

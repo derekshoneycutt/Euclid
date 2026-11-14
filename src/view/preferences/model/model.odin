@@ -9,12 +9,20 @@ Settings_Save_Task_Kind :: enum u8 {
     User_Data_Batch,
     Collection_Note_Read,
     Collection_Note_Write,
+    User_Exercise,
 }
 
 Collection_Note_Request_Kind :: enum u8 {
     None,
     Read,
     Write,
+}
+
+User_Exercise_Request_Outcome :: enum u8 {
+    Accepted,
+    Invalid_Request,
+    Busy,
+    Unavailable,
 }
 
 // Settings_Save_Status is the shared user-data durability state of local edits.
@@ -43,6 +51,7 @@ Settings_Save_Task_Payload :: struct {
     note_notes_on_top: bool,
     note_read_result: user_data.Collection_Note_Read_Result,
     note_failure: user_data.Store_Error,
+    user_exercise: user_data.User_Exercise_Task,
     result: user_data.Commit_Result,
     owner_thread_id: int,
     worker_thread_id: int,
@@ -68,6 +77,8 @@ Settings_Save_Runtime :: struct {
     note_notes_on_top: bool,
     note_failure_revision: u64,
     note_failure_unresolved: bool,
+    user_exercise_request_state: user_data.User_Exercise_Request_State,
+    user_exercise_request: user_data.User_Exercise_Task,
     settings_store: ^user_data.Store,
     settings_failure_count: int,
     settings_retry_frames: int,

@@ -207,6 +207,162 @@ settings_save_test_release_worker :: proc(gate: ^Settings_Save_Test_Gate) {
     sync.mutex_unlock(&gate.mutex)
 }
 
+// Build one immutable create request for the joined exercise worker path.
+settings_save_test_user_exercise_task :: proc(
+    reference: string) -> user_data.User_Exercise_Task {
+    title := "Worker exercise"
+    instructions := "Construct a test figure."
+    task: user_data.User_Exercise_Task = {
+        operation = .Create,
+        draft_animation_id = settings_save_test_id(93),
+        draft_reference_length = u8(len(reference)),
+        draft_title_length = u16(len(title)),
+        draft_instructions_length = u32(len(instructions)),
+    }
+    copy(task.draft_reference[:], transmute([]u8)reference)
+    copy(task.draft_title[:], transmute([]u8)title)
+    copy(task.draft_instructions[:], transmute([]u8)instructions)
+    return task
+}
+
+// Wait until the exercise result is published after its task handle is joined.
+settings_save_test_wait_user_exercise_complete :: proc(
+    state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool) -> bool {
+    deadline := time.tick_since({}) + 5 * time.Second
+    for time.tick_since({}) < deadline {
+        viewpreferences.settings_save_service(state, pool)
+        if !state^.preferences_runtime.settings_save_active &&
+           state^.preferences_runtime.user_exercise_request_state == .Complete {
+            return true
+        }
+        thread.yield()
+    }
+    return false
+}
+
+// Submit one accepted exercise and verify results publish only after join.
+settings_save_test_user_exercise_first :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool, store: ^user_data.Store) -> uuid.Identifier {
+    testing.expect_value(t, viewpreferences.settings_save_user_exercise_request(
+        state, {}), preferencesmodel.User_Exercise_Request_Outcome.Invalid_Request)
+    first_request := settings_save_test_user_exercise_task("first-exercise")
+    testing.expect_value(t, viewpreferences.settings_save_user_exercise_request(
+        state, first_request), preferencesmodel.User_Exercise_Request_Outcome.Accepted)
+    testing.expect_value(t, viewpreferences.settings_save_user_exercise_request(
+        state, first_request), preferencesmodel.User_Exercise_Request_Outcome.Busy)
+    _, available_before_join :=
+        viewpreferences.settings_save_user_exercise_take_result(state)
+    testing.expect(t, !available_before_join)
+
+    viewpreferences.settings_save_service(state, pool)
+    testing.expect_value(t,
+        state^.preferences_runtime.user_exercise_request_state,
+        user_data.User_Exercise_Request_State.In_Flight)
+    testing.expect(t,
+        state^.user_data_admission.owner ==
+            protocol.User_Data_Connection_Client.Settings_Save &&
+        state^.user_data_admission.phase ==
+            protocol.User_Data_Connection_Admission_Phase.Submitted)
+    testing.expect(t, settings_save_test_wait_user_exercise_complete(state, pool))
+    payload := &state^.preferences_runtime.settings_save_payload
+    testing.expect(t, payload.worker_thread_id != 0 &&
+        payload.worker_thread_id != payload.owner_thread_id)
+    first_result, first_available :=
+        viewpreferences.settings_save_user_exercise_take_result(state)
+    testing.expect(t, first_available)
+    testing.expect_value(t, first_result.failure.kind, user_data.Store_Error_Kind.None)
+    testing.expect(t, first_result.result.id != (uuid.Identifier{}))
+    testing.expect_value(t, state^.user_data_admission.next_turn,
+        protocol.User_Data_Connection_Client.Terminal_History)
+    settings_save_test_user_exercise_verify_persisted(
+        t, store, first_result.result.id)
+    return first_result.result.id
+}
+
+// Verify the joined create result resolves to the persisted reference.
+settings_save_test_user_exercise_verify_persisted :: proc(
+    t: ^testing.T, store: ^user_data.Store, identity: uuid.Identifier) {
+    persisted, failure := user_data.store_user_exercise_read_by_reference(
+        store, "first-exercise")
+    testing.expect_value(t, failure.kind, user_data.Store_Error_Kind.None)
+    testing.expect_value(t, persisted.id, identity)
+}
+
+// Verify exercise work yields fairly to terminal history and reports a collision.
+settings_save_test_user_exercise_fairness :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool) {
+    second_request := settings_save_test_user_exercise_task("first-exercise")
+    testing.expect_value(t, viewpreferences.settings_save_user_exercise_request(
+        state, second_request), preferencesmodel.User_Exercise_Request_Outcome.Accepted)
+    viewpreferences.settings_save_service(state, pool, history_ready = true)
+    testing.expect(t, !state^.preferences_runtime.settings_save_active)
+    testing.expect_value(t,
+        state^.preferences_runtime.user_exercise_request_state,
+        user_data.User_Exercise_Request_State.Pending)
+    testing.expect(t, viewuserdata.connection_admission_claim(
+        &state^.user_data_admission,
+        protocol.User_Data_Connection_Client.Terminal_History, true, false))
+    testing.expect(t, viewuserdata.connection_admission_mark_submitted(
+        &state^.user_data_admission,
+        protocol.User_Data_Connection_Client.Terminal_History))
+    testing.expect(t, viewuserdata.connection_admission_release_joined(
+        &state^.user_data_admission,
+        protocol.User_Data_Connection_Client.Terminal_History))
+    viewpreferences.settings_save_service(state, pool)
+    testing.expect(t, settings_save_test_wait_user_exercise_complete(state, pool))
+    second_result, second_available :=
+        viewpreferences.settings_save_user_exercise_take_result(state)
+    testing.expect(t, second_available)
+    testing.expect_value(t, second_result.failure.kind,
+        user_data.Store_Error_Kind.Reference_Collision)
+}
+
+// Drain an accepted exercise task during shutdown and verify it persisted.
+settings_save_test_user_exercise_shutdown_drain :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    pool: ^taskpool.Task_Pool, store: ^user_data.Store) {
+    third_request := settings_save_test_user_exercise_task("shutdown-test")
+    testing.expect_value(t, viewpreferences.settings_save_user_exercise_request(
+        state, third_request), preferencesmodel.User_Exercise_Request_Outcome.Accepted)
+    viewpreferences.settings_save_shutdown(state, pool)
+    testing.expect(t, viewuserdata.connection_admission_drain_complete(
+        &state^.user_data_admission))
+    third_result, third_available :=
+        viewpreferences.settings_save_user_exercise_take_result(state)
+    testing.expect(t, third_available)
+    testing.expect_value(t, third_result.failure.kind, user_data.Store_Error_Kind.None)
+    _, shutdown_record_error := user_data.store_user_exercise_read_by_identity(
+        store, third_result.result.id)
+    testing.expect_value(t, shutdown_record_error.kind, user_data.Store_Error_Kind.None)
+}
+
+// Run exercise persistence through fair shared-store admission and shutdown drain.
+@(test)
+settings_save_user_exercise_uses_joined_fair_lane_and_shutdown_drain :: proc(
+    t: ^testing.T) {
+    path := settings_save_test_path(t)
+    defer settings_save_test_path_destroy(path)
+    testing.expect(t, path.valid)
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    defer user_data.store_close(&store)
+    pool: taskpool.Task_Pool
+    testing.expect(t, taskpool.task_pool_init(&pool, 1, 3))
+    defer taskpool.task_pool_destroy(&pool)
+    state := settings_save_test_state()
+    defer settings_save_test_destroy_state(state)
+    state^.preferences_runtime.settings_store = &store
+    state^.ui_runtime.preferences.save_status = .Saved
+
+    _ = settings_save_test_user_exercise_first(t, state, &pool, &store)
+    settings_save_test_user_exercise_fairness(t, state, &pool)
+    settings_save_test_user_exercise_shutdown_drain(t, state, &pool, &store)
+}
+
 // Run frame-like polls until a save reaches any terminal non-pending status.
 settings_save_test_wait_terminal :: proc(
     state: ^app_core.Euclid_General_State, pool: ^taskpool.Task_Pool) -> bool {

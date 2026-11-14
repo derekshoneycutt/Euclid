@@ -1,0 +1,14 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"catalogue=resolve_exercise(\"builtin:elements-i-1\"); created=create_user_exercise!(catalogue.animation_id,\"phase33-original\",\"Milestone 3.3 Exercise\",\"Instructions before rename.\"); print(\"user-exercise-\"*\"created\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-created","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"updated=update_user_exercise!(created.id,created.animation_id,\"phase33-renamed\",\"Milestone 3.3 Exercise\",\"Instructions after rename.\"); @assert updated.id==created.id; print(\"user-exercise-\"*\"renamed\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-renamed","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -70,6 +70,39 @@ screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
     testing.expect_value(t, scale.screenshake_offset_y, 0.0)
 }
 
+//   Verify an enabled shake shifts the fitted origin and restore returns it exactly.
+@(test)
+screenshake_apply_origin_shifts_and_restores_fitted_origin :: proc(t: ^testing.T) {
+    scale: worldmodel.Iso_Scale
+    fit_iso_scale_to_viewport(
+        &scale, worldmodel.VIEW_WIDTH * 2, worldmodel.VIEW_HEIGHT * 2)
+    screenshake_on_dust_kick(&scale)
+    screenshake_update(&scale, 0.01)
+    fitted := geometry.Vector2{scale.x_offset, scale.y_offset}
+
+    base := screenshake_apply_origin(&scale, true)
+
+    expect_vec2_close(t, base, fitted, "apply returns unshaken origin")
+    expect_vec2_close(t, {scale.x_offset, scale.y_offset},
+        fitted + geometry.Vector2{
+            scale.screenshake_offset_x, scale.screenshake_offset_y} * 2,
+        "shake scales with viewport fit")
+    screenshake_restore_origin(&scale, base)
+    expect_vec2_close(t, {scale.x_offset, scale.y_offset}, fitted, "restore")
+}
+
+//   Verify a disabled shake leaves the origin untouched despite active trauma.
+@(test)
+screenshake_apply_origin_disabled_keeps_origin :: proc(t: ^testing.T) {
+    scale := make_iso_scale(800, 450, 250)
+    screenshake_on_dust_kick(&scale)
+
+    base := screenshake_apply_origin(&scale, false)
+
+    expect_vec2_close(t, base, {450, 250}, "base origin")
+    expect_vec2_close(t, {scale.x_offset, scale.y_offset}, {450, 250}, "unchanged")
+}
+
 //   Verify recompute_iso_scale_precompute sets the cached half/quarter coefficients.
 @(test)
 recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {

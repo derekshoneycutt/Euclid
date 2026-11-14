@@ -21,6 +21,7 @@ import viewmodel "ui/model"
 import viewcapture "capture"
 import viewmessages "messages"
 import world "world"
+import projection "world/projection"
 import uisemantics "ui/semantics"
 import viewpresentation "presentation"
 import uipresentation "ui/presentation"
@@ -471,6 +472,7 @@ service_frame_user_data :: proc(
         _ = terminalview.terminal_history_navigation_clear(&state^.terminal)
     }
     viewpreferences.settings_save_service(state, pool, history_ready)
+    service_user_exercise_operations(state)
 }
 
 // Route one UI-requested collection dialog and publish its result on the display owner.
@@ -724,10 +726,17 @@ prepare_sdl_simulation_frame :: proc(
     viewsimulation.run_parallel_frame_preparation_after_ui(state, alpha, compile_dynview)
 }
 
-// encode_sdl_world_geometry encodes the clipped world draw stream.
+// encode_sdl_world_geometry encodes the clipped world draw stream. Screen shake
+// offsets the projection origin only for this encode; recordings stay steady.
 encode_sdl_world_geometry :: proc(
     state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
     encoder: ^native.Draw_Encoder) {
+    shake_enabled :=
+        state^.gif_capture_status.gif_capture_phase != .Recording &&
+        !viewpresentation.presentation_reduced_motion_enabled(state)
+    base_origin := projection.screenshake_apply_origin(
+        &state^.iso_scale, shake_enabled)
+    defer projection.screenshake_restore_origin(&state^.iso_scale, base_origin)
     _ = native.draw_encoder_push_scissor(
         encoder, state^.ui_runtime.layout.ui_regions.world_rect)
     world.prepare_formation_targets(&state^.particle_system, state, encoder)

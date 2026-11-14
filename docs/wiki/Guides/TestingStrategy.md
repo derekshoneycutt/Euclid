@@ -143,6 +143,13 @@ The isolated [completed-preferences persistence acceptance](../../../tools/scena
 checks both committed database rows and their restored values in a new process,
 including the held completed figure on startup.
 
+The isolated [user-exercise persistence acceptance](../../../tools/scenarios/user-exercise-persistence-acceptance.jsonl)
+creates and renames a user exercise, restarts the application against the same
+temporary database, browses and loads it through the real Terminal menu, then
+edits and deletes it while checking attempt and displayed-instruction preservation.
+A final restart verifies the retired aliases and UUID remain unavailable. The
+scenario runner supplies its own `--user-db` and rejects use of the default data home.
+
 The [Parabola showcase](../../../tools/scenarios/parabola-showcase.jsonl) and
 [Hyperbola showcase](../../../tools/scenarios/hyperbola-showcase.jsonl) capture their
 apparatus during drawing and the finished ink after tool lift. The typed

@@ -299,7 +299,8 @@ const ODIN_ABI_TYPE_ALIASES = Dict(
     "^Exercise_Query_Metadata" => "pointer-exercise-query-metadata",
     "^Exercise_Query_Row" => "pointer-exercise-query-row",
     "^Exercise_Query_Input" => "pointer-exercise-query-input",
-    "^Exercise_Query_Buffers" => "pointer-exercise-query-buffers")
+    "^Exercise_Query_Buffers" => "pointer-exercise-query-buffers",
+    "^User_Exercise_Input" => "pointer-user-exercise-input")
 
 const JULIA_ABI_TYPE_ALIASES = Dict(
     "NTuple{16,UInt8}" => "uuid-bytes",
@@ -374,7 +375,8 @@ const JULIA_ABI_TYPE_ALIASES = Dict(
     "Ref{ExerciseQueryMetadataABI}" => "pointer-exercise-query-metadata",
     "Ptr{ExerciseQueryRowABI}" => "pointer-exercise-query-row",
     "Ref{ExerciseQueryInputABI}" => "pointer-exercise-query-input",
-    "Ref{ExerciseQueryBuffersABI}" => "pointer-exercise-query-buffers")
+    "Ref{ExerciseQueryBuffersABI}" => "pointer-exercise-query-buffers",
+    "Ref{UserExerciseInputABI}" => "pointer-user-exercise-input")
 
 """Return one canonical ABI type or fail on an unreviewed spelling."""
 function canonical_abi_type(

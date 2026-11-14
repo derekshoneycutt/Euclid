@@ -83,33 +83,89 @@ function request_exercise_menu(
 end
 
 """
-    choose_exercise()
+    choose_exercise(state_ptr)
 
-Browse Built-in exercises using Julia's TerminalMenus. Use arrows and Enter to
-browse or load, Back to return to a parent, and q or Ctrl-C to cancel. Selection
-loads instructions without navigating or resetting the drawing, variables, or output.
+Browse built-in or user exercises using Julia's TerminalMenus. Use arrows and
+Enter to browse or load, Back to return to a parent, and q or Ctrl-C to cancel.
+Loading instructions does not navigate or reset the drawing, variables, or output.
 """
 function choose_exercise(state_ptr::Ptr{Cvoid})
     return Terminal.with_interactive_input(stdin) do
         while true
             selected = request_exercise_menu(
-                "Exercises", ["Built-in exercises", "Cancel"], Ref(1))
-            selected == 1 || break
-            result = browse_exercises(
-                (id, offset) -> exercises(state_ptr, "builtin"; parent=id, offset=offset),
-                (id, offset) -> exercises(state_ptr, "builtin", id; offset=offset),
-                reference -> load_exercise!(state_ptr, reference),
-                request_exercise_menu)
-            result === :back && continue
-            if !isnothing(result)
-                println("Loaded exercise: ", result.title)
-                return nothing
+                "Exercises",
+                ["Built-in exercises", "User exercises by animation",
+                    "All user exercises", "Cancel"], Ref(1))
+            if selected == 1
+                result = choose_exercise_namespace(state_ptr, "builtin")
+            elseif selected == 2
+                result = choose_exercise_namespace(state_ptr, "user")
+            elseif selected == 3
+                result = choose_all_user_exercises(state_ptr)
+            else
+                break
             end
-            break
+            result === :back && continue
+            isnothing(result) && break
+            report_exercise_selection(result)
+            return nothing
         end
         println("Exercise selection cancelled.")
         return nothing
     end
+end
+
+"""Browse one exercise namespace by animation and load the selected record."""
+function choose_exercise_namespace(state_ptr, namespace)
+    return browse_exercises(
+        (id, offset) -> exercises(
+            state_ptr, namespace; parent=id, offset=offset),
+        (id, offset) -> exercises(state_ptr, namespace, id; offset=offset),
+        reference -> load_exercise!(state_ptr, reference),
+        request_exercise_menu; namespace)
+end
+
+"""Browse all user records with bounded paging, including unavailable associations."""
+function choose_all_user_exercises(state_ptr)
+    return browse_user_exercise_pages(
+        offset -> exercises(state_ptr, "user"; all=true, offset=offset),
+        reference -> load_exercise!(state_ptr, reference),
+        request_exercise_menu)
+end
+
+"""Report whether a selected exercise loaded or has an unavailable animation."""
+function report_exercise_selection(result)
+    if result.animation_available
+        println("Loaded exercise: ", result.title)
+    else
+        println("Exercise association unavailable: ", result.title)
+    end
+end
+
+"""Browse every user record with bounded paging, retaining unavailable links visibly."""
+function browse_user_exercise_pages(list_page, load, request)
+    location = ExerciseBrowserLocation(nothing, "All user exercises", 0, 0, 1)
+    stack = [location]
+    while !isempty(stack)
+        location = last(stack)
+        page = list_page(location.exercise_offset)
+        empty_children = ExercisePage(ExerciseCatalogueNode[], 0, 0, false)
+        entries, labels = exercise_browser_entries(empty_children, page)
+        cursor = Ref(clamp(location.cursor, 1, length(entries)))
+        selection = request(
+            exercise_browser_title(stack, empty_children, page), labels, cursor)
+        location.cursor = cursor[]
+        selection == -1 && return nothing
+        entry = entries[selection]
+        if entry isa ExerciseSummary
+            entry.animation_available || return entry
+            return load("user:" * string(entry.id))
+        end
+        entry === :back && return :back
+        entry === :cancel && return nothing
+        exercise_browser_navigate!(stack, entry)
+    end
+    return nothing
 end
 
 """Return a clear bounded-page description without exposing storage or UUID details."""
@@ -134,8 +190,9 @@ function exercise_browser_title(
 end
 
 """Navigate bounded content pages, retaining only ancestor identities and page positions."""
-function browse_exercises(children, associated, load, request)
-    stack = [ExerciseBrowserLocation(nothing, "Built-in exercises", 0, 0, 1)]
+function browse_exercises(children, associated, load, request; namespace::String="builtin")
+    root = namespace == "user" ? "User exercises" : "Built-in exercises"
+    stack = [ExerciseBrowserLocation(nothing, root, 0, 0, 1)]
     while !isempty(stack)
         location = last(stack)
         child_page = children(location.id, location.child_offset)
@@ -150,7 +207,8 @@ function browse_exercises(children, associated, load, request)
         selection == -1 && return nothing
         entry = entries[selection]
         if entry isa ExerciseSummary
-            return load("builtin:" * string(entry.id))
+            entry.animation_available || return entry
+            return load(namespace * ":" * string(entry.id))
         elseif entry isa ExerciseCatalogueNode
             push!(stack, ExerciseBrowserLocation(entry.id, entry.title, 0, 0, 1))
         elseif entry === :back && length(stack) == 1
@@ -168,7 +226,8 @@ function exercise_browser_entries(children::ExercisePage, exercises::ExercisePag
     labels = String[]
     for exercise in exercises.entries
         push!(entries, exercise)
-        push!(labels, "Load: " * exercise.title)
+        prefix = exercise.animation_available ? "Load: " : "Unavailable: "
+        push!(labels, prefix * exercise.title)
     end
     for child in children.entries
         push!(entries, child)

@@ -11,6 +11,7 @@ import "core:strings"
 USER_SETTING_SCHEMA_SQL :: #load("sql/user_setting.sql", string)
 USER_COLLECTION_SCHEMA_SQL :: #load("sql/user_collection_schema.sql", string)
 USER_COLLECTION_NOTE_SCHEMA_SQL :: #load("sql/user_collection_note_schema.sql", string)
+USER_EXERCISES_SCHEMA_SQL :: #load("sql/user_exercises.sql", string)
 USER_TERMINAL_HISTORY_SCHEMA_SQL :: #load("history/sql/user_terminal_history.sql", string)
 
 // Open or safely admit one database at an explicit durable path.
@@ -22,7 +23,7 @@ store_open :: proc(store: ^Store, path: string) -> Store_Error {
 store_open_internal :: proc(
     store: ^Store,
     path: string,
-    fail_migration_after_schema: bool,
+    fail_initialization_after_schema: bool,
     force_read_only: bool) -> Store_Error {
     if !store_can_open(store) {
         return {
@@ -55,18 +56,18 @@ store_open_internal :: proc(
     }
     store^.status = read_only ? .Read_Only : .Ready
     finalize_error := store_finish_open(
-        store, read_only, fail_migration_after_schema)
+        store, read_only, fail_initialization_after_schema)
     if !store_error_is_clear(finalize_error) {
         return store_abort_open(store, finalize_error)
     }
     return {}
 }
 
-// Complete schema, statement, and collection admission before publishing the store.
+// Complete schema, statement, collection, and exercise admission before publishing.
 store_finish_open :: proc(
-    store: ^Store, read_only, fail_migration_after_schema: bool) -> Store_Error {
+    store: ^Store, read_only, fail_initialization_after_schema: bool) -> Store_Error {
     failure := store_admit_database(
-        store, read_only, fail_migration_after_schema)
+        store, read_only, fail_initialization_after_schema)
     if !store_error_is_clear(failure) {
         return failure
     }
@@ -74,7 +75,11 @@ store_finish_open :: proc(
     if !store_error_is_clear(failure) {
         return failure
     }
-    return store_verify_collection_admission(store)
+    failure = store_verify_collection_admission(store)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_verify_user_exercise_admission(store)
 }
 
 // Validate that no native resources remain before opening another database.
@@ -90,6 +95,20 @@ store_can_open :: proc(store: ^Store) -> bool {
         store^.delete_collections.handle == nil &&
         store^.upsert_collection_note.handle == nil &&
         store^.delete_orphan_collection_notes.handle == nil &&
+        store^.exercise_by_identity.handle == nil &&
+        store^.exercise_by_alias.handle == nil &&
+        store^.exercise_list_count.handle == nil &&
+        store^.exercise_list_rows.handle == nil &&
+        store^.retired_exercise_alias.handle == nil &&
+        store^.exercise_alias_state.handle == nil &&
+        store^.exercise_identity_taken.handle == nil &&
+        store^.exercise_rows_for_admission.handle == nil &&
+        store^.retired_exercise_rows_for_admission.handle == nil &&
+        store^.exercise_insert.handle == nil &&
+        store^.exercise_update.handle == nil &&
+        store^.exercise_delete.handle == nil &&
+        store^.exercise_retire_alias.handle == nil &&
+        store^.exercise_retire_identity.handle == nil &&
         !store^.collection_replay_workspace.initialized
 }
 
@@ -153,7 +172,7 @@ store_ensure_parent_directory :: proc(path: string) -> bool {
 
 // Admit an empty database or verify the stable identity of an existing store.
 store_admit_database :: proc(
-    store: ^Store, read_only, fail_migration_after_schema: bool) -> Store_Error {
+    store: ^Store, read_only, fail_initialization_after_schema: bool) -> Store_Error {
     failure := store_set_busy_timeout(store)
     if !store_sqlite_error_is_clear(failure) {
         return {
@@ -175,19 +194,18 @@ store_admit_database :: proc(
     if header.application_id == 0 && header.schema_version == 0 &&
         header.user_object_count == 0 {
         return store_initialize_empty_database(
-            store, read_only, fail_migration_after_schema, header)
+            store, read_only, fail_initialization_after_schema, header)
     }
     return store_admit_existing_database(
-        store, read_only, fail_migration_after_schema, header)
+        store, read_only, header)
 }
 
-// Admit a known store, applying a transactional migration when the schema is v1.
+// Admit only the current v2 schema without rewriting the existing database.
 store_admit_existing_database :: proc(
     store: ^Store,
-    read_only, fail_migration_after_schema: bool,
+    read_only: bool,
     header: Store_Header) -> Store_Error {
-    final_header := header
-    identity_error := store_validate_pre_migration_identity(header)
+    identity_error := store_validate_database_identity(header)
     if !store_error_is_clear(identity_error) {
         return identity_error
     }
@@ -200,66 +218,13 @@ store_admit_existing_database :: proc(
             }
         }
     }
-    if final_header.schema_version == 1 {
-        migration_error := store_upgrade_legacy_database(
-            store, read_only, fail_migration_after_schema, final_header)
-        if !store_error_is_clear(migration_error) {
-            return migration_error
-        }
-        final_header = store_read_header(store)
-        if !store_error_is_clear(final_header.failure) {
-            return final_header.failure
-        }
-    }
-    return store_validate_database_identity(final_header)
-}
-
-// Reject unrelated and unsupported schemas before changing connection policy.
-store_validate_pre_migration_identity :: proc(
-    header: Store_Header) -> Store_Error {
-    if header.application_id != DATABASE_APPLICATION_ID {
-        return {
-            kind = .Wrong_Application,
-            application_id = header.application_id,
-            schema_version = header.schema_version,
-        }
-    }
-    if header.schema_version > DATABASE_SCHEMA_VERSION {
-        return {
-            kind = .Future_Schema,
-            application_id = header.application_id,
-            schema_version = header.schema_version,
-        }
-    }
-    if header.schema_version < 1 {
-        return {
-            kind = .Unsupported_Schema,
-            application_id = header.application_id,
-            schema_version = header.schema_version,
-        }
-    }
     return {}
-}
-
-// Upgrade only schema v1, rejecting read-only legacy stores without mutation.
-store_upgrade_legacy_database :: proc(
-    store: ^Store,
-    read_only, fail_migration_after_schema: bool,
-    header: Store_Header) -> Store_Error {
-    if read_only {
-        return {
-            kind = .Not_Writable,
-            application_id = header.application_id,
-            schema_version = header.schema_version,
-        }
-    }
-    return store_migrate_v1_to_v2(store, fail_migration_after_schema)
 }
 
 // Initialize only a completely empty writable database.
 store_initialize_empty_database :: proc(
     store: ^Store,
-    read_only, fail_migration_after_schema: bool,
+    read_only, fail_initialization_after_schema: bool,
     header: Store_Header) -> Store_Error {
     if read_only {
         return {
@@ -271,11 +236,11 @@ store_initialize_empty_database :: proc(
     pragma_error := store_configure_writable(store)
     if !store_sqlite_error_is_clear(pragma_error) {
         return {
-            kind = .Migration,
+            kind = .Schema,
             sqlite_error = pragma_error,
         }
     }
-    return store_initialize_schema(store, fail_migration_after_schema)
+    return store_initialize_schema(store, fail_initialization_after_schema)
 }
 
 // Reject database ownership and schema versions without altering the file.
@@ -406,13 +371,13 @@ store_set_busy_timeout :: proc(store: ^Store) -> sqlite.Error {
     return store_exec(store, "PRAGMA busy_timeout=0")
 }
 
-// Initialize schema and identity atomically for a genuinely empty database.
+// Construct schema and identity atomically for a genuinely empty database.
 store_initialize_schema :: proc(
     store: ^Store, fail_after_schema: bool) -> Store_Error {
     begin_error := store_exec(store, "BEGIN IMMEDIATE")
     if !store_sqlite_error_is_clear(begin_error) {
         return {
-            kind = .Migration,
+            kind = .Schema,
             sqlite_error = begin_error,
         }
     }
@@ -432,15 +397,16 @@ store_initialize_schema :: proc(
             return {}
         }
     }
-    return store_rollback_failure(store, .Migration, failure)
+    return store_rollback_failure(store, .Schema, failure)
 }
 
-// Create the settings, collection, and optional terminal-history tables in order.
+// Create the complete current schema in one initialization transaction.
 store_create_schema_tables :: proc(store: ^Store) -> sqlite.Error {
-    statements: [4]string = {
+    statements: [5]string = {
         USER_SETTING_SCHEMA_SQL,
         USER_COLLECTION_SCHEMA_SQL,
         USER_COLLECTION_NOTE_SCHEMA_SQL,
+        USER_EXERCISES_SCHEMA_SQL,
         USER_TERMINAL_HISTORY_SCHEMA_SQL,
     }
     for sql in statements {
@@ -452,47 +418,6 @@ store_create_schema_tables :: proc(store: ^Store) -> sqlite.Error {
         }
     }
     return {}
-}
-
-// Upgrade settings-only schema v1 atomically without rewriting user preferences.
-store_migrate_v1_to_v2 :: proc(
-    store: ^Store, fail_after_schema: bool) -> Store_Error {
-    begin_error := store_exec(store, "BEGIN IMMEDIATE")
-    if !store_sqlite_error_is_clear(begin_error) {
-        return {
-            kind = .Migration,
-            sqlite_error = begin_error,
-        }
-    }
-    failure := sqlite.connection_exec(
-        &store^.connection,
-        strings.clone_to_cstring(
-            USER_COLLECTION_SCHEMA_SQL, context.temp_allocator))
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.connection_exec(
-            &store^.connection,
-            strings.clone_to_cstring(
-                USER_TERMINAL_HISTORY_SCHEMA_SQL, context.temp_allocator))
-    }
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.connection_exec(
-            &store^.connection,
-            strings.clone_to_cstring(
-                USER_COLLECTION_NOTE_SCHEMA_SQL, context.temp_allocator))
-    }
-    if store_sqlite_error_is_clear(failure) && fail_after_schema {
-        failure = store_exec(store, "CREATE TABLE user_setting(value INTEGER)")
-    }
-    if store_sqlite_error_is_clear(failure) {
-        failure = store_exec(store, "PRAGMA user_version=2")
-    }
-    if store_sqlite_error_is_clear(failure) {
-        failure = store_exec(store, "COMMIT")
-        if store_sqlite_error_is_clear(failure) {
-            return {}
-        }
-    }
-    return store_rollback_failure(store, .Migration, failure)
 }
 
 // Execute fixed store-owned SQL and return its structured SQLite failure.
@@ -528,6 +453,7 @@ store_close :: proc(store: ^Store) -> Store_Error {
     }
     failure: Store_Error
     store_finalize_owned(store, &store^.delete_collections, &failure)
+    store_finalize_exercise_statements(store, &failure)
     store_finalize_owned(store, &store^.delete_orphan_collection_notes, &failure)
     store_finalize_owned(store, &store^.upsert_collection_note, &failure)
     store_finalize_owned(store, &store^.read_collection_note, &failure)
@@ -555,6 +481,25 @@ store_close :: proc(store: ^Store) -> Store_Error {
     }
     collections.destroy(&store^.collection_replay_workspace)
     return failure
+}
+
+// Finalize every exercise statement while preserving the first cleanup failure.
+store_finalize_exercise_statements :: proc(
+    store: ^Store, failure: ^Store_Error) {
+    store_finalize_owned(store, &store^.exercise_retire_identity, failure)
+    store_finalize_owned(store, &store^.exercise_retire_alias, failure)
+    store_finalize_owned(store, &store^.exercise_delete, failure)
+    store_finalize_owned(store, &store^.exercise_update, failure)
+    store_finalize_owned(store, &store^.exercise_insert, failure)
+    store_finalize_owned(store, &store^.retired_exercise_rows_for_admission, failure)
+    store_finalize_owned(store, &store^.exercise_rows_for_admission, failure)
+    store_finalize_owned(store, &store^.exercise_list_rows, failure)
+    store_finalize_owned(store, &store^.exercise_list_count, failure)
+    store_finalize_owned(store, &store^.exercise_identity_taken, failure)
+    store_finalize_owned(store, &store^.exercise_alias_state, failure)
+    store_finalize_owned(store, &store^.retired_exercise_alias, failure)
+    store_finalize_owned(store, &store^.exercise_by_alias, failure)
+    store_finalize_owned(store, &store^.exercise_by_identity, failure)
 }
 
 // Close a rejected open path and preserve both admission and cleanup failures.

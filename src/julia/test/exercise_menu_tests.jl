@@ -43,6 +43,7 @@ end
         entries = isnothing(id) ? [node] : ExerciseCatalogueNode[]
         ExercisePage(entries, offset, length(entries), false)
     end
+
     associated = (id, offset) -> begin
         @test id == MENU_TEST_ANIMATION
         ExercisePage([MENU_TEST_EXERCISE], offset, 1, false)
@@ -59,6 +60,54 @@ end
     @test children_calls == [(nothing, 0), (MENU_TEST_ANIMATION, 0),
         (nothing, 0), (MENU_TEST_ANIMATION, 0)]
     @test isempty(choices)
+end
+
+@testset "exercise browser keeps user records in their explicit namespace" begin
+    node = ExerciseCatalogueNode(MENU_TEST_ANIMATION, "Proposition I")
+    user_summary = ExerciseSummary(
+        MENU_TEST_EXERCISE.id, MENU_TEST_ANIMATION,
+        "user:triangle-basic", "Triangle", true)
+    loaded = String[]
+    choices = ["Browse: Proposition I", "Load: Triangle"]
+    children = (id, offset) -> isnothing(id) ?
+        ExercisePage([node], offset, 1, false) :
+        ExercisePage(ExerciseCatalogueNode[], offset, 0, false)
+    associated = (id, offset) -> ExercisePage([user_summary], offset, 1, false)
+    request = (_, labels, _) -> something(findfirst(==(popfirst!(choices)), labels))
+    result = EuclidRepl.browse_exercises(
+        children, associated, reference -> (push!(loaded, reference); user_summary),
+        request; namespace="user")
+    @test result === user_summary
+    @test loaded == ["user:" * string(user_summary.id)]
+    @test isempty(choices)
+
+    unavailable = ExerciseSummary(
+        MENU_TEST_EXERCISE.id, MENU_TEST_ANIMATION,
+        "user:orphaned", "Unavailable construction", false)
+    @test occursin("animation unavailable", sprint(show, unavailable))
+    @test occursin("Unavailable: Unavailable construction",
+        first(EuclidRepl.exercise_browser_entries(
+            ExercisePage(ExerciseCatalogueNode[], 0, 0, false),
+            ExercisePage([unavailable], 0, 1, false))[2]))
+    @test !unavailable.animation_available
+end
+
+@testset "all-user browser reports unavailable associations without loading them" begin
+    unavailable = ExerciseSummary(
+        MENU_TEST_EXERCISE.id, MENU_TEST_ANIMATION,
+        "user:orphaned", "Unavailable construction", false)
+    loaded = String[]
+    selections = ["Unavailable: Unavailable construction"]
+    list_page = offset -> begin
+        @test offset == 0
+        ExercisePage([unavailable], offset, 1, false)
+    end
+    request = (_, labels, _) -> something(findfirst(==(popfirst!(selections)), labels))
+    result = EuclidRepl.browse_user_exercise_pages(
+        list_page, reference -> (push!(loaded, reference); unavailable), request)
+    @test result === unavailable
+    @test isempty(loaded)
+    @test isempty(selections)
 end
 
 @testset "exercise browser bounded pages, empty state, cancel, and database failure" begin

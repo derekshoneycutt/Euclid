@@ -37,6 +37,8 @@ settings_save_worker :: proc(
             task^.store, task^.note_identity,
             string(task^.note_text[:task^.note_text_length]),
             task^.note_notes_on_top)
+    case .User_Exercise:
+        return settings_save_worker_user_exercise(task)
     }
     if task^.kind != .User_Data_Batch {
         outcome := user_data.Commit_Outcome.Not_Committed
@@ -51,12 +53,65 @@ settings_save_worker :: proc(
     return .Succeeded if task^.result.outcome == .Committed else .Failed
 }
 
+// Run an exercise operation through the existing joined user-store worker lane.
+settings_save_worker_user_exercise :: proc(
+    task: ^preferencesmodel.Settings_Save_Task_Payload) -> taskpool.Task_Result {
+    failure := user_data.store_user_exercise_task_execute(
+        task^.store, &task^.user_exercise)
+    task^.user_exercise.failure = failure
+    return .Succeeded if user_data.store_error_is_clear(failure) else .Failed
+}
+
 // Treat settings and collection edits as one outstanding persistence batch.
 settings_save_has_pending :: proc(
     runtime: ^preferencesmodel.Settings_Save_Runtime) -> bool {
     return runtime^.settings_pending.count > 0 ||
         runtime^.collection_mutation_count > 0 ||
-        runtime^.note_request_kind != .None
+        runtime^.note_request_kind != .None ||
+        runtime^.user_exercise_request_state == .Pending
+}
+
+// Admit one bounded exercise operation into the existing user-data save lane.
+settings_save_user_exercise_request :: proc(
+    state: ^core.Euclid_General_State,
+    request: user_data.User_Exercise_Task) ->
+        preferencesmodel.User_Exercise_Request_Outcome {
+    if state == nil || !user_data.store_user_exercise_task_is_valid(request) {
+        return .Invalid_Request
+    }
+    runtime := &state^.preferences_runtime
+    if runtime^.settings_store == nil ||
+       (!user_data.store_user_exercise_task_is_read_only(request) &&
+        (state^.ui_runtime.preferences.save_status == .Unavailable ||
+         state^.ui_runtime.preferences.save_status == .Failed)) {
+        return .Unavailable
+    }
+    if runtime^.user_exercise_request_state != .None {
+        return .Busy
+    }
+    sharing := &state^.ui_runtime.sharing
+    if sharing.edit_admission_blocked || sharing.collection_edit_locked {
+        return .Busy
+    }
+    runtime^.user_exercise_request = request
+    runtime^.user_exercise_request_state = .Pending
+    return .Accepted
+}
+
+// Consume one completed exercise operation only after its worker has joined.
+settings_save_user_exercise_take_result :: proc(
+    state: ^core.Euclid_General_State) -> (user_data.User_Exercise_Task, bool) {
+    if state == nil {
+        return {}, false
+    }
+    runtime := &state^.preferences_runtime
+    if runtime^.user_exercise_request_state != .Complete {
+        return {}, false
+    }
+    result := runtime^.user_exercise_request
+    runtime^.user_exercise_request = {}
+    runtime^.user_exercise_request_state = .None
+    return result, true
 }
 
 // Report whether a save can currently compete for the shared connection.
@@ -67,10 +122,14 @@ settings_save_ready :: proc(state: ^core.Euclid_General_State) -> bool {
     runtime := &state^.preferences_runtime
     status := state^.ui_runtime.preferences.save_status
     sharing := &state^.ui_runtime.sharing
+    exercise_read_pending :=
+        runtime^.user_exercise_request_state == .Pending &&
+        user_data.store_user_exercise_task_is_read_only(
+            runtime^.user_exercise_request)
     return runtime^.settings_store != nil && !runtime^.settings_save_active &&
         !sharing.exchange_task_active && !sharing.collection_edit_locked &&
         settings_save_has_pending(runtime) && runtime^.settings_retry_frames == 0 &&
-        (status != .Unavailable && status != .Failed ||
+        (status != .Unavailable && status != .Failed || exercise_read_pending ||
             runtime^.note_request_kind == .Read)
 }
 
@@ -488,6 +547,10 @@ settings_save_apply_result :: proc(
     state: ^core.Euclid_General_State,
     task_result: taskpool.Task_Result) {
     runtime := &state^.preferences_runtime
+    if runtime^.settings_save_payload.kind == .User_Exercise {
+        settings_save_apply_user_exercise_result(state, task_result)
+        return
+    }
     if runtime^.settings_save_payload.kind != .User_Data_Batch {
         settings_save_apply_note_result(state, task_result)
         return
@@ -500,6 +563,28 @@ settings_save_apply_result :: proc(
         return
     }
     settings_save_apply_failed_result(state, runtime)
+}
+
+// Publish an exercise result only after the stable worker payload is joined.
+settings_save_apply_user_exercise_result :: proc(
+    state: ^core.Euclid_General_State, task_result: taskpool.Task_Result) {
+    runtime := &state^.preferences_runtime
+    if runtime^.user_exercise_request_state != .In_Flight {
+        log.error("user_exercise_request_join_transition_failed")
+        runtime^.user_exercise_request = {
+            failure = {
+                kind = .Invalid_State,
+            },
+        }
+    } else {
+        runtime^.user_exercise_request = runtime^.settings_save_payload.user_exercise
+    }
+    if task_result != .Succeeded &&
+       user_data.store_error_is_clear(runtime^.user_exercise_request.failure) {
+        log.error("user_exercise_worker_failed_without_store_error")
+        runtime^.user_exercise_request.failure.kind = .Write
+    }
+    runtime^.user_exercise_request_state = .Complete
 }
 
 // Publish a joined placement-note read or save only to its matching owner.
@@ -802,6 +887,16 @@ settings_save_submit :: proc(
 // Snapshot pending edits into the stable payload before task-pool admission.
 settings_save_prepare_payload :: proc(state: ^core.Euclid_General_State) -> bool {
     runtime := &state^.preferences_runtime
+    if runtime^.user_exercise_request_state == .Pending {
+        runtime^.settings_save_payload = {
+            kind = .User_Exercise,
+            store = runtime^.settings_store,
+            user_exercise = runtime^.user_exercise_request,
+            user_data_revision = runtime^.user_data_revision,
+            owner_thread_id = sync.current_thread_id(),
+        }
+        return true
+    }
     if runtime^.note_request_kind == .None {
         runtime^.settings_save_payload = {
             kind = .User_Data_Batch,
@@ -886,7 +981,23 @@ settings_save_submit_claimed :: proc(
     }
     runtime^.settings_save_handle = handle
     runtime^.settings_save_active = true
+    if runtime^.settings_save_payload.kind == .User_Exercise {
+        settings_save_mark_user_exercise_submitted(state)
+    }
     settings_save_publish_submission(state)
+}
+
+// Retain the single request until its task result is consumed or shutdown ends.
+settings_save_mark_user_exercise_submitted :: proc(
+    state: ^core.Euclid_General_State) {
+    runtime := &state^.preferences_runtime
+    if runtime^.user_exercise_request_state != .Pending {
+        log.error("user_exercise_request_submit_transition_failed")
+        runtime^.user_exercise_request_state = .Complete
+        runtime^.user_exercise_request.failure.kind = .Invalid_State
+        return
+    }
+    runtime^.user_exercise_request_state = .In_Flight
 }
 
 // Publish the accepted immutable batch and its existing durable-save status.

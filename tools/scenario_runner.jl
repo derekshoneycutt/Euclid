@@ -372,6 +372,103 @@ function launch_history_phase(binary::String, root::String, database::String,
     return record
 end
 
+"""Run user-exercise browsing, mutation, and restart checks on isolated SQLite data."""
+function run_user_exercise_persistence_acceptance(binary::String)
+    root = fresh_artifact_path("user-exercise-persistence")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    fake_home = joinpath(root, "data-home")
+    records = NamedTuple[]
+    seed = launch_user_exercise_phase(binary, root, database, fake_home,
+        "seed", joinpath("tools", "scenarios", "user-exercises", "seed.jsonl"))
+    push!(records, seed)
+    validate_user_exercise_seed(database)
+    workflow = launch_user_exercise_phase(binary, root, database, fake_home,
+        "workflow", joinpath("tools", "scenarios",
+            "user-exercise-persistence-acceptance.jsonl"))
+    push!(records, workflow)
+    identity = validate_user_exercise_retirement(database)
+    restart = launch_user_exercise_phase(binary, root, database, fake_home,
+        "restart", joinpath("tools", "scenarios", "user-exercises", "restart.jsonl");
+        identity)
+    push!(records, restart)
+    persisted_identity = validate_user_exercise_retirement(database)
+    persisted_identity == identity ||
+        error("User exercise UUID tombstone changed across the final restart")
+    ispath(fake_home) && error("User exercise acceptance touched the default data home")
+    return records
+end
+
+"""Launch one isolated user-exercise phase and require complete semantic evidence."""
+function launch_user_exercise_phase(binary, root, database, fake_home, phase, source;
+    identity=nothing)
+    environment = Pair{String,String}[
+        "XDG_DATA_HOME" => fake_home,
+        "LOCALAPPDATA" => fake_home,
+        "APPDATA" => fake_home,
+    ]
+    isnothing(identity) || push!(
+        environment, "EUCLID_ACCEPTANCE_EXERCISE_ID" => identity)
+    record = run_scenario_launch(binary, "user-exercise-$phase", source,
+        joinpath(root, phase), ["--user-db=$database"]; environment, diagnostics=true)
+    validate_user_exercise_launch(record)
+    return record
+end
+
+"""Reject incomplete exercise scenarios and any reported native bad frees."""
+function validate_user_exercise_launch(record)
+    scenario_passed(record) ||
+        error("User exercise launch failed: $(record.name)")
+    bundle = EuclidEvidence.inspect_bundle(
+        joinpath(REPOSITORY_ROOT, record.artifacts))
+    bundle.allocations.bad_frees == 0 ||
+        error("User exercise launch reported bad frees: $(record.name)")
+    return bundle
+end
+
+"""Require the seed process to leave the renamed exercise durably available."""
+function validate_user_exercise_seed(database)
+    rows = user_exercise_database_query(database,
+        "SELECT reference,title,instructions FROM user_exercise")
+    length(rows) == 1 || error("User exercise seed did not persist one active record")
+    row = only(rows)
+    row["reference"] == "phase33-renamed" ||
+        error("User exercise rename was not persisted")
+    row["instructions"] == "Instructions after rename." ||
+        error("User exercise instructions were not persisted")
+end
+
+"""Require deletion to preserve the UUID tombstone and all retired aliases."""
+function validate_user_exercise_retirement(database)
+    active = user_exercise_database_query(database,
+        "SELECT exercise_id FROM user_exercise")
+    isempty(active) || error("Deleted user exercise remains active")
+    retired = user_exercise_database_query(database,
+        "SELECT reference FROM user_exercise_retired_reference " *
+        "ORDER BY reference")
+    references = Set(row["reference"] for row in retired)
+    references == Set(["phase33-original", "phase33-renamed", "phase33-final"]) ||
+        error("User exercise aliases did not all remain retired")
+    identities = user_exercise_database_query(database,
+        "SELECT DISTINCT lower(hex(exercise_id)) AS identity " *
+        "FROM user_exercise_retired_reference WHERE identity_retired=1")
+    length(identities) == 1 || error("User exercise UUID tombstone was not persisted")
+    hex = only(identities)["identity"]
+    length(hex) == 32 || error("Persisted user exercise UUID has an invalid length")
+    return string(hex[1:8], "-", hex[9:12], "-", hex[13:16], "-",
+        hex[17:20], "-", hex[21:32])
+end
+
+"""Query the isolated acceptance database through a separate read-only SQLite process."""
+function user_exercise_database_query(path::String, query::String)
+    sqlite = Sys.which("sqlite3")
+    sqlite === nothing && error("User exercise acceptance requires the sqlite3 CLI")
+    process = capture_process(Cmd([sqlite, "-readonly", "-json", path, query]))
+    process.exit_code == 0 ||
+        error("User exercise database inspection failed: $(process.stderr)")
+    return isempty(strip(process.stdout)) ? Any[] : JSON.parse(process.stdout)
+end
+
 """Create a genuine isolated SQLite failure for the next durable history insert."""
 function inject_terminal_history_insert_failure(database::String)
     sqlite = Sys.which("sqlite3")
@@ -521,6 +618,8 @@ function run_named_scenario(binary::String, name::String)
         "terminal-history-explorer-acceptance" =>
             run_terminal_history_explorer_acceptance,
         "terminal-history-persistence-acceptance" => run_terminal_history_acceptance,
+        "user-exercise-persistence-acceptance" =>
+            run_user_exercise_persistence_acceptance,
         "settings-persistence-acceptance" => run_settings_acceptance,
         "completed-preferences-persistence-acceptance" =>
             run_completed_preferences_acceptance,

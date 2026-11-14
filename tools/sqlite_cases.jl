@@ -116,7 +116,7 @@ function euclid_sqlite_userdata_case()
     entry_id = SQLiteBlob(fill(UInt8(0x22), 16))
     animation_id = SQLiteBlob(fill(UInt8(0x33), 16))
     steps = SQLiteValidationStep[
-        euclid_sqlite_userdata_schema_steps()...,
+        euclid_sqlite_userdata_setup_steps()...,
         euclid_sqlite_file_step("src/persistence/userdata/sql/upsert_setting.sql";
             bindings=euclid_sqlite_bindings(
                 SQLiteText("phase5"), SQLiteText("manifest"), SQLiteText("text"),
@@ -148,6 +148,15 @@ function euclid_sqlite_userdata_case()
     return SQLiteValidationCase("user-settings-and-collections"; steps)
 end
 
+"""Combine the user-data schema and exercise fixture steps."""
+function euclid_sqlite_userdata_setup_steps()
+    animation_id = SQLiteBlob(fill(UInt8(0x33), 16))
+    exercise_id = SQLiteBlob(fill(UInt8(0x44), 16))
+    return vcat(
+        euclid_sqlite_userdata_schema_steps(),
+        euclid_sqlite_user_exercise_steps(exercise_id, animation_id))
+end
+
 """Exercise the streamed collection cursor and import-order query."""
 function euclid_sqlite_collection_exchange_steps(collection_id)
     return SQLiteValidationStep[
@@ -162,7 +171,7 @@ function euclid_sqlite_collection_exchange_steps(collection_id)
     ]
 end
 
-"""Create the settings, collection topology, and placement-note schema in dependency order."""
+"""Create the settings, collection, note, and exercise schemas in dependency order."""
 function euclid_sqlite_userdata_schema_steps()
     return SQLiteValidationStep[
         euclid_sqlite_file_step(
@@ -171,6 +180,79 @@ function euclid_sqlite_userdata_schema_steps()
             "src/persistence/userdata/sql/user_collection_schema.sql"; role=:setup),
         euclid_sqlite_file_step(
             "src/persistence/userdata/sql/user_collection_note_schema.sql"; role=:setup),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/user_exercises.sql"; role=:setup),
+    ]
+end
+
+"""Exercise exercise-row queries and permanent alias/identity retirement."""
+function euclid_sqlite_user_exercise_steps(exercise_id, animation_id)
+    return vcat(
+        euclid_sqlite_user_exercise_create_read_steps(exercise_id, animation_id),
+        euclid_sqlite_user_exercise_update_delete_steps(exercise_id, animation_id))
+end
+
+"""Create a row and execute identity, alias, and active-admission queries."""
+function euclid_sqlite_user_exercise_create_read_steps(exercise_id, animation_id)
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step("src/persistence/userdata/sql/exercise_insert.sql";
+            bindings=euclid_sqlite_bindings(
+                exercise_id, animation_id, SQLiteText("triangle-basic"),
+                SQLiteText("Triangle"), SQLiteText("Construct a triangle."))),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_by_identity.sql";
+            bindings=euclid_sqlite_bindings(exercise_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_by_alias.sql";
+            bindings=euclid_sqlite_bindings(SQLiteText("triangle-basic"))),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_list_count.sql";
+            bindings=euclid_sqlite_bindings(animation_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_list_rows.sql";
+            bindings=euclid_sqlite_bindings(
+                animation_id, SQLiteInteger(16), SQLiteInteger(0))),
+        SQLiteFileStep(
+            "exercise-list-count-all",
+            "src/persistence/userdata/sql/exercise_list_count.sql";
+            bindings=euclid_sqlite_bindings(SQLiteNull())),
+        SQLiteFileStep(
+            "exercise-list-rows-all",
+            "src/persistence/userdata/sql/exercise_list_rows.sql";
+            bindings=euclid_sqlite_bindings(
+                SQLiteNull(), SQLiteInteger(16), SQLiteInteger(0))),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_rows_for_admission.sql"),
+    ]
+end
+
+"""Rename and delete the row, executing each alias-retirement query."""
+function euclid_sqlite_user_exercise_update_delete_steps(exercise_id, animation_id)
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step("src/persistence/userdata/sql/exercise_update.sql";
+            bindings=euclid_sqlite_bindings(
+                animation_id, SQLiteText("equilateral"), SQLiteText("Equilateral"),
+                SQLiteText("Construct an equilateral triangle."), exercise_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_retire_alias.sql";
+            bindings=euclid_sqlite_bindings(
+                SQLiteText("triangle-basic"), exercise_id, SQLiteInteger(0))),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_alias_state.sql";
+            bindings=euclid_sqlite_bindings(SQLiteText("triangle-basic"))),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/retired_exercise_alias.sql";
+            bindings=euclid_sqlite_bindings(SQLiteText("triangle-basic"))),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_retire_identity.sql";
+            bindings=euclid_sqlite_bindings(exercise_id)),
+        euclid_sqlite_file_step("src/persistence/userdata/sql/exercise_delete.sql";
+            bindings=euclid_sqlite_bindings(exercise_id)),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/retired_exercise_rows_for_admission.sql"),
+        euclid_sqlite_file_step(
+            "src/persistence/userdata/sql/exercise_identity_taken.sql";
+            bindings=euclid_sqlite_bindings(exercise_id)),
     ]
 end
 

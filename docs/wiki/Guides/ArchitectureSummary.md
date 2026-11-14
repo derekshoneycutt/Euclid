@@ -123,11 +123,17 @@ The [Architecture Guide Map](#architecture-guide-map) provides the next step for
 subsystem. For dependency ownership and normative code rules, see
 [Coding Standards](CodingStandards.md).
 
-The user-data database schema is version 2. It migrates writable settings from earlier
-versioned stores transactionally, preserving existing settings, then creates general
-collection and placement tables with 16-byte UUID identities and foreign-key enforcement.
-Settings and collection mutations share one worker-only transaction queue and one
-durability status in Settings.
+The user-data database schema is version 2 and is constructed transactionally only for
+empty databases. Existing databases must match the current schema identity; unsupported
+versions are rejected rather than migrated. General collection and placement tables
+use 16-byte UUID identities and foreign-key enforcement. Settings, collection, and
+user-exercise mutations share the existing worker-only transaction queue and one
+durability status in Settings. User exercises use generated stable UUIDs, bounded text,
+and permanently reserved aliases after rename or deletion. Julia authoring and browsing
+requests cross the typed egress into the display owner, then use that joined worker lane;
+they never access SQLite directly. Built-in and user references remain explicitly
+namespaced, and loading either source copies instructions into the same display-owned
+header buffer so later record edits or deletion cannot change the visible snapshot.
 Collection notes are keyed by both collection and placement UUID in SQLite. Their
 bounded UTF-8 working text lives in the active animation generation; asynchronous save
 barriers keep that generation alive through reset, reload, destructive edits, and

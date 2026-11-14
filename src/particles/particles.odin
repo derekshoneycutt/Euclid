@@ -330,16 +330,17 @@ kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
 //   - ps: Particle system containing dust particles.
 //
 // Returns:
-//   - none.
-kick_existing_dust :: proc(ps: ^Particle_System) {
+//   - kicked: true when at least one live dust particle was disturbed.
+kick_existing_dust :: proc(ps: ^Particle_System) -> (kicked: bool) {
     for i in 0..<ps^.use_max_dust_particles {
         if !ps.low_particles[i].alive {
             continue
         }
 
         kick_existing_dust_index(ps, i)
+        kicked = true
     }
-
+    return
 }
 
 //   Resolve one direct world transform position for particle emission.

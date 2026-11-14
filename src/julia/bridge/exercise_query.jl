@@ -47,7 +47,12 @@ struct ExerciseSummary
     animation_id::UUID
     reference::String
     title::String
+    animation_available::Bool
 end
+
+"""Preserve the four-field constructor used by built-in exercise summaries."""
+ExerciseSummary(id::UUID, animation_id::UUID, reference::String, title::String) =
+    ExerciseSummary(id, animation_id, reference, title, true)
 
 """One actual animation catalogue child, not an exercise-specific folder."""
 struct ExerciseCatalogueNode
@@ -71,6 +76,7 @@ end
 """Display the useful title and copyable friendly reference, never an implementation dump."""
 function Base.show(io::IO, summary::ExerciseSummary)
     print(io, summary.title, " (", summary.reference, ")")
+    summary.animation_available || print(io, " [animation unavailable]")
 end
 
 """Use the same readable exercise description in the standard Julia REPL display."""
@@ -144,7 +150,7 @@ end
 function exercise_query_summary(row::ExerciseQueryRowABI)::ExerciseSummary
     return ExerciseSummary(UUID(exercise_query_text(row.identity)),
         UUID(exercise_query_text(row.animation_id)),
-        "builtin:" * exercise_query_text(row.reference), exercise_query_text(row.title))
+        "builtin:" * exercise_query_text(row.reference), exercise_query_text(row.title), true)
 end
 
 """Reject bad paging locally before reserving native operation storage."""

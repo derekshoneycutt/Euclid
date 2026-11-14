@@ -413,6 +413,21 @@ bridge_label_hide_reports_missing_departure_material :: proc(t: ^testing.T) {
     }
 }
 
+// Verify a clear before any shape forms still reports the live dust it kicked.
+@(test)
+bridge_clear_departures_reports_kicked_dust_without_formed_shapes :: proc(
+    t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 4
+    state^.particle_system.low_particles.alive[2] = true
+
+    testing.expect(t, emit_shape_world_clear_departures(state))
+
+    state^.particle_system.low_particles.alive[2] = false
+    testing.expect(t, !emit_shape_world_clear_departures(state))
+}
+
 // Verify bulk clear captures labels before retirement and reports missing ink.
 @(test)
 bridge_clear_departures_reports_unprepared_label :: proc(t: ^testing.T) {

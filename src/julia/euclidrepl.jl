@@ -34,6 +34,7 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
     euclidcolors, hide!, show!, show_exercise!, hide_exercise!,
     exercises, resolve_exercise, load_exercise!, choose_exercise,
+    create_user_exercise!, update_user_exercise!, delete_user_exercise!,
     point!, line!, circle!, label!, triangle!, square!,
     pentagon!, lens!, lune!, polygon_vertex_ids, line_endpoint_ids,
     circle_region_center_ids, cycloid!, ordinary_cycloid!,
@@ -574,6 +575,17 @@ function install_session_helpers!(
         """Load stored instructions without resetting drawing, variables, or Terminal."""
         load_exercise!(reference) =
             EuclidRepl.load_exercise!(EUCLID_STATE_PTR, reference)
+        """Create a user exercise attached to an exact animation UUID."""
+        create_user_exercise!(animation_id, reference, title, instructions) =
+            EuclidRepl.create_user_exercise!(
+                EUCLID_STATE_PTR, animation_id, reference, title, instructions)
+        """Update a user exercise by stable UUID without changing that identity."""
+        update_user_exercise!(identity, animation_id, reference, title, instructions) =
+            EuclidRepl.update_user_exercise!(
+                EUCLID_STATE_PTR, identity, animation_id, reference, title, instructions)
+        """Delete a user exercise by stable UUID and permanently retire its aliases."""
+        delete_user_exercise!(identity) =
+            EuclidRepl.delete_user_exercise!(EUCLID_STATE_PTR, identity)
         """Browse exercises with arrow keys and Enter; q cancels without changing the attempt."""
         choose_exercise() = EuclidRepl.choose_exercise(EUCLID_STATE_PTR)
     end)
@@ -592,15 +604,27 @@ function hide_exercise!(state_ptr::Ptr{Cvoid})
     return nothing
 end
 
-"""List the currently supported exercise namespaces."""
-exercises(::Ptr{Cvoid}) = (:builtin,)
+"""List the separate built-in and user exercise namespaces."""
+exercises(::Ptr{Cvoid}) = (:builtin, :user)
 
-"""Page actual catalogue children in the builtin namespace; parent defaults to the root."""
+"""Page catalogue children for one explicit namespace; parent defaults to the root."""
 function exercises(
     state_ptr::Ptr{Cvoid}, namespace::AbstractString;
-    parent=nothing, offset::Integer=0, limit::Integer=16)
-    namespace == "builtin" || throw(ArgumentError("unsupported exercise namespace"))
+    parent=nothing, offset::Integer=0, limit::Integer=16, all::Bool=false)
+    namespace in ("builtin", "user") ||
+        throw(ArgumentError("unsupported exercise namespace"))
     start, count = OdinJuliaBridge.validate_exercise_page(offset, limit)
+    if all
+        namespace == "user" ||
+            throw(ArgumentError(
+                "all-record listing is available only in the user namespace"))
+        reply = OdinJuliaBridge.user_exercise_operation(
+            state_ptr, OdinJuliaBridge.USER_EXERCISE_LIST;
+            offset=start, limit=count)
+        rows = OdinJuliaBridge.user_exercise_query_summary.(reply.rows)
+        return ExercisePage(rows, Int(start), Int(reply.metadata.total),
+            reply.metadata.more != 0)
+    end
     identity = isnothing(parent) ? "" : OdinJuliaBridge.canonical_exercise_uuid(parent)
     reply = OdinJuliaBridge.query_exercises(
         state_ptr, UInt32(4), identity; offset=start, limit=count)
@@ -611,13 +635,21 @@ function exercises(
     return ExercisePage(entries, Int(start), Int(metadata.total), metadata.more != 0)
 end
 
-"""Page stored exercises associated with an exact catalogue animation UUID."""
+"""Page one namespace's exercises associated with an exact animation UUID."""
 function exercises(
     state_ptr::Ptr{Cvoid}, namespace::AbstractString, animation_id;
     offset::Integer=0, limit::Integer=16)
-    namespace == "builtin" || throw(ArgumentError("unsupported exercise namespace"))
     start, count = OdinJuliaBridge.validate_exercise_page(offset, limit)
     identity = OdinJuliaBridge.canonical_exercise_uuid(animation_id)
+    if namespace == "user"
+        reply = OdinJuliaBridge.user_exercise_operation(
+            state_ptr, OdinJuliaBridge.USER_EXERCISE_LIST;
+            animation_id=identity, offset=start, limit=count)
+        rows = OdinJuliaBridge.user_exercise_query_summary.(reply.rows)
+        return ExercisePage(rows, Int(start), Int(reply.metadata.total),
+            reply.metadata.more != 0)
+    end
+    namespace == "builtin" || throw(ArgumentError("unsupported exercise namespace"))
     reply = OdinJuliaBridge.query_exercises(
         state_ptr, UInt32(0), identity; offset=start, limit=count)
     metadata, rows = reply.metadata, reply.rows
@@ -625,18 +657,65 @@ function exercises(
         Int(start), Int(metadata.total), metadata.more != 0)
 end
 
-"""Resolve an explicit builtin: alias or canonical UUID without changing visible state."""
+"""Resolve an explicitly namespaced alias or UUID without changing visible state."""
 function resolve_exercise(state_ptr::Ptr{Cvoid}, reference::AbstractString)
-    kind, identity = OdinJuliaBridge.parse_exercise_reference(reference)
-    reply = OdinJuliaBridge.query_exercises(state_ptr, kind, identity)
-    return OdinJuliaBridge.exercise_query_summary(only(reply.rows))
+    namespace = OdinJuliaBridge.exercise_reference_namespace(reference)
+    if namespace == :builtin
+        kind, identity = OdinJuliaBridge.parse_exercise_reference(reference)
+        reply = OdinJuliaBridge.query_exercises(state_ptr, kind, identity)
+        return OdinJuliaBridge.exercise_query_summary(only(reply.rows))
+    end
+    operation, identity = OdinJuliaBridge.parse_user_exercise_reference(reference)
+    return OdinJuliaBridge.user_exercise_summary(
+        state_ptr, operation, identity; load=false)
 end
 
-"""Load the resolved instruction snapshot only after display-owned acceptance."""
+"""Load a namespaced instruction snapshot only after display-owned acceptance."""
 function load_exercise!(state_ptr::Ptr{Cvoid}, reference::AbstractString)
-    kind, identity = OdinJuliaBridge.parse_exercise_reference(reference)
-    reply = OdinJuliaBridge.query_exercises(state_ptr, kind, identity; load=true)
-    return OdinJuliaBridge.exercise_query_summary(only(reply.rows))
+    namespace = OdinJuliaBridge.exercise_reference_namespace(reference)
+    if namespace == :builtin
+        kind, identity = OdinJuliaBridge.parse_exercise_reference(reference)
+        reply = OdinJuliaBridge.query_exercises(state_ptr, kind, identity; load=true)
+        return OdinJuliaBridge.exercise_query_summary(only(reply.rows))
+    end
+    operation, identity = OdinJuliaBridge.parse_user_exercise_reference(reference)
+    return OdinJuliaBridge.user_exercise_summary(
+        state_ptr, operation, identity; load=true)
+end
+
+"""Create a user exercise and return its stable identity and exact namespaced alias."""
+function create_user_exercise!(
+    state_ptr::Ptr{Cvoid}, animation_id, reference::AbstractString,
+    title::AbstractString, instructions::AbstractString)
+    animation = OdinJuliaBridge.canonical_exercise_uuid(animation_id)
+    alias = OdinJuliaBridge.validate_user_exercise_draft(reference, title, instructions)
+    reply = OdinJuliaBridge.user_exercise_operation(
+        state_ptr, OdinJuliaBridge.USER_EXERCISE_CREATE;
+        animation_id=animation, reference=alias,
+        title=String(title), instructions=String(instructions))
+    return OdinJuliaBridge.user_exercise_query_summary(only(reply.rows))
+end
+
+"""Update mutable fields by stable user UUID while preserving its identity."""
+function update_user_exercise!(
+    state_ptr::Ptr{Cvoid}, identity, animation_id, reference::AbstractString,
+    title::AbstractString, instructions::AbstractString)
+    id = OdinJuliaBridge.canonical_exercise_uuid(identity)
+    animation = OdinJuliaBridge.canonical_exercise_uuid(animation_id)
+    alias = OdinJuliaBridge.validate_user_exercise_draft(reference, title, instructions)
+    reply = OdinJuliaBridge.user_exercise_operation(
+        state_ptr, OdinJuliaBridge.USER_EXERCISE_UPDATE;
+        identity=id, animation_id=animation, reference=alias,
+        title=String(title), instructions=String(instructions))
+    return OdinJuliaBridge.user_exercise_query_summary(only(reply.rows))
+end
+
+"""Delete a user exercise by stable UUID and retire its identity and aliases."""
+function delete_user_exercise!(state_ptr::Ptr{Cvoid}, identity)
+    id = OdinJuliaBridge.canonical_exercise_uuid(identity)
+    OdinJuliaBridge.user_exercise_operation(
+        state_ptr, OdinJuliaBridge.USER_EXERCISE_DELETE; identity=id)
+    return nothing
 end
 
 include("repl_exercises.jl")

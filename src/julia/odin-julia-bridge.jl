@@ -17,6 +17,7 @@ export BridgeColor, BridgePointView, BridgeSolveResult,
     EXERCISE_HEADER_MAX_TEXT_BYTES, validate_exercise_header_text,
     publish_exercise_header, hide_exercise_header,
     ExerciseSummary, ExerciseCatalogueNode, ExercisePage, ExerciseQueryError,
+    UserExerciseError,
     AnimationKey, animation_schema_id, set_animation_value!, get_animation_value,
     AnimationContentSpecification, animation_content_specification,
     BridgeShapeLine, BridgeShapeCircle, BridgeShapeFilledCircle,
@@ -103,5 +104,6 @@ include("bridge/content_specification.jl")
 include("bridge/presentation.jl")
 include("bridge/exercise_header.jl")
 include("bridge/exercise_query.jl")
+include("bridge/user_exercise.jl")
 
 end

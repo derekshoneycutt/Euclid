@@ -18,8 +18,7 @@ julia_egress_router_dispatch :: proc(
         viewpresentation.presentation_admit(runtime^.state, runtime, message, content)
         return true
     }
-    if intent, is_intent := message^.(bridgemodel.Exercise_Query_Intent); is_intent {
-        admit_exercise_query(runtime.state, intent)
+    if julia_egress_router_dispatch_exercise_operation(runtime.state, message) {
         return false
     }
     if update, is_update := message^.(bridgemodel.Exercise_Header_Update);
@@ -42,6 +41,21 @@ julia_egress_router_dispatch :: proc(
         return false
     }
     _ = terminalservice.terminal_service_dispatch_egress(runtime^.state, message)
+    return false
+}
+
+// Route built-in and user exercise work through their respective display owners.
+julia_egress_router_dispatch_exercise_operation :: proc(
+    state: ^core.Euclid_General_State,
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
+    if intent, is_intent := message^.(bridgemodel.Exercise_Query_Intent); is_intent {
+        admit_exercise_query(state, intent)
+        return true
+    }
+    if intent, is_intent := message^.(bridgemodel.User_Exercise_Intent); is_intent {
+        admit_user_exercise_operation(state, intent)
+        return true
+    }
     return false
 }
 

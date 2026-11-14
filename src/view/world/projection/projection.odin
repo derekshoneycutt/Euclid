@@ -124,6 +124,26 @@ screenshake_update :: proc(scale: ^worldmodel.Iso_Scale, dt: f32) {
     screenshake_set_offsets_from_trauma(scale)
 }
 
+// Shift the projection origin by the current viewport-fitted shake and return the
+// unshaken origin, which the caller must pass to screenshake_restore_origin.
+screenshake_apply_origin :: proc(
+    scale: ^worldmodel.Iso_Scale, enabled: bool) -> geometry.Vector2 {
+    base := geometry.Vector2{scale^.x_offset, scale^.y_offset}
+    if enabled {
+        fit := viewport_scale_factor(scale^)
+        scale^.x_offset += scale^.screenshake_offset_x * fit
+        scale^.y_offset += scale^.screenshake_offset_y * fit
+    }
+    return base
+}
+
+// Restore the projection origin captured by screenshake_apply_origin.
+screenshake_restore_origin :: proc(
+    scale: ^worldmodel.Iso_Scale, base: geometry.Vector2) {
+    scale^.x_offset = base.x
+    scale^.y_offset = base.y
+}
+
 //   Recompute cached scalar coefficients used by isometric projection.
 //
 // Parameters:

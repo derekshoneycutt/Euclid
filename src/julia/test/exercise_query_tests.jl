@@ -13,6 +13,50 @@ using UUIDs
         "builtin:00000000-0000-0000-0000-000000000000")
         @test_throws ArgumentError bridge.parse_exercise_reference(invalid)
     end
+
+    @testset "user exercise namespaces, draft bounds, and operation ABI" begin
+        bridge = OdinJuliaBridge
+        identity = "10000000-0000-0000-0000-000000000001"
+        @test bridge.exercise_reference_namespace("builtin:elements-i-1") == :builtin
+        @test bridge.exercise_reference_namespace("user:triangle") == :user
+        @test bridge.parse_user_exercise_reference("user:triangle") ==
+            (bridge.USER_EXERCISE_READ_REFERENCE, "triangle")
+        @test bridge.parse_user_exercise_reference("user:" * identity) ==
+            (bridge.USER_EXERCISE_READ_IDENTITY, identity)
+        for invalid in ("triangle", "builtin:triangle", "user:", "user:Uppercase",
+            "user:" * "a"^17, "user:" * "00000000-0000-0000-0000-000000000000")
+            @test_throws ArgumentError bridge.parse_user_exercise_reference(invalid)
+        end
+        @test bridge.validate_user_exercise_draft(
+            "triangle", "Triangle", "Instructions") == "triangle"
+        @test_throws ArgumentError bridge.validate_user_exercise_draft(
+            "Uppercase", "Triangle", "Instructions")
+        @test_throws ArgumentError bridge.validate_user_exercise_draft(
+            "triangle", " ", "Instructions")
+        @test_throws ArgumentError bridge.validate_user_exercise_draft(
+            "triangle", "x"^257, "Instructions")
+        @test_throws ArgumentError bridge.validate_user_exercise_draft(
+            "triangle", "Triangle", "x"^(bridge.EXERCISE_HEADER_MAX_TEXT_BYTES + 1))
+
+        @test sizeof(bridge.UserExerciseInputABI) == 96
+        @test fieldoffset(bridge.UserExerciseInputABI, 2) == 8
+        @test fieldoffset(bridge.UserExerciseInputABI, 10) == 72
+        @test fieldoffset(bridge.UserExerciseInputABI, 12) == 84
+        @test fieldoffset(bridge.UserExerciseInputABI, 14) == 90
+        @test bridge.check_user_exercise_status(UInt32(1)) === nothing
+        for (status, reason) in ((0, :unavailable), (2, :invalid_request),
+            (3, :not_found), (4, :retired), (5, :database_failed),
+            (6, :missing_animation), (7, :busy), (8, :reference_collision),
+            (9, :identity_collision), (10, :read_only), (11, :superseded))
+            failure = try
+                bridge.check_user_exercise_status(UInt32(status))
+            catch error
+                error
+            end
+            @test failure isa UserExerciseError
+            @test failure.reason == reason
+        end
+    end
     @test bridge.canonical_exercise_uuid(UUID(identity)) == identity
     @test bridge.validate_exercise_page(0, 16) == (UInt32(0), UInt16(16))
     for (offset, limit) in ((-1, 1), (0, 0), (0, 17), (typemax(UInt32), 16))

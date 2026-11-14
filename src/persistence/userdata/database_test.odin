@@ -65,28 +65,6 @@ userdata_test_index_id :: proc(value: u32) -> uuid.Identifier {
     return identifier
 }
 
-// Create a genuine v1 settings-only database for migration tests.
-userdata_test_create_v1 :: proc(path: string) -> bool {
-    connection: sqlite.Connection
-    failure := userdata_test_open_sqlite(path, &connection)
-    if !store_sqlite_error_is_clear(failure) {
-        return false
-    }
-    failure = sqlite.connection_exec(&connection,
-        strings.clone_to_cstring(USER_SETTING_SCHEMA_SQL, context.temp_allocator))
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.connection_exec(&connection,
-            "INSERT INTO user_setting VALUES ('migration', 'kept', 'integer', 7, NULL)")
-    }
-    if store_sqlite_error_is_clear(failure) {
-        failure = sqlite.connection_exec(
-            &connection, "PRAGMA application_id=1163215701; PRAGMA user_version=1")
-    }
-    close_error := sqlite.connection_close(&connection)
-    return store_sqlite_error_is_clear(failure) &&
-        store_sqlite_error_is_clear(close_error)
-}
-
 // Create a unique temporary directory and database path for isolated tests.
 userdata_test_path :: proc(t: ^testing.T) -> Userdata_Test_Path {
     result: Userdata_Test_Path
@@ -160,10 +138,21 @@ userdata_expect_database_identity :: proc(
     history_table_count, history_table_valid := userdata_test_integer_query(
         connection,
         "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_terminal_history'")
-    testing.expect(t, app_valid && version_valid && history_table_valid)
+    exercise_table_count, exercise_table_valid := userdata_test_integer_query(
+        connection,
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_exercise'")
+    retired_reference_table_count, retired_reference_table_valid :=
+        userdata_test_integer_query(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_schema "+
+            "WHERE name='user_exercise_retired_reference'")
+    testing.expect(t, app_valid && version_valid && history_table_valid &&
+        exercise_table_valid && retired_reference_table_valid)
     testing.expect_value(t, application_id, i64(DATABASE_APPLICATION_ID))
     testing.expect_value(t, schema_version, i64(DATABASE_SCHEMA_VERSION))
     testing.expect_value(t, history_table_count, i64(1))
+    testing.expect_value(t, exercise_table_count, i64(1))
+    testing.expect_value(t, retired_reference_table_count, i64(1))
 }
 
 // Resolve stable default and explicit paths without creating database files.
@@ -1238,9 +1227,9 @@ userdata_rejects_future_schema :: proc(
     testing.expect_value(t, future_result.schema_version, i64(3))
 }
 
-// Roll back partially initialized schema and identity after migration failure.
+// Roll back partial initial schema construction without leaving database objects.
 @(test)
-userdata_initial_migration_failure_leaves_empty_database :: proc(t: ^testing.T) {
+userdata_initial_schema_creation_failure_leaves_empty_database :: proc(t: ^testing.T) {
     fixture := userdata_test_path(t)
     testing.expect(t, fixture.valid)
     if !fixture.valid {
@@ -1250,7 +1239,7 @@ userdata_initial_migration_failure_leaves_empty_database :: proc(t: ^testing.T) 
 
     store: Store
     failure := store_open_internal(&store, fixture.path, true, false)
-    testing.expect_value(t, failure.kind, Store_Error_Kind.Migration)
+    testing.expect_value(t, failure.kind, Store_Error_Kind.Schema)
     inspect: sqlite.Connection
     testing.expect_value(t,
         sqlite.connection_open(&inspect, fixture.path, .Readonly,
@@ -1312,110 +1301,6 @@ userdata_read_only_admission_loads_without_writing :: proc(t: ^testing.T) {
 @(test)
 userdata_sqlite_build_is_mutex_enabled :: proc(t: ^testing.T) {
     testing.expect(t, sqlite.threading_supported())
-}
-
-// Upgrade v1 atomically, retain user settings, and seed exactly one editable Favorites role.
-@(test)
-userdata_v1_migration_preserves_settings_and_seeds_favorites :: proc(t: ^testing.T) {
-    fixture := userdata_test_path(t)
-    testing.expect(t, fixture.valid)
-    if !fixture.valid {
-        return
-    }
-    defer os.remove_all(fixture.directory)
-    testing.expect(t, userdata_test_create_v1(fixture.path))
-
-    store: Store
-    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
-    snapshot := new(collections.Set, context.allocator)
-    defer userdata_test_free_collection_set(snapshot)
-    testing.expect_value(t, store_load_collections(&store, snapshot).kind,
-        Store_Error_Kind.None)
-    testing.expect_value(t, snapshot^.collection_count, 1)
-    testing.expect_value(t, snapshot^.collections[0].role, collections.Role.Favorites)
-    testing.expect_value(t,
-        snapshot^.collections[0].id, collections.FAVORITES_COLLECTION_ID)
-    testing.expect(t, !snapshot^.collections[0].is_read_only)
-    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
-
-    inspect: sqlite.Connection
-    testing.expect_value(t,
-        sqlite.connection_open(&inspect, fixture.path, .Readonly,
-            context.temp_allocator).result,
-        raw.Result.Ok)
-    version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
-    history_table_count, history_table_valid := userdata_test_integer_query(
-        &inspect,
-        "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_terminal_history'")
-    preserved, preserved_valid := userdata_test_integer_query(
-        &inspect, "SELECT integer_value FROM user_setting WHERE namespace='migration'")
-    testing.expect(t, version_valid && preserved_valid && history_table_valid)
-    testing.expect_value(t, version, i64(2))
-    testing.expect_value(t, preserved, i64(7))
-    testing.expect_value(t, history_table_count, i64(1))
-    testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
-}
-
-// Keep a read-only v1 database untouched and report that in-place migration is unavailable.
-@(test)
-userdata_read_only_v1_migration_is_rejected_without_mutation :: proc(t: ^testing.T) {
-    fixture := userdata_test_path(t)
-    testing.expect(t, fixture.valid)
-    if !fixture.valid {
-        return
-    }
-    defer os.remove_all(fixture.directory)
-    testing.expect(t, userdata_test_create_v1(fixture.path))
-
-    store: Store
-    result := store_open_internal(&store, fixture.path, false, true)
-    testing.expect_value(t, result.kind, Store_Error_Kind.Not_Writable)
-    testing.expect_value(t, result.schema_version, i64(1))
-    inspect: sqlite.Connection
-    testing.expect_value(t,
-        sqlite.connection_open(&inspect, fixture.path, .Readonly,
-            context.temp_allocator).result,
-        raw.Result.Ok)
-    version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
-    collections_count, collections_valid := userdata_test_integer_query(
-        &inspect,
-        "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_collection'")
-    testing.expect(t, version_valid && collections_valid)
-    testing.expect_value(t, version, i64(1))
-    testing.expect_value(t, collections_count, i64(0))
-    testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
-}
-
-// Roll back a failed v1 migration without damaging its prior settings schema.
-@(test)
-userdata_failed_v1_migration_rolls_back_schema_and_version :: proc(t: ^testing.T) {
-    fixture := userdata_test_path(t)
-    testing.expect(t, fixture.valid)
-    if !fixture.valid {
-        return
-    }
-    defer os.remove_all(fixture.directory)
-    testing.expect(t, userdata_test_create_v1(fixture.path))
-
-    store: Store
-    result := store_open_internal(&store, fixture.path, true, false)
-    testing.expect_value(t, result.kind, Store_Error_Kind.Migration)
-    inspect: sqlite.Connection
-    testing.expect_value(t,
-        sqlite.connection_open(&inspect, fixture.path, .Readonly,
-            context.temp_allocator).result,
-        raw.Result.Ok)
-    version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
-    collection_tables, tables_valid := userdata_test_integer_query(
-        &inspect,
-        "SELECT COUNT(*) FROM sqlite_schema WHERE name LIKE 'user_collection%'")
-    preserved, preserved_valid := userdata_test_integer_query(
-        &inspect, "SELECT integer_value FROM user_setting WHERE namespace='migration'")
-    testing.expect(t, version_valid && tables_valid && preserved_valid)
-    testing.expect_value(t, version, i64(1))
-    testing.expect_value(t, collection_tables, i64(0))
-    testing.expect_value(t, preserved, i64(7))
-    testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
 }
 
 // Build a bounded persistence fixture with Favorites and a nested read-only group.

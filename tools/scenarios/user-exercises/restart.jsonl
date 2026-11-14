@@ -1,0 +1,18 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@assert isempty(exercises(\"user\";all=true).entries); print(\"user-exercise-\"*\"active-list-empty\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-active-list-empty","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"for alias in (\"phase33-original\",\"phase33-renamed\",\"phase33-final\"); failure=try resolve_exercise(\"user:\"*alias) catch caught; caught end; @assert failure isa OdinJuliaBridge.UserExerciseError && failure.reason==:retired; end; print(\"user-exercise-\"*\"aliases-retired\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-aliases-retired","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"failure=try resolve_exercise(\"user:\"*ENV[\"EUCLID_ACCEPTANCE_EXERCISE_ID\"]) catch caught; caught end; @assert failure isa OdinJuliaBridge.UserExerciseError && failure.reason==:not_found; print(\"user-exercise-\"*\"identity-retired\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-identity-retired","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -1,0 +1,47 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"attempt=73; p=point!([0.3,0.4,0];duration=0.05); print(\"user-exercise-\"*\"attempt-saved\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-attempt-saved","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; before=OdinJuliaBridge.get_point(state_ptr,p.index).pos; before_count=status().managed_shape_count; print(\"user-exercise-\"*\"drawing-ready\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-drawing-ready","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"page=exercises(\"user\";all=true); @assert length(page.entries)==1; record=only(page.entries); @assert record.reference==\"user:phase33-renamed\"; resolved=resolve_exercise(\"user:\"*string(record.id)); @assert resolved.id==record.id && resolved.reference==\"user:phase33-renamed\"; print(\"user-exercise-\"*\"restart-resolved\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-restart-resolved","timeout_ms":15000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"choose_exercise()"}
+{"key":"enter"}
+{"wait_state":"terminal_interactive","timeout_ms":10000}
+{"key":"down"}
+{"key":"down"}
+{"key":"enter"}
+{"wait_terminal_contains":"Load: Milestone 3.3 Exercise","timeout_ms":10000}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":15000}
+{"wait_terminal_contains":"Loaded exercise: Milestone 3.3 Exercise","timeout_ms":10000}
+{"assert_exercise_header":"Instructions after rename."}
+{"type":"@assert attempt==73 && status().managed_shape_count==before_count; @assert OdinJuliaBridge.get_point(state_ptr,p.index).pos==before; print(\"user-exercise-\"*\"load-preserved-attempt\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-load-preserved-attempt","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"edited=update_user_exercise!(record.id,record.animation_id,\"phase33-final\",\"Milestone 3.3 Exercise\",\"Instructions after edit.\"); @assert edited.id==record.id; print(\"user-exercise-\"*\"edited\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-edited","timeout_ms":15000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_exercise_header":"Instructions after rename."}
+{"type":"delete_user_exercise!(record.id); print(\"user-exercise-\"*\"deleted\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-deleted","timeout_ms":15000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_exercise_header":"Instructions after rename."}
+{"type":"@assert attempt==73 && OdinJuliaBridge.get_point(state_ptr,p.index).pos==before; print(\"user-exercise-\"*\"delete-preserved-attempt\\n\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"user-exercise-delete-preserved-attempt","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

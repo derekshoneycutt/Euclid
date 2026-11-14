@@ -1461,14 +1461,15 @@ bridge_label_ink_world_position :: proc(
 }
 
 // Emit one bulk clear from last-presented geometry and freshly copied label ink.
+// Returns true when the clear visibly disturbed the board, either by kicking live
+// surface dust or by emitting departure material from formed shapes.
 emit_shape_world_clear_departures :: proc(
     state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.particle_system.effects_disabled ||
         state^.particle_system.use_max_dust_particles < 1 {
         return false
     }
-    particles.kick_existing_dust(&state^.particle_system)
-    emitted := false
+    emitted := particles.kick_existing_dust(&state^.particle_system)
     world := &state^.shape_world
     for index in 0..<world.render_styles.count {
         entity := world.render_styles.entities[index]

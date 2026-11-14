@@ -15,10 +15,34 @@ DELETE_COLLECTIONS_SQL :: #load("sql/delete_collections.sql", string)
 READ_COLLECTION_NOTE_SQL :: #load("sql/read_collection_note.sql", string)
 UPSERT_COLLECTION_NOTE_SQL :: #load("sql/upsert_collection_note.sql", string)
 DELETE_ORPHAN_COLLECTION_NOTES_SQL :: #load("sql/delete_orphan_collection_notes.sql", string)
+EXERCISE_BY_IDENTITY_SQL :: #load("sql/exercise_by_identity.sql", string)
+EXERCISE_BY_ALIAS_SQL :: #load("sql/exercise_by_alias.sql", string)
+EXERCISE_LIST_COUNT_SQL :: #load("sql/exercise_list_count.sql", string)
+EXERCISE_LIST_ROWS_SQL :: #load("sql/exercise_list_rows.sql", string)
+RETIRED_EXERCISE_ALIAS_SQL :: #load("sql/retired_exercise_alias.sql", string)
+EXERCISE_ALIAS_STATE_SQL :: #load("sql/exercise_alias_state.sql", string)
+EXERCISE_IDENTITY_TAKEN_SQL :: #load("sql/exercise_identity_taken.sql", string)
+EXERCISE_ROWS_FOR_ADMISSION_SQL :: #load("sql/exercise_rows_for_admission.sql", string)
+RETIRED_EXERCISE_ROWS_FOR_ADMISSION_SQL :: #load(
+    "sql/retired_exercise_rows_for_admission.sql", string)
+EXERCISE_INSERT_SQL :: #load("sql/exercise_insert.sql", string)
+EXERCISE_UPDATE_SQL :: #load("sql/exercise_update.sql", string)
+EXERCISE_DELETE_SQL :: #load("sql/exercise_delete.sql", string)
+EXERCISE_RETIRE_ALIAS_SQL :: #load("sql/exercise_retire_alias.sql", string)
+EXERCISE_RETIRE_IDENTITY_SQL :: #load("sql/exercise_retire_identity.sql", string)
 
 // Prepare only the known-key statements needed by admitted stores.
 store_prepare_statements :: proc(
     store: ^Store, read_only: bool) -> Store_Error {
+    failure := store_prepare_read_statements(store)
+    if !store_error_is_clear(failure) || read_only {
+        return failure
+    }
+    return store_prepare_write_statements(store)
+}
+
+// Prepare all statements required for reads and schema admission.
+store_prepare_read_statements :: proc(store: ^Store) -> Store_Error {
     failure := store_prepare_statement(store, &store^.read_setting, READ_SETTING_SQL)
     if !store_error_is_clear(failure) {
         return failure
@@ -38,10 +62,16 @@ store_prepare_statements :: proc(
     if !store_error_is_clear(failure) {
         return failure
     }
-    if read_only {
-        return {}
+    failure = store_prepare_user_exercise_read_statements(store)
+    if !store_error_is_clear(failure) {
+        return failure
     }
-    failure = store_prepare_setting_write_statements(store)
+    return {}
+}
+
+// Prepare all mutation statements for a writable admitted connection.
+store_prepare_write_statements :: proc(store: ^Store) -> Store_Error {
+    failure := store_prepare_setting_write_statements(store)
     if !store_error_is_clear(failure) {
         return failure
     }
@@ -49,7 +79,69 @@ store_prepare_statements :: proc(
     if !store_error_is_clear(failure) {
         return failure
     }
-    return store_prepare_note_write_statements(store)
+    failure = store_prepare_note_write_statements(store)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_prepare_user_exercise_write_statements(store)
+}
+
+// Prepare exercise lookup and schema-admission statements on either connection.
+store_prepare_user_exercise_read_statements :: proc(store: ^Store) -> Store_Error {
+    statements: [9]^sqlite.Statement = {
+        &store^.exercise_by_identity,
+        &store^.exercise_by_alias,
+        &store^.exercise_list_count,
+        &store^.exercise_list_rows,
+        &store^.retired_exercise_alias,
+        &store^.exercise_alias_state,
+        &store^.exercise_identity_taken,
+        &store^.exercise_rows_for_admission,
+        &store^.retired_exercise_rows_for_admission,
+    }
+    queries: [9]string = {
+        EXERCISE_BY_IDENTITY_SQL,
+        EXERCISE_BY_ALIAS_SQL,
+        EXERCISE_LIST_COUNT_SQL,
+        EXERCISE_LIST_ROWS_SQL,
+        RETIRED_EXERCISE_ALIAS_SQL,
+        EXERCISE_ALIAS_STATE_SQL,
+        EXERCISE_IDENTITY_TAKEN_SQL,
+        EXERCISE_ROWS_FOR_ADMISSION_SQL,
+        RETIRED_EXERCISE_ROWS_FOR_ADMISSION_SQL,
+    }
+    for index in 0..<len(statements) {
+        failure := store_prepare_statement(store, statements[index], queries[index])
+        if !store_error_is_clear(failure) {
+            return failure
+        }
+    }
+    return {}
+}
+
+// Prepare transactional exercise changes on writable connections only.
+store_prepare_user_exercise_write_statements :: proc(store: ^Store) -> Store_Error {
+    statements: [5]^sqlite.Statement = {
+        &store^.exercise_insert,
+        &store^.exercise_update,
+        &store^.exercise_delete,
+        &store^.exercise_retire_alias,
+        &store^.exercise_retire_identity,
+    }
+    queries: [5]string = {
+        EXERCISE_INSERT_SQL,
+        EXERCISE_UPDATE_SQL,
+        EXERCISE_DELETE_SQL,
+        EXERCISE_RETIRE_ALIAS_SQL,
+        EXERCISE_RETIRE_IDENTITY_SQL,
+    }
+    for index in 0..<len(statements) {
+        failure := store_prepare_statement(store, statements[index], queries[index])
+        if !store_error_is_clear(failure) {
+            return failure
+        }
+    }
+    return {}
 }
 
 // Prepare placement-note writes and orphan cleanup for the writable connection.

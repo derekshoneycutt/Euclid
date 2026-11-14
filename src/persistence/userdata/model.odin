@@ -31,7 +31,7 @@ Store_Error_Kind :: enum u8 {
     Unsupported_Schema,
     Future_Schema,
     Invalid_Schema,
-    Migration,
+    Schema,
     Not_Writable,
     Closed,
     Unusable,
@@ -41,6 +41,13 @@ Store_Error_Kind :: enum u8 {
     Finalize,
     Close,
     Allocation,
+    Invalid_Exercise,
+    Invalid_Reference,
+    Reference_Collision,
+    Reference_Retired,
+    Identity_Retired,
+    Not_Found,
+    Identity_Collision,
 }
 
 Store_Error :: struct {
@@ -66,6 +73,20 @@ Store :: struct {
     delete_collections: sqlite.Statement,
     upsert_collection_note: sqlite.Statement,
     delete_orphan_collection_notes: sqlite.Statement,
+    exercise_by_identity: sqlite.Statement,
+    exercise_by_alias: sqlite.Statement,
+    exercise_list_count: sqlite.Statement,
+    exercise_list_rows: sqlite.Statement,
+    retired_exercise_alias: sqlite.Statement,
+    exercise_alias_state: sqlite.Statement,
+    exercise_identity_taken: sqlite.Statement,
+    exercise_rows_for_admission: sqlite.Statement,
+    retired_exercise_rows_for_admission: sqlite.Statement,
+    exercise_insert: sqlite.Statement,
+    exercise_update: sqlite.Statement,
+    exercise_delete: sqlite.Statement,
+    exercise_retire_alias: sqlite.Statement,
+    exercise_retire_identity: sqlite.Statement,
     status: Store_Status,
     path: [DATABASE_PATH_MAX_BYTES]u8,
     path_length: int,
@@ -153,6 +174,112 @@ Collection_Note_Read_Result :: struct {
     found: bool,
     text_length: int,
     notes_on_top: bool,
+}
+
+USER_EXERCISE_REFERENCE_MAX_BYTES :: 16
+USER_EXERCISE_TITLE_MAX_BYTES :: 256
+USER_EXERCISE_INSTRUCTIONS_MAX_BYTES :: 32 * 1024
+USER_EXERCISE_LIST_PAGE_CAPACITY :: 16
+USER_EXERCISE_ID_GENERATION_ATTEMPTS :: 8
+
+// User_Exercise_Draft contains caller-owned text for one validated write.
+User_Exercise_Draft :: struct {
+    animation_id: uuid.Identifier,
+    reference: string,
+    title: string,
+    instructions: string,
+}
+
+// User_Exercise_Record owns bounded copies of every persisted field.
+User_Exercise_Record :: struct {
+    id: uuid.Identifier,
+    animation_id: uuid.Identifier,
+    reference: [USER_EXERCISE_REFERENCE_MAX_BYTES]u8,
+    reference_length: u8,
+    title: [USER_EXERCISE_TITLE_MAX_BYTES]u8,
+    title_length: u16,
+    instructions: [USER_EXERCISE_INSTRUCTIONS_MAX_BYTES]u8,
+    instructions_length: u32,
+}
+
+// User_Exercise_Summary omits instructions from bounded browsing results.
+User_Exercise_Summary :: struct {
+    id: uuid.Identifier,
+    animation_id: uuid.Identifier,
+    reference: [USER_EXERCISE_REFERENCE_MAX_BYTES]u8,
+    reference_length: u8,
+    title: [USER_EXERCISE_TITLE_MAX_BYTES]u8,
+    title_length: u16,
+}
+
+// User_Exercise_Page owns one ordered, animation-scoped result window.
+User_Exercise_Page :: struct {
+    result_offset: u32,
+    total_count: u32,
+    returned_count: u16,
+    more_available: bool,
+    exercises: [USER_EXERCISE_LIST_PAGE_CAPACITY]User_Exercise_Summary,
+}
+
+// User_Exercise_Read_Result owns one decoded row and its SQLite read status.
+User_Exercise_Read_Result :: struct {
+    record: User_Exercise_Record,
+    found: bool,
+    failure: sqlite.Error,
+}
+
+// User_Exercise_Decode_Result reports row validity without a long return tuple.
+User_Exercise_Decode_Result :: struct {
+    record: User_Exercise_Record,
+    valid: bool,
+    failure: sqlite.Error,
+}
+
+// User_Exercise_Uuid_Result owns one copied UUID and its validation status.
+User_Exercise_Uuid_Result :: struct {
+    identity: uuid.Identifier,
+    valid: bool,
+    failure: sqlite.Error,
+}
+
+// User_Exercise_Operation identifies one worker-owned store operation.
+User_Exercise_Operation :: enum u8 {
+    None,
+    Create,
+    List,
+    Read_Identity,
+    Read_Reference,
+    Update,
+    Delete,
+}
+
+// User_Exercise_Task owns inputs and the joined result for one SQLite task.
+User_Exercise_Task :: struct {
+    request_id: u64,
+    operation: User_Exercise_Operation,
+    identity: uuid.Identifier,
+    reference: [USER_EXERCISE_REFERENCE_MAX_BYTES]u8,
+    reference_length: u8,
+    draft_animation_id: uuid.Identifier,
+    draft_reference: [USER_EXERCISE_REFERENCE_MAX_BYTES]u8,
+    draft_reference_length: u8,
+    draft_title: [USER_EXERCISE_TITLE_MAX_BYTES]u8,
+    draft_title_length: u16,
+    draft_instructions: [USER_EXERCISE_INSTRUCTIONS_MAX_BYTES]u8,
+    draft_instructions_length: u32,
+    result_offset: u32,
+    page_limit: u16,
+    result: User_Exercise_Record,
+    page: User_Exercise_Page,
+    failure: Store_Error,
+}
+
+// User_Exercise_Request_State keeps one operation in the existing save lane.
+User_Exercise_Request_State :: enum u8 {
+    None,
+    Pending,
+    In_Flight,
+    Complete,
 }
 
 Collection_Kind_Decode_Result :: struct {
