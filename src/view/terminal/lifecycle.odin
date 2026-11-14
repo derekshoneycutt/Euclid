@@ -608,6 +608,7 @@ terminal_complete_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     termemulator.interpreter_restore_primary_screen(&term.output_interpreter)
     termemulator.interpreter_finish_input(&term.output_interpreter)
     term.awaiting_eval = false
+    term.interactive_input_request_id = 0
     term.collecting_continuation = false
     term.output_checkpoint.valid = false
     term.pending_eval_request_id = 0

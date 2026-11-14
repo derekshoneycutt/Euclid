@@ -942,18 +942,6 @@ when core.HARNESS_ENABLED {
     }
 }
 
-/* TODO: Can we kill this?
-//   Clear animation registry state and reset interface selection fields to defaults.
-reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
-    clean_julia_interfaces(state)
-
-    state^.julia_interface^.null_animation = {}
-    state^.julia_interface^.current_animation = &state^.julia_interface^.null_animation
-    state^.julia_interface^.selected_animation = nil
-    state^.julia_interface^.pending_animation_reset = false
-    state^.julia_interface^.animation_reset_cooldown_remaining = 0
-}*/
-
 //   Find an animation pointer by its registered stable UUID identity.
 find_animation_by_stable_id :: proc(
     state: ^core.Euclid_General_State,

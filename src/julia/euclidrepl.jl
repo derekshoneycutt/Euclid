@@ -23,6 +23,9 @@ module EuclidRepl
 using ..OdinJuliaBridge
 using ..EuclidAnimations
 using Colors: Colorant
+using UUIDs: UUID
+using REPL: TerminalMenus, Terminals
+import ..Terminal
 
 export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_LABEL_DURATION, DEFAULT_REGION_DURATION, DEFAULT_POLYGON_DURATION,
@@ -30,6 +33,7 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     DEFAULT_TRANSFORM_DURATION, DEFAULT_HIGHLIGHT_DURATION,
     DEFAULT_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_BRUSH,
     euclidcolors, hide!, show!, show_exercise!, hide_exercise!,
+    exercises, resolve_exercise, load_exercise!, choose_exercise,
     point!, line!, circle!, label!, triangle!, square!,
     pentagon!, lens!, lune!, polygon_vertex_ids, line_endpoint_ids,
     circle_region_center_ids, cycloid!, ordinary_cycloid!,
@@ -561,6 +565,17 @@ function install_session_helpers!(
             EuclidRepl.show_exercise!(EUCLID_STATE_PTR, text)
         """Hide exercise instructions without resetting Terminal."""
         hide_exercise!() = EuclidRepl.hide_exercise!(EUCLID_STATE_PTR)
+        """List namespace roots, catalogue children, or exercises for an animation UUID."""
+        exercises(args...; kwargs...) =
+            EuclidRepl.exercises(EUCLID_STATE_PTR, args...; kwargs...)
+        """Resolve a builtin: alias or UUID without changing the current attempt."""
+        resolve_exercise(reference) =
+            EuclidRepl.resolve_exercise(EUCLID_STATE_PTR, reference)
+        """Load stored instructions without resetting drawing, variables, or Terminal."""
+        load_exercise!(reference) =
+            EuclidRepl.load_exercise!(EUCLID_STATE_PTR, reference)
+        """Browse exercises with arrow keys and Enter; q cancels without changing the attempt."""
+        choose_exercise() = EuclidRepl.choose_exercise(EUCLID_STATE_PTR)
     end)
     return nothing
 end
@@ -576,6 +591,55 @@ function hide_exercise!(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.hide_exercise_header(state_ptr)
     return nothing
 end
+
+"""List the currently supported exercise namespaces."""
+exercises(::Ptr{Cvoid}) = (:builtin,)
+
+"""Page actual catalogue children in the builtin namespace; parent defaults to the root."""
+function exercises(
+    state_ptr::Ptr{Cvoid}, namespace::AbstractString;
+    parent=nothing, offset::Integer=0, limit::Integer=16)
+    namespace == "builtin" || throw(ArgumentError("unsupported exercise namespace"))
+    start, count = OdinJuliaBridge.validate_exercise_page(offset, limit)
+    identity = isnothing(parent) ? "" : OdinJuliaBridge.canonical_exercise_uuid(parent)
+    reply = OdinJuliaBridge.query_exercises(
+        state_ptr, UInt32(4), identity; offset=start, limit=count)
+    metadata, rows = reply.metadata, reply.rows
+    entries = [ExerciseCatalogueNode(
+        UUID(OdinJuliaBridge.exercise_query_text(row.identity)),
+        OdinJuliaBridge.exercise_query_text(row.title)) for row in rows]
+    return ExercisePage(entries, Int(start), Int(metadata.total), metadata.more != 0)
+end
+
+"""Page stored exercises associated with an exact catalogue animation UUID."""
+function exercises(
+    state_ptr::Ptr{Cvoid}, namespace::AbstractString, animation_id;
+    offset::Integer=0, limit::Integer=16)
+    namespace == "builtin" || throw(ArgumentError("unsupported exercise namespace"))
+    start, count = OdinJuliaBridge.validate_exercise_page(offset, limit)
+    identity = OdinJuliaBridge.canonical_exercise_uuid(animation_id)
+    reply = OdinJuliaBridge.query_exercises(
+        state_ptr, UInt32(0), identity; offset=start, limit=count)
+    metadata, rows = reply.metadata, reply.rows
+    return ExercisePage(OdinJuliaBridge.exercise_query_summary.(rows),
+        Int(start), Int(metadata.total), metadata.more != 0)
+end
+
+"""Resolve an explicit builtin: alias or canonical UUID without changing visible state."""
+function resolve_exercise(state_ptr::Ptr{Cvoid}, reference::AbstractString)
+    kind, identity = OdinJuliaBridge.parse_exercise_reference(reference)
+    reply = OdinJuliaBridge.query_exercises(state_ptr, kind, identity)
+    return OdinJuliaBridge.exercise_query_summary(only(reply.rows))
+end
+
+"""Load the resolved instruction snapshot only after display-owned acceptance."""
+function load_exercise!(state_ptr::Ptr{Cvoid}, reference::AbstractString)
+    kind, identity = OdinJuliaBridge.parse_exercise_reference(reference)
+    reply = OdinJuliaBridge.query_exercises(state_ptr, kind, identity; load=true)
+    return OdinJuliaBridge.exercise_query_summary(only(reply.rows))
+end
+
+include("repl_exercises.jl")
 
 struct ReplStatus
     active::Bool

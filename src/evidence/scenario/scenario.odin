@@ -1580,6 +1580,8 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
         return display.terminal_ready
     case "terminal_idle":
         return display.terminal_idle
+    case "terminal_interactive":
+        return display.terminal_interactive
     case "terminal_continuation":
         return display.terminal_continuation
     case "terminal_completion_ready":

@@ -15,8 +15,11 @@ using ..AnimationCatalog
 using ..LocalizedContent
 include(joinpath(
     @__DIR__, "..", "src", "content", "animation_catalog_generation.jl"))
+include(joinpath(@__DIR__, "..", "src", "content", "builtin_exercises.jl"))
 const AnimationDescriptors = AnimationCatalogGeneration.AnimationDescriptors
 const AuthoredManifest = AnimationCatalogGeneration.AuthoredManifest
+const BuiltinExerciseRecords = BuiltinExercises.EXERCISES
+const RetiredExerciseReferences = BuiltinExercises.RETIRED_REFERENCES
 end
 
 """Create an isolated owner module for build-time content sidecars."""
@@ -52,7 +55,9 @@ function export_content_records(destination::String)
         BuildContentInput.AnimationDescriptors,
         BuildContentInput.AuthoredManifest,
         descriptor -> load_search_content(
-            content, BuildContentInput.AnimationDescriptors, descriptor))
+            content, BuildContentInput.AnimationDescriptors, descriptor),
+        BuildContentInput.BuiltinExerciseRecords,
+        BuildContentInput.RetiredExerciseReferences)
     mkpath(dirname(destination))
     candidate = destination * ".candidate"
     try

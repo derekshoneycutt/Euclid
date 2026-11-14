@@ -18,6 +18,10 @@ julia_egress_router_dispatch :: proc(
         viewpresentation.presentation_admit(runtime^.state, runtime, message, content)
         return true
     }
+    if intent, is_intent := message^.(bridgemodel.Exercise_Query_Intent); is_intent {
+        admit_exercise_query(runtime.state, intent)
+        return false
+    }
     if update, is_update := message^.(bridgemodel.Exercise_Header_Update);
         is_update {
         state := runtime^.state

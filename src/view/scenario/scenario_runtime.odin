@@ -253,7 +253,8 @@ scenario_terminal_input_available :: proc(state: ^core.Euclid_General_State) -> 
         !state^.terminal.julia_session_ready {
         return false
     }
-    return !state^.terminal.awaiting_eval || state^.shell.phase == .Running
+    return !state^.terminal.awaiting_eval || state^.shell.phase == .Running ||
+        state^.terminal.interactive_input_request_id != 0
 }
 
 // Inject one complete UTF-8 text action into ordinary next-frame input.

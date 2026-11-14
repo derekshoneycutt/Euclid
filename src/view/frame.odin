@@ -417,6 +417,7 @@ prepare_sdl_frame_owners :: proc(
         service_frame_user_data(state, ctx.platform)
     }
     libraryservice.service_library_search(state, ctx.content_service, update.frame_dt)
+    service_exercise_queries(state)
     terminal_frame := terminalservice.terminal_service_update(
         state, ctx.input_runtime, update.routed_frame)
     apply_sdl_cursor(state, ctx.platform)

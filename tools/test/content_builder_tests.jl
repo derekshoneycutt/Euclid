@@ -2,6 +2,9 @@ using JSON
 using SHA
 
 const CONTENT_TEST_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
+const CONTENT_TEST_IDENTITY_FIELDS = Dict(
+    1 => "key", 2 => "tag", 3 => "message_key", 9 => "edition_id",
+    12 => "exercise_id", 13 => "reference")
 
 """Return the canonical SHA-256 identity for one JSON Lines stream."""
 stream_fingerprint(path::String) = bytes2hex(sha256(read(path)))
@@ -19,12 +22,9 @@ end
 """Derive the order-check identity with the builder's primary-key grammar."""
 function record_identity_for_test(record::AbstractDict{String,Any})
     kind = record["kind"]
-    if kind == 1
-        return record["key"]
-    elseif kind == 2
-        return record["tag"]
-    elseif kind == 3
-        return record["message_key"]
+    field = get(CONTENT_TEST_IDENTITY_FIELDS, kind, nothing)
+    if field !== nothing
+        return record[field]
     elseif kind == 4
         return "$(record["message_key"])|$(lpad(record["ordinal"], 2, '0'))"
     elseif kind == 5
@@ -33,27 +33,32 @@ function record_identity_for_test(record::AbstractDict{String,Any})
         return "$(record["source_namespace"])|$(record["animation_id"])"
     elseif kind == 8
         return "$(record["source_namespace"])|$(record["animation_id"])|$(record["locale_tag"])"
-    elseif kind == 9
-        return record["edition_id"]
     end
     return join((record["source_namespace"], record["animation_id"],
         record["locale_tag"], record["edition_id"]), "|")
 end
 
-@testset "Schema-3 immutable content database" begin
+@testset "Schema-4 immutable content database" begin
     mktempdir() do directory
         corpus_path = joinpath(directory, "content.jsonl")
         fingerprint = Main.export_content_records(corpus_path)
         @test fingerprint == stream_fingerprint(corpus_path)
         canonical = [JSON.parse(line) for line in
             split(read(corpus_path, String), '\n') if !isempty(line)]
-        @test all(record["schema"] == 3 for record in canonical)
+        @test all(record["schema"] == 4 for record in canonical)
         @test issorted([(record["kind"], record_identity_for_test(record))
             for record in canonical])
         counts = [count(record -> record["kind"] == kind, canonical)
-            for kind in 1:11]
-        @test counts == [6, 1, 207, counts[4], 207, 141, 140, 140, 3, 141, 140]
+            for kind in 1:13]
+        @test counts == [
+            6, 1, 207, counts[4], 207, 141, 140, 140, 3, 141, 140, 1, 0]
         @test counts[4] <= 32
+        exercise = only(filter(record -> record["kind"] == 12, canonical))
+        @test exercise["exercise_id"] == "a9237c51-c9f6-4d54-8bf5-f8c651906e1c"
+        @test exercise["animation_id"] == "76fdebfe-2600-551e-be64-03f1942f4f49"
+        @test exercise["reference"] == "elements-i-1"
+        @test exercise["instructions"] ==
+            "On a given finite straight line to construct an equilateral triangle."
         catalog_nodes = filter(record -> record["kind"] == 7, canonical)
         @test count(record -> record["node_kind"] == 2, catalog_nodes) == 1
         @test all(record -> record["node_kind"] ==
@@ -119,6 +124,47 @@ end
                 foreach(record -> record["is_default"] = false,
                     filter(record -> record["kind"] == 10, records))
             end),
+            ("invalid exercise UUID", records -> begin
+                index = first(findall(record -> record["kind"] == 12, records))
+                records[index]["exercise_id"] = "not-a-uuid"
+            end),
+            ("invalid exercise reference", records -> begin
+                index = first(findall(record -> record["kind"] == 12, records))
+                records[index]["reference"] = "Elements-I-1"
+            end),
+            ("missing exercise animation", records -> begin
+                index = first(findall(record -> record["kind"] == 12, records))
+                records[index]["animation_id"] =
+                    "00000000-0000-0000-0000-000000000001"
+            end),
+            ("blank exercise instructions", records -> begin
+                index = first(findall(record -> record["kind"] == 12, records))
+                records[index]["instructions"] = " \n\t"
+            end),
+            ("oversized exercise instructions", records -> begin
+                index = first(findall(record -> record["kind"] == 12, records))
+                records[index]["instructions"] = repeat("x", 32 * 1024 + 1)
+            end),
+            ("reused retired reference", records -> begin
+                exercise = only(filter(record -> record["kind"] == 12, records))
+                push!(records, Dict(
+                    "schema" => 4, "kind" => 13,
+                    "exercise_id" => exercise["exercise_id"],
+                    "reference" => exercise["reference"],
+                    "identity_retired" => false))
+                sort!(records; by=record -> (
+                    record["kind"], record_identity_for_test(record)))
+            end),
+            ("reused retired identity", records -> begin
+                exercise = only(filter(record -> record["kind"] == 12, records))
+                push!(records, Dict(
+                    "schema" => 4, "kind" => 13,
+                    "exercise_id" => exercise["exercise_id"],
+                    "reference" => "elements-i-old",
+                    "identity_retired" => true))
+                sort!(records; by=record -> (
+                    record["kind"], record_identity_for_test(record)))
+            end),
         ]
         for (name, mutate!) in malformed_cases
             records = deepcopy(canonical)
@@ -131,6 +177,32 @@ end
             @test_throws ErrorException Main.run_content_database_builder(
                 builder, malformed_path, output_path, malformed_fingerprint)
         end
+
+        renamed_records = deepcopy(canonical)
+        exercise = only(filter(record -> record["kind"] == 12, renamed_records))
+        push!(renamed_records, Dict(
+            "schema" => 4, "kind" => 13,
+            "exercise_id" => exercise["exercise_id"],
+            "reference" => "elements-i-old",
+            "identity_retired" => false))
+        sort!(renamed_records; by=record -> (
+            record["kind"], record_identity_for_test(record)))
+        renamed_path = joinpath(directory, "renamed-reference.jsonl")
+        renamed_fingerprint = write_content_fixture(renamed_path, renamed_records)
+        Main.run_content_database_builder(
+            builder, renamed_path, joinpath(directory, "renamed-reference.sqlite3"),
+            renamed_fingerprint)
+
+        full_text_records = deepcopy(canonical)
+        full_text_exercise = only(filter(
+            record -> record["kind"] == 12, full_text_records))
+        full_text_exercise["instructions"] = repeat("x", 32 * 1024)
+        full_text_path = joinpath(directory, "maximum-exercise-text.jsonl")
+        full_text_fingerprint = write_content_fixture(full_text_path, full_text_records)
+        Main.run_content_database_builder(
+            builder, full_text_path,
+            joinpath(directory, "maximum-exercise-text.sqlite3"),
+            full_text_fingerprint)
 
         @testset "Content builder compile-time input identity" begin
             mktempdir() do directory
@@ -158,7 +230,7 @@ end
         canonical_lines = split(read(corpus_path, String), '\n'; keepempty=false)
         malformed_shapes = [
             ("reordered-fields", replace(canonical_lines[1],
-                "\"schema\":3,\"kind\":1" => "\"kind\":1,\"schema\":3")),
+                "\"schema\":4,\"kind\":1" => "\"kind\":1,\"schema\":4")),
             ("unknown-field", replace(canonical_lines[1],
                 "\"value\":\"en-US\"}" => "\"value\":\"en-US\",\"unknown\":0}")),
             ("noncompact-record", replace(canonical_lines[1],

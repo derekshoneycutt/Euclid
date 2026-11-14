@@ -9,6 +9,7 @@ using Test
         include("euclidrepl_tests.jl")
         include("repl_transforms_tests.jl")
         include("exercise_header_tests.jl")
+        include("exercise_query_tests.jl")
     end
 
     @testset "Syntax Highlighting Adapter" begin
@@ -45,6 +46,7 @@ using Test
 
     @testset "Runtime Host" begin
         include("runtime_host_tests.jl")
+        include("exercise_menu_tests.jl")
     end
 
     @testset "Completion Adapter" begin

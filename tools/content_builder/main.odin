@@ -9,9 +9,13 @@ import "core:os"
 import "core:strings"
 import "core:unicode/utf8"
 
-CONTENT_CORPUS_SCHEMA_VERSION :: 3
+CONTENT_CORPUS_SCHEMA_VERSION :: 4
 CONTENT_MAX_BYTES :: 4 * 1024 * 1024
-CONTENT_LINE_MAX_BYTES :: 16 * 1024
+CONTENT_LINE_MAX_BYTES :: 34 * 1024
+EXERCISE_INSTRUCTIONS_BYTE_CAPACITY :: 32 * 1024
+EXERCISE_REFERENCE_BYTE_CAPACITY :: 16
+EXERCISE_TITLE_BYTE_CAPACITY :: 256
+EXERCISE_RECORD_CAPACITY :: 4096
 EXPECTED_LOCALE_COUNT :: 1
 EXPECTED_MESSAGE_COUNT :: 207
 EXPECTED_TRANSLATION_COUNT :: 207
@@ -23,8 +27,8 @@ EXPECTED_AVAILABILITY_COUNT :: 141
 EXPECTED_PROJECTION_COUNT :: 140
 SOURCE_METADATA_COUNT :: 6
 
-RECORD_FIELD_COUNTS :: [12]int{0, 4, 4, 5, 6, 5, 4, 9, 6, 6, 7, 10}
-RECORD_FIELDS :: [12][10]string{
+RECORD_FIELD_COUNTS :: [14]int{0, 4, 4, 5, 6, 5, 4, 9, 6, 6, 7, 10, 8, 5}
+RECORD_FIELDS :: [14][10]string{
     {},
     {"schema", "kind", "key", "value", "", "", "", "", "", ""},
     {"schema", "kind", "tag", "is_default", "", "", "", "", "", ""},
@@ -44,6 +48,10 @@ RECORD_FIELDS :: [12][10]string{
         "edition_id", "is_default", "", "", ""},
     {"schema", "kind", "source_namespace", "animation_id", "locale_tag", "edition_id",
         "display_name", "hierarchy_path", "semantic_text", "aliases"},
+    {"schema", "kind", "exercise_id", "animation_id", "reference", "title",
+        "display_order", "instructions", "", ""},
+    {"schema", "kind", "exercise_id", "reference", "identity_retired",
+        "", "", "", "", ""},
 }
 
 Content_Optional_String :: union {
@@ -81,6 +89,12 @@ Content_Record :: struct {
     hierarchy_path: string,
     semantic_text: string,
     aliases: []string,
+    exercise_id: string,
+    reference: string,
+    title: string,
+    display_order: int,
+    instructions: string,
+    identity_retired: bool,
 }
 
 Message_Signature :: struct {
@@ -110,6 +124,8 @@ NAME_INSERT_SQL :: #load("sql/name_insert.sql", string)
 EDITION_INSERT_SQL :: #load("sql/edition_insert.sql", string)
 AVAILABILITY_INSERT_SQL :: #load("sql/availability_insert.sql", string)
 PROJECTION_INSERT_SQL :: #load("sql/projection_insert.sql", string)
+EXERCISE_INSERT_SQL :: #load("sql/exercise_insert.sql", string)
+RETIRED_REFERENCE_INSERT_SQL :: #load("sql/retired_reference_insert.sql", string)
 PLAIN_INSERT_SQL :: #load("sql/plain_insert.sql", string)
 
 Builder_Statements :: struct {
@@ -124,13 +140,15 @@ Builder_Statements :: struct {
     edition: sqlite.Statement,
     availability: sqlite.Statement,
     projection: sqlite.Statement,
+    exercise: sqlite.Statement,
+    retired_reference: sqlite.Statement,
     plain: sqlite.Statement,
 }
 
 Builder_Database :: struct {
     connection: sqlite.Connection,
     statements: Builder_Statements,
-    counts: [12]int,
+    counts: [14]int,
 }
 
 // Fail with the active SQLite connection's diagnostic text.
@@ -281,6 +299,29 @@ valid_animation_id :: proc(value: string) -> bool {
         }
     }
     return true
+}
+
+// Accept the stable lowercase ASCII spelling used for friendly exercise references.
+valid_exercise_reference :: proc(value: string) -> bool {
+    if len(value) < 1 || len(value) > EXERCISE_REFERENCE_BYTE_CAPACITY {
+        return false
+    }
+    for character in transmute([]u8)value {
+        if !(character >= 'a' && character <= 'z') &&
+           !(character >= '0' && character <= '9') &&
+           character != '-' && character != '_' {
+            return false
+        }
+    }
+    return true
+}
+
+// Require nonblank bounded plain text without accepting control storage bytes.
+validate_exercise_instructions :: proc(value: string) {
+    validate_text(value, "exercise instructions",
+        EXERCISE_INSTRUCTIONS_BYTE_CAPACITY, false)
+    require(len(strings.trim_space(value)) > 0,
+        "exercise instructions are blank")
 }
 
 // Verify the supplied whole-record-stream SHA-256 identity.
@@ -449,6 +490,10 @@ record_identity :: proc(record: Content_Record) -> string {
         return fmt.tprintf("%s|%s|%s|%s",
         record.source_namespace, record.animation_id,
         record.locale_tag, record.edition_id)
+    case 12:
+        return record.exercise_id
+    case 13:
+        return record.reference
     }
     return ""
 }
@@ -645,14 +690,43 @@ validate_content_record :: proc(record: Content_Record) {
         validate_text(record.edition_id, "availability edition", 64, false)
     case 11:
         validate_projection(record)
+    case 12:
+        validate_exercise_record(record)
+    case 13:
+        validate_retired_reference_record(record)
     }
+}
+
+// Validate one authored built-in exercise identity, association, and plain text.
+validate_exercise_record :: proc(record: Content_Record) {
+    validate_text(record.exercise_id, "exercise UUID", 36, false)
+    validate_text(record.animation_id, "exercise animation UUID", 36, false)
+    require(valid_animation_id(record.exercise_id) &&
+        valid_animation_id(record.animation_id),
+        "invalid exercise identity or animation association")
+    require(valid_exercise_reference(record.reference),
+        "invalid built-in exercise reference")
+    validate_text(record.title, "exercise title", EXERCISE_TITLE_BYTE_CAPACITY, false)
+    require(len(strings.trim_space(record.title)) > 0,
+        "exercise title is blank")
+    validate_exercise_instructions(record.instructions)
+    require(record.display_order >= 0 && record.display_order <= int(max(i32)),
+        "invalid exercise display order")
+}
+
+// Validate one retired alias reservation without deriving identity from its spelling.
+validate_retired_reference_record :: proc(record: Content_Record) {
+    validate_text(record.exercise_id, "retired exercise UUID", 36, false)
+    require(valid_animation_id(record.exercise_id) &&
+        valid_exercise_reference(record.reference),
+        "invalid retired exercise reference")
 }
 
 // Validate the versioned envelope before routing to bounded payload validation.
 validate_record :: proc(record: Content_Record) {
     require(record.schema == CONTENT_CORPUS_SCHEMA_VERSION,
         "unsupported content corpus schema")
-    require(record.kind >= 1 && record.kind <= 11,
+    require(record.kind >= 1 && record.kind <= 13,
         "unknown content record kind")
     if record.kind <= 5 {
         validate_ui_record(record)
@@ -837,6 +911,30 @@ insert_projection :: proc(
     insert_done(database, plain, "spellfix vocabulary insertion")
 }
 
+// Insert one bounded authored exercise into the immutable built-in database.
+insert_exercise :: proc(database: ^Builder_Database, record: Content_Record) {
+    statement := &database.statements.exercise
+    bind_text(database, statement, 1, record.exercise_id)
+    bind_text(database, statement, 2, "builtin")
+    bind_text(database, statement, 3, record.animation_id)
+    bind_text(database, statement, 4, record.reference)
+    bind_text(database, statement, 5, record.title)
+    bind_i32(database, statement, 6, record.display_order, "exercise order binding")
+    bind_text(database, statement, 7, record.instructions)
+    insert_done(database, statement, "exercise insertion")
+}
+
+// Reserve one retired alias and retain whether its exercise identity was deleted.
+insert_retired_reference :: proc(
+    database: ^Builder_Database, record: Content_Record) {
+    statement := &database.statements.retired_reference
+    bind_text(database, statement, 1, record.exercise_id)
+    bind_text(database, statement, 2, record.reference)
+    bind_i32(database, statement, 3, int(record.identity_retired),
+        "retired exercise identity binding")
+    insert_done(database, statement, "retired exercise reference insertion")
+}
+
 // Insert metadata and UI declarations through their signature-aware statements.
 insert_ui_record :: proc(
     database: ^Builder_Database, record: Content_Record,
@@ -878,6 +976,10 @@ insert_content_record :: proc(database: ^Builder_Database, record: Content_Recor
         insert_availability(database, record)
     case 11:
         insert_projection(database, record, database.counts[11] + 1)
+    case 12:
+        insert_exercise(database, record)
+    case 13:
+        insert_retired_reference(database, record)
     }
 }
 
@@ -909,6 +1011,9 @@ prepare_builder_statements :: proc(database: ^Builder_Database) {
     prepare_statement(database, &statements.availability,
         cstring(AVAILABILITY_INSERT_SQL))
     prepare_statement(database, &statements.projection, cstring(PROJECTION_INSERT_SQL))
+    prepare_statement(database, &statements.exercise, cstring(EXERCISE_INSERT_SQL))
+    prepare_statement(database, &statements.retired_reference,
+        cstring(RETIRED_REFERENCE_INSERT_SQL))
     prepare_statement(database, &statements.plain, cstring(PLAIN_INSERT_SQL))
 }
 
@@ -926,6 +1031,8 @@ finalize_builder_statements :: proc(database: ^Builder_Database) {
     finalize_statement(database, &statements.edition)
     finalize_statement(database, &statements.availability)
     finalize_statement(database, &statements.projection)
+    finalize_statement(database, &statements.exercise)
+    finalize_statement(database, &statements.retired_reference)
     finalize_statement(database, &statements.plain)
 }
 
@@ -1003,10 +1110,11 @@ require_query_count :: proc(
 }
 
 // Return a deterministic semicolon-separated table count summary.
-table_counts_value :: proc(counts: [12]int) -> string {
-    return fmt.tprintf("1=%d;2=%d;3=%d;4=%d;5=%d;6=%d;7=%d;8=%d;9=%d;10=%d;11=%d",
+table_counts_value :: proc(counts: [14]int) -> string {
+    return fmt.tprintf("1=%d;2=%d;3=%d;4=%d;5=%d;6=%d;7=%d;8=%d;9=%d;10=%d;11=%d;12=%d;13=%d",
         counts[1], counts[2], counts[3], counts[4], counts[5], counts[6],
-        counts[7], counts[8], counts[9], counts[10], counts[11])
+        counts[7], counts[8], counts[9], counts[10], counts[11], counts[12],
+        counts[13])
 }
 
 // Insert builder-derived metadata after declaration counts are frozen.
@@ -1034,7 +1142,7 @@ validate_source_metadata :: proc(database: ^Builder_Database) {
     require_query_count(database,
         "SELECT count(*) FROM content_metadata", SOURCE_METADATA_COUNT,
         "source metadata count")
-    require_metadata_value(database, "schema_version", "3")
+    require_metadata_value(database, "schema_version", "4")
     require_metadata_value(database, "tool_compatibility",
         "euclid-content-builder-v1")
     require_metadata_value(database, "sqlite_version", "3.53.4")
@@ -1069,6 +1177,9 @@ validate_declaration_coverage :: proc(database: ^Builder_Database) {
     require(counts[9] == EXPECTED_EDITION_COUNT, "edition count mismatch")
     require(counts[10] == EXPECTED_AVAILABILITY_COUNT, "availability count mismatch")
     require(counts[11] == EXPECTED_PROJECTION_COUNT, "search projection count mismatch")
+    require(counts[12] <= EXERCISE_RECORD_CAPACITY &&
+        counts[13] <= EXERCISE_RECORD_CAPACITY,
+        "exercise declarations exceed capacity")
     require_query_count(database,
         "SELECT count(*) FROM ui_message m CROSS JOIN locale l " +
         "LEFT JOIN ui_translation t ON t.message_key=m.message_key " +
@@ -1080,6 +1191,20 @@ validate_declaration_coverage :: proc(database: ^Builder_Database) {
         "AND c.animation_id=n.animation_id AND c.locale_tag=l.tag " +
         "WHERE c.animation_id IS NULL",
         0, "catalogue name coverage")
+}
+
+// Enforce non-reuse and stable-identity rules for retired built-in references.
+validate_exercise_reference_coverage :: proc(database: ^Builder_Database) {
+    require_query_count(database,
+        "SELECT count(*) FROM builtin_exercise e " +
+        "JOIN retired_exercise_reference r ON r.reference=e.reference",
+        0, "retired reference reuse")
+    require_query_count(database,
+        "SELECT count(*) FROM retired_exercise_reference r " +
+        "LEFT JOIN builtin_exercise e ON e.exercise_id=r.exercise_id " +
+        "WHERE (r.identity_retired=1 AND e.exercise_id IS NOT NULL) " +
+        "OR (r.identity_retired=0 AND e.exercise_id IS NULL)",
+        0, "retired identity consistency")
 }
 
 // Require complete subject availability with one default per subject and locale.
@@ -1146,6 +1271,7 @@ validate_content_coverage :: proc(database: ^Builder_Database) {
     validate_declaration_coverage(database)
     validate_availability_coverage(database)
     validate_catalog_coverage(database)
+    validate_exercise_reference_coverage(database)
 }
 
 // Validate the generated search indexes and their original query projection.

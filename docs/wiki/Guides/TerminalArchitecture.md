@@ -875,6 +875,98 @@ show_exercise!("On a given finite straight line to construct an equilateral tria
 hide_exercise!()
 ```
 
+### Interactive Exercise Browser
+
+Run `choose_exercise()` in Terminal to browse and load instructions. It opens only
+when requested; selecting Terminal does not automatically open a menu.
+
+```julia
+choose_exercise()
+```
+
+The browser uses Julia's standard `REPL.TerminalMenus.RadioMenu` and `request`.
+Select **Built-in exercises**, then browse the actual catalogue by readable names:
+**Euclid's Elements → Book I → Propositions → Proposition I → Load: Construct an
+equilateral triangle**. No UUIDs or references need to be copied or typed.
+
+- Use Up/Down, Home/End, or Page Up/Page Down to move; Enter selects.
+- **Back** returns to the parent and preserves its page and selection.
+- **More catalogue entries** and **More exercises** fetch bounded 16-row windows;
+  previous-page actions return to earlier results.
+- Empty branches say **No exercises here** and still offer Back and Cancel.
+- **Cancel**, q, or Ctrl-C returns to the ordinary REPL without loading anything.
+- Loading shows the existing instruction header without changing the selected
+  animation, drawing, variables, or retained Terminal output.
+
+One evaluation-scoped interactive lease covers the browser, including content
+queries between menus. Julia's `request` owns keyboard handling and cursor-mode
+restoration. A narrow `ConfiguredMenu` viewport adapter delegates selection to
+`RadioMenu`, clips labels to the current pane width, and adjusts visible rows at the
+next key/redraw after a resize. It introduces no input stack or graphical browser.
+Failure, interruption, navigation, and session retirement unwind the lease.
+
+The display routes ordinary encoded key/text bytes through the existing bounded
+`Terminal_Interactive_Input` envelopes, identified by evaluation request and Terminal
+generation. The native Julia owner forwards acquired/released notifications and
+installs accepted pane geometry and capabilities through rooted bridge callbacks.
+Unsent bytes remain queued under pressure and are discarded when their input owner
+changes; they never become text in a later prompt. Geometry/capability snapshots are
+retried until Julia acknowledges the exact accepted values.
+
+The real-input
+[`exercise-menu-acceptance` scenario](../../../tools/scenarios/exercise-menu-acceptance.jsonl)
+navigates to Proposition I, loads exact instructions, verifies attempt preservation,
+resizes and cancels, then types into the restored REPL. The
+[`lifecycle scenario`](../../../tools/scenarios/exercise-menu-lifecycle-acceptance.jsonl)
+checks back navigation, Ctrl-C, and leaving Terminal while a menu awaits input.
+
+### Programmatic Exercise Queries
+
+Stored built-in instructions use the existing content worker, not a second database
+connection or hierarchy. These session helpers retain typed bounded results while
+Julia's standard plain-text display shows readable titles, friendly references,
+page ranges, and empty states instead of constructor/UUID dumps:
+
+```julia
+exercises()                         # (:builtin,)
+exercises("builtin")                # root catalogue children
+exercises("builtin"; parent=animation_uuid, offset=0, limit=16)
+exercises("builtin", animation_uuid) # exercises associated with this exact UUID
+resolve_exercise("builtin:elements-i-1")
+load_exercise!("builtin:elements-i-1")
+load_exercise!("builtin:a9237c51-c9f6-4d54-8bf5-f8c651906e1c")
+```
+
+`ExercisePage.entries`, `.offset`, `.total`, and `.more` describe a page of at most
+16 rows. Catalogue children carry actual animation UUIDs, never title-matched
+identities. Exercise summaries expose `.id`, `.animation_id`, `.reference`, and
+`.title`. Both `builtin:alias` and `builtin:canonical-lowercase-UUID` refer to the
+same stored exercise; unqualified references are rejected.
+
+An admitted animation with no exercises returns a successful empty page.
+`ExerciseQueryError.reason` distinguishes `not_found`, `retired`,
+`missing_animation`, `database_failed`, `unavailable`, and `superseded`.
+One fixed reply slot in the Julia runtime carries pointer-free worker results.
+Julia waits cooperatively and copies into task-owned bounded buffers; interruption
+or the 30-second deadline releases its slot. A newer load supersedes an older
+operation; simultaneous non-load queries report `busy_or_inactive`.
+
+The query bridge borrows one typed input record during admission and one typed
+buffer record during polling. Admission copies source bytes before returning;
+polling copies completed rows and text into Julia-owned destinations. Julia roots
+each backing value for the native call and returns an internal `ExerciseQueryReply`
+containing metadata, rows, and owned text. Neither side retains borrowed pointers.
+
+The display correlates replies with request, content-index, animation, and header
+intent identities. Hide, newer show/load, navigation/reset, and content replacement
+prevent stale instruction publication. Accepted loads call the existing header
+show operation. They do not navigate, reset the Terminal, clear output, discard
+variables, or alter the drawing. The
+[`exercise-repl-acceptance` scenario](../../../tools/scenarios/exercise-repl-acceptance.jsonl)
+loads through actual Terminal input and checks preserved attempt state.
+
+### Drawing Helpers
+
 `point!` returns a `BridgeShapeEntityResult` with the point's packed entity index.
 Like line and circle handles, this handle can be passed directly to `hide!` after
 drawing completes: `p = point!([0.5,0.5,0])`, then `hide!(p)`.

@@ -48,7 +48,7 @@ function content_record_field(record, name::String)
     return last(record.fields[index])
 end
 
-"""Require the schema-3 projection to preserve each schema-2 search input."""
+"""Require the schema-4 projection to preserve each schema-2 search input."""
 function main()
     descriptors = ProjectionCompatibilityInput.AnimationDescriptors
     manifest = ProjectionCompatibilityInput.AuthoredManifest

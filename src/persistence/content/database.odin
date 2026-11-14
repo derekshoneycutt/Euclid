@@ -118,6 +118,13 @@ search_finalize :: proc(statement: ^sqlite.Statement, ok: ^bool) {
 content_database_close :: proc(database: ^Content_Database) -> bool {
     ok := true
     search_finalize(&database.statements.projection_rows, &ok)
+    search_finalize(&database.statements.exercise_read, &ok)
+    search_finalize(&database.statements.exercise_retired, &ok)
+    search_finalize(&database.statements.exercise_resolve, &ok)
+    search_finalize(&database.statements.exercise_list_count, &ok)
+    search_finalize(&database.statements.exercise_list_rows, &ok)
+    search_finalize(&database.statements.retired_exercise_validation_rows, &ok)
+    search_finalize(&database.statements.exercise_validation_rows, &ok)
     search_finalize(&database.statements.availability_rows, &ok)
     search_finalize(&database.statements.edition_rows, &ok)
     search_finalize(&database.statements.name_rows, &ok)
@@ -148,7 +155,28 @@ content_database_close :: proc(database: ^Content_Database) -> bool {
 content_database_prepare_statements :: proc(database: ^Content_Database) -> bool {
     return content_database_prepare_search_statements(database) &&
         content_database_prepare_declaration_statements(database) &&
-        content_database_prepare_catalogue_statements(database)
+        content_database_prepare_catalogue_statements(database) &&
+        content_database_prepare_exercise_statements(database)
+}
+
+// Prepare bounded built-in exercise validation, browsing, resolution, and read statements.
+content_database_prepare_exercise_statements :: proc(
+    database: ^Content_Database) -> bool {
+    statements := &database.statements
+    return content_database_prepare(database, &statements.exercise_validation_rows,
+        cstring(EXERCISE_VALIDATION_ROWS_SQL)) &&
+        content_database_prepare(database, &statements.retired_exercise_validation_rows,
+            cstring(RETIRED_EXERCISE_VALIDATION_ROWS_SQL)) &&
+        content_database_prepare(database, &statements.exercise_list_rows,
+            cstring(EXERCISE_LIST_ROWS_SQL)) &&
+        content_database_prepare(database, &statements.exercise_list_count,
+            cstring(EXERCISE_LIST_COUNT_SQL)) &&
+        content_database_prepare(database, &statements.exercise_resolve,
+            cstring(EXERCISE_RESOLVE_SQL)) &&
+        content_database_prepare(database, &statements.exercise_retired,
+            cstring(EXERCISE_RETIRED_SQL)) &&
+        content_database_prepare(database, &statements.exercise_read,
+            cstring(EXERCISE_READ_SQL))
 }
 
 // Prepare one named statement against the owned connection.

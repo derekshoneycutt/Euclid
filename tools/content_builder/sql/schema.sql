@@ -106,6 +106,24 @@ CREATE TABLE search_projection (
         REFERENCES availability(
             source_namespace, animation_id, locale_tag, edition_id)
 );
+CREATE TABLE builtin_exercise (
+    exercise_id TEXT PRIMARY KEY,
+    source_namespace TEXT NOT NULL CHECK (source_namespace = 'builtin'),
+    animation_id TEXT NOT NULL,
+    reference TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    display_order INTEGER NOT NULL CHECK (display_order >= 0),
+    instructions TEXT NOT NULL CHECK (
+        length(CAST(instructions AS BLOB)) BETWEEN 1 AND 32768),
+    UNIQUE (animation_id, display_order),
+    FOREIGN KEY (source_namespace, animation_id)
+        REFERENCES catalog_node(source_namespace, animation_id)
+) WITHOUT ROWID;
+CREATE TABLE retired_exercise_reference (
+    exercise_id TEXT NOT NULL,
+    reference TEXT PRIMARY KEY,
+    identity_retired INTEGER NOT NULL CHECK (identity_retired IN (0, 1))
+) WITHOUT ROWID;
 CREATE VIRTUAL TABLE animation_search USING fts5(
     display_name,
     hierarchy_path,

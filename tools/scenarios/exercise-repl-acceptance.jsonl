@@ -1,0 +1,48 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"attempt=41; p=point!([0.3,0.4,0];duration=0.05); println(\"exercise-attempt-\"*\"saved\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"exercise-attempt-saved","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; before=OdinJuliaBridge.get_point(state_ptr,p.index).pos; "}
+{"type":"before_count=status().managed_shape_count; println(\"exercise-drawing-\"*\"ready\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"exercise-drawing-ready","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"loaded=load_exercise!(\"builtin:elements-i-1\"); println(\"exercise-load-\"*\"accepted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"exercise-load-accepted","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_exercise_header":"On a given finite straight line to construct an equilateral triangle."}
+{"wait_state":"exercise_header_visible","timeout_ms":10000}
+{"type":"@assert attempt==41 && status().managed_shape_count==before_count; "}
+{"type":"@assert OdinJuliaBridge.get_point(state_ptr,p.index).pos==before; "}
+{"type":"@assert loaded.reference==\"builtin:elements-i-1\"; println(\"exercise-attempt-\"*\"preserved\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"exercise-attempt-preserved","timeout_ms":10000}
+{"wait_terminal_contains":"exercise-attempt-saved","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"@assert exercises()==(:builtin,); roots=exercises(\"builtin\";limit=1); "}
+{"type":"@assert length(roots.entries)==1; "}
+{"type":"page=exercises(\"builtin\",loaded.animation_id;limit=1); @assert only(page.entries).id==loaded.id; "}
+{"type":"@assert isempty(exercises(\"builtin\",loaded.animation_id;offset=page.total).entries); "}
+{"type":"@assert resolve_exercise(\"builtin:\"*string(loaded.id)).id==loaded.id; "}
+{"type":"load_exercise!(\"builtin:\"*string(loaded.id)); println(\"exercise-catalogue-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"exercise-catalogue-verified","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_exercise_header":"On a given finite straight line to construct an equilateral triangle."}
+{"type":"missing=try resolve_exercise(\"builtin:missing\"); catch e; e; end; "}
+{"type":"@assert missing isa OdinJuliaBridge.ExerciseQueryError && missing.reason==:not_found; "}
+{"type":"@assert attempt==41 && OdinJuliaBridge.get_point(state_ptr,p.index).pos==before; "}
+{"type":"println(\"exercise-failure-\"*\"distinct\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"exercise-failure-distinct","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/exercise-repl-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

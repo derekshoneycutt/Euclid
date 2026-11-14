@@ -8,9 +8,9 @@ using ..LocalizedContent
 export CONTENT_CORPUS_SCHEMA_VERSION, ContentRecord,
     build_content_records, write_content_records
 
-const CONTENT_CORPUS_SCHEMA_VERSION = 3
+const CONTENT_CORPUS_SCHEMA_VERSION = 4
 const CONTENT_CORPUS_MAX_BYTES = 4 * 1024 * 1024
-const CONTENT_RECORD_MAX_BYTES = 16 * 1024
+const CONTENT_RECORD_MAX_BYTES = 34 * 1024
 const CanonicalValue = Union{String,Int,Bool,Nothing,Vector{String}}
 
 """One versioned declaration in the deterministic content record stream."""
@@ -264,6 +264,29 @@ function append_search_records!(
     return nothing
 end
 
+"""Append stable exercise declarations and reserved retired references."""
+function append_exercise_records!(
+    records::Vector{ContentRecord}, exercises, retired_references)
+    for exercise in exercises
+        identity = string(exercise.id)
+        push!(records, content_record(UInt8(12), identity,
+            "exercise_id" => identity,
+            "animation_id" => string(exercise.animation_id),
+            "reference" => exercise.reference,
+            "title" => exercise.title,
+            "display_order" => exercise.display_order,
+            "instructions" => exercise.instructions))
+    end
+    for retired in retired_references
+        identity = retired.reference
+        push!(records, content_record(UInt8(13), identity,
+            "exercise_id" => string(retired.exercise_id),
+            "reference" => retired.reference,
+            "identity_retired" => retired.identity_retired))
+    end
+    return nothing
+end
+
 """Reject a serialized corpus that exceeds aggregate or per-record bounds."""
 function validate_content_record_sizes(records::Vector{ContentRecord})
     encoded = IOBuffer()
@@ -282,12 +305,12 @@ end
 function build_content_records(
     descriptors::Vector{AnimationDescriptor},
     manifest::LocalizedContent.ContentManifest,
-    content_loader::Function)
+    content_loader::Function, exercises=(), retired_references=())
     validate_catalog(descriptors)
     LocalizedContent.validate_content_manifest(manifest, descriptors)
     records = ContentRecord[]
     metadata = (
-        "schema_version" => "3",
+        "schema_version" => "4",
         "tool_compatibility" => "euclid-content-builder-v1",
         "sqlite_version" => "3.53.4",
         "tokenizer_version" => "porter-unicode61-v1",
@@ -300,6 +323,7 @@ function build_content_records(
     append_catalog_records!(records, manifest, descriptors)
     append_edition_records!(records, manifest)
     append_search_records!(records, descriptors, manifest, content_loader)
+    append_exercise_records!(records, exercises, retired_references)
     sort!(records; by=record -> (record.kind, record.identity))
     validate_content_record_sizes(records)
     return records

@@ -11,6 +11,7 @@ end
     @test "animation_catalog.jl" in relative_inputs
     @test "localized_content.jl" in relative_inputs
     @test "repl_transforms.jl" in relative_inputs
+    @test "repl_exercises.jl" in relative_inputs
     @test "animations/trochoids.jl" in relative_inputs
     @test "animations/cycloids.jl" in relative_inputs
     @test "animations/conics.jl" in relative_inputs

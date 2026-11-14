@@ -188,6 +188,7 @@ const SYSIMAGE_STABLE_INPUTS = String[
     "ticks.jl",
     "euclidrepl.jl",
     "repl_transforms.jl",
+    "repl_exercises.jl",
     "terminal_container.jl",
     "eval.jl",
     "interpolation.jl",
@@ -1393,7 +1394,7 @@ package_identity=$package_identity
 content_database=content/content.sqlite3
 content_database_sha256=$(content.database_sha256)
 content_fingerprint=$(content.content_fingerprint)
-content_schema_version=3
+content_schema_version=4
 shader_root=shaders
 shader_manifest=shaders/manifest.toml
 shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
@@ -1417,7 +1418,7 @@ function staged_asset_package_identity()
     end
     sort!(paths; by=path -> replace(relpath(path, ASSETS_STAGING_DIR), '\\' => '/'))
     return fingerprint_sysimage_inputs(
-        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1-content-schema-3")
+        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1-content-schema-4")
 end
 
 """Populate asset staging with content and validated generated artifacts."""

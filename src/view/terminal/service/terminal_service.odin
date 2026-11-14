@@ -763,6 +763,8 @@ terminal_service_update_visible :: proc(
     prepared := uiterminal.terminal_prepare_frame(
         state, terminal_frame, terminal_font, bounds,
         input_runtime != nil && card(input_runtime^.mouse_captured) > 0)
+    terminal_service_publish_interactive_environment(state)
+    terminal_service_interactive_input(state, input_runtime, prepared.content_frame)
     shell_service_update(
         state, input_runtime, prepared.content_frame, prepared.geometry_change)
     state^.terminal.history_explorer_open_allowed =

@@ -17,6 +17,14 @@ NAME_ROWS_SQL :: #load("sql/name_rows.sql", string)
 EDITION_ROWS_SQL :: #load("sql/edition_rows.sql", string)
 AVAILABILITY_ROWS_SQL :: #load("sql/availability_rows.sql", string)
 PROJECTION_ROWS_SQL :: #load("sql/projection_rows.sql", string)
+EXERCISE_VALIDATION_ROWS_SQL :: #load("sql/exercise_validation_rows.sql", string)
+RETIRED_EXERCISE_VALIDATION_ROWS_SQL :: #load(
+    "sql/retired_exercise_validation_rows.sql", string)
+EXERCISE_LIST_ROWS_SQL :: #load("sql/exercise_list_rows.sql", string)
+EXERCISE_LIST_COUNT_SQL :: #load("sql/exercise_list_count.sql", string)
+EXERCISE_RESOLVE_SQL :: #load("sql/exercise_resolve.sql", string)
+EXERCISE_RETIRED_SQL :: #load("sql/exercise_retired.sql", string)
+EXERCISE_READ_SQL :: #load("sql/exercise_read.sql", string)
 
 // Persistent named statement set for schema admission and compatibility search.
 Content_Statements :: struct {
@@ -35,4 +43,11 @@ Content_Statements :: struct {
     edition_rows: sqlite.Statement,
     availability_rows: sqlite.Statement,
     projection_rows: sqlite.Statement,
+    exercise_validation_rows: sqlite.Statement,
+    retired_exercise_validation_rows: sqlite.Statement,
+    exercise_list_rows: sqlite.Statement,
+    exercise_list_count: sqlite.Statement,
+    exercise_resolve: sqlite.Statement,
+    exercise_retired: sqlite.Statement,
+    exercise_read: sqlite.Statement,
 }

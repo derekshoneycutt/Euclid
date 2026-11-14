@@ -279,6 +279,10 @@ scenario_runtime_terminal_input_tracks_foreground_owner :: proc(t: ^testing.T) {
     state^.terminal.awaiting_eval = true
     testing.expect(t, !viewscenario.scenario_terminal_input_available(state))
 
+    state^.terminal.interactive_input_request_id = 1
+    testing.expect(t, viewscenario.scenario_terminal_input_available(state))
+    state^.terminal.interactive_input_request_id = 0
+
     state^.shell.phase = .Running
     testing.expect(t, viewscenario.scenario_terminal_input_available(state))
 }

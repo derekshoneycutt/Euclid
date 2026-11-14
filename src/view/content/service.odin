@@ -9,11 +9,13 @@ import "core:sync/chan"
 import "core:thread"
 
 CONTENT_WORKER_CHANNEL_CAPACITY :: 8
+CONTENT_EXERCISE_RESULT_CHANNEL_CAPACITY :: 2
 CONTENT_SERVICE_EXTRA_ALLOCATOR_CAPACITY :: 64 * 1024
 CONTENT_SERVICE_ALLOCATOR_CAPACITY :: size_of(Content_Generation) * 2 +
     CONTENT_WORKER_CHANNEL_CAPACITY *
         (size_of(Content_Worker_Request) + size_of(Search_Query_Result) +
             size_of(Content_Control_Result)) +
+    CONTENT_EXERCISE_RESULT_CHANNEL_CAPACITY * size_of(Exercise_Query_Result) +
     CONTENT_SERVICE_EXTRA_ALLOCATOR_CAPACITY
 
 // Release dedicated service storage after every channel and generation borrower stops.
@@ -70,12 +72,22 @@ content_service_init_channels :: proc(
         return false
     }
     service.results = results
+    exercise_results, exercise_error := chan.create(
+        chan.Chan(Exercise_Query_Result),
+        CONTENT_EXERCISE_RESULT_CHANNEL_CAPACITY, allocator)
+    if exercise_error != .None {
+        _ = chan.destroy(service.results)
+        _ = chan.destroy(service.requests)
+        return false
+    }
+    service.exercise_results = exercise_results
     controls, control_error := chan.create(
         chan.Chan(Content_Control_Result), CONTENT_WORKER_CHANNEL_CAPACITY, allocator)
     if control_error == .None {
         service.control_results = controls
         return true
     }
+    _ = chan.destroy(service.exercise_results)
     _ = chan.destroy(service.results)
     _ = chan.destroy(service.requests)
     return false
@@ -119,6 +131,7 @@ content_service_rollback_start :: proc(service: ^Content_Service) {
         thread.destroy(service.worker)
     }
     _ = chan.destroy(service.control_results)
+    _ = chan.destroy(service.exercise_results)
     _ = chan.destroy(service.results)
     _ = chan.destroy(service.requests)
     content_service_release_allocator(service)
@@ -191,6 +204,38 @@ content_service_try_receive :: proc(
         return {}, false
     }
     return chan.try_recv(service.results)
+}
+
+// Submit one built-in exercise operation without blocking the display owner.
+content_service_try_submit_exercise :: proc(
+    service: ^Content_Service, request: Exercise_Query_Request) -> bool {
+    if service == nil || !service.running {
+        return false
+    }
+    kind := Content_Worker_Request_Kind.Exercise_List
+    switch request.kind {
+    case .List, .Children:
+        kind = .Exercise_List
+    case .Resolve_Alias:
+        kind = .Exercise_Resolve_Alias
+    case .Resolve_Uuid:
+        kind = .Exercise_Resolve_Uuid
+    case .Read_Uuid:
+        kind = .Exercise_Read
+    }
+    return chan.try_send(service.requests, Content_Worker_Request{
+        kind = kind,
+        exercise_query = request,
+    })
+}
+
+// Receive one bounded exercise result without blocking the display owner.
+content_service_try_receive_exercise :: proc(
+    service: ^Content_Service) -> (Exercise_Query_Result, bool) {
+    if service == nil || !service.running {
+        return {}, false
+    }
+    return chan.try_recv(service.exercise_results)
 }
 
 // Build one bounded worker request for a candidate immutable database.
@@ -352,6 +397,7 @@ content_service_destroy :: proc(service: ^Content_Service) {
     }
     if service.backing != nil {
         _ = chan.destroy(service.control_results)
+        _ = chan.destroy(service.exercise_results)
         _ = chan.destroy(service.results)
         _ = chan.destroy(service.requests)
         content_service_release_allocator(service)

@@ -25,7 +25,6 @@ Content_Database :: struct {
     connection: sqlite.Connection,
     statements: Content_Statements,
     index_generation: u64,
-    expected_table_counts: [12]u16,
+    expected_table_counts: [14]u16,
     expected_record_count: u32,
 }
-

@@ -21,6 +21,13 @@ CATALOG_NAME_BYTE_CAPACITY :: 256
 CATALOG_PATH_BYTE_CAPACITY :: 2 * 1024
 CATALOG_DATABASE_PATH_CAPACITY :: 4096
 SEARCH_FINGERPRINT_BYTE_COUNT :: 64
+EXERCISE_UUID_BYTE_COUNT :: 36
+EXERCISE_REFERENCE_BYTE_CAPACITY :: 16
+EXERCISE_TITLE_BYTE_CAPACITY :: 256
+EXERCISE_INSTRUCTIONS_BYTE_CAPACITY :: 32 * 1024
+EXERCISE_LIST_PAGE_CAPACITY :: 16
+EXERCISE_RECORD_CAPACITY :: 4096
+EXERCISE_QUERY_TEXT_CAPACITY :: EXERCISE_UUID_BYTE_COUNT
 CATALOG_TEXT_BYTE_CAPACITY :: CATALOG_RECORD_CAPACITY *
     (CATALOG_NAME_BYTE_CAPACITY + CATALOG_PATH_BYTE_CAPACITY)
 CONTENT_TEXT_BYTE_CAPACITY :: CATALOG_TEXT_BYTE_CAPACITY +
@@ -135,6 +142,80 @@ Search_Query_Result :: struct {
     suggestion_bytes: [SEARCH_QUERY_BYTE_CAPACITY]u8,
 }
 
+// Supported bounded operations against packaged built-in exercises.
+Exercise_Query_Kind :: enum u8 {
+    List,
+    Resolve_Alias,
+    Resolve_Uuid,
+    Read_Uuid,
+    Children,
+}
+
+// Explicit worker outcomes distinguish absent, retired, malformed, and failed reads.
+Exercise_Query_Status :: enum u8 {
+    Unavailable,
+    Ready,
+    Invalid_Request,
+    Not_Found,
+    Retired,
+    Database_Failed,
+    Missing_Animation,
+    Superseded,
+}
+
+// Bounded copy of one catalogue child, preserving its actual hierarchy identity.
+Exercise_Catalogue_Node :: struct {
+    animation_id: [EXERCISE_UUID_BYTE_COUNT]u8,
+    name_length: u16,
+    name: [CATALOG_NAME_BYTE_CAPACITY]u8,
+    kind: Catalog_Node_Kind,
+}
+
+// Bounded pointer-free exercise lookup or page request.
+Exercise_Query_Request :: struct {
+    generation: u64,
+    kind: Exercise_Query_Kind,
+    animation_id_length: u16,
+    animation_id: [EXERCISE_UUID_BYTE_COUNT]u8,
+    reference_length: u16,
+    reference: [EXERCISE_QUERY_TEXT_CAPACITY]u8,
+    result_offset: u32,
+    page_limit: u16,
+}
+
+// Fixed copy-out exercise summary with byte-counted UTF-8 fields.
+Exercise_Summary :: struct {
+    exercise_id_length: u16,
+    exercise_id: [EXERCISE_UUID_BYTE_COUNT]u8,
+    animation_id_length: u16,
+    animation_id: [EXERCISE_UUID_BYTE_COUNT]u8,
+    reference_length: u16,
+    reference: [EXERCISE_REFERENCE_BYTE_CAPACITY]u8,
+    title_length: u16,
+    title: [EXERCISE_TITLE_BYTE_CAPACITY]u8,
+    display_order: i32,
+}
+
+// Pointer-free bounded page, resolution, or instruction read result.
+Exercise_Query_Result :: struct {
+    generation: u64,
+    index_generation: u64,
+    kind: Exercise_Query_Kind,
+    status: Exercise_Query_Status,
+    result_offset: u32,
+    total_count: u32,
+    returned_count: u16,
+    more_available: bool,
+    // The operation kind selects the sole page representation.
+    using page: struct #raw_union {
+        exercises: [EXERCISE_LIST_PAGE_CAPACITY]Exercise_Summary,
+        children: [EXERCISE_LIST_PAGE_CAPACITY]Exercise_Catalogue_Node,
+    },
+    exercise: Exercise_Summary,
+    instructions_length: u16,
+    instructions: [EXERCISE_INSTRUCTIONS_BYTE_CAPACITY]u8,
+}
+
 // Worker-to-coordinator acknowledgement for one catalogue transaction command.
 Content_Control_Result :: struct {
     status: Search_Query_Status,
@@ -145,6 +226,10 @@ Content_Control_Result :: struct {
 // Control discriminator for the bounded display-to-worker channel.
 Content_Worker_Request_Kind :: enum u8 {
     Query,
+    Exercise_List,
+    Exercise_Resolve_Alias,
+    Exercise_Resolve_Uuid,
+    Exercise_Read,
     Stage,
     Commit,
     Discard,
@@ -156,6 +241,7 @@ Content_Worker_Request_Kind :: enum u8 {
 Content_Worker_Request :: struct {
     kind: Content_Worker_Request_Kind,
     query: Search_Query_Request,
+    exercise_query: Exercise_Query_Request,
     database_path_length: u16,
     database_path: [CATALOG_DATABASE_PATH_CAPACITY]u8,
     expected_fingerprint: [SEARCH_FINGERPRINT_BYTE_COUNT]u8,
@@ -180,6 +266,7 @@ Content_Candidate_State :: enum u8 {
 Content_Service :: struct {
     requests: chan.Chan(Content_Worker_Request),
     results: chan.Chan(Search_Query_Result),
+    exercise_results: chan.Chan(Exercise_Query_Result),
     control_results: chan.Chan(Content_Control_Result),
     worker: ^thread.Thread,
     backing: []byte,

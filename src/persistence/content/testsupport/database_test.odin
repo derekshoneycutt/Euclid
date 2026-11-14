@@ -186,13 +186,17 @@ content_test_refresh_counts :: proc(database: ^sqlite3.Database) -> bool {
         ';5='||(SELECT count(*) FROM ui_translation)||';6='||(SELECT count(*) FROM content_subject)||
         ';7='||(SELECT count(*) FROM catalog_node)||';8='||(SELECT count(*) FROM catalog_name)||
         ';9='||(SELECT count(*) FROM edition)||';10='||(SELECT count(*) FROM availability)||
-        ';11='||(SELECT count(*) FROM search_projection) WHERE key='table_counts';
+        ';11='||(SELECT count(*) FROM search_projection)||
+        ';12='||(SELECT count(*) FROM builtin_exercise)||
+        ';13='||(SELECT count(*) FROM retired_exercise_reference) WHERE key='table_counts';
         UPDATE content_metadata SET value=CAST(6+(SELECT count(*) FROM locale)+
         (SELECT count(*) FROM ui_message)+(SELECT count(*) FROM ui_argument)+
         (SELECT count(*) FROM ui_translation)+(SELECT count(*) FROM content_subject)+
         (SELECT count(*) FROM catalog_node)+(SELECT count(*) FROM catalog_name)+
         (SELECT count(*) FROM edition)+(SELECT count(*) FROM availability)+
-        (SELECT count(*) FROM search_projection) AS TEXT) WHERE key='record_count';`
+        (SELECT count(*) FROM search_projection)+(SELECT count(*) FROM builtin_exercise)+
+        (SELECT count(*) FROM retired_exercise_reference) AS TEXT)
+        WHERE key='record_count';`
     return search_test_execute_sql(
         database, strings.clone_to_cstring(sql, context.temp_allocator))
 }

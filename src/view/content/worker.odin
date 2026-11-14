@@ -131,7 +131,10 @@ content_worker_dispatch_control :: proc(
         })
         return true, true
     }
-    if request.kind == .Stage {
+    if request.kind == .Exercise_List || request.kind == .Exercise_Resolve_Alias ||
+       request.kind == .Exercise_Resolve_Uuid || request.kind == .Exercise_Read {
+        content_worker_execute_exercise(service, active, request^)
+    } else if request.kind == .Stage {
         content_worker_stage(service, staged, request)
     } else if request.kind == .Commit {
         candidate_committed^ = content_worker_commit(service, active, staged)
@@ -145,6 +148,32 @@ content_worker_dispatch_control :: proc(
         }
     }
     return true, false
+}
+
+// Execute one exercise request and publish into its separately bounded result queue.
+content_worker_execute_exercise :: proc(
+    service: ^Content_Service, database: ^reader.Content_Database,
+    request: Content_Worker_Request) {
+    result: Exercise_Query_Result
+    if request.exercise_query.kind == .Children {
+        result = contentdata.exercise_catalogue_children(
+            service.active_generation, request.exercise_query)
+    } else {
+        result = reader.content_database_execute_exercise(
+            database, request.exercise_query)
+        if request.exercise_query.kind == .List &&
+            result.status == .Ready {
+            query := request.exercise_query
+            identity := string(query.animation_id[:query.animation_id_length])
+            if !contentdata.exercise_animation_exists(
+                service.active_generation, identity) {
+                result.status = .Missing_Animation
+            }
+        }
+    }
+    if !chan.try_send(service.exercise_results, result) {
+        log.error("exercise_query_result_capacity_exhausted")
+    }
 }
 
 // Consume a retained control before receiving later requests from the channel.

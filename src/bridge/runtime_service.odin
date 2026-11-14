@@ -61,6 +61,9 @@ Julia_Runtime_Host :: struct {
     terminal_start_session: ^julialib.jl_value_t,
     terminal_close_session: ^julialib.jl_value_t,
     terminal_ingest_evaluation: ^julialib.jl_value_t,
+    terminal_ingest_interactive_input: ^julialib.jl_value_t,
+    terminal_ingest_geometry: ^julialib.jl_value_t,
+    terminal_ingest_capabilities: ^julialib.jl_value_t,
     terminal_ingest_completion_preview: ^julialib.jl_value_t,
     terminal_ingest_completion_candidates: ^julialib.jl_value_t,
     terminal_pump: ^julialib.jl_value_t,
@@ -3245,6 +3248,7 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, "terminal_host_close_session")
     host^.terminal_ingest_evaluation = julialib.jl_get_function(
         main_module, "terminal_host_ingest_evaluation")
+    bind_julia_terminal_interactive_callbacks(host, main_module)
     host^.terminal_ingest_completion_preview = julialib.jl_get_function(
         main_module, "terminal_host_ingest_completion_preview")
     host^.terminal_ingest_completion_candidates = julialib.jl_get_function(
@@ -3294,6 +3298,9 @@ julia_terminal_callbacks_complete :: proc(host: ^Julia_Runtime_Host) -> bool {
         host^.terminal_start_session != nil &&
         host^.terminal_close_session != nil &&
         host^.terminal_ingest_evaluation != nil &&
+        host^.terminal_ingest_interactive_input != nil &&
+        host^.terminal_ingest_geometry != nil &&
+        host^.terminal_ingest_capabilities != nil &&
         host^.terminal_ingest_completion_preview != nil &&
         host^.terminal_ingest_completion_candidates != nil &&
         host^.terminal_pump != nil &&
@@ -3782,6 +3789,23 @@ julia_terminal_ingest_tick_pulse :: proc(
     return true
 }
 
+// Publish Julia's evaluation-scoped input lease through the ordinary Terminal egress.
+julia_terminal_emit_input_lease :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    request_id: protocol.Request_Id, acquired: bool) -> bool {
+    value := bridgemodel.Julia_Host_Egress(protocol.Terminal_Input_Released{
+        request_id = request_id,
+        animation_generation = host.terminal_generation,
+    })
+    if acquired {
+        value = protocol.Terminal_Input_Acquired{
+            request_id = request_id,
+            animation_generation = host.terminal_generation,
+        }
+    }
+    return send_terminal_value_until_sent(service, value)
+}
+
 //   Convert one Julia evaluation command into a producer-owned terminal envelope.
 send_terminal_value_until_sent :: proc(
     service: ^Julia_Runtime_Service, value: bridgemodel.Julia_Host_Egress) -> bool {
@@ -3873,6 +3897,8 @@ julia_terminal_emit_evaluation :: proc(
         sent = julia_terminal_emit_output(service, host, command, request_id)
     } else if kind == 2 || kind == 3 {
         sent = julia_terminal_emit_completion(service, host, request_id, kind == 2)
+    } else if kind == 5 || kind == 6 {
+        sent = julia_terminal_emit_input_lease(service, host, request_id, kind == 5)
     }
     gc_stack^ = frame.previous
     return true, sent
@@ -4130,17 +4156,18 @@ julia_terminal_dispatch_ingress :: proc(
     message: ^bridgemodel.Julia_Host_Ingress) -> bool {
     #partial switch payload in message^ {
     case protocol.Terminal_Session_Started:
-        accepted := julia_terminal_session_call(
-            host, host^.terminal_start_session, payload.animation_generation)
-        if accepted {
-            host^.terminal_generation = payload.animation_generation
-        }
-        return accepted
+        return julia_terminal_start_session(host, payload.animation_generation)
     case protocol.Terminal_Session_Closed:
         return julia_terminal_session_call(
             host, host^.terminal_close_session, payload.animation_generation)
     case protocol.Evaluation_Requested:
         return julia_terminal_ingest_evaluation(host, payload)
+    case protocol.Terminal_Interactive_Input:
+        return julia_terminal_ingest_interactive_input(host, payload)
+    case protocol.Terminal_Geometry_Accepted:
+        return julia_terminal_ingest_geometry(service, host, payload)
+    case protocol.Terminal_Capabilities_Accepted:
+        return julia_terminal_ingest_capabilities(service, host, payload)
     case protocol.Completion_Requested:
         return julia_terminal_ingest_completion(host, payload)
     case protocol.Highlight_Requested:

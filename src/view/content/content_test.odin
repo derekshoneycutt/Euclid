@@ -127,7 +127,7 @@ content_worker_admits_and_rejects_typed_signatures :: proc(t: ^testing.T) {
         "WHERE message_key IN (SELECT message_key FROM ui_argument);")
 }
 
-// A search-compatible database without schema-3 content must fail closed at startup.
+// A search-compatible database without schema-4 content must fail closed at startup.
 @(test)
 content_worker_rejects_search_only_database :: proc(t: ^testing.T) {
     search_test_rejects_catalog_mutation(t, "content-search-only",
@@ -174,7 +174,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
         "INSERT INTO edition VALUES ('greek','Ancient Greek','grc','Greek source');"+
         "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"+
         "UPDATE content_metadata SET value='1035' WHERE key='record_count';"+
-        "UPDATE content_metadata SET value='1=6;2=1;3=92;4=13;5=92;6=141;7=140;8=140;9=4;10=282;11=140' "+
+        "UPDATE content_metadata SET value='1=6;2=1;3=92;4=13;5=92;6=141;7=140;8=140;9=4;10=282;11=140;12=1;13=0' "+
         "WHERE key='table_counts';"))
     service: Content_Service
     testing.expect(t, content_service_init(

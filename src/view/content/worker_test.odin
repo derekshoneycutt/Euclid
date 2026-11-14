@@ -65,6 +65,16 @@ search_test_query_window :: proc(
     return search_test_receive(service)
 }
 
+// Submit one built-in exercise request and wait for its owner-thread result.
+exercise_test_query :: proc(
+    t: ^testing.T, service: ^Content_Service,
+    request: contentdata.Exercise_Query_Request) -> Exercise_Query_Result {
+    testing.expect(t, content_service_try_submit_exercise(service, request))
+    result, received := chan.recv(service.exercise_results)
+    testing.expect(t, received)
+    return result
+}
+
 // Verify immutable startup, friendly query behavior, ranking, and joined shutdown.
 @(test)
 search_worker_executes_bounded_ranked_queries :: proc(t: ^testing.T) {
@@ -101,6 +111,178 @@ search_worker_executes_bounded_ranked_queries :: proc(t: ^testing.T) {
     testing.expect_value(t, excluded.status, Search_Query_Status.Ready)
     testing.expect_value(t, excluded.total_match_count, u32(2))
     testing.expect(t, !excluded.more_available)
+}
+
+// Exercise list, alias/UUID resolution, instruction reads, and empty/missing states.
+@(test)
+content_worker_reads_bounded_builtin_exercises :: proc(t: ^testing.T) {
+    fixture := contentfixture.search_test_database_create("exercise-reads")
+    defer delete(fixture.directory)
+    defer delete(fixture.path)
+    defer _ = os.remove_all(fixture.directory)
+    retired := "INSERT INTO retired_exercise_reference VALUES " +
+        "('10000000-0000-0000-0000-000000000001','old-exercise',0);"
+    testing.expect(t, fixture.ok &&
+        contentfixture.content_test_mutate(&fixture, retired))
+    service: Content_Service
+    testing.expect(t, content_service_init(
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
+    defer content_service_destroy(&service)
+
+    exercise_test_list_page(t, &service)
+    exercise_test_resolve_and_read(t, &service)
+    exercise_test_catalogue_pages(t, &service)
+}
+
+// Verify the worker returns the requested bounded list and generation.
+exercise_test_list_page :: proc(t: ^testing.T, service: ^Content_Service) {
+    animation_id := "00000000-0000-0000-0000-000000000001"
+    list_request, list_valid := contentdata.exercise_query_request_make(
+        7, .List, animation_id, "", {0, 4})
+    testing.expect(t, list_valid)
+    listed := exercise_test_query(t, service, list_request)
+    testing.expect_value(t, listed.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t, listed.generation, u64(7))
+    testing.expect_value(t, listed.total_count, u32(1))
+    testing.expect_value(t, listed.returned_count, u16(1))
+    testing.expect_value(t,
+        string(listed.exercises[0].reference[:listed.exercises[0].reference_length]),
+        "test-exercise")
+}
+
+// Resolve aliases and UUIDs to the same instruction snapshot, preserving missing states.
+exercise_test_resolve_and_read :: proc(t: ^testing.T, service: ^Content_Service) {
+    exercise_id := "10000000-0000-0000-0000-000000000001"
+    alias_request, alias_valid := contentdata.exercise_query_request_make(
+        8, .Resolve_Alias, "", "test-exercise", {})
+    testing.expect(t, alias_valid)
+    alias := exercise_test_query(t, service, alias_request)
+    testing.expect_value(t, alias.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t,
+        string(alias.exercise.exercise_id[:alias.exercise.exercise_id_length]),
+        exercise_id)
+    uuid_request, uuid_valid := contentdata.exercise_query_request_make(
+        9, .Resolve_Uuid, "", exercise_id, {})
+    testing.expect(t, uuid_valid)
+    resolved := exercise_test_query(t, service, uuid_request)
+    testing.expect_value(t, resolved.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t, resolved.exercise, alias.exercise)
+
+    read_request, read_valid := contentdata.exercise_query_request_make(
+        10, .Read_Uuid, "", exercise_id, {})
+    testing.expect(t, read_valid)
+    read := exercise_test_query(t, service, read_request)
+    testing.expect_value(t, read.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t,
+        string(read.instructions[:read.instructions_length]),
+        "Synthetic exercise instructions")
+    retired_request, retired_valid := contentdata.exercise_query_request_make(
+        11, .Resolve_Alias, "", "old-exercise", {})
+    testing.expect(t, retired_valid)
+    retired_result := exercise_test_query(t, service, retired_request)
+    testing.expect_value(t, retired_result.status, Exercise_Query_Status.Retired)
+    missing_request, missing_valid := contentdata.exercise_query_request_make(
+        12, .Resolve_Alias, "", "missing", {})
+    testing.expect(t, missing_valid)
+    missing := exercise_test_query(t, service, missing_request)
+    testing.expect_value(t, missing.status, Exercise_Query_Status.Not_Found)
+}
+
+// Assert hierarchy paging, successful empty windows, and unavailable associations differ.
+exercise_test_catalogue_pages :: proc(t: ^testing.T, service: ^Content_Service) {
+    root, root_valid := contentdata.exercise_query_request_make(
+        13, .Children, "", "", {0, 1})
+    testing.expect(t, root_valid)
+    roots := exercise_test_query(t, service, root)
+    testing.expect_value(t, roots.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t, roots.returned_count, u16(1))
+    root.result_offset = roots.total_count
+    empty_roots := exercise_test_query(t, service, root)
+    testing.expect_value(t, empty_roots.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t, empty_roots.returned_count, u16(0))
+    testing.expect(t, !empty_roots.more_available)
+    list, valid := contentdata.exercise_query_request_make(
+        14, .List, "00000000-0000-0000-0000-000000000001", "", {1, 1})
+    testing.expect(t, valid)
+    empty := exercise_test_query(t, service, list)
+    testing.expect_value(t, empty.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t, empty.total_count, u32(1))
+    testing.expect_value(t, empty.returned_count, u16(0))
+    missing, missing_valid := contentdata.exercise_query_request_make(
+        15, .List, "00000000-0000-0000-0000-999999999999", "", {0, 1})
+    testing.expect(t, missing_valid)
+    unavailable := exercise_test_query(t, service, missing)
+    testing.expect_value(t, unavailable.status, Exercise_Query_Status.Missing_Animation)
+}
+
+// A deleted exercise UUID remains reserved and produces a retired result.
+@(test)
+content_worker_reports_deleted_exercise_identity_as_retired :: proc(t: ^testing.T) {
+    fixture := contentfixture.search_test_database_create("exercise-retired-identity")
+    defer delete(fixture.directory)
+    defer delete(fixture.path)
+    defer _ = os.remove_all(fixture.directory)
+    mutation := "DELETE FROM builtin_exercise;" +
+        "INSERT INTO retired_exercise_reference VALUES " +
+        "('10000000-0000-0000-0000-000000000001','deleted-exercise',1);"
+    testing.expect(t, fixture.ok &&
+        contentfixture.content_test_mutate(&fixture, mutation))
+    service: Content_Service
+    testing.expect(t, content_service_init(
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
+    defer content_service_destroy(&service)
+
+    request, valid := contentdata.exercise_query_request_make(
+        1, .Read_Uuid, "", "10000000-0000-0000-0000-000000000001", {})
+    testing.expect(t, valid)
+    result := exercise_test_query(t, &service, request)
+    testing.expect_value(t, result.status, Exercise_Query_Status.Retired)
+}
+
+// An unavailable prepared statement is a database failure, never an empty lookup.
+@(test)
+content_query_distinguishes_exercise_database_failure :: proc(t: ^testing.T) {
+    database: reader.Content_Database
+    request, valid := contentdata.exercise_query_request_make(
+        1, .Resolve_Alias, "", "test-exercise", {})
+    testing.expect(t, valid)
+    result := reader.content_database_execute_exercise(&database, request)
+    testing.expect_value(t, result.status, Exercise_Query_Status.Database_Failed)
+}
+
+// Verify full and trailing windows preserve order with no skipped or duplicated rows.
+@(test)
+content_worker_pages_exercises_at_the_exact_bound :: proc(t: ^testing.T) {
+    fixture := contentfixture.search_test_database_create("exercise-paging")
+    defer delete(fixture.directory)
+    defer delete(fixture.path)
+    defer _ = os.remove_all(fixture.directory)
+    mutation := `WITH RECURSIVE n(i) AS (
+        SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<17)
+        INSERT INTO builtin_exercise
+        SELECT printf('20000000-0000-0000-0000-%012d',i), 'builtin',
+        '00000000-0000-0000-0000-000000000001', printf('exercise-%d',i),
+        'Paging exercise', i, 'Paging instructions' FROM n;`
+    testing.expect(t,
+        fixture.ok && contentfixture.content_test_mutate(&fixture, mutation))
+    service: Content_Service
+    testing.expect(t, content_service_init(
+        &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
+    defer content_service_destroy(&service)
+    request, valid := contentdata.exercise_query_request_make(
+        1, .List, "00000000-0000-0000-0000-000000000001", "", {0, 16})
+    testing.expect(t, valid)
+    first := exercise_test_query(t, &service, request)
+    testing.expect_value(t, first.status, Exercise_Query_Status.Ready)
+    testing.expect_value(t, first.returned_count, u16(16))
+    testing.expect_value(t, first.total_count, u32(18))
+    testing.expect(t, first.more_available)
+    request.result_offset = 16
+    last := exercise_test_query(t, &service, request)
+    testing.expect_value(t, last.returned_count, u16(2))
+    testing.expect_value(t, last.exercises[0].display_order, i32(16))
+    testing.expect_value(t, last.exercises[1].display_order, i32(17))
+    testing.expect(t, !last.more_available)
 }
 
 // Verify snapshot admission rejects malformed rows, topology, order, and overflow.
@@ -243,6 +425,7 @@ search_protocol_is_fixed_and_bounded :: proc(t: ^testing.T) {
     _, accepted := search_query_request_make(1, 0, string(oversized[:]))
     testing.expect(t, !accepted)
     testing.expect(t, size_of(Search_Query_Result) < 16 * 1024)
+    testing.expect(t, size_of(Exercise_Query_Result) < 40 * 1024)
 }
 
 // Verify large result sets use stable nonoverlapping windows and exact totals.

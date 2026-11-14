@@ -18,6 +18,9 @@ if !isdefined(Main, :Ticks)
     include("../ticks.jl")
 end
 if !isdefined(Main, :EuclidRepl)
+    if !isdefined(Main, :Terminal)
+        include("../terminal.jl")
+    end
     include("../euclidrepl.jl")
 end
 

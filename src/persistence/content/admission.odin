@@ -26,14 +26,14 @@ CONTENT_ALIASES_CAPACITY :: CONTENT_ALIAS_COUNT_CAPACITY * CONTENT_ALIAS_BYTE_CA
     CONTENT_ALIAS_COUNT_CAPACITY - 1
 CONTENT_UUID_BYTE_COUNT :: 36
 
-// Fixed-value or derived metadata rule for one schema-3 metadata key.
+// Fixed-value or derived metadata rule for one schema-4 metadata key.
 Content_Metadata_Key :: struct {
     key: string,
     fixed_value: string,
     rule: Content_Metadata_Rule,
 }
 
-// Validation responsibility for one schema-3 metadata value.
+// Validation responsibility for one schema-4 metadata value.
 Content_Metadata_Rule :: enum u8 {
     Fixed,
     Fingerprint,
@@ -42,9 +42,9 @@ Content_Metadata_Rule :: enum u8 {
     Projection_Count,
 }
 
-// Frozen schema-3 metadata vocabulary; each index is one coverage bit.
+// Frozen schema-4 metadata vocabulary; each index is one coverage bit.
 CONTENT_METADATA_KEYS :: [CONTENT_METADATA_ROW_COUNT]Content_Metadata_Key{
-    {"schema_version", "3", .Fixed},
+    {"schema_version", "4", .Fixed},
     {"tool_compatibility", "euclid-content-builder-v1", .Fixed},
     {"sqlite_version", "3.53.4", .Fixed},
     {"tokenizer_version", "porter-unicode61-v1", .Fixed},
@@ -152,9 +152,9 @@ content_admission_parse_u32 :: proc(value: string) -> (u32, bool) {
 
 // Parse the builder's exact semicolon-delimited normalized table count value.
 content_admission_parse_table_counts :: proc(
-    value: string, counts: ^[12]u16) -> bool {
+    value: string, counts: ^[14]u16) -> bool {
     cursor := 0
-    for table_index in 1..=11 {
+    for table_index in 1..=13 {
         if !content_admission_expect_table_label(value, &cursor, table_index) {
             return false
         }
@@ -163,7 +163,7 @@ content_admission_parse_table_counts :: proc(
             return false
         }
         counts[table_index] = parsed
-        if table_index < 11 && !content_admission_expect_byte(value, &cursor, ';') {
+        if table_index < 13 && !content_admission_expect_byte(value, &cursor, ';') {
             return false
         }
     }
@@ -204,7 +204,7 @@ content_admission_take_count :: proc(value: string, cursor: ^int) -> (u16, bool)
     return u16(parsed), true
 }
 
-// Verify all schema-3 and builder-derived metadata before reading table rows.
+// Verify all schema-4 and builder-derived metadata before reading table rows.
 content_admission_validate_metadata :: proc(
     database: ^Content_Database, expected_fingerprint: string) -> bool {
     if !content_admission_fingerprint_is_valid(expected_fingerprint) {
@@ -255,7 +255,7 @@ content_admission_read_metadata_row :: proc(
         database, key, string(value_bytes[:value_count]), fingerprint)
 }
 
-// Map the frozen schema-3 metadata vocabulary to one coverage bit.
+// Map the frozen schema-4 metadata vocabulary to one coverage bit.
 content_admission_metadata_key_bit :: proc(key: string) -> (u16, bool) {
     keys := CONTENT_METADATA_KEYS
     for entry, index in keys {
@@ -315,17 +315,19 @@ content_admission_metadata_counts_are_valid :: proc(
        counts[9] == 0 || counts[9] > contentdata.CONTENT_EDITION_CAPACITY ||
        counts[10] < counts[6] ||
        counts[10] > contentdata.CONTENT_AVAILABILITY_CAPACITY ||
-       counts[11] != contentdata.CATALOG_RECORD_CAPACITY {
+       counts[11] != contentdata.CATALOG_RECORD_CAPACITY ||
+       counts[12] > contentdata.EXERCISE_RECORD_CAPACITY ||
+       counts[13] > contentdata.EXERCISE_RECORD_CAPACITY {
         return false
     }
     total: u32
-    for index in 1..=11 {
+    for index in 1..=13 {
         total += u32(counts[index])
     }
     return total == database.expected_record_count
 }
 
-// Require a lowercase SHA-256 hex fingerprint for the schema-3 identity.
+// Require a lowercase SHA-256 hex fingerprint for the schema-4 identity.
 content_admission_fingerprint_is_valid :: proc(fingerprint: string) -> bool {
     if len(fingerprint) != contentdata.SEARCH_FINGERPRINT_BYTE_COUNT {
         return false

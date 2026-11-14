@@ -128,6 +128,7 @@ Display :: struct {
     runtime_request_saturation_count: u64,
     terminal_ready: bool,
     terminal_idle: bool,
+    terminal_interactive: bool,
     terminal_continuation: bool,
     terminal_completion_ready: bool,
 
@@ -577,6 +578,8 @@ observe_display_terminal :: proc(
     }
     result.terminal_ready = terminal.initialized && terminal.julia_session_ready
     result.terminal_idle = result.terminal_ready && !terminal.awaiting_eval
+    result.terminal_interactive = result.terminal_ready && terminal.awaiting_eval &&
+        terminal.interactive_input_request_id != 0
     result.terminal_continuation = result.terminal_ready &&
         terminal.collecting_continuation
     result.terminal_completion_ready = result.terminal_idle &&

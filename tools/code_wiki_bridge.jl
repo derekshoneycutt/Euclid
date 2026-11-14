@@ -294,7 +294,12 @@ const ODIN_ABI_TYPE_ALIASES = Dict(
     "^u8" => "pointer-u8",
     "int" => "i64", "i32" => "i32", "u8" => "u8", "u16" => "u16",
     "u32" => "u32",
-    "u64" => "u64", "f32" => "f32", "bool" => "bool")
+    "u64" => "u64", "f32" => "f32", "bool" => "bool",
+    "^u64" => "pointer-u64",
+    "^Exercise_Query_Metadata" => "pointer-exercise-query-metadata",
+    "^Exercise_Query_Row" => "pointer-exercise-query-row",
+    "^Exercise_Query_Input" => "pointer-exercise-query-input",
+    "^Exercise_Query_Buffers" => "pointer-exercise-query-buffers")
 
 const JULIA_ABI_TYPE_ALIASES = Dict(
     "NTuple{16,UInt8}" => "uuid-bytes",
@@ -364,7 +369,12 @@ const JULIA_ABI_TYPE_ALIASES = Dict(
     "Ptr{UInt8}" => "pointer-u8",
     "Int64" => "i64", "Int32" => "i32", "Cint" => "i32",
     "UInt8" => "u8", "UInt16" => "u16", "UInt64" => "u64", "Cfloat" => "f32",
-    "Bool" => "bool")
+    "Bool" => "bool",
+    "Ref{UInt64}" => "pointer-u64",
+    "Ref{ExerciseQueryMetadataABI}" => "pointer-exercise-query-metadata",
+    "Ptr{ExerciseQueryRowABI}" => "pointer-exercise-query-row",
+    "Ref{ExerciseQueryInputABI}" => "pointer-exercise-query-input",
+    "Ref{ExerciseQueryBuffersABI}" => "pointer-exercise-query-buffers")
 
 """Return one canonical ABI type or fail on an unreviewed spelling."""
 function canonical_abi_type(

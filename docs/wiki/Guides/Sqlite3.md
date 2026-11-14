@@ -140,6 +140,20 @@ erDiagram
         text semantic_text
         text aliases
     }
+    BUILTIN_EXERCISE {
+        text exercise_id PK
+        text source_namespace
+        text animation_id FK
+        text reference UK
+        text title
+        integer display_order
+        text instructions
+    }
+    RETIRED_EXERCISE_REFERENCE {
+        text exercise_id
+        text reference PK
+        integer identity_retired
+    }
     ANIMATION_SEARCH {
         integer rowid PK, FK
     }
@@ -160,14 +174,18 @@ erDiagram
     CATALOG_NODE ||--|{ SEARCH_PROJECTION : indexes
     AVAILABILITY ||--o{ SEARCH_PROJECTION : authorizes
     SEARCH_PROJECTION ||--|| ANIMATION_SEARCH : indexed_as
+    CATALOG_NODE ||--o{ BUILTIN_EXERCISE : exercises
 ```
 
 `CONTENT_METADATA` describes the generated content and search generation. UI message
 definitions and translations serve typed native messages; catalogue nodes and localized
 names describe the Library tree; editions and availability connect authored content to
-the catalogue; `SEARCH_PROJECTION` gathers text used for retrieval. `ANIMATION_SEARCH`
-is an FTS5 index over that projection. `SEARCH_TERMS` is the spelling-suggestion
-vocabulary. SQLite-owned FTS shadow tables are omitted.
+the catalogue; `SEARCH_PROJECTION` gathers text used for retrieval. Built-in exercise
+rows attach bounded plain-text instructions to stable catalogue identities, while
+retired-reference rows reserve renamed or deleted identifiers. Exercise text is read
+on demand by the content worker and is not copied into the materialized catalogue
+generation. `ANIMATION_SEARCH` is an FTS5 index over that projection. `SEARCH_TERMS`
+is the spelling-suggestion vocabulary. SQLite-owned FTS shadow tables are omitted.
 
 ### Build-Only Vocabulary
 
@@ -203,7 +221,7 @@ flowchart LR
 
     Julia --> Export --> Builder --> Packaged --> Asset --> Worker
     Display -->|bounded query| Worker
-    Worker -->|IDs and suggestion values| Display
+    Worker -->|IDs, exercise pages, and copied text| Display
 ```
 
 The builder creates the normalized tables, publishes the search indexes, and validates

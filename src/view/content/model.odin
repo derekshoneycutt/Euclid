@@ -24,6 +24,11 @@ Search_Document_Key :: model.Search_Document_Key
 Search_Query_Request :: model.Search_Query_Request
 Search_Query_Status :: model.Search_Query_Status
 Search_Query_Result :: model.Search_Query_Result
+Exercise_Query_Kind :: model.Exercise_Query_Kind
+Exercise_Query_Status :: model.Exercise_Query_Status
+Exercise_Query_Request :: model.Exercise_Query_Request
+Exercise_Summary :: model.Exercise_Summary
+Exercise_Query_Result :: model.Exercise_Query_Result
 Content_Control_Result :: model.Content_Control_Result
 Content_Worker_Request_Kind :: model.Content_Worker_Request_Kind
 Content_Worker_Request :: model.Content_Worker_Request

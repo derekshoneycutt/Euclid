@@ -80,6 +80,35 @@ function terminal_host_ingest_evaluation(
     return true
 end
 
+"""Deliver bounded bytes only to the matching live Terminal evaluation."""
+function terminal_host_ingest_interactive_input(
+    host::EuclidRuntimeHost, request_id::UInt64, source::String,
+    generation::UInt64)::Bool
+    session = host.reactor.session
+    if session.generation != generation ||
+        session.phase !== EuclidHost.HostSessionActive ||
+        session.evaluator_state.active_request != request_id ||
+        !session.evaluator_state.runtime.terminal.acquired
+        return true
+    end
+    return EuclidHost.ingest_interactive_input_for_host(host.reactor, request_id, source)
+end
+
+"""Install accepted display dimensions in the active Terminal input adapter."""
+function terminal_host_ingest_geometry(
+    host::EuclidRuntimeHost, generation::UInt64, columns::UInt16, rows::UInt16)::Bool
+    return EuclidHost.ingest_terminal_geometry_for_host(
+        host.reactor, generation, columns, rows)
+end
+
+"""Install the display's versioned capability snapshot in the active adapter."""
+function terminal_host_ingest_capabilities(
+    host::EuclidRuntimeHost, version::UInt16, encoding::UInt8, color::UInt8,
+    modify_other_keys_level::UInt8, kitty_keyboard_flags::UInt8, features::UInt32)::Bool
+    return EuclidHost.ingest_terminal_capabilities_for_host(host.reactor,
+        version, encoding, color, modify_other_keys_level, kitty_keyboard_flags, features)
+end
+
 """Pump one bounded turn of host-owned application actor work."""
 function terminal_host_pump(host::EuclidRuntimeHost)::Bool
     return pump_euclid_reactor!(host)

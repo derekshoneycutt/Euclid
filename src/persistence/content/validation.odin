@@ -21,6 +21,7 @@ content_admission_validate_complete :: proc(
        !content_admission_validate_translations(generation) ||
        !content_admission_validate_catalogue(generation) ||
        !content_admission_validate_subjects(generation) ||
+       !content_admission_validate_exercises(database, generation) ||
        !content_admission_validate_editions(generation) ||
        !content_admission_validate_availability(generation) ||
        !content_admission_validate_projections(generation) {

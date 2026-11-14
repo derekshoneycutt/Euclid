@@ -496,7 +496,7 @@ exercise_header_obeys_animation_control_visibility :: proc(t: ^testing.T) {
         mouse_position = {close_point.x, close_point.y},
     })
     testing.expect(t, !close_release.exercise_header.visible)
-    eye_point := geometry.Vector2{
+    eye_point: geometry.Vector2 = {
         close_release.slots.eye.x + close_release.slots.eye.width * 0.5,
         close_release.slots.eye.y + close_release.slots.eye.height * 0.5,
     }

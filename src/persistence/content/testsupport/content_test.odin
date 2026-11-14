@@ -15,7 +15,7 @@ INSERT INTO content_metadata SELECT CASE key
     WHEN 'document_count' THEN 'projection_count'
     WHEN 'schema_version' THEN 'catalog_projection_schema_version'
     ELSE key END, value FROM search_metadata;
-INSERT INTO content_metadata VALUES ('schema_version','3'),
+INSERT INTO content_metadata VALUES ('schema_version','4'),
     ('default_locale','en-US'), ('tool_compatibility','euclid-content-builder-v1'),
     ('record_count','0'), ('table_counts','');
 CREATE TABLE locale(tag TEXT PRIMARY KEY, is_default INTEGER NOT NULL);
@@ -30,6 +30,26 @@ INSERT INTO content_subject SELECT source_namespace, animation_id FROM animation
 INSERT INTO content_subject VALUES ('builtin','00000000-0000-0000-0000-000000000000');
 CREATE TABLE catalog_node AS SELECT source_namespace, animation_id, parent_animation_id,
     node_kind, sibling_order, catalog_order, implementation_path FROM animation_catalog;
+CREATE TABLE builtin_exercise (
+    exercise_id TEXT PRIMARY KEY,
+    source_namespace TEXT NOT NULL CHECK (source_namespace = 'builtin'),
+    animation_id TEXT NOT NULL,
+    reference TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    display_order INTEGER NOT NULL,
+    instructions TEXT NOT NULL,
+    UNIQUE (animation_id, display_order)
+) WITHOUT ROWID;
+INSERT INTO builtin_exercise VALUES (
+    '10000000-0000-0000-0000-000000000001', 'builtin',
+    '00000000-0000-0000-0000-000000000001',
+    'test-exercise', 'Synthetic exercise', 0,
+    'Synthetic exercise instructions');
+CREATE TABLE retired_exercise_reference (
+    exercise_id TEXT NOT NULL,
+    reference TEXT PRIMARY KEY,
+    identity_retired INTEGER NOT NULL CHECK (identity_retired IN (0, 1))
+) WITHOUT ROWID;
 CREATE TABLE catalog_name AS SELECT source_namespace, animation_id,
     'en-US' AS locale_tag, display_name FROM animation_catalog;
 CREATE TABLE edition(edition_id TEXT, unique_name TEXT, text_language_tag TEXT,

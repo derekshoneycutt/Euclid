@@ -86,7 +86,7 @@ packaged_manifest_rejects_legacy_catalog_contract :: proc(t: ^testing.T) {
         "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
         "sysimage_platform=%s\ncontent_database=content/content.sqlite3\n" +
         "content_database_sha256=%s\ncontent_fingerprint=%s\n" +
-        "content_schema_version=3\n",
+        "content_schema_version=4\n",
         fingerprint, image_path, fingerprint, fingerprint,
         PACKAGED_SYSIMAGE_PLATFORM, database_digest, fingerprint)
     metadata, valid := parse_packaged_sysimage_manifest(
@@ -257,7 +257,7 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
         "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
         "sysimage_platform=%s\ncontent_database=content/content.sqlite3\n" +
         "content_database_sha256=%s\ncontent_fingerprint=%s\n" +
-        "content_schema_version=3\n",
+        "content_schema_version=4\n",
         fingerprint, image_path, fingerprint, fingerprint,
         PACKAGED_SYSIMAGE_PLATFORM, content_digest, fingerprint)
     return os.write_entire_file(manifest_path, manifest) == nil

@@ -1,0 +1,67 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"attempt=41; menu_before_size=Terminal.dimensions(); p=point!([0.3,0.4,0];duration=0.05); println(\"menu-attempt-\"*\"saved\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"menu-attempt-saved","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; "}
+{"type":"@assert !status().failed; before=OdinJuliaBridge.get_point(state_ptr,p.index).pos; "}
+{"type":"before_count=status().managed_shape_count; println(\"menu-drawing-\"*\"ready\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"menu-drawing-ready","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"choose_exercise()"}
+{"key":"enter"}
+{"wait_state":"terminal_interactive","timeout_ms":10000}
+{"wait_terminal_contains":"Built-in exercises","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"Browse: Euclid's Elements","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"Browse: Book I","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"Browse: Definitions","timeout_ms":10000}
+{"key":"down"}
+{"key":"down"}
+{"key":"down"}
+{"wait_terminal_contains":"Browse: Propositions","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"Browse: Proposition II","timeout_ms":10000}
+{"key":"enter"}
+{"wait_terminal_contains":"Load: Construct an equilateral triangle","timeout_ms":10000}
+{"screenshot":".build/exercise-menu-choices.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"Loaded exercise: Construct an equilateral triangle","timeout_ms":10000}
+{"assert_exercise_header":"On a given finite straight line to construct an equilateral triangle."}
+{"type":"@assert attempt==41 && status().managed_shape_count==before_count; "}
+{"type":"@assert OdinJuliaBridge.get_point(state_ptr,p.index).pos==before; "}
+{"type":"println(\"menu-attempt-\"*\"preserved\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"menu-attempt-preserved","timeout_ms":10000}
+{"wait_terminal_contains":"menu-attempt-saved","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"exercises(\"builtin\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"Animation catalogue","timeout_ms":10000}
+{"wait_terminal_contains":"Use choose_exercise() to browse","timeout_ms":10000}
+{"type":"choose_exercise()"}
+{"key":"enter"}
+{"wait_state":"terminal_interactive","timeout_ms":10000}
+{"set_splitters":{"vertical":750,"horizontal":400}}
+{"key":"down"}
+{"screenshot":".build/exercise-menu-resized.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"q"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"Exercise selection cancelled.","timeout_ms":10000}
+{"assert_exercise_header":"On a given finite straight line to construct an equilateral triangle."}
+{"type":"@assert attempt==41; @assert Terminal.dimensions()[1]>menu_before_size[1]; @assert Terminal.dimensions()[2]<menu_before_size[2]; println(\"menu-cancel-\"*\"input-restored\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"menu-cancel-input-restored","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

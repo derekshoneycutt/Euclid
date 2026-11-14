@@ -171,6 +171,11 @@ function interactive_input_available()::Bool
     return interactive_input_available(stdin)
 end
 
+"""Hold evaluation input ownership for an interactive operation, not individual keys."""
+function with_interactive_input(_operation, _input::IO)
+    throw(ArgumentError("this operation requires Euclid Terminal interactive input"))
+end
+
 """Return capabilities inherited by one output context."""
 function context_capabilities(io::IO)::Capabilities
     return get(io, CAPABILITIES_CONTEXT_KEY, CONSERVATIVE_CAPABILITIES)

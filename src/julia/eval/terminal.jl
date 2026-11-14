@@ -238,6 +238,12 @@ function with_interactive_read(
         outer_blocking && interactive_release!(terminal)
         unlock(terminal.read_lock)
     end
+
+end
+
+"""Keep a menu's input lease until completion, cancellation, or evaluation retirement."""
+function Terminal.with_interactive_input(operation, input::InteractiveInput)
+    return with_interactive_read(_ -> operation(), input)
 end
 
 """Read one menu character under a semantic lease when blocking is possible."""

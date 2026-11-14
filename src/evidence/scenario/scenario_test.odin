@@ -861,6 +861,10 @@ scenario_test_terminal_commands :: proc(t: ^testing.T) {
     testing.expect(t, state_matches("terminal_idle", observe.Display{
         terminal_idle = true,
     }))
+    testing.expect(t, state_matches("terminal_interactive", observe.Display{
+        terminal_interactive = true,
+    }))
+    testing.expect(t, !state_matches("terminal_interactive", observe.Display{}))
     testing.expect(t, state_matches("terminal_completion_ready", observe.Display{
         terminal_completion_ready = true,
     }))

@@ -191,7 +191,7 @@ assign_content_manifest_field :: proc(
             &state.metadata.content_fingerprint, &state.content_fingerprint_seen,
             value, allocator), true
     case "content_schema_version":
-        if state.content_schema_ok || value != "3" {
+        if state.content_schema_ok || value != "4" {
             return false, true
         }
         state.content_schema_ok = true

@@ -29,6 +29,34 @@ Communication_Link_Egress_Collector :: struct {
 
 COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE :: 33
 
+// Input lease notifications retain the evaluation and session identity at native emission.
+@(test)
+terminal_transport_emits_evaluation_input_leases :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    host: Julia_Runtime_Host = {
+        terminal_generation = 7,
+    }
+    for acquired in ([]bool{true, false}) {
+        testing.expect(t, julia_terminal_emit_input_lease(service, &host, 19, acquired))
+        message, available := communication_link_try_recv(&service.event_link)
+        testing.expect(t, available)
+        if acquired {
+            lease, typed := message^.(protocol.Terminal_Input_Acquired)
+            testing.expect(t, typed)
+            testing.expect_value(t, lease.request_id, protocol.Request_Id(19))
+            testing.expect_value(t, lease.animation_generation, u64(7))
+        } else {
+            lease, typed := message^.(protocol.Terminal_Input_Released)
+            testing.expect(t, typed)
+            testing.expect_value(t, lease.request_id, protocol.Request_Id(19))
+            testing.expect_value(t, lease.animation_generation, u64(7))
+        }
+        testing.expect(t, return_julia_egress(service, message))
+        testing.expect_value(t, drain_julia_egress_returns(service), 1)
+    }
+}
+
 // Worker polling reclaims a full return queue without requiring another outgoing result.
 @(test)
 julia_worker_reclaims_returns_before_ingress :: proc(t: ^testing.T) {

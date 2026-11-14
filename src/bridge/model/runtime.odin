@@ -227,6 +227,35 @@ Exercise_Header_Update :: struct {
     text: []u8,
 }
 
+// Exercise_Query_Intent crosses the existing Julia egress with no borrowed storage.
+Exercise_Query_Intent :: struct {
+    token: u64,
+    animation_generation: u64,
+    header_request_id: u64,
+    load: bool,
+    query: contentmodel.Exercise_Query_Request,
+}
+
+// Exercise_Operation_State separates admission, worker ownership, and completed copy-out.
+Exercise_Operation_State :: enum u8 {
+    Idle,
+    Queued,
+    Admitted,
+    Waiting,
+    Ready,
+}
+
+// Exercise_Operation is one bounded reply slot, guarded across Julia and display owners.
+Exercise_Operation :: struct {
+    mutex: sync.Mutex,
+    next_token: u64,
+    inflight_token: u64,
+    state: Exercise_Operation_State,
+    intent: Exercise_Query_Intent,
+    index_generation: u64,
+    result: contentmodel.Exercise_Query_Result,
+}
+
 // Exercise_Header_Request_Sequence synchronizes request ordering across owners.
 Exercise_Header_Request_Sequence :: struct {
     mutex: sync.Mutex,
@@ -273,6 +302,7 @@ Julia_Host_Egress :: union {
     Runtime_Shutdown_Completed,
     View_Content_Ready,
     Exercise_Header_Update,
+    Exercise_Query_Intent,
     protocol.Terminal_Output_Batch,
     protocol.Evaluation_Incomplete,
     protocol.Evaluation_Completed,
@@ -331,6 +361,7 @@ Julia_Runtime_Service :: struct {
     // Request identity, active work, and admission/failure diagnostics.
     next_request_id: u64,
     exercise_header_request_sequence: Exercise_Header_Request_Sequence,
+    exercise_operation: Exercise_Operation,
     active_request_id: u64,
     active_request_kind: Julia_Request_Kind,
     failed_request_count: u64,

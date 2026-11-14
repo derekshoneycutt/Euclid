@@ -79,7 +79,7 @@ end
     manifest_paths = [replace(normpath(step.path), '\\' => '/') for step in file_steps]
 
     search_paths = Set(step.path for step in euclid_history_search_steps())
-    @test length(paths) == 61
+    @test length(paths) == 77
     @test length(search_paths) == 4
     @test all(path -> count(==(path), manifest_paths) ==
         (path in search_paths ? 2 : 1), paths)

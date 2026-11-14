@@ -233,18 +233,71 @@ function euclid_content_builder_write_steps(
                 SQLiteInteger(1), namespace, animation, locale, edition,
                 SQLiteText("Case study"), SQLiteText("Root/Case study"),
                 SQLiteText("Euclid validation case"), SQLiteText("case study"))),
+        euclid_content_exercise_write_steps(animation)...,
         euclid_sqlite_file_step("tools/content_builder/sql/plain_insert.sql";
             bindings=euclid_sqlite_bindings(SQLiteText("plain validation content"))),
     ]
 end
 
+"""Seed a built-in exercise and retired alias under the admitted catalogue identity."""
+function euclid_content_exercise_write_steps(animation)
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step("tools/content_builder/sql/exercise_insert.sql";
+            bindings=euclid_sqlite_bindings(
+                SQLiteText("00000000-0000-0000-0000-000000000011"),
+                SQLiteText("builtin"), animation, SQLiteText("case-exercise"),
+                SQLiteText("Case exercise"), SQLiteInteger(0),
+                SQLiteText("Construct a case."))),
+        euclid_sqlite_file_step("tools/content_builder/sql/retired_reference_insert.sql";
+            bindings=euclid_sqlite_bindings(
+                SQLiteText("00000000-0000-0000-0000-000000000011"),
+                SQLiteText("old-case"), SQLiteInteger(0))),
+    ]
+end
+
 """Read authored content interfaces and query both compiled-in search modules."""
-function euclid_content_search_read_steps()
+function euclid_content_search_read_steps(animation)
     return SQLiteValidationStep[
         euclid_sqlite_file_step("src/persistence/content/sql/argument_rows.sql"),
         euclid_sqlite_file_step("src/persistence/content/sql/availability_rows.sql"),
         euclid_sqlite_file_step("src/persistence/content/sql/catalog_rows.sql"),
         euclid_sqlite_file_step("src/persistence/content/sql/edition_rows.sql"),
+        euclid_content_exercise_read_steps(animation)...,
+        euclid_content_catalogue_read_steps()...,
+    ]
+end
+
+"""Validate bounded exercise queries against the same seeded catalogue identity."""
+function euclid_content_exercise_read_steps(animation)
+    return SQLiteValidationStep[
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/exercise_validation_rows.sql"),
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/retired_exercise_validation_rows.sql"),
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/exercise_list_rows.sql";
+            bindings=euclid_sqlite_bindings(
+                animation, SQLiteInteger(1), SQLiteInteger(0))),
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/exercise_list_count.sql";
+            bindings=euclid_sqlite_bindings(animation)),
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/exercise_resolve.sql";
+            bindings=euclid_sqlite_bindings(
+                SQLiteInteger(1), SQLiteText("case-exercise"))),
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/exercise_retired.sql";
+            bindings=euclid_sqlite_bindings(SQLiteInteger(1), SQLiteText("old-case"))),
+        euclid_sqlite_file_step(
+            "src/persistence/content/sql/exercise_read.sql";
+            bindings=euclid_sqlite_bindings(
+                SQLiteText("00000000-0000-0000-0000-000000000011"))),
+    ]
+end
+
+"""Read remaining catalogue metadata and exercise the compiled search modules."""
+function euclid_content_catalogue_read_steps()
+    return SQLiteValidationStep[
         euclid_sqlite_file_step("src/persistence/content/sql/locale_rows.sql"),
         euclid_sqlite_file_step("src/persistence/content/sql/message_rows.sql"),
         euclid_sqlite_file_step("src/persistence/content/sql/name_rows.sql"),
@@ -267,7 +320,7 @@ end
 
 """Build ordered builder/search rows with the exact source schema and required modules."""
 function euclid_sqlite_content_case()
-    namespace = SQLiteText("phase5")
+    namespace = SQLiteText("builtin")
     animation = SQLiteText("case-study")
     locale = SQLiteText("en-US")
     edition = SQLiteText("case-edition")
@@ -275,7 +328,7 @@ function euclid_sqlite_content_case()
     steps = vcat(
         euclid_content_builder_write_steps(
             namespace, animation, locale, edition, message),
-        euclid_content_search_read_steps())
+        euclid_content_search_read_steps(animation))
     return SQLiteValidationCase(
         "content-builder-and-search"; requirements=["fts5", "spellfix1"], steps)
 end
