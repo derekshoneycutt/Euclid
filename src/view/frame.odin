@@ -728,6 +728,21 @@ prepare_sdl_simulation_frame :: proc(
     viewsimulation.run_parallel_frame_preparation_after_ui(state, alpha, compile_dynview)
 }
 
+// Encode all shape and tool shadow coverage through the finite board receivers.
+encode_sdl_world_shadows :: proc(
+    state: ^core.Euclid_General_State, ctx: Window_Frame_Context,
+    encoder: ^native.Draw_Encoder) {
+    shadow_encoder: native.Draw_Encoder
+    ready := native.draw_encoder_begin(&shadow_encoder,
+        ctx.draw_runtime^.shadow_storage, encoder^.logical_extent,
+        encoder^.physical_extent)
+    assert(ready)
+    world.draw_encoded_cached_shadow_pass(state, &shadow_encoder)
+    world.draw_encoded_cached_tool_shadow_pass(state, &shadow_encoder)
+    receivers := world.shadow_receiver_geometry(state^.draw_surface, state^.iso_scale)
+    world.shadow_submit_receivers(encoder, &shadow_encoder, receivers)
+}
+
 // encode_sdl_world_geometry encodes the clipped world draw stream. Screen shake
 // offsets the projection origin only for this encode; recordings stay steady.
 encode_sdl_world_geometry :: proc(
@@ -752,8 +767,7 @@ encode_sdl_world_geometry :: proc(
     world.draw_encoded_cached_basic_pass(state, encoder, false)
     world.encode_low_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)
-    world.draw_encoded_cached_shadow_pass(state, encoder)
-    world.draw_encoded_cached_tool_shadow_pass(state, encoder)
+    encode_sdl_world_shadows(state, ctx, encoder)
     world.draw_encoded_shapes_high_merged_cached(state, encoder)
     world.encode_mid_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)

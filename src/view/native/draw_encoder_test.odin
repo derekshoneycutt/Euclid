@@ -596,6 +596,27 @@ sdl_draw_test_statistics_accumulate_and_track_high_water :: proc(t: ^testing.T) 
     sdl_draw_expect_accumulated_statistics(t, &runtime)
 }
 
+// Verify scratch staging remains valid when renderer candidate ownership moves.
+@(test)
+sdl_draw_shadow_storage_survives_candidate_move :: proc(t: ^testing.T) {
+    candidate: Sdl_Draw_Runtime
+    ready := sdl_draw_runtime_allocate_storage(&candidate)
+    testing.expect(t, ready)
+    if !ready {
+        sdl_draw_runtime_destroy(&candidate, nil)
+        return
+    }
+    runtime := candidate
+    candidate = {}
+    defer sdl_draw_runtime_destroy(&runtime, nil)
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder, runtime.shadow_storage,
+        {100, 100}, {100, 100}))
+    testing.expect(t, draw_encoder_rectangle(&encoder, {1, 2, 3, 4}, color.WHITE))
+    testing.expect_value(t, encoder.batch_count, 1)
+    testing.expect_value(t, runtime.shadow_storage.batches[0].index_count, u32(6))
+}
+
 // Verify custom markers split otherwise compatible 2D batches in authored order.
 @(test)
 draw_encoder_test_custom_commands_preserve_batch_order :: proc(t: ^testing.T) {

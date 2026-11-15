@@ -172,6 +172,7 @@ Sdl_Draw_Runtime :: struct {
     arena: vmem.Arena,
     arena_initialized: bool,
     storage: Draw_Storage,
+    shadow_storage: Draw_Storage,
     custom_storage: Draw_Custom_Storage,
     last_frame: Sdl_Draw_Frame_Statistics,
     statistics: Sdl_Draw_Runtime_Statistics,
@@ -421,11 +422,21 @@ sdl_draw_runtime_allocate_core_storage :: proc(
     batches, batch_error := make([]Draw_Batch, DRAW_BATCH_CAPACITY, allocator)
     commands, command_error := make(
         []Draw_Command, DRAW_COMMAND_CAPACITY, allocator)
+    shadow_vertices, shadow_vertex_error := make(
+        []Draw_Vertex, DRAW_VERTEX_CAPACITY, allocator)
+    shadow_indices, shadow_index_error := make(
+        []u32, DRAW_INDEX_CAPACITY, allocator)
+    shadow_batches, shadow_batch_error := make([]Draw_Batch, 1, allocator)
+    shadow_commands, shadow_command_error := make([]Draw_Command, 1, allocator)
     if vertex_error != nil || index_error != nil || batch_error != nil ||
-        command_error != nil {
+        command_error != nil || shadow_vertex_error != nil ||
+        shadow_index_error != nil || shadow_batch_error != nil ||
+        shadow_command_error != nil {
         return false
     }
     runtime^.storage = {vertices, indices, batches, commands, nil}
+    runtime^.shadow_storage = {
+        shadow_vertices, shadow_indices, shadow_batches, shadow_commands, nil}
     return true
 }
 

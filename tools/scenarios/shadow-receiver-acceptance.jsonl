@@ -1,0 +1,48 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"p=point!([1.0,0.45,0.3];duration=0.1); l=line!([0.75,0.25,0.3],[1.2,0.25,0.3];duration=0.1); "}
+{"type":"c=circle!([0.95,0.7,0.3],0.2;duration=0.1); println(\"shadow-\"*\"admitted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-admitted","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; println(\"shadow-\"*\"ready\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-ready","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"screenshot":".build/shadow-receiver-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"highlight_pen!([0.85,0.2,0],[1.2,0.2,0];duration=6); println(\"shadow-\"*\"pen\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-pen","timeout_ms":10000}
+{"type":"sleep(1.0); println(\"shadow-\"*\"pen-frame\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-pen-frame","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"screenshot":".build/shadow-receiver-pen.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; println(\"shadow-\"*\"pen-complete\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-pen-complete","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"highlight_compass!([0.9,0.6,0],[1.1,0.6,0],pi/2,0.2;duration=4); println(\"shadow-\"*\"compass\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-compass","timeout_ms":10000}
+{"type":"sleep(1.0); println(\"shadow-\"*\"compass-frame\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-compass-frame","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"screenshot":".build/shadow-receiver-compass.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; println(\"shadow-\"*\"tools-complete\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"shadow-tools-complete","timeout_ms":20000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"allocation_checkpoint":"display_cache"}
+{"screenshot":".build/shadow-receiver-finished.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_allocation_baseline":"display_cache"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

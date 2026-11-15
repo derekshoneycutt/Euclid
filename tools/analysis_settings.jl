@@ -805,13 +805,13 @@ AnalysisSettings(
                 "src/view/native/sdl_draw_runtime.odin",
                 "sdl_draw_runtime_allocate_core_storage",
                 :custom,
-                "Four fixed-capacity core draw streams share the native runtime arena and are released when that arena is destroyed.";
+                "Four core draw streams and four reusable shadow scratch streams share the native runtime arena and are released when that arena is destroyed.";
                 operation="make",
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
+                minimum_matches=8,
+                maximum_matches=8),
             ReviewedAllocationPolicy(
                 "view-sdl-draw-custom-storage",
                 "src/view/native/sdl_draw_runtime.odin",

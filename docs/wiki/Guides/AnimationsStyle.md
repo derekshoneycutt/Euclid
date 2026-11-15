@@ -284,7 +284,7 @@ Current frame order is:
 | 1 | Drawing surface | Persistent background surface. |
 | 2 | Low cached geometry | Labels, points, lines, circles, and polygons. |
 | 3 | Low particles | Effects behind tool shadows and high geometry. |
-| 4 | Tool shadows | Roulette guides, pen, and compass shadows. |
+| 4 | Shape and tool shadows | Elevated shape shadows, roulette guides, pen, and compass shadows. |
 | 5 | Mid particles | Effects between shadows and active tools. |
 | 6 | High cached tools | Roulette guides, active tool dots, pen, and compass strokes. |
 | 7 | Formation material | Authored region settling; airborne above the board and tools. |
@@ -318,9 +318,11 @@ Tool crossing guidance for 3D plane barriers:
 ## Plane and Surface Treatment
 
 - The persistent drawing surface casts a soft shadow onto a virtual receiver below
-  `z = 0`, following the same world-space light direction as animation shadows.
-  This display-only treatment does not change construction coordinates, projection,
-  brush sizes, labels, or the `z = 0` receiver for shadows cast by elevated geometry.
+  `z = 0`. Shape and tool shadows follow the same world-space light: they land on
+  the board, including its border, or on that lower receiver when the light ray
+  misses the board. The board visually occludes ground shadows; overlapping
+  translucent shadows retain their usual blending. This display-only treatment
+  does not change construction coordinates, projection, brush sizes, or labels.
 - The app already provides a persistent drawing surface; do not simulate a full
   plane by drawing a large fake fill stroke unless the plane stroke itself is
   the geometric point being demonstrated.
