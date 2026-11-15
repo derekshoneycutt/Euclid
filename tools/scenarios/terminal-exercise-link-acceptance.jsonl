@@ -1,0 +1,13 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_event":"terminal_session_ready","timeout_ms":10000}
+{"type":";/usr/bin/printf '\\033]8;;euclid:exercise/builtin/elements-i-1\\033\\\\\\104o as Exercise\\033]8;;\\033\\\\\\n'"}
+{"key":"enter"}
+{"wait_terminal_contains":"Do as Exercise","timeout_ms":10000}
+{"activate_terminal_link":"euclid:exercise/builtin/elements-i-1"}
+{"wait_event":"terminal_session_ready","timeout_ms":10000}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":0}}
+{"assert_exercise_header":"On a given finite straight line to construct an equilateral triangle."}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

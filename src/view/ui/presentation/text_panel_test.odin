@@ -7,6 +7,8 @@ import testing "core:testing"
 import core "../../../core"
 import native "../../native"
 import uisplitter "../layout/splitter"
+import ui_dynview "../dynview"
+import dynviewmodel "../../../dynview/model"
 
 // Reading order shares the footer without covering Done, including scaled narrow panes.
 @(test)
@@ -88,6 +90,72 @@ presentation_note_reading_uses_stationary_document_viewport :: proc(t: ^testing.
         testing.expect_value(t, views.selection.scroll_y, position)
         testing.expect_value(t, views.original_screen, panel)
     }
+}
+
+// Link activation requires a same-revision click rather than drag selection.
+@(test)
+presentation_link_press_release_rejects_stale_drag_and_outside_release :: proc(
+    t: ^testing.T) {
+    valid: Presentation_Link_Activation_Check = {
+        pressed = true,
+        press_revision = 4,
+        content_revision = 4,
+        press_offset = 12,
+        press_count = 30,
+        release_offset = 12,
+        release_count = 30,
+    }
+    testing.expect(t, presentation_link_press_release_matches(valid))
+
+    stale := valid
+    stale.content_revision = 5
+    testing.expect(t, !presentation_link_press_release_matches(stale))
+    dragged := valid
+    dragged.distance_squared = 25
+    testing.expect(t, !presentation_link_press_release_matches(dragged))
+    mismatched := valid
+    mismatched.release_offset = 13
+    testing.expect(t, !presentation_link_press_release_matches(mismatched))
+    selected := valid
+    selected.selection_active = true
+    testing.expect(t, !presentation_link_press_release_matches(selected))
+}
+
+// Pointer links use the visible portion of exact measured glyph geometry.
+@(test)
+presentation_link_hit_testing_respects_viewport_clipping :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    documents: [1]dynviewmodel.Dynview_Document
+    state^.dynview.content.documents = documents[:]
+    state^.dynview.compile_cache.document_layout_is_valid = true
+    state^.dynview.compile_cache.document_layout_copy_targets =
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{
+            {
+                link_id = 1,
+                link_target_offset = 20,
+                link_target_count = 30,
+                width = 24,
+                height = 12,
+            },
+        }
+    view: ui_dynview.Dynview_Selection_View = {
+        panel = {10, 10, 100, 30},
+    }
+
+    inside := presentation_link_hit_target(
+        state, view, {10, 10, 8, 12}, {12, 12})
+    clipped := presentation_link_hit_target(
+        state, view, {10, 10, 8, 12}, {22, 12})
+    view.scroll_y = 40
+    scrolled_away := presentation_link_hit_target(
+        state, view, {10, 10, 8, 12}, {12, 12})
+
+    testing.expect(t, inside.hit)
+    testing.expect_value(t, inside.offset, 20)
+    testing.expect_value(t, inside.count, 30)
+    testing.expect(t, !clipped.hit)
+    testing.expect(t, !scrolled_away.hit)
 }
 
 // The internal splitter's idle chrome has no accent; hover paints only its narrow line.

@@ -186,6 +186,9 @@ the checked-in [MIME presentation](../../../tools/scenarios/mime-presentation-ac
 [keyboard focus](../../../tools/scenarios/keyboard-focus-acceptance.jsonl), and
 [context menu](../../../tools/scenarios/context-menu-acceptance.jsonl) scenarios as
 examples of longer flows.
+The [Dynview exercise-link acceptance](../../../tools/scenarios/dynview-exercise-links-acceptance.jsonl)
+loads a persisted user exercise from a saved collection-note link through keyboard
+focus and the shared fresh-session destination.
 
 For a successful result, inspect the bundle's `manifest.json` and require both
 `result: "passed"` and `trace_complete: true`; consult `state.json` and `evidence.bin`

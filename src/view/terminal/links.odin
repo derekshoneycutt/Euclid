@@ -167,7 +167,7 @@ terminal_detect_link_at :: proc(
         cells, start, end, trimmed)
     uri := string(hit.uri[:hit.uri_byte_count])
     parsed, supported := termhyperlink.hyperlink_uri_scheme(uri)
-    if !supported || parsed.scheme == .File ||
+    if !supported || parsed.scheme == .File || parsed.scheme == .Euclid ||
         !termhyperlink.hyperlink_uri_valid(uri) || column >= hit.column_end {
         return {}
     }
@@ -327,7 +327,7 @@ terminal_activate_hyperlink :: proc(
         detected := activation
         uri := string(detected.uri[:detected.uri_byte_count])
         parsed, supported := termhyperlink.hyperlink_uri_scheme(uri)
-        if !supported || parsed.scheme == .File ||
+        if !supported || parsed.scheme == .File || parsed.scheme == .Euclid ||
             !termhyperlink.hyperlink_uri_valid(uri) {
             return false
         }

@@ -127,6 +127,9 @@ document_layout_append_atomic_copy_target :: proc(
         count = item.source_count,
         x = item.x,
         width = item.width,
+        link_id = item.link_id,
+        link_target_offset = item.link_target_offset,
+        link_target_count = item.link_target_count,
     }
     return storage.bounded_element_builder_append(
         &builders^.copy_targets,
@@ -198,6 +201,9 @@ document_layout_append_prose_copy_targets :: proc(
             count = span_end - int(shaped.glyphs[start].cluster),
             x = pen_x,
             width = f32(cluster.advance) * shaped.scale,
+            link_id = item.link_id,
+            link_target_offset = item.link_target_offset,
+            link_target_count = item.link_target_count,
             canonical_text = true,
         }
         status := storage.bounded_element_builder_append(
@@ -329,6 +335,9 @@ document_layout_place_line :: proc(
                 source_count = node.source_count,
                 text_offset = node.text_offset,
                 text_count = node.text_count,
+                link_id = node.link_id,
+                link_target_offset = node.link_target_offset,
+                link_target_count = node.link_target_count,
                 x = x,
                 width = node_width,
                 ascent = node.ascent,

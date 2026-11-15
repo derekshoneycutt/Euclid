@@ -4,6 +4,7 @@ package termhyperlink
 import "core:mem"
 import "core:unicode/utf8"
 import termmodel "../model"
+import contentmodel "../../core/content"
 
 HYPERLINK_REGISTRY_CAPACITY :: 64
 HYPERLINK_URI_BYTE_CAPACITY :: 1024
@@ -14,6 +15,7 @@ Hyperlink_Scheme :: enum u8 {
     Https,
     Mailto,
     File,
+    Euclid,
 }
 
 // Validated scheme and byte offset of one URI's scheme-specific payload.
@@ -21,6 +23,8 @@ Hyperlink_Uri_Parse :: struct {
     scheme: Hyperlink_Scheme,
     payload_start: int,
 }
+
+Exercise_Link_Target :: contentmodel.Exercise_Link_Target
 
 // One validated URI retained without native resources.
 Hyperlink_Entry :: struct {
@@ -91,12 +95,12 @@ hyperlink_uri_byte_rejected :: proc(byte: u8) -> bool {
 // Decode one exact supported URI scheme prefix.
 hyperlink_uri_scheme :: proc(uri: string) -> (Hyperlink_Uri_Parse, bool) {
     bytes := transmute([]u8)uri
-    schemes: [4]struct {
+    schemes: [5]struct {
         text: string,
         scheme: Hyperlink_Scheme,
     } = {
         {"http:", .Http}, {"https:", .Https},
-        {"mailto:", .Mailto}, {"file:", .File},
+        {"mailto:", .Mailto}, {"file:", .File}, {"euclid:", .Euclid},
     }
     for candidate in schemes {
         scheme_bytes := transmute([]u8)candidate.text
@@ -118,6 +122,11 @@ hyperlink_uri_scheme :: proc(uri: string) -> (Hyperlink_Uri_Parse, bool) {
         }
     }
     return {}, false
+}
+
+// Parse only the explicit namespace and alias-or-UUID forms for exercise links.
+hyperlink_exercise_target_parse :: proc(uri: string) -> (Exercise_Link_Target, bool) {
+    return contentmodel.exercise_link_target_parse(uri)
 }
 
 // Return the end of an authority component beginning after `//`.
@@ -175,6 +184,10 @@ hyperlink_file_path_canonical :: proc(bytes: []u8, start: int) -> bool {
 // Validate supported scheme-specific authority and path requirements.
 hyperlink_uri_shape_valid :: proc(
     bytes: []u8, scheme: Hyperlink_Scheme, payload_start: int) -> bool {
+    if scheme == .Euclid {
+        _, valid := hyperlink_exercise_target_parse(string(bytes))
+        return valid
+    }
     if scheme == .Mailto {
         return payload_start < len(bytes)
     }
@@ -233,6 +246,11 @@ hyperlink_uri_valid :: proc(uri: string) -> bool {
     }
     for byte, index in bytes {
         if hyperlink_uri_byte_rejected(byte) {
+            return false
+        }
+        if parsed.scheme == .Euclid &&
+            !(byte >= 'a' && byte <= 'z') && !(byte >= '0' && byte <= '9') &&
+            byte != ':' && byte != '/' && byte != '-' && byte != '_' {
             return false
         }
         if byte == '%' &&

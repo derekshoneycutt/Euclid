@@ -1224,7 +1224,8 @@ view_snapshot_document_inline_is_valid :: proc(
         !view_snapshot_subspan_is_valid(document.source_offset,
             document.source_count, item.source_offset, item.source_count) ||
         !view_snapshot_subspan_is_valid(document.text_offset,
-            document.text_count, item.text_offset, item.text_count) {
+            document.text_count, item.text_offset, item.text_count) ||
+        !view_snapshot_document_inline_link_is_valid(document, item) {
         return false
     }
     if item.kind == .Math {
@@ -1243,6 +1244,20 @@ view_snapshot_document_inline_is_valid :: proc(
             space_kind <= int(dynviewmodel.Dynview_Document_Space_Kind.Controlled)
     }
     return item.kind != .Shape || item.shape.present
+}
+
+// Validate one optional link target against its owning document text span.
+view_snapshot_document_inline_link_is_valid :: proc(
+    document: dynviewmodel.Dynview_Document,
+    item: dynviewmodel.Dynview_Document_Inline) -> bool {
+    return item.link_id <= u16(dynviewmodel.DYNVIEW_MAX_DOCUMENT_LINKS) &&
+        (item.link_id != 0 ||
+            item.link_target_offset == 0 && item.link_target_count == 0) &&
+        (item.link_id == 0 ||
+            item.link_target_count > 0 &&
+            view_snapshot_subspan_is_valid(document.text_offset,
+                document.text_count, item.link_target_offset,
+                item.link_target_count))
 }
 
 //   Require one child range to be fully contained by its owner range.

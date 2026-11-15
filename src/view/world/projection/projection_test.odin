@@ -78,7 +78,7 @@ screenshake_apply_origin_shifts_and_restores_fitted_origin :: proc(t: ^testing.T
         &scale, worldmodel.VIEW_WIDTH * 2, worldmodel.VIEW_HEIGHT * 2)
     screenshake_on_dust_kick(&scale)
     screenshake_update(&scale, 0.01)
-    fitted := geometry.Vector2{scale.x_offset, scale.y_offset}
+    fitted: geometry.Vector2 = {scale.x_offset, scale.y_offset}
 
     base := screenshake_apply_origin(&scale, true)
 

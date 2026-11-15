@@ -844,20 +844,23 @@ scenario_test_dust_state_predicates :: proc(t: ^testing.T) {
     }))
 }
 
-// Verify Terminal input and cell assertions are bounded scenario commands.
+// Verify Terminal input, internal hyperlink activation, and cell assertions.
 @(test)
 scenario_test_terminal_commands :: proc(t: ^testing.T) {
     program: Program
     result := parse(
         "{\"type\":\"1 + 1\"}\n" +
         "{\"key\":\"enter\"}\n" +
+        "{\"activate_terminal_link\":\"euclid:exercise/builtin/elements-i-1\"}\n" +
         "{\"assert_terminal_contains\":\"2\"}\n", &program)
     testing.expect_value(t, result, Parse_Error.None)
-    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, program.count, 4)
     testing.expect_value(t, program.commands[0].kind, Command_Kind.Type_Text)
     testing.expect_value(t, program.commands[1].kind, Command_Kind.Key)
+    testing.expect_value(
+        t, program.commands[2].kind, Command_Kind.Activate_Terminal_Link)
     testing.expect_value(t,
-        program.commands[2].kind, Command_Kind.Assert_Terminal_Contains)
+        program.commands[3].kind, Command_Kind.Assert_Terminal_Contains)
     testing.expect(t, state_matches("terminal_idle", observe.Display{
         terminal_idle = true,
     }))

@@ -226,6 +226,24 @@ leave the editor and generation active. See
 [`text_panel.odin`](../../../src/view/ui/presentation/text_panel.odin), and
 [`Sqlite3.md`](Sqlite3.md) for the UI and storage ownership details.
 
+### Dynview Exercise Links
+
+Animation reading text and collection-note reading views may contain reference-only
+`\href{euclid:exercise/...}{label}` links. The native document parser validates the
+target grammar but does not check whether a record currently exists. A syntactically
+valid unavailable reference leaves the surrounding document readable; activation
+reports the resolution failure instead of substituting stale instructions.
+
+Presentation registers a link only when its label has visible, measured layout
+geometry. Hit regions follow wrapped glyphs and intersect the current reading clip,
+including the collection-note composition's scroll position. A pointer activation
+requires press and release on the same target and document revision; dragging for text
+selection, releasing outside, or changing the document cannot activate it. The target
+is omitted from selection/copy output. Each visible link is a semantic Button with its
+label, focus bounds, keyboard activation, and accessibility activation; all routes use
+the shared exercise-link destination. Editing a collection note does not expose its
+source as an activatable link.
+
 This division is useful when extending the UI: add common control mechanics to the
 widget layer when multiple callers can share them; keep feature policy in the owning
 panel. The Library tree is a notable specialization: it uses treeview primitives, but

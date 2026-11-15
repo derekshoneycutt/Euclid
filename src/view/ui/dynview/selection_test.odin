@@ -331,6 +331,42 @@ dynview_selection_test_uses_published_document_text :: proc(t: ^testing.T) {
         dynview_selection_text(runtime, selection, ""), "right")
 }
 
+// Verify selection copy exposes only the visible label, never its hidden destination.
+@(test)
+dynview_selection_copy_omits_exercise_link_target :: proc(t: ^testing.T) {
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
+    text := "euclid:exercise/user/phase33Open"
+    published: [64]u8
+    copy(published[:], transmute([]u8)text)
+    runtime^.content.document_text = published[:len(text)]
+    label_offset := len("euclid:exercise/user/phase33")
+    runtime^.compile_cache.document_layout_copy_targets =
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{
+            {
+                offset = label_offset,
+                count = 4,
+                link_id = 1,
+                link_target_offset = 0,
+                link_target_count = label_offset,
+                canonical_text = true,
+            },
+        }
+    selection: dynviewmodel.Dynview_Selection_State = {
+        mode = .Semantic_Document,
+        active = true,
+        anchor = {
+            unit_index = 0,
+        },
+        head = {
+            unit_index = 1,
+        },
+    }
+
+    testing.expect_value(t,
+        dynview_selection_text(runtime, selection, ""), "Open")
+}
+
 // Verify semantic hit testing chooses the nearest half-open target boundary.
 @(test)
 dynview_selection_test_hits_semantic_boundaries :: proc(t: ^testing.T) {

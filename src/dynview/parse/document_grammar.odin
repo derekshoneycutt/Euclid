@@ -1,5 +1,7 @@
 package dynview_parse
 
+import contentmodel "../../core/content"
+
 TEX_DOCUMENT_STYLE_REGULAR :: i32(4)
 TEX_DOCUMENT_STYLE_BOLD :: i32(32)
 TEX_DOCUMENT_STYLE_ITALIC :: i32(1)
@@ -82,6 +84,9 @@ Tex_Document_Parser :: struct {
     paragraph_format: Tex_Document_Format,
     quotation_first_paragraph: bool,
     next_list_id: u16,
+    link_count: u16,
+    active_link_id: u16,
+    active_link_target: Tex_Text_Span,
     list_item_started: bool,
     list_item_first_block: bool,
     list_item_block_start: int,
@@ -123,7 +128,7 @@ tex_classify_source_mode :: proc(source: string) -> Tex_Source_Mode {
         "\\textnormal{", "\\texttt{", "\\bfseries", "\\itshape",
         "\\begin{", "\\noindent", "\\newline", "\\par", "\\euclid",
         "\\%", "\\#", "\\_", "\\&", "\\{", "\\}", "\\ ",
-        "\\\\", "$", "\\(", "\\[", "~", "%",
+        "\\\\", "\\href{", "$", "\\(", "\\[", "~", "%",
     }
     for marker in markers {
         if tex_document_contains(text, marker) {
@@ -311,6 +316,9 @@ tex_document_parse_run :: proc(
     if structural {
         return structural_status
     }
+    if tex_document_starts(parser, "\\href{") {
+        return tex_document_parse_href(parser, parse_ctx)
+    }
     style_status, style_handled := tex_document_parse_style_command(
         parser, parse_ctx)
     if style_handled {
@@ -335,6 +343,70 @@ tex_document_parse_run :: proc(
         parser, parse_ctx.font_flags, parse_ctx.color, parse_ctx.inline_only)
 }
 
+// Parse one reference-only exercise link and retain its target beside label inlines.
+tex_document_parse_href :: proc(
+    parser: ^Tex_Document_Parser,
+    parse_ctx: Tex_Document_Parse_Context) -> Tex_Parse_Status {
+    if parser.active_link_id != 0 {
+        return .Unexpected_Token
+    }
+    target_span, status := tex_document_parse_href_target(parser)
+    if status != .Ok {
+        return status
+    }
+    return tex_document_parse_href_label(parser, parse_ctx, target_span)
+}
+
+// Parse and retain one validated target before reading its label group.
+tex_document_parse_href_target :: proc(
+    parser: ^Tex_Document_Parser) -> (Tex_Text_Span, Tex_Parse_Status) {
+    if parser.link_count >= u16(TEX_DOCUMENT_LINK_CAPACITY) {
+        return {}, .Work_Limit
+    }
+    parser.offset += len("\\href")
+    target, target_ok := tex_document_take_group_source(parser)
+    if !target_ok {
+        return {}, .Unexpected_Token
+    }
+    _, valid_target := contentmodel.exercise_link_target_parse(target)
+    if !valid_target {
+        return {}, .Unexpected_Token
+    }
+    target_span, stored := tex_semantic_append_text(parser.output, target)
+    if !stored {
+        return {}, .Work_Limit
+    }
+    if parser.offset >= len(parser.source) || parser.source[parser.offset] != '{' {
+        return {}, .Unexpected_Token
+    }
+    parser.link_count += 1
+    return target_span, .Ok
+}
+
+// Parse a bounded inline label while its target metadata is active.
+tex_document_parse_href_label :: proc(
+    parser: ^Tex_Document_Parser,
+    parse_ctx: Tex_Document_Parse_Context,
+    target_span: Tex_Text_Span) -> Tex_Parse_Status {
+    previous_id, previous_target := parser.active_link_id, parser.active_link_target
+    parser.active_link_id, parser.active_link_target =
+        parser.link_count, target_span
+    defer parser.active_link_id, parser.active_link_target =
+        previous_id, previous_target
+    inline_start := parser.output.document_inline_count
+    nested := parse_ctx
+    nested.inline_only = true
+    nested.stop_on_brace = true
+    nested.stop_on_bracket = false
+    status := tex_document_parse_group(parser, nested)
+    if status != .Ok {
+        return status
+    }
+    if parser.output.document_inline_count == inline_start {
+        return .Unexpected_Token
+    }
+    return .Ok
+}
 
 // Parse one scoped prose style command when the current source begins one.
 tex_document_parse_style_command :: proc(
@@ -776,12 +848,17 @@ tex_document_append_semantic_space :: proc(
 tex_document_append_paragraph_inline :: proc(
     parser: ^Tex_Document_Parser,
     item: Tex_Document_Inline) -> Tex_Parse_Status {
+    item_inline := item
+    if parser.active_link_id != 0 {
+        item_inline.link_id = parser.active_link_id
+        item_inline.link_target = parser.active_link_target
+    }
     if parser.active_paragraph < 0 {
         parser.active_paragraph = tex_semantic_append_document_block(
             parser.output, {
                 kind = .Paragraph,
                 inline_start = parser.output.document_inline_count,
-                source = {item.source.offset, 0},
+                source = {item_inline.source.offset, 0},
                 format = tex_document_block_format(
                     parser, parser.paragraph_alignment),
             })
@@ -791,7 +868,7 @@ tex_document_append_paragraph_inline :: proc(
         parser.pending_no_indent = false
     }
     if parser.active_paragraph < 0 || !tex_semantic_append_document_inline(
-        parser.output, parser.active_paragraph, item) {
+        parser.output, parser.active_paragraph, item_inline) {
         return .Work_Limit
     }
     return .Ok

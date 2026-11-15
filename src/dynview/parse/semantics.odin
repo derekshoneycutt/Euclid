@@ -7,6 +7,7 @@ TEX_TABLE_DESCRIPTOR_CAPACITY :: 256
 TEX_DOCUMENT_BLOCK_CAPACITY :: 256
 TEX_DOCUMENT_INLINE_CAPACITY :: 2048
 TEX_DOCUMENT_DISPLAY_ROW_CAPACITY :: 512
+TEX_DOCUMENT_LINK_CAPACITY :: 64
 
 // Match the frozen recursive operation numbers emitted by the Julia compiler.
 Tex_Math_Op_Kind :: enum i32 {
@@ -309,6 +310,8 @@ Tex_Document_Inline :: struct {
     root_style: Tex_Math_Root_Style,
     math_program: int,
     penalty: i32,
+    link_id: u16,
+    link_target: Tex_Text_Span,
 }
 
 // Retain one contiguous range of semantic inline items.

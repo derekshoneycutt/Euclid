@@ -69,7 +69,13 @@ semantic_focus_matches_name :: proc(
     if index < 0 {
         return false
     }
-    id := snapshot^.nodes[index].id
+    node := snapshot^.nodes[index]
+    id := node.id
+    if name == "presentation_link" {
+        return id.domain == .Presentation &&
+            node.parent.domain == .Presentation && node.parent.local_id == 0 &&
+            node.role == .Button && .Activate in node.actions
+    }
     for entry in SCENARIO_FOCUS_NAMES {
         if entry.name == name {
             return id.domain == entry.domain && id.local_id == entry.local_id

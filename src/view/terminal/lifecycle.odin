@@ -434,7 +434,7 @@ terminal_log_teardown_rejections :: proc(term: ^viewterminalmodel.Terminal_State
     query := interpreter.title_state
     palette := &query.palette
     log.warnf(
-        "terminal teardown columns=%d rows=%d scrollback_rows=%d malformed_sequences=%d unsupported_sequences=%d cancelled_sequences=%d overflow_sequences=%d invalid_utf8=%d truncated_graphemes=%d hyperlink_accepts=%d hyperlink_rejects=%d hyperlink_activations=%d hyperlink_activation_rejects=%d hyperlink_http=%d hyperlink_https=%d hyperlink_mailto=%d hyperlink_file=%d shell_cwd_accepts=%d shell_cwd_rejects=%d shell_marker_accepts=%d shell_marker_rejects=%d query_accepts=%d query_rejects=%d palette_generation=%d color_accepts=%d color_rejects=%d color_query_accepts=%d color_query_rejects=%d synchronized_begins=%d synchronized_publishes=%d synchronized_forced_publishes=%d synchronized_capture_failures=%d",
+        "terminal teardown columns=%d rows=%d scrollback_rows=%d malformed_sequences=%d unsupported_sequences=%d cancelled_sequences=%d overflow_sequences=%d invalid_utf8=%d truncated_graphemes=%d hyperlink_accepts=%d hyperlink_rejects=%d hyperlink_activations=%d hyperlink_activation_rejects=%d hyperlink_http=%d hyperlink_https=%d hyperlink_mailto=%d hyperlink_file=%d hyperlink_euclid=%d shell_cwd_accepts=%d shell_cwd_rejects=%d shell_marker_accepts=%d shell_marker_rejects=%d query_accepts=%d query_rejects=%d palette_generation=%d color_accepts=%d color_rejects=%d color_query_accepts=%d color_query_rejects=%d synchronized_begins=%d synchronized_publishes=%d synchronized_forced_publishes=%d synchronized_capture_failures=%d",
         grid.columns, grid.row_count, scrollback.count,
         interpreter.malformed_sequence_count,
         interpreter.unsupported_sequence_count,
@@ -447,6 +447,7 @@ terminal_log_teardown_rejections :: proc(term: ^viewterminalmodel.Terminal_State
         hyperlinks.acceptance_by_scheme[.Https],
         hyperlinks.acceptance_by_scheme[.Mailto],
         hyperlinks.acceptance_by_scheme[.File],
+        hyperlinks.acceptance_by_scheme[.Euclid],
         shell.cwd_acceptance_count, shell.cwd_rejection_count,
         shell.marker_acceptance_count, shell.marker_rejection_count,
         query.query_acceptance_count, query.query_rejection_count,

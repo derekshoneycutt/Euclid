@@ -5,6 +5,7 @@ import native "../../native"
 import core "../../../core"
 import animation_model "../../../core/animation"
 import dynlayout "../../../dynview/layout"
+import dynviewmodel "../../../dynview/model"
 import julia "../../../bridge"
 import font "../../font"
 import ui_dynview "../dynview"
@@ -20,7 +21,35 @@ import uiterminal "../terminal"
 import uiaccordion "../layout/accordion"
 import uilibrary "../library"
 import uisplitter "../layout/splitter"
+import exercise_link "../../exercise_link"
 import log "core:log"
+
+// Presentation_Link_Target identifies one unique link in the compiled document.
+Presentation_Link_Target :: struct {
+    offset: int,
+    count: int,
+    index: int,
+}
+
+// Presentation_Link_Activation_Check captures one measured pointer click.
+Presentation_Link_Activation_Check :: struct {
+    pressed: bool,
+    press_revision: u64,
+    content_revision: u64,
+    press_offset: int,
+    press_count: int,
+    release_offset: int,
+    release_count: int,
+    distance_squared: f32,
+    selection_active: bool,
+}
+
+// Presentation_Link_Hit is a link identity only when hit is true.
+Presentation_Link_Hit :: struct {
+    offset: int,
+    count: int,
+    hit: bool,
+}
 
 PRESENTATION_NOTE_SPLITTER_HEIGHT :: f32(8)
 PRESENTATION_NOTE_ACTION_HEIGHT :: f32(24)
@@ -158,6 +187,172 @@ presentation_note_edit_layout :: proc(
         done_rect = done,
         order_rect = {panel.x+padding, footer_y, done_height, done_height},
     }
+}
+
+// Register measured document links as focusable controls and route activations.
+presentation_register_document_links :: proc(
+    state: ^core.Euclid_General_State,
+    view: ui_dynview.Dynview_Selection_View,
+    clip: geometry.Rectangle) {
+    if !dynlayout.document_layout_is_authoritative(&state^.dynview) {
+        return
+    }
+    offsets: [dynviewmodel.DYNVIEW_MAX_DOCUMENT_LINKS]int
+    counts: [dynviewmodel.DYNVIEW_MAX_DOCUMENT_LINKS]int
+    link_count := 0
+    for item in state^.dynview.content.document_inlines {
+        if item.link_id == 0 {
+            continue
+        }
+        if presentation_link_already_registered(
+            offsets[:link_count], counts[:link_count],
+            item.link_target_offset, item.link_target_count) {
+            continue
+        }
+        if link_count >= len(offsets) {
+            log.error("presentation_link_semantic_capacity_exceeded")
+            return
+        }
+        offsets[link_count], counts[link_count] =
+            item.link_target_offset, item.link_target_count
+        target: Presentation_Link_Target = {
+            offset = item.link_target_offset,
+            count = item.link_target_count,
+            index = link_count,
+        }
+        presentation_register_document_link(
+            state, view, clip, target)
+        link_count += 1
+    }
+}
+
+// Register one target identity after deriving its measured label and visible bounds.
+presentation_register_document_link :: proc(
+    state: ^core.Euclid_General_State,
+    view: ui_dynview.Dynview_Selection_View,
+    clip: geometry.Rectangle,
+    target: Presentation_Link_Target) {
+    bounds, visible := presentation_link_bounds(
+        state, view, clip, target.offset, target.count)
+    label_buffer: [4096]u8
+    label_count, label_valid := presentation_link_label(
+        state, target.offset, target.count, label_buffer[:])
+    if !visible || !label_valid {
+        return
+    }
+    id := presentation_link_semantic_id(state, target.offset)
+    _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = id,
+        parent = presentation_semantic_id(state),
+        role = .Button,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Activate},
+        region = .Presentation,
+        traversal_order = u32(64+target.index),
+        bounds = bounds,
+        clip_bounds = geometry.Rectangle(clip),
+        label = string(label_buffer[:label_count]),
+    })
+    if state^.ui_runtime.presentation.link_press_active &&
+        state^.ui_runtime.presentation.link_press_target_offset == target.offset {
+        _ = uisemantics.semantic_request_pointer_focus(
+            state^.ui_runtime.semantic_focus, id)
+    }
+    if uisemantics.semantic_command_requested(
+        state^.ui_runtime.semantic_focus, id, .Activate) {
+        presentation_activate_link(state, target.offset, target.count)
+    }
+}
+
+// Build one stable focus identity from the current compiled-document generation.
+presentation_link_semantic_id :: #force_inline proc(
+    state: ^core.Euclid_General_State, target_offset: int) -> viewmodel.Ui_Node_Id {
+    return {
+        domain = .Presentation,
+        local_id = u64(target_offset)+1,
+        generation = state^.dynview.compile_cache.compiled_revision,
+    }
+}
+
+// Return whether an equal target has already been registered this frame.
+presentation_link_already_registered :: proc(
+    offsets, counts: []int, target_offset, target_count: int) -> bool {
+    for offset, index in offsets {
+        if offset == target_offset && counts[index] == target_count {
+            return true
+        }
+    }
+    return false
+}
+
+// Aggregate exact visible glyph bounds for one link and intersect its viewport.
+presentation_link_bounds :: proc(
+    state: ^core.Euclid_General_State,
+    view: ui_dynview.Dynview_Selection_View,
+    clip: geometry.Rectangle,
+    target_offset, target_count: int) -> (geometry.Rectangle, bool) {
+    result: geometry.Rectangle
+    found := false
+    for target in state^.dynview.compile_cache.document_layout_copy_targets {
+        if target.link_target_offset != target_offset ||
+            target.link_target_count != target_count {
+            continue
+        }
+        rect := ui_dynview.dynview_document_target_rect(target, view)
+        rect = presentation_intersection(rect, clip)
+        if rect.width <= 0 || rect.height <= 0 {
+            continue
+        }
+        result = presentation_rect_union(result, rect) if found else rect
+        found = true
+    }
+    return result, found
+}
+
+// Copy the ordinary semantic label into bounded stack storage for accessibility.
+presentation_link_label :: proc(
+    state: ^core.Euclid_General_State,
+    target_offset, target_count: int,
+    buffer: []u8) -> (int, bool) {
+    count := 0
+    for item in state^.dynview.content.document_inlines {
+        if item.link_target_offset != target_offset ||
+            item.link_target_count != target_count || item.text_count == 0 {
+            continue
+        }
+        if item.text_offset < 0 ||
+            item.text_count >
+                len(state^.dynview.content.document_text)-item.text_offset ||
+            item.text_count > len(buffer)-count {
+            return 0, false
+        }
+        copy(buffer[count:], state^.dynview.content.document_text[
+            item.text_offset:item.text_offset+item.text_count])
+        count += item.text_count
+    }
+    return count, count > 0
+}
+
+// Resolve a target span only while its current semantic document remains authoritative.
+presentation_link_target_uri :: proc(
+    state: ^core.Euclid_General_State,
+    target_offset, target_count: int) -> string {
+    text := state^.dynview.content.document_text
+    if target_offset < 0 || target_count <= 0 ||
+        target_count > len(text)-target_offset {
+        return ""
+    }
+    return string(text[target_offset:target_offset+target_count])
+}
+
+// Union two positive-area screen-space rectangles.
+presentation_rect_union :: #force_inline proc(
+    left, right: geometry.Rectangle) -> geometry.Rectangle {
+    x := min(left.x, right.x)
+    y := min(left.y, right.y)
+    x2 := max(left.x+left.width, right.x+right.width)
+    y2 := max(left.y+left.height, right.y+right.height)
+    return {x, y, x2-x, y2-y}
 }
 
 // Keep both split regions usable when the viewport can fit their minimum heights.
@@ -842,6 +1037,23 @@ presentation_update_selection_mouse :: proc(
     runtime := &state^.ui_runtime
     owner := &runtime^.input.press_owner
     point := uiwidgets.input_frame_mouse_position(request.mouse_input)
+    if content.mode == .Semantic_Document {
+        hovered := presentation_link_hit_target(
+            state, request.selection_view, request.original_screen, point)
+        runtime^.presentation.has_hovered_link = hovered.hit
+        runtime^.presentation.hovered_link_target_offset = hovered.offset
+        if .Left in request.mouse_input.mouse_pressed {
+            runtime^.presentation.link_press_active = hovered.hit
+            runtime^.presentation.link_press_revision = content.revision
+            runtime^.presentation.link_press_target_offset = hovered.offset
+            runtime^.presentation.link_press_target_count = hovered.count
+            runtime^.presentation.link_press_x = point.x
+            runtime^.presentation.link_press_y = point.y
+        }
+    } else {
+        runtime^.presentation.has_hovered_link = false
+        runtime^.presentation.link_press_active = false
+    }
     original_capture := owner^.kind == .Dynview_Selection && owner^.id == 1001
     original_hit := geometry.rectangle_contains(request.original_screen, point)
     if original_hit || original_capture {
@@ -854,6 +1066,92 @@ presentation_update_selection_mouse :: proc(
             frame = request.mouse_input,
             selection_id = 1001,
         })
+    }
+    if .Left in request.mouse_input.mouse_released {
+        presentation_finish_link_press(
+            state, request, content, point)
+    }
+}
+
+// Route a pointer activation only when press and release identify the same measured link.
+presentation_finish_link_press :: proc(
+    state: ^core.Euclid_General_State,
+    request: Presentation_Content_Interaction,
+    content: ui_dynview.Dynview_Selection_Content,
+    point: geometry.Vector2) {
+    interaction := &state^.ui_runtime.presentation
+    pressed := interaction^.link_press_active
+    revision := interaction^.link_press_revision
+    target_offset, target_count := interaction^.link_press_target_offset,
+        interaction^.link_press_target_count
+    dx, dy := point.x-interaction^.link_press_x, point.y-interaction^.link_press_y
+    interaction^.link_press_active = false
+    if content.mode != .Semantic_Document {
+        return
+    }
+    released := presentation_link_hit_target(
+        state, request.selection_view, request.original_screen, point)
+    check: Presentation_Link_Activation_Check = {
+        pressed = pressed,
+        press_revision = revision,
+        content_revision = content.revision,
+        press_offset = target_offset,
+        press_count = target_count,
+        release_offset = released.offset,
+        release_count = released.count,
+        distance_squared = dx*dx+dy*dy,
+        selection_active = state^.ui_runtime.presentation.selection.active,
+    }
+    if !released.hit || !presentation_link_press_release_matches(check) {
+        return
+    }
+    presentation_activate_link(state, target_offset, target_count)
+}
+
+// Require a same-revision, same-link click with neither drag nor text selection.
+presentation_link_press_release_matches :: #force_inline proc(
+    check: Presentation_Link_Activation_Check) -> bool {
+    return check.pressed &&
+        check.press_revision == check.content_revision &&
+        check.press_offset == check.release_offset &&
+        check.press_count == check.release_count &&
+        check.distance_squared <= 16 && !check.selection_active
+}
+
+// Find one link only inside its measured, clipped glyph geometry.
+presentation_link_hit_target :: proc(
+    state: ^core.Euclid_General_State,
+    view: ui_dynview.Dynview_Selection_View,
+    clip: geometry.Rectangle,
+    point: geometry.Vector2) -> Presentation_Link_Hit {
+    if !dynlayout.document_layout_is_authoritative(&state^.dynview) ||
+        !geometry.rectangle_contains(clip, point) {
+        return {}
+    }
+    for target in state^.dynview.compile_cache.document_layout_copy_targets {
+        if target.link_id == 0 || target.link_target_count <= 0 {
+            continue
+        }
+        rect := ui_dynview.dynview_document_target_rect(target, view)
+        rect = presentation_intersection(rect, clip)
+        if geometry.rectangle_contains(rect, point) {
+            return {
+                offset = target.link_target_offset,
+                count = target.link_target_count,
+                hit = true,
+            }
+        }
+    }
+    return {}
+}
+
+// Activate one current target through the established shared exercise-link lifecycle.
+presentation_activate_link :: proc(
+    state: ^core.Euclid_General_State,
+    target_offset, target_count: int) {
+    uri := presentation_link_target_uri(state, target_offset, target_count)
+    if len(uri) == 0 || !exercise_link.exercise_link_activate(state, uri) {
+        log.warn("presentation_exercise_link_activation_rejected")
     }
 }
 
@@ -958,6 +1256,8 @@ prepare_presentation_interaction :: proc(
         keyboard_enabled = keyboard_enabled,
     })
     register_presentation_semantics(state, text_panel, scroll)
+    presentation_register_document_links(
+        state, views.selection, views.original_screen)
     editor := presentation_prepare_note_mode(state, note_layout, mouse_input)
     return {
         active = true,

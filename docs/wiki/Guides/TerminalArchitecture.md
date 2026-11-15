@@ -221,6 +221,26 @@ These operations commit only after a complete payload validates. System effects 
 behind display-owned callbacks: an OSC sequence can request a clipboard write or retain
 a link, but parser code does not call the operating system directly.
 
+Terminal OSC 8 and Dynview document `\href` links accept internal exercise references:
+`euclid:exercise/{builtin|user}/{alias}` or
+`euclid:exercise/{builtin|user}/uuid/{uuid}`. Aliases are 1-16 lowercase ASCII
+letters, digits, hyphens, or underscores; UUIDs are canonical, lowercase, nonzero
+36-byte UUIDs. Syntax validation does not consult either database, so a well-formed
+reference can become unavailable after authoring, rename, or deletion.
+
+Dynview supports `\href{target}{label}` only for these exercise targets. It retains
+the target reference and ordinary label text; it does not embed exercise instructions.
+Activation is available in reading views, uses measured and clipped link geometry,
+and does not turn a text-selection drag into a click. Keyboard and accessibility
+activation use the same path. The destination resolves through the target namespace's
+existing owner, selects or resets the Terminal through the ordinary animation
+lifecycle, waits for session readiness, and reads again by stable UUID before
+publishing instructions. Internal targets never reach the operating-system URL opener
+or become submitted Terminal commands. A missing, retired, malformed, or otherwise
+unresolvable target reports a failure without loading stale instructions. Pending
+resolution is cancelled when a newer header request or animation selection supersedes
+it.
+
 ## Source Map
 
 ### Shared Protocol And Host Boundary
@@ -928,11 +948,14 @@ Julia's standard plain-text display shows readable titles, friendly references,
 page ranges, and empty states instead of constructor/UUID dumps:
 
 ```julia
-exercises()                         # (:builtin,)
+exercises()                         # (:builtin, :user)
 exercises("builtin")                # root catalogue children
 exercises("builtin"; parent=animation_uuid, offset=0, limit=16)
 exercises("builtin", animation_uuid) # exercises associated with this exact UUID
+exercises("user"; all=true, offset=0, limit=16)
+exercises("user", animation_uuid; offset=0, limit=16)
 resolve_exercise("builtin:elements-i-1")
+resolve_exercise("user:triangle")
 load_exercise!("builtin:elements-i-1")
 load_exercise!("builtin:a9237c51-c9f6-4d54-8bf5-f8c651906e1c")
 ```
@@ -940,11 +963,18 @@ load_exercise!("builtin:a9237c51-c9f6-4d54-8bf5-f8c651906e1c")
 `ExercisePage.entries`, `.offset`, `.total`, and `.more` describe a page of at most
 16 rows. Catalogue children carry actual animation UUIDs, never title-matched
 identities. Exercise summaries expose `.id`, `.animation_id`, `.reference`, and
-`.title`. Both `builtin:alias` and `builtin:canonical-lowercase-UUID` refer to the
-same stored exercise; unqualified references are rejected.
+`.title`; user summaries also report `.animation_available`. User records may be
+listed across all animations with `all=true`, or by an exact animation UUID.
+`resolve_exercise` reads a summary without changing the current attempt;
+`load_exercise!` loads its instructions into the exercise header without navigating,
+resetting the Terminal, changing variables, or altering drawing/output. Built-in
+references accept `builtin:alias` or `builtin:canonical-lowercase-UUID`; user references
+accept `user:alias` or `user:canonical-lowercase-UUID`. Unqualified or wrong-namespace
+references are rejected.
 
-An admitted animation with no exercises returns a successful empty page.
-`ExerciseQueryError.reason` distinguishes `not_found`, `retired`,
+Each list page has 1-16 rows and an offset in the nonnegative Int32 range. An admitted
+animation with no exercises returns a successful empty page. Invalid arguments raise
+`ArgumentError`. `ExerciseQueryError.reason` distinguishes `not_found`, `retired`,
 `missing_animation`, `database_failed`, `unavailable`, and `superseded`.
 One fixed reply slot in the Julia runtime carries pointer-free worker results.
 Julia waits cooperatively and copies into task-owned bounded buffers; interruption
@@ -964,6 +994,24 @@ show operation. They do not navigate, reset the Terminal, clear output, discard
 variables, or alter the drawing. The
 [`exercise-repl-acceptance` scenario](../../../tools/scenarios/exercise-repl-acceptance.jsonl)
 loads through actual Terminal input and checks preserved attempt state.
+
+### User-Authored Exercises
+
+The Terminal session exposes `create_user_exercise!`, `update_user_exercise!`, and
+`delete_user_exercise!`. Creation takes an animation UUID, alias, title, and
+instructions; it returns an `ExerciseSummary` with a stable UUID and `user:` reference.
+Updates take that UUID plus the replacement animation UUID, alias, title, and
+instructions, preserving identity. Deletion takes the UUID and permanently retires it
+and its active alias. Built-in exercises are read-only.
+
+Aliases are 1-16 lowercase ASCII letters, digits, hyphens, or underscores. Titles are
+nonblank valid UTF-8 of at most 256 bytes; instructions are nonblank valid UTF-8 of at
+most 32 KiB. NUL and invalid UTF-8 are rejected. The associated animation UUID must
+identify an available animation when the write is committed. Invalid input raises
+`ArgumentError`; worker, database, busy, collision, missing-animation, retired, or
+timeout outcomes raise `UserExerciseError` with a reason symbol. Retired aliases and
+UUIDs cannot be reused. User references are local to the current user database and are
+not portable between machines.
 
 ### Drawing Helpers
 

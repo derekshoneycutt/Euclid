@@ -301,6 +301,36 @@ document_store_resolves_semantic_document_blocks :: proc(t: ^testing.T) {
         uintptr(align_of(dynparse.Tex_Document_Inline)), uintptr(0))
 }
 
+// Verify immutable interning preserves reference targets attached to label inlines.
+@(test)
+document_store_preserves_exercise_link_metadata :: proc(t: ^testing.T) {
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
+    testing.expect(t, document_store_test_init(&memory, &store, 23))
+    defer document_store_test_destroy(&memory, &store)
+    source := "Intro \\href{euclid:exercise/builtin/elements-i-1}{Do as Exercise}"
+
+    handle, status := document_store_intern(
+        &store, source, .Document, .Display)
+    document, resolve_status := document_store_resolve(&store, handle)
+
+    testing.expect_value(t, status, Dynview_Document_Status.Ok)
+    testing.expect_value(t, resolve_status, Dynview_Document_Status.Ok)
+    found := false
+    for item_inline in document.document_inlines {
+        if item_inline.link_id == 0 {
+            continue
+        }
+        found = true
+        target := document.text[
+            item_inline.link_target.offset:
+                item_inline.link_target.offset+item_inline.link_target.length]
+        testing.expect_value(t, string(target),
+            "euclid:exercise/builtin/elements-i-1")
+    }
+    testing.expect(t, found)
+}
+
 // Verify technical display rows resolve from aligned generation-owned storage.
 @(test)
 document_store_resolves_technical_display_rows :: proc(t: ^testing.T) {

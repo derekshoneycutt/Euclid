@@ -32,6 +32,10 @@ import viewpresentation "../presentation"
 import uisplitter "../ui/layout/splitter"
 import uilibrary "../ui/library"
 import uisettings "../ui/settings"
+import terminalview "../terminal"
+import terminalservice "../terminal/service"
+import termhyperlink "../../terminal/hyperlink"
+import termmodel "../../terminal/model"
 import capturemodel "../capture/model"
 import geometry "../../core/geometry"
 import uianimation "../ui/animation"
@@ -1101,6 +1105,8 @@ scenario_issue_terminal_action :: proc(
     runtime: ^Scenario_Runtime, kind: scenario.Command_Kind,
     text: string) -> (bool, bool) {
     #partial switch kind {
+    case .Activate_Terminal_Link:
+        return true, scenario_activate_terminal_link(runtime, text)
     case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
         return true, scenario_terminal_contains(runtime.state, text)
     case .Wait_Terminal_History_Idle:
@@ -1114,6 +1120,58 @@ scenario_issue_terminal_action :: proc(
     case:
     }
     return false, false
+}
+
+// Activate only an OSC 8 URI already present in Terminal output.
+scenario_activate_terminal_link :: proc(
+    runtime: ^Scenario_Runtime, uri: string) -> bool {
+    if runtime == nil || runtime.state == nil ||
+        !runtime.state^.terminal.initialized {
+        log.error("scenario_terminal_link_activation_failed reason=terminal_unavailable")
+        return false
+    }
+    term := &runtime.state^.terminal
+    for line in 0 ..< uiterminal.terminal_line_count(term) {
+        cells, row_valid := terminalview.terminal_output_row(term, line)
+        if !row_valid {
+            continue
+        }
+        for column in 0..<len(cells) {
+            handle := terminalview.terminal_output_hyperlink_at(term, line, column)
+            target, target_valid := termhyperlink.hyperlink_registry_uri(
+                term^.hyperlink_registry, handle)
+            if target_valid && target == uri {
+                return scenario_activate_terminal_link_handle(runtime, handle)
+            }
+        }
+    }
+    registry := term^.hyperlink_registry
+    if registry == nil {
+        log.error("scenario_terminal_link_activation_failed reason=registry_unavailable")
+    } else {
+        log.errorf(
+            "scenario_terminal_link_activation_failed reason=target_not_visible entries=%d accepted=%d rejected=%d",
+            registry.count, registry.acceptance_count, registry.rejection_count)
+    }
+    return false
+}
+
+// Invoke one found OSC 8 handle through the production Terminal activation path.
+scenario_activate_terminal_link_handle :: proc(
+    runtime: ^Scenario_Runtime, handle: termmodel.Hyperlink_Handle) -> bool {
+    accepted := terminalview.terminal_activate_hyperlink(
+        &runtime.state^.terminal, {
+            kind = .Osc8,
+            handle = handle,
+            requested = true,
+        }, {
+            user_data = rawptr(runtime.state),
+            activate = terminalservice.terminal_service_activate_uri,
+        })
+    if !accepted {
+        log.error("scenario_terminal_link_activation_failed reason=activation_rejected")
+    }
+    return accepted
 }
 
 //   Record one accepted scenario action under its final correlation identity.

@@ -2903,6 +2903,43 @@ draw_document_item :: proc(
         draw_document_shape_item(ctx, item, semantic_inline, position)
     case .None:
     }
+    draw_document_link_decoration(ctx, item, position)
+}
+
+// Underline a link while hovered or keyboard-focused, using its measured item box.
+draw_document_link_decoration :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item,
+    position: geometry.Vector2) {
+    if item.link_id == 0 {
+        return
+    }
+    interaction := ctx.state^.ui_runtime.presentation
+    semantic := ctx.state^.ui_runtime.semantic_focus
+    hovered := interaction.has_hovered_link &&
+        interaction.hovered_link_target_offset == item.link_target_offset
+    focused := semantic != nil && semantic^.window_focused &&
+        semantic^.focus_origin == .Keyboard &&
+        semantic^.logical_focus.domain == .Presentation &&
+        semantic^.logical_focus.generation ==
+            ctx.runtime^.compile_cache.compiled_revision &&
+        semantic^.logical_focus.local_id == u64(item.link_target_offset)+1
+    active := hovered || focused
+    rect: geometry.Rectangle = {
+        position.x,
+        position.y+item.ascent+item.descent-1,
+        item.width,
+        2 if active else 1,
+    }
+    clip := ctx.selection_clip if ctx.selected_text else ctx.panel
+    left, top := max(rect.x, clip.x), max(rect.y, clip.y)
+    right := min(rect.x+rect.width, clip.x+clip.width)
+    bottom := min(rect.y+rect.height, clip.y+clip.height)
+    if right > left && bottom > top {
+        _ = native.draw_encoder_rectangle(
+            ctx.encoder, {left, top, right-left, bottom-top},
+            theme.UI_LINK_HOVER_COLOR if active else theme.UI_LINK_COLOR)
+    }
 }
 
 // Draw one parenthesized positive display number from fixed stack storage.

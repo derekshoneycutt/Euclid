@@ -27,6 +27,7 @@ import viewpresentation "presentation"
 import uipresentation "ui/presentation"
 import viewscenario "scenario"
 import terminalservice "terminal/service"
+import exercise_link "exercise_link"
 import terminalview "terminal"
 import uiaccessibility "ui/accessibility"
 import viewpreferences "preferences"
@@ -473,6 +474,7 @@ service_frame_user_data :: proc(
     }
     viewpreferences.settings_save_service(state, pool, history_ready)
     service_user_exercise_operations(state)
+    exercise_link.exercise_link_service(state)
 }
 
 // Route one UI-requested collection dialog and publish its result on the display owner.

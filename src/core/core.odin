@@ -117,6 +117,7 @@ Euclid_General_State :: struct {
     
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
     exercise_header: exerciseheader.State,
+    exercise_link: exerciseheader.Link_State,
     preferences_runtime: preferencesmodel.Settings_Save_Runtime,
     user_data_admission: protocol.User_Data_Connection_Admission,
     terminal_history_runtime: historyruntime.History_Runtime,

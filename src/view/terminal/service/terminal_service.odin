@@ -14,6 +14,8 @@ import font "../../font"
 import input "../../input"
 import native "../../native"
 import terminalview ".."
+import termhyperlink "../../../terminal/hyperlink"
+import exercise_link "../../exercise_link"
 import viewterminalmodel "../model"
 import uiterminal "../../ui/terminal"
 import uipresentation "../../ui/presentation"
@@ -279,8 +281,16 @@ terminal_service_dispatch_egress :: proc(
         terminal_service_dispatch_observation(state, message)
 }
 
-// Open one terminal hyperlink after its URI passed terminal validation.
-terminal_service_open_uri :: proc(_: rawptr, uri: cstring) -> bool {
+// Route validated internal exercise targets separately from operating-system URLs.
+terminal_service_activate_uri :: proc(user_data: rawptr, uri: cstring) -> bool {
+    state := cast(^core.Euclid_General_State)user_data
+    parsed, supported := termhyperlink.hyperlink_uri_scheme(string(uri))
+    if supported && parsed.scheme == .Euclid {
+        return exercise_link.exercise_link_activate(state, string(uri))
+    }
+    if state != nil {
+        exercise_link.exercise_link_cancel(state, "Exercise link cancelled.")
+    }
     return native.sdl_platform_open_url(uri)
 }
 
@@ -296,6 +306,7 @@ terminal_service_apply_submission :: proc(
     if !submission.submitted {
         return
     }
+    exercise_link.exercise_link_cancel(state, "Exercise link cancelled.")
     terminal_service_record_history(state, submission)
     if submission.mode == .Shell {
         _ = shell_service_submit(state, submission.text)
@@ -785,7 +796,8 @@ terminal_service_update_visible :: proc(
     terminal_graphics_update(state)
     _ = terminalview.terminal_activate_hyperlink(
         &state^.terminal, update.hyperlink_activation, {
-            activate = terminal_service_open_uri,
+            user_data = rawptr(state),
+            activate = terminal_service_activate_uri,
         })
     uiterminal.terminal_refresh_explorer_frame(state, &prepared)
     return prepared

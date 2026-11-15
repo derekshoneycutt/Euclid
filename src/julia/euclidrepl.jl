@@ -553,61 +553,147 @@ function install_transform_helpers!(context_module::Module)::Nothing
     return nothing
 end
 
-"""Install user-facing geometry helpers bound to one Terminal generation."""
-function install_session_helpers!(
-    context_module::Module, runtime::EuclidReplRuntime,
-    state_ptr::Ptr{Cvoid})::Nothing
-
-    install_drawing_helpers!(context_module, runtime, state_ptr)
-    install_transform_helpers!(context_module)
+"""Install exercise-header helpers in the REPL evaluation module."""
+function install_exercise_header_helpers!(context_module::Module)::Nothing
     Core.eval(context_module, quote
-        """Show or replace plain-text exercise instructions without resetting Terminal."""
+        """
+        Show or replace plain-text exercise instructions without resetting Terminal.
+
+        Accepts nonblank valid UTF-8 of at most 32 KiB, without NUL. Validation
+        failures raise `ArgumentError`; rejected bridge admission raises an error.
+        """
         show_exercise!(text) =
             EuclidRepl.show_exercise!(EUCLID_STATE_PTR, text)
-        """Hide exercise instructions without resetting Terminal."""
+        """Hide the current exercise header; rejected bridge admission raises an error."""
         hide_exercise!() = EuclidRepl.hide_exercise!(EUCLID_STATE_PTR)
-        """List namespace roots, catalogue children, or exercises for an animation UUID."""
+    end)
+    return nothing
+end
+
+"""Install exercise lookup and loading helpers in the REPL evaluation module."""
+function install_exercise_query_helpers!(context_module::Module)::Nothing
+    Core.eval(context_module, quote
+        """
+        List exercise namespaces or one bounded page of catalogue/exercise entries.
+
+        Pages contain 1-16 rows with a nonnegative Int32 offset. User pages may
+        list all records or filter by exact animation UUID; records are user-local.
+        Invalid arguments raise `ArgumentError`; owner failures raise a typed query
+        exception.
+        """
         exercises(args...; kwargs...) =
             EuclidRepl.exercises(EUCLID_STATE_PTR, args...; kwargs...)
-        """Resolve a builtin: alias or UUID without changing the current attempt."""
+        """
+        Resolve a `builtin:` or `user:` alias/UUID to a summary without loading it.
+
+        Invalid references raise `ArgumentError`; missing, retired, or unavailable
+        records raise a typed query exception.
+        """
         resolve_exercise(reference) =
             EuclidRepl.resolve_exercise(EUCLID_STATE_PTR, reference)
-        """Load stored instructions without resetting drawing, variables, or Terminal."""
+        """
+        Load stored instructions into the exercise header without resetting state.
+
+        The explicit reference must use `builtin:` or `user:`. Invalid references
+        raise `ArgumentError`; missing, retired, or unavailable records raise a
+        typed query exception.
+        """
         load_exercise!(reference) =
             EuclidRepl.load_exercise!(EUCLID_STATE_PTR, reference)
-        """Create a user exercise attached to an exact animation UUID."""
-        create_user_exercise!(animation_id, reference, title, instructions) =
-            EuclidRepl.create_user_exercise!(
-                EUCLID_STATE_PTR, animation_id, reference, title, instructions)
-        """Update a user exercise by stable UUID without changing that identity."""
-        update_user_exercise!(identity, animation_id, reference, title, instructions) =
-            EuclidRepl.update_user_exercise!(
-                EUCLID_STATE_PTR, identity, animation_id, reference, title, instructions)
-        """Delete a user exercise by stable UUID and permanently retire its aliases."""
-        delete_user_exercise!(identity) =
-            EuclidRepl.delete_user_exercise!(EUCLID_STATE_PTR, identity)
-        """Browse exercises with arrow keys and Enter; q cancels without changing the attempt."""
+        """
+        Browse built-in or user exercises; Enter loads and q/Ctrl-C cancels.
+
+        Loading shows instructions without changing the current attempt. Cancellation
+        returns to the REPL without loading. This browser opens only when called.
+        """
         choose_exercise() = EuclidRepl.choose_exercise(EUCLID_STATE_PTR)
     end)
     return nothing
 end
 
-"""Request the display-owned header to show validated plain-text instructions."""
+"""Install user exercise authoring helpers in the REPL evaluation module."""
+function install_user_exercise_helpers!(context_module::Module)::Nothing
+    Core.eval(context_module, quote
+        """
+        Create a user exercise attached to an exact animation UUID.
+
+        Aliases are 1-16 lowercase ASCII letters, digits, hyphens, or underscores;
+        titles are nonblank UTF-8 up to 256 bytes; instructions are nonblank UTF-8
+        up to 32 KiB. NUL is rejected. Returns the stable UUID and `user:` reference.
+        Invalid values raise `ArgumentError`; persistence failures raise
+        `UserExerciseError`.
+        """
+        create_user_exercise!(animation_id, reference, title, instructions) =
+            EuclidRepl.create_user_exercise!(
+                EUCLID_STATE_PTR, animation_id, reference, title, instructions)
+        """
+        Update a user exercise by stable UUID without changing that identity.
+
+        The new alias, title, instructions, and animation UUID follow the creation
+        contract. The previous alias is retired and cannot be reused. Invalid values
+        raise `ArgumentError`; persistence failures raise `UserExerciseError`.
+        """
+        update_user_exercise!(identity, animation_id, reference, title, instructions) =
+            EuclidRepl.update_user_exercise!(
+                EUCLID_STATE_PTR, identity, animation_id, reference, title, instructions)
+        """
+        Delete a user exercise by stable UUID and retire its identity and alias.
+
+        Invalid UUIDs raise `ArgumentError`; missing, busy, or database failures
+        raise `UserExerciseError`. Retired aliases and identities cannot be reused.
+        """
+        delete_user_exercise!(identity) =
+            EuclidRepl.delete_user_exercise!(EUCLID_STATE_PTR, identity)
+    end)
+    return nothing
+end
+
+"""Install user-facing geometry and exercise helpers for one Terminal generation."""
+function install_session_helpers!(
+    context_module::Module, runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid})::Nothing
+    install_drawing_helpers!(context_module, runtime, state_ptr)
+    install_transform_helpers!(context_module)
+    install_exercise_header_helpers!(context_module)
+    install_exercise_query_helpers!(context_module)
+    install_user_exercise_helpers!(context_module)
+    return nothing
+end
+
+"""
+    show_exercise!(state_ptr, text)
+
+Request the display-owned header to show plain-text instructions. Text must be valid
+UTF-8, nonblank, NUL-free, and at most 32 KiB. Validation throws `ArgumentError`;
+bridge admission failure throws an error. The request never resets the current attempt.
+"""
 function show_exercise!(state_ptr::Ptr{Cvoid}, text::AbstractString)
     OdinJuliaBridge.publish_exercise_header(state_ptr, text)
     return nothing
 end
 
-"""Request the display-owned header to dismiss its current instructions."""
+"""
+    hide_exercise!(state_ptr)
+
+Request dismissal of the current header without resetting Terminal or construction.
+Bridge admission failure throws an error.
+"""
 function hide_exercise!(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.hide_exercise_header(state_ptr)
     return nothing
 end
 
-"""List the separate built-in and user exercise namespaces."""
+"""Return the separately owned `:builtin` and `:user` exercise namespaces."""
 exercises(::Ptr{Cvoid}) = (:builtin, :user)
 
-"""Page catalogue children for one explicit namespace; parent defaults to the root."""
+"""
+    exercises(state_ptr, namespace; parent=nothing, offset=0, limit=16, all=false)
+
+Page catalogue children or exercises in `builtin` or `user`. Pages are 1-16 rows
+with a nonnegative Int32 offset; `all=true` is user-only and lists across animations.
+An empty result is a successful page. Invalid arguments raise `ArgumentError`;
+owner failures raise `ExerciseQueryError` or `UserExerciseError`.
+"""
 function exercises(
     state_ptr::Ptr{Cvoid}, namespace::AbstractString;
     parent=nothing, offset::Integer=0, limit::Integer=16, all::Bool=false)
@@ -635,7 +721,13 @@ function exercises(
     return ExercisePage(entries, Int(start), Int(metadata.total), metadata.more != 0)
 end
 
-"""Page one namespace's exercises associated with an exact animation UUID."""
+"""
+    exercises(state_ptr, namespace, animation_id; offset=0, limit=16)
+
+Page exercises attached to the exact animation UUID in one namespace. Results are
+bounded to 1-16 rows; invalid UUIDs, namespaces, offsets, or limits raise
+`ArgumentError`. Owner failures raise `ExerciseQueryError` or `UserExerciseError`.
+"""
 function exercises(
     state_ptr::Ptr{Cvoid}, namespace::AbstractString, animation_id;
     offset::Integer=0, limit::Integer=16)
@@ -657,7 +749,13 @@ function exercises(
         Int(start), Int(metadata.total), metadata.more != 0)
 end
 
-"""Resolve an explicitly namespaced alias or UUID without changing visible state."""
+"""
+    resolve_exercise(state_ptr, reference)
+
+Resolve a `builtin:` or `user:` alias/UUID to a summary without loading instructions.
+Malformed or unqualified references raise `ArgumentError`; missing, retired, or
+unavailable records raise `ExerciseQueryError` or `UserExerciseError`.
+"""
 function resolve_exercise(state_ptr::Ptr{Cvoid}, reference::AbstractString)
     namespace = OdinJuliaBridge.exercise_reference_namespace(reference)
     if namespace == :builtin
@@ -670,7 +768,14 @@ function resolve_exercise(state_ptr::Ptr{Cvoid}, reference::AbstractString)
         state_ptr, operation, identity; load=false)
 end
 
-"""Load a namespaced instruction snapshot only after display-owned acceptance."""
+"""
+    load_exercise!(state_ptr, reference)
+
+Load a namespaced instruction snapshot through display-owned acceptance. It updates
+the exercise header without resetting the Terminal, drawing, variables, or output.
+Malformed references raise `ArgumentError`; missing, retired, or unavailable records
+raise `ExerciseQueryError` or `UserExerciseError`.
+"""
 function load_exercise!(state_ptr::Ptr{Cvoid}, reference::AbstractString)
     namespace = OdinJuliaBridge.exercise_reference_namespace(reference)
     if namespace == :builtin
@@ -683,7 +788,16 @@ function load_exercise!(state_ptr::Ptr{Cvoid}, reference::AbstractString)
         state_ptr, operation, identity; load=true)
 end
 
-"""Create a user exercise and return its stable identity and exact namespaced alias."""
+"""
+    create_user_exercise!(state_ptr, animation_id, reference, title, instructions)
+
+Create a user record and return its stable UUID and `user:` alias. The animation UUID
+must identify an available animation. Alias syntax is 1-16 lowercase ASCII letters,
+digits, hyphens, or underscores; title and instructions must be nonblank valid UTF-8,
+without NUL, limited to 256 bytes and 32 KiB respectively. Invalid inputs raise
+`ArgumentError`; collisions, missing animation, or storage errors raise
+`UserExerciseError`.
+"""
 function create_user_exercise!(
     state_ptr::Ptr{Cvoid}, animation_id, reference::AbstractString,
     title::AbstractString, instructions::AbstractString)
@@ -696,7 +810,14 @@ function create_user_exercise!(
     return OdinJuliaBridge.user_exercise_query_summary(only(reply.rows))
 end
 
-"""Update mutable fields by stable user UUID while preserving its identity."""
+"""
+    update_user_exercise!(state_ptr, identity, animation_id, reference, title, instructions)
+
+Update a user record by stable UUID. The UUID is immutable and the former alias is
+retired. The new alias, title, instructions, and animation UUID follow the create
+contract. Invalid inputs raise `ArgumentError`; retired/colliding aliases, missing
+records/animations, or storage errors raise `UserExerciseError`.
+"""
 function update_user_exercise!(
     state_ptr::Ptr{Cvoid}, identity, animation_id, reference::AbstractString,
     title::AbstractString, instructions::AbstractString)
@@ -710,7 +831,12 @@ function update_user_exercise!(
     return OdinJuliaBridge.user_exercise_query_summary(only(reply.rows))
 end
 
-"""Delete a user exercise by stable UUID and retire its identity and aliases."""
+"""
+    delete_user_exercise!(state_ptr, identity)
+
+Delete by stable UUID and permanently retire the UUID and current alias. Invalid UUIDs
+raise `ArgumentError`; missing, busy, or storage failures raise `UserExerciseError`.
+"""
 function delete_user_exercise!(state_ptr::Ptr{Cvoid}, identity)
     id = OdinJuliaBridge.canonical_exercise_uuid(identity)
     OdinJuliaBridge.user_exercise_operation(

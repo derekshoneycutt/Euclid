@@ -19,6 +19,7 @@ DYNVIEW_MAX_DOCUMENTS :: 256
 DYNVIEW_MAX_DOCUMENT_BLOCKS :: 256
 DYNVIEW_MAX_DOCUMENT_INLINES :: 2048
 DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS :: 512
+DYNVIEW_MAX_DOCUMENT_LINKS :: 128
 DYNVIEW_MAX_DOCUMENT_BYTES :: 128 * 1024
 DYNVIEW_MAX_DOCUMENT_SHAPED_RUNS :: DYNVIEW_MAX_DOCUMENT_INLINES
 DYNVIEW_MAX_DOCUMENT_SHAPED_GLYPHS :: DYNVIEW_MAX_DOCUMENT_BYTES
@@ -631,6 +632,9 @@ Dynview_Document_Inline :: struct {
     root_style: Dynview_Math_Style_Level,
     math_program_id: int,
     penalty: i32,
+    link_id: u16,
+    link_target_offset: int,
+    link_target_count: int,
 }
 
 // Retain one generation-specific JuliaMono measurement for a semantic prose inline.
@@ -674,6 +678,9 @@ Dynview_Document_Layout_Node :: struct {
     source_count: int,
     text_offset: int,
     text_count: int,
+    link_id: u16,
+    link_target_offset: int,
+    link_target_count: int,
     width: f32,
     ascent: f32,
     descent: f32,
@@ -693,6 +700,9 @@ Dynview_Document_Layout_Item :: struct {
     source_count: int,
     text_offset: int,
     text_count: int,
+    link_id: u16,
+    link_target_offset: int,
+    link_target_count: int,
     x: f32,
     top: f32,
     baseline: f32,
@@ -767,6 +777,9 @@ Dynview_Document_Layout_Copy_Target :: struct {
     y: f32,
     width: f32,
     height: f32,
+    link_id: u16,
+    link_target_offset: int,
+    link_target_count: int,
     canonical_text: bool,
     separator_before: Dynview_Document_Selection_Separator,
 }

@@ -85,9 +85,12 @@ end
 """
     choose_exercise(state_ptr)
 
-Browse built-in or user exercises using Julia's TerminalMenus. Use arrows and
-Enter to browse or load, Back to return to a parent, and q or Ctrl-C to cancel.
-Loading instructions does not navigate or reset the drawing, variables, or output.
+Browse built-in or user exercises using Julia's `TerminalMenus.RadioMenu`.
+Use arrows/Home/End/Page Up/Page Down to browse, Enter to load, Back to return
+to a parent, and q or Ctrl-C to cancel. Catalog and exercise pages are bounded
+to 16 rows. Loading publishes instructions without navigating or resetting the
+drawing, variables, or retained Terminal output; cancellation returns to the REPL
+without loading. The browser opens only when explicitly called.
 """
 function choose_exercise(state_ptr::Ptr{Cvoid})
     return Terminal.with_interactive_input(stdin) do

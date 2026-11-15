@@ -8,6 +8,53 @@ Exercise_Query_Page :: struct {
     limit: u16,
 }
 
+// Exercise_Link_Target is one bounded, syntactically valid internal destination.
+Exercise_Link_Target :: struct {
+    user_namespace: bool,
+    uuid_identity: bool,
+    identity: [36]u8,
+    identity_byte_count: int,
+}
+
+// Parse only explicit exercise namespace and alias-or-UUID destination forms.
+exercise_link_target_parse :: proc(uri: string) -> (Exercise_Link_Target, bool) {
+    prefix := "euclid:exercise/"
+    if len(uri) <= len(prefix) || uri[:len(prefix)] != prefix {
+        return {}, false
+    }
+    remaining := uri[len(prefix):]
+    slash := 0
+    for slash < len(remaining) && remaining[slash] != '/' {
+        slash += 1
+    }
+    if slash == 0 || slash >= len(remaining)-1 {
+        return {}, false
+    }
+    namespace, target := remaining[:slash], remaining[slash+1:]
+    result: Exercise_Link_Target
+    if namespace == "user" {
+        result.user_namespace = true
+    } else if namespace != "builtin" {
+        return {}, false
+    }
+    if len(target) > 5 && target[:5] == "uuid/" {
+        value := target[5:]
+        if !exercise_uuid_is_valid(value) {
+            return {}, false
+        }
+        result.uuid_identity = true
+        result.identity_byte_count = len(value)
+        copy(result.identity[:], transmute([]u8)value)
+        return result, true
+    }
+    if !exercise_reference_is_valid(target) {
+        return {}, false
+    }
+    result.identity_byte_count = len(target)
+    copy(result.identity[:], transmute([]u8)target)
+    return result, true
+}
+
 // Accept the stable lowercase ASCII spelling used for friendly exercise references.
 exercise_reference_is_valid :: proc(reference: string) -> bool {
     if len(reference) < 1 || len(reference) > EXERCISE_REFERENCE_BYTE_CAPACITY {

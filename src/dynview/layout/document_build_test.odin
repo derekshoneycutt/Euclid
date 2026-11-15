@@ -196,6 +196,39 @@ document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
     testing.expect(t, pie_geometry.draw_height > 16)
 }
 
+// Verify measured prose clusters retain exact exercise-link target metadata.
+@(test)
+document_layout_prose_copy_targets_retain_link_metadata :: proc(t: ^testing.T) {
+    runtime_owner, cache_owner: storage.Arena_Owner
+    fixture: Document_Layout_Test_Fixture
+    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
+    defer storage.arena_owner_destroy(&runtime_owner)
+    for inline_index in 0..<3 {
+        runtime^.content.document_inlines[inline_index].link_id = 1
+        runtime^.content.document_inlines[inline_index].link_target_offset = 40
+        runtime^.content.document_inlines[inline_index].link_target_count = 36
+    }
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
+
+    status := rebuild_document_layout_cache(runtime, &cache_owner)
+
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
+    targets := runtime^.compile_cache.document_layout_copy_targets
+    testing.expect(t, len(targets) >= 2)
+    line_zero, line_one := false, false
+    for target in targets {
+        if target.link_id != 1 {
+            continue
+        }
+        line_zero = line_zero || target.line_index == 0
+        line_one = line_one || target.line_index == 1
+        testing.expect_value(t, target.link_target_offset, 40)
+        testing.expect_value(t, target.link_target_count, 36)
+    }
+    testing.expect(t, line_zero && line_one)
+}
+
 // Verify every semantic layout output family rejects one record beyond its limit.
 @(test)
 document_layout_builders_enforce_all_output_limits :: proc(t: ^testing.T) {

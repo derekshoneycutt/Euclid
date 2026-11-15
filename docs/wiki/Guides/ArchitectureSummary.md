@@ -141,6 +141,10 @@ shutdown. In reading mode the native presentation owner parses notes as a separa
 LaTeX body and assembles it with animation content into one Dynview snapshot. The latest
 producer source is retained independently, so note-only publication and note changes do
 not require Julia to resend content or borrow display-owned collection state.
+Reference-only `\href{euclid:exercise/...}{label}` links retain bounded target metadata
+beside ordinary semantic label inlines. Dynview derives pointer and accessibility
+actions from measured, clipped layout geometry and routes activation through the shared
+exercise-link lifecycle used by Terminal OSC 8.
 
 Runtime queries, bindings, and row decoding have two discoverable homes:
 content reading in `src/persistence/content/` and user data in

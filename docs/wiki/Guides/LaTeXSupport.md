@@ -112,6 +112,7 @@ Document mode supports a deliberately small LaTeX-like prose language:
 - `itemize`, `enumerate`, and `description` environments for semantic lists.
 - `quote` and `quotation` environments for indented quoted prose.
 - Comments from an unescaped `%` through the source newline.
+- Reference-only exercise links with `\href{euclid:exercise/...}{label}`.
 - Inline Euclid shapes through `\euclidpoint`, `\euclidline`,
     `\euclidcircle`, `\euclidbox`, `\euclidangle`, `\euclidsemicircle`,
     `\euclidperpendicular`, `\euclidtriangle`, and `\euclidpentagon`.
@@ -121,7 +122,7 @@ A single source newline in prose normalizes to one breakable space. A blank line
 semantic block with measured vertical spacing; authors should not add blank lines merely
 to pad a display.
 
-Document grammar revision 30 retains bounded, font-independent levels: at most 256
+Document grammar revision 31 retains bounded, font-independent levels: at most 256
 paragraph, display, or list-item blocks and at most 2,048 inline text, space, math, shape,
 penalty, or forced-break nodes, plus at most 512 technical display rows. Inline and row
 records preserve source byte spans, style and color,
@@ -129,6 +130,20 @@ math-program identity, and shape values. Breakable and nonbreaking spaces remain
 distinct; each carries one canonical space byte for shaping, and `~` produces
 nonbreaking space semantics. Capacity exhaustion rejects the complete structured
 document and publishes the exact canonical source literally.
+
+An exercise link has the form
+`\href{euclid:exercise/{builtin|user}/{alias}}{label}` or
+`\href{euclid:exercise/{builtin|user}/uuid/{uuid}}{label}`. Aliases contain 1-16
+lowercase ASCII letters, digits, hyphens, or underscores; UUIDs are canonical
+lowercase nonzero UUIDs. The parser accepts syntactically valid references without
+checking database availability. It rejects nested links and malformed targets; a
+rejected document follows the ordinary exact-source literal fallback. Link targets
+are bounded metadata, not content: exercise instructions are resolved only after user
+activation. The label remains ordinary semantic prose, so selection and copied text
+include the label but never the target. Each parsed document admits at most 64 links;
+the composed document reserves at most 128 link identities. Layout derives visible
+link regions from measured glyph geometry, so wrapping, scrolling, and clipping use
+the same positions as drawing.
 
 ### Prose Style And Alignment Matrix
 

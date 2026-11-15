@@ -212,8 +212,7 @@ exercise_query_intent_current :: proc(
     operation: ^bridgemodel.Exercise_Operation) -> bool {
     service := state.julia_runtime_service
     intent := &operation.intent
-    if !state.terminal.initialized ||
-        intent.animation_generation != service.animation_generation ||
+    if intent.animation_generation != service.animation_generation ||
         operation.index_generation != viewcontent.content_service_index_generation(
             state.content_service) {
         return false
@@ -221,7 +220,8 @@ exercise_query_intent_current :: proc(
     if !intent.load {
         return true
     }
-    return intent.header_request_id > state.exercise_header.last_request_id &&
+    return state.terminal.initialized &&
+        intent.header_request_id > state.exercise_header.last_request_id &&
         intent.header_request_id == bridgemodel.exercise_header_request_latest(
             &service.exercise_header_request_sequence)
 }

@@ -3,6 +3,8 @@ package terminalservice
 import viewterminalmodel "../model"
 import bridgemodel "../../../bridge/model"
 import animation_model "../../../core/animation"
+import contentdata "../../../core/content"
+import exercise_link "../../exercise_link"
 import runtime "base:runtime"
 import bridge "../../../bridge"
 import core "../../../core"
@@ -95,6 +97,72 @@ terminal_service_test_dispatch_egress :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) -> int {
     testing.expect(t, state != nil && state^.julia_runtime_service != nil)
     return bridge.drain_julia_egress(state^.julia_runtime_service)
+}
+
+// Consume and validate one built-in alias-resolution request from the link owner.
+terminal_service_test_expect_builtin_link_intent :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    message, message_received := bridge.communication_link_try_recv(
+        &state^.julia_runtime_service^.event_link)
+    testing.expect(t, message_received)
+    intent, is_builtin := message^.(bridgemodel.Exercise_Query_Intent)
+    testing.expect(t, is_builtin)
+    testing.expect_value(t,
+        intent.query.kind, contentdata.Exercise_Query_Kind.Resolve_Alias)
+    testing.expect_value(t,
+        string(intent.query.reference[:intent.query.reference_length]), "elements-i-1")
+    testing.expect(t, bridge.communication_link_return(
+        &state^.julia_runtime_service^.event_link, message))
+}
+
+// Verify internal activation did not create an editor, evaluation, or history entry.
+terminal_service_test_expect_internal_link_no_submission :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State) {
+    testing.expect_value(t, termhist.termhist_current_text(state^.terminal.history), "")
+    testing.expect(t, !state^.terminal.awaiting_eval &&
+        state^.terminal.next_eval_request_id == protocol.Request_Id(0))
+    testing.expect(t,
+        state^.terminal_history_runtime.next_submission_id == 0 &&
+        state^.terminal_history_runtime.mutation_count == 0)
+}
+
+// Route internal OSC 8 targets without submitting Terminal input or history.
+@(test)
+terminal_service_test_internal_exercise_link_routes_by_namespace :: proc(
+    t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    terminal_service_test_state_init(t, state, &animation, 31)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
+    terminal_service_test_runtime_init(t, state)
+    defer terminal_service_test_runtime_destroy(state)
+    state^.julia_runtime_service^.host_exercise_header_animation_generation = 31
+    testing.expect(t, terminal_service_enter(state))
+    ingress, ingress_received := bridge.communication_link_try_recv(
+        &state^.julia_runtime_service^.request_link)
+    testing.expect(t, ingress_received)
+    testing.expect(t, bridge.communication_link_return(
+        &state^.julia_runtime_service^.request_link, ingress))
+    testing.expect(t, terminal_service_activate_uri(rawptr(state), cstring(
+        "euclid:exercise/builtin/elements-i-1")))
+    terminal_service_test_expect_builtin_link_intent(t, state)
+    exercise_link.exercise_link_cancel(state, "")
+
+    testing.expect(t, terminal_service_activate_uri(rawptr(state), cstring(
+        "euclid:exercise/user/uuid/a9237c51-c9f6-4d54-8bf5-f8c651906e1c")))
+    message, message_received := bridge.communication_link_try_recv(
+        &state^.julia_runtime_service^.event_link)
+    testing.expect(t, message_received)
+    user_intent, is_user := message^.(bridgemodel.User_Exercise_Intent)
+    testing.expect(t, is_user)
+    testing.expect_value(t, user_intent.load, false)
+    testing.expect(t, bridge.communication_link_return(
+        &state^.julia_runtime_service^.event_link, message))
+    exercise_link.exercise_link_cancel(state, "")
+    terminal_service_test_expect_internal_link_no_submission(t, state)
+    terminalview.terminal_destroy(&state^.terminal,
+        animation_model.animation_memory_allocator(&state^.animation_memory))
 }
 
 // Produce two ordered output batches and one completion as the simulated Julia owner.

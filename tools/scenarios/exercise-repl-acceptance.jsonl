@@ -12,6 +12,8 @@
 {"key":"enter"}
 {"wait_terminal_contains":"exercise-drawing-ready","timeout_ms":10000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
+{"do":"pause_simulation"}
+{"wait_state":"simulation_paused","timeout_ms":10000}
 {"type":"loaded=load_exercise!(\"builtin:elements-i-1\"); println(\"exercise-load-\"*\"accepted\")"}
 {"key":"enter"}
 {"wait_terminal_contains":"exercise-load-accepted","timeout_ms":10000}
@@ -25,7 +27,7 @@
 {"wait_terminal_contains":"exercise-attempt-preserved","timeout_ms":10000}
 {"wait_terminal_contains":"exercise-attempt-saved","timeout_ms":10000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
-{"type":"@assert exercises()==(:builtin,); roots=exercises(\"builtin\";limit=1); "}
+{"type":"@assert exercises()==(:builtin,:user); roots=exercises(\"builtin\";limit=1); "}
 {"type":"@assert length(roots.entries)==1; "}
 {"type":"page=exercises(\"builtin\",loaded.animation_id;limit=1); @assert only(page.entries).id==loaded.id; "}
 {"type":"@assert isempty(exercises(\"builtin\",loaded.animation_id;offset=page.total).entries); "}

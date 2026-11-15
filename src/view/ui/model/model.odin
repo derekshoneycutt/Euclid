@@ -914,6 +914,13 @@ Ui_Presentation_Interaction_State :: struct {
     scroll_dragging: bool,
     scroll_drag_off: f32,
     selection: dynviewmodel.Dynview_Selection_State,
+    has_hovered_link: bool,
+    hovered_link_target_offset: int,
+    link_press_active: bool,
+    link_press_revision: u64,
+    link_press_target_offset: int,
+    link_press_target_count: int,
+    link_press_x, link_press_y: f32,
 }
 
 // Ui_Settings_Panel_State retains Settings panel interaction and scrolling.

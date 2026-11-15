@@ -27,6 +27,41 @@ tex_parse_document_matches_styled_mixed_fixture :: proc(t: ^testing.T) {
     testing.expect_value(t, root.kind, Tex_Math_Op_Kind.Style_Override)
 }
 
+// Verify exercise links retain separate targets while their labels remain normal inlines.
+@(test)
+tex_parse_document_retains_exercise_link_target_and_label :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\href{euclid:exercise/user/not-yet-created}" +
+        "{\\textbf{Open} $x^2$}"
+    testing.expect_value(t, tex_classify_source_mode(source), Tex_Source_Mode.Document)
+    testing.expect_value(t, tex_parse_document(source, output), Tex_Parse_Status.Ok)
+    testing.expect_value(t, output.document_inline_count, 3)
+    first := output.document_inlines[0]
+    testing.expect_value(t, first.link_id, u16(1))
+    testing.expect_value(t, tex_semantic_text(output, first.link_target),
+        "euclid:exercise/user/not-yet-created")
+    testing.expect_value(t, tex_semantic_text(
+        output, output.document_inlines[0].text), "Open")
+    testing.expect_value(t, output.document_inlines[2].kind,
+        Tex_Document_Inline_Kind.Math)
+    testing.expect_value(t, output.document_inlines[2].link_id, u16(1))
+}
+
+// Reject malformed and nested targets without treating missing database records as syntax errors.
+@(test)
+tex_parse_document_rejects_malformed_or_nested_exercise_links :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    testing.expect_value(t, tex_parse_document(
+        "Math $x^2$ \\href{euclid:exercise/user/Bad}{label}", output),
+        Tex_Parse_Status.Unexpected_Token)
+    testing.expect_value(t, tex_parse_document(
+        "\\href{euclid:exercise/builtin/elements-i-1}" +
+            "{outer \\href{euclid:exercise/builtin/elements-i-1}{inner}}",
+        output), Tex_Parse_Status.Unexpected_Token)
+}
+
 //   Verify nested document color inheritance and style flattening.
 @(test)
 tex_parse_document_matches_colored_nested_fixture :: proc(t: ^testing.T) {

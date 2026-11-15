@@ -11,6 +11,8 @@ function get_view_content()
 
 \textit{On a given finite straight line to construct an equilateral triangle.}
 
+\href{euclid:exercise/builtin/elements-i-1}{Do as Exercise.}\\\\
+
 Let $AB$ \euclidline[color=grey60,length=3,thickness=4] be the given finite straight line.
 
 Thus it is required to construct an equilateral triangle on the straight line $AB$.\\

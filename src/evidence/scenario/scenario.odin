@@ -83,6 +83,7 @@ Command_Kind :: enum u8 {
     Reload_Runtime,
     Inject_Reload_Failure,
     Type_Text,
+    Activate_Terminal_Link,
     Type_Library_Name,
     Type_Collection_Note,
     Key,
@@ -355,6 +356,7 @@ Raw_Command :: struct {
     start_gif: string,
     set_arrival_style: string,
     set_exercise_header: string,
+    activate_terminal_link: string,
     set_library_search: string,
     favorite_control: string,
     library_placement: string,
@@ -922,7 +924,7 @@ runner_update_command :: proc(
          .Type_Collection_Note,
          .Set_Arrival_Style, .Set_Exercise_Header,
          .Hide_Exercise_Header, .Expand_Exercise_Header,
-         .Set_Exercise_Header_Scroll:
+         .Set_Exercise_Header_Scroll, .Activate_Terminal_Link:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -1089,6 +1091,8 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_arrival_style_command_select(raw.set_arrival_style, command)
     selected += raw_text_command_select(
         raw.set_exercise_header, .Set_Exercise_Header, command)
+    selected += raw_text_command_select(
+        raw.activate_terminal_link, .Activate_Terminal_Link, command)
     selected += raw_library_search_command_select(raw, command)
     selected += raw_favorites_command_select(raw, command)
     selected += raw_wait_command_select(raw, command)
@@ -1322,7 +1326,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
-         .Type_Text, .Type_Library_Name, .Type_Collection_Note, .Key,
+         .Type_Text, .Activate_Terminal_Link, .Type_Library_Name,
+         .Type_Collection_Note, .Key,
          .Pause_Simulation, .Resume_Simulation,
          .Pause_Animation, .Resume_Animation, .Pause_Construction,
          .Resume_Construction, .Show_Completed,

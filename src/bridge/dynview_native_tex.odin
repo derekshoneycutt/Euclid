@@ -443,12 +443,17 @@ dynview_native_document_inline :: proc(
         item.source.offset, item.source.length, len(document.source)) ||
         !dynview_native_span_valid(
             item.text.offset, item.text.length, len(document.text)) ||
+        !dynview_native_document_inline_link_is_valid(item, document^) ||
         item.math_program < -1 || item.math_program >= len(document.programs) {
         return {}, false
     }
     program_id := -1
     if item.math_program >= 0 {
         program_id = program_base + item.math_program
+    }
+    link_target_offset := 0
+    if item.link_id != 0 {
+        link_target_offset = text_base + item.link_target.offset
     }
     result: dynviewmodel.Dynview_Document_Inline = {
         kind = dynviewmodel.Dynview_Document_Inline_Kind(item.kind),
@@ -463,8 +468,24 @@ dynview_native_document_inline :: proc(
         root_style = dynviewmodel.Dynview_Math_Style_Level(item.root_style),
         math_program_id = program_id,
         penalty = item.penalty,
+        link_id = item.link_id,
+        link_target_offset = link_target_offset,
+        link_target_count = item.link_target.length,
     }
     return result, true
+}
+
+// Validate one optional document-link target before offset rebasing.
+dynview_native_document_inline_link_is_valid :: proc(
+    item: dynparse.Tex_Document_Inline,
+    document: dyncore.Dynview_Document) -> bool {
+    return item.link_id <= u16(dynparse.TEX_DOCUMENT_LINK_CAPACITY) &&
+        (item.link_id != 0 ||
+            item.link_target.offset == 0 && item.link_target.length == 0) &&
+        (item.link_id == 0 ||
+            item.link_target.length > 0 &&
+            dynview_native_span_valid(item.link_target.offset,
+                item.link_target.length, len(document.text)))
 }
 
 //   Copy one parser shape payload without retaining parser-owned storage.

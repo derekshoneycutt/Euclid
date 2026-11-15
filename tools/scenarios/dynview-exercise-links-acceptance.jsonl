@@ -1,0 +1,33 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"favorite_control":"leave"}
+{"library_placement":"focus_library"}
+{"key":"enter"}
+{"wait_state":"accordion_settled","timeout_ms":10000}
+{"library_placement":"expand:collections"}
+{"library_placement":"expand:first_collection"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"library_placement":"select:first_collection:Point"}
+{"library_placement":"actions_open:first_collection:Point"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"wait_state":"collection_note_ready","timeout_ms":10000}
+{"library_placement":"notes_activate:first_collection:Point"}
+{"wait_state":"collection_note_editing","timeout_ms":10000}
+{"library_placement":"note_input_press:first_collection:Point"}
+{"library_placement":"note_input_release:first_collection:Point"}
+{"type_collection_note":"\\href{euclid:exercise/user/phase33-renamed}{Open the user exercise instructions from this saved collection note. Open the user exercise instructions from this saved collection note. Open the user exercise instructions from this saved collection note.}"}
+{"wait_state":"collection_note_dirty","timeout_ms":10000}
+{"library_placement":"note_done_press:first_collection:Point"}
+{"library_placement":"note_done_release:first_collection:Point"}
+{"wait_state":"collection_note_clean","timeout_ms":20000}
+{"wait_state":"presentation_idle","timeout_ms":10000}
+{"key":"tab"}
+{"assert_focus":"presentation_link"}
+{"key":"enter"}
+{"wait_state":"terminal_ready","timeout_ms":20000}
+{"wait_state":"exercise_header_visible","timeout_ms":20000}
+{"assert_exercise_header":"Instructions after rename."}
+{"assert_terminal_editor":{"source":"","mode":"julia","cursor":0,"anchor":0,"evaluation_requests":0}}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

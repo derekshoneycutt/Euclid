@@ -583,6 +583,30 @@ scenario_passed(record) = record.result == "passed" && record.trace_complete &&
 
 include(joinpath(@__DIR__, "favorites_scenarios.jl"))
 
+"""Prove a user exercise linked from a persisted collection note loads fresh instructions."""
+function run_dynview_exercise_links_acceptance(binary::String)
+    root = fresh_artifact_path("dynview-exercise-links")
+    mkpath(root)
+    database = joinpath(root, "user.sqlite3")
+    fake_home = joinpath(root, "data-home")
+    records = NamedTuple[]
+    push!(records, launch_user_exercise_phase(binary, root, database, fake_home,
+        "seed", joinpath("tools", "scenarios", "user-exercises", "seed.jsonl")))
+    push!(records, favorites_launch(binary, root, database, "collections",
+        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl")))
+    push!(records, favorites_launch(binary, root, database, "membership",
+        joinpath("tools", "scenarios", "collection-membership-acceptance.jsonl")))
+    push!(records, favorites_launch(binary, root, database, "note-link",
+        joinpath("tools", "scenarios", "dynview-exercise-links-acceptance.jsonl")))
+    notes = collection_note_database_rows(database)
+    length(notes) == 1 || error("Dynview exercise-link note was not persisted")
+    notes[1]["note_text"] ==
+        "\\href{euclid:exercise/user/phase33-renamed}{Open the user exercise instructions from this saved collection note. Open the user exercise instructions from this saved collection note. Open the user exercise instructions from this saved collection note.}" ||
+        error("Dynview exercise-link note changed before it was read")
+    ispath(fake_home) && error("Exercise-link acceptance touched the default data home")
+    return records
+end
+
 """Exercise explorer grammar, help, recall, and scaled layouts with isolated data."""
 function run_terminal_history_explorer_acceptance(binary::String)
     root = fresh_artifact_path("terminal-history-explorer")
@@ -620,6 +644,8 @@ function run_named_scenario(binary::String, name::String)
         "terminal-history-persistence-acceptance" => run_terminal_history_acceptance,
         "user-exercise-persistence-acceptance" =>
             run_user_exercise_persistence_acceptance,
+        "dynview-exercise-links-acceptance" =>
+            run_dynview_exercise_links_acceptance,
         "settings-persistence-acceptance" => run_settings_acceptance,
         "completed-preferences-persistence-acceptance" =>
             run_completed_preferences_acceptance,

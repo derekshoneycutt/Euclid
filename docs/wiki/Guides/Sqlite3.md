@@ -31,11 +31,11 @@ these as one generic “application database” would obscure those distinct res
 
 | | Packaged content database | User data database |
 | --- | --- | --- |
-| Purpose | Catalogue, localization and search data | Durable user preferences, collections, and opted-in Terminal history |
-| Produced or changed by | Julia content declarations and the asset builder | Application startup and settings-save path |
+| Purpose | Catalogue, localization, search data, and built-in exercises | Durable user preferences, collections, user exercises, and opted-in Terminal history |
+| Produced or changed by | Julia content declarations and the asset builder | Application startup and user-data operation owners |
 | Runtime access | Read-only connection owned by the content worker | Read and write through the user-data store |
 | Lifetime | Packaged asset and staged/active content generations | User-data file, admitted for the application session |
-| Current publication model | Build, validate, package, then replace as a complete immutable asset | Load saved values; write validated setting batches transactionally |
+| Current publication model | Build, validate, package, then replace as a complete immutable asset | Load saved values; commit settings/collection batches and user-exercise operations through their serialized owners |
 | Schema ownership | Content builder and content-store admission | `src/persistence/userdata/`, using typed definitions from `src/settings/` |
 
 Both databases use `src/sqlite/` for explicit connection, statement, binding, and column
@@ -58,12 +58,14 @@ Sharing the substrate does not make connections interchangeable.
 The content worker keeps its connection exclusive
 while servicing content requests. The settings connection is opened and admitted by the
 application coordinator; settings writes run as worker-only tasks, are joined before
-their payload or store can be reused, and are drained during shutdown.
+their payload or store can be reused, and are drained during shutdown. User exercise
+operations are serialized on that admitted user connection and return copied results;
+they do not borrow a second connection or run SQL from the UI or Julia host.
 
 The UI does not issue SQL. Content requests cross the worker boundary as bounded values.
 Settings and collection changes use the shared user-data save queue; Terminal history
-uses the same connection-admission protocol for its own worker tasks. Display drawing
-and controls operate on application-owned state.
+and user-exercise operations use the same connection-admission protocol for their
+worker tasks. Display drawing and controls operate on application-owned state.
 
 ## Packaged Content And Search
 
@@ -290,6 +292,18 @@ erDiagram
         integer terminal_generation
         integer source_revision
     }
+    USER_EXERCISE {
+        blob exercise_id PK
+        blob animation_id
+        text reference UK
+        text title
+        text instructions
+    }
+    USER_EXERCISE_RETIRED_REFERENCE {
+        text reference PK
+        blob exercise_id
+        integer identity_retired
+    }
     USER_COLLECTION ||--o{ USER_COLLECTION_ENTRY : contains
     USER_COLLECTION_ENTRY ||--o{ USER_COLLECTION_ENTRY : nests
 ```
@@ -339,6 +353,26 @@ The Settings save line reports aggregate durability:
 | Saved | No queued edits or unresolved failure remain. |
 
 A failed batch stays unresolved until a committed batch covers its revision.
+
+### User Exercises
+
+User-authored exercises live in the same writable user database but use their own
+`user_exercise` records and `user_exercise_retired_reference` reservations. Each record
+has a stable UUID, an associated animation UUID, a friendly alias, a title, and
+plain-text instructions. The user store serializes create/update/delete and read/list
+operations on its admitted connection; callers receive copied, bounded summaries or
+instruction text. Built-in exercise rows remain in the packaged read-only content
+database and are served by its content worker. Neither namespace is imported into or
+merged with the other.
+
+Aliases are unique lowercase ASCII values of 1-16 bytes. Renaming or deleting an
+exercise reserves its old alias; deletion also retires its UUID. A rename preserves the
+UUID. Reusing a retired alias or identity is rejected, and an update cannot change the
+UUID. Titles are nonblank valid UTF-8 of at most 256 bytes; instruction text is
+nonblank valid UTF-8 of at most 32 KiB. NUL bytes and over-limit values are rejected.
+The persistence transaction also rejects records whose animation UUID is unavailable.
+These are per-database identities: user-reference portability between machines is not
+promised.
 
 ### Collection Mutations
 
@@ -498,9 +532,7 @@ complete `check` target when a database or lifecycle change requires full valida
 
 ## What Could Grow Next
 
-Custom user lists and optional saved use history could support smarter Library features.
-They are aspirations, not existing tables or behavior. Before adding them, decide which
-database owns each record and how privacy, retention, migration, and deletion work.
-User-created or learned data should not silently become part of the reproducible
-packaged content index; the content and user-data lifecycles should remain distinct
-unless a deliberate design gives them a safe bridge.
+Further user-authored data or saved use history would need an explicit owning database,
+privacy and retention policy, and deletion contract. User-created or learned data must
+not silently become part of the reproducible packaged content index; keep content and
+user-data lifecycles distinct unless a deliberate design gives them a safe bridge.
