@@ -357,6 +357,7 @@ terminal_clear_completion :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.pending_completion_cursor = 0
     term.completion_result_received = false
     term.completion_request_scheduled = false
+    term.completion_submission_pending = false
     term.completion_request_due = 0
     terminal_clear_completion_preview(term)
 }

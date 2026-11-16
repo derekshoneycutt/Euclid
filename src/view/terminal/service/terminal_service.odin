@@ -86,15 +86,26 @@ terminal_service_submit_evaluation :: proc(
             &state^.terminal, text) {
         return .Runtime_Stopping
     }
+    state.terminal.pending_eval_mode = mode
+    state.terminal.eval_submission_pending = true
+    return terminal_service_publish_evaluation(state)
+}
+
+// Retry the existing retained evaluation snapshot without allocating another request.
+terminal_service_publish_evaluation :: proc(
+    state: ^core.Euclid_General_State) -> bridgemodel.Communication_Send_Outcome {
     request: protocol.Evaluation_Requested = {
         request_id = state^.terminal.pending_eval_request_id,
         animation_generation = state^.terminal.animation_generation,
         code = state^.terminal.pending_eval_source,
-        mode = mode,
+        mode = state.terminal.pending_eval_mode,
     }
     outcome := julia.send_terminal_evaluation(
         state^.julia_runtime_service, request)
-    if outcome != .Sent {
+    state.terminal.eval_submission_pending =
+        outcome == .Queue_Full || outcome == .Storage_Full
+    if outcome != .Sent && !state.terminal.eval_submission_pending {
+        log.errorf("terminal_evaluation_publication_failed outcome=%d", int(outcome))
         terminalview.terminal_complete_eval(&state^.terminal)
     }
     return outcome
@@ -733,12 +744,32 @@ terminal_service_send_completion :: proc(
             cursor_byte = completion.cursor_byte,
             show_candidates = completion.show_candidates,
         })
-    if outcome != .Sent {
+    state.terminal.completion_submission_pending =
+        outcome == .Queue_Full || outcome == .Storage_Full
+    state.terminal.pending_completion_show_candidates = completion.show_candidates
+    if outcome != .Sent && !state.terminal.completion_submission_pending {
         if terminalview.terminal_fail_completion(
             &state^.terminal, completion.request_id) {
             terminalview.terminal_reject_completion(
                 &state^.terminal, "request_transport_failure")
         }
+    }
+}
+
+// Retry domain-owned request snapshots after the Julia inbox reopens admission.
+terminal_service_retry_requests :: proc(state: ^core.Euclid_General_State) {
+    term := &state.terminal
+    if term.eval_submission_pending {
+        _ = terminal_service_publish_evaluation(state)
+    }
+    if term.completion_submission_pending {
+        terminal_service_send_completion(state, {
+            requested = true,
+            request_id = term.pending_completion_request_id,
+            code = term.pending_completion_source,
+            cursor_byte = term.pending_completion_cursor,
+            show_candidates = term.pending_completion_show_candidates,
+        })
     }
 }
 
@@ -816,6 +847,9 @@ terminal_service_update :: proc(
         return {}
     }
     terminal_service_request_session(state)
+    if state.terminal.julia_session_ready {
+        terminal_service_retry_requests(state)
+    }
     if !uipresentation.ui_presentation_is_visible(
         &state^.ui_runtime.presentation) {
         terminal_service_update_hidden(state)

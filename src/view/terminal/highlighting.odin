@@ -276,7 +276,7 @@ terminal_highlight_pending_slot :: proc(
     return nil
 }
 
-// Copy a complete validated result before its producer-owned envelope is returned.
+// Copy a complete validated result before its display-inbox borrow is released.
 terminal_highlight_publish :: proc(
     term: ^model.Terminal_State, result: protocol.Highlight_Result) -> bool {
     if term == nil || term.highlighting == nil ||
@@ -305,7 +305,21 @@ terminal_highlight_publish :: proc(
     return true
 }
 
-// Record explicit service or transport failure without retrying unchanged source each frame.
+// Return an unadmitted request to its existing slot for retry after transport pressure.
+terminal_highlight_defer :: proc(
+    term: ^model.Terminal_State, identity: protocol.Highlight_Identity) -> bool {
+    if term == nil || term.highlighting == nil {
+        return false
+    }
+    slot := terminal_highlight_pending_slot(term, identity)
+    if slot == nil || !terminal_highlight_retire(term, identity) {
+        return false
+    }
+    slot.phase = .Scheduled
+    return true
+}
+
+// Record explicit service or terminal transport failure without retrying unchanged source.
 terminal_highlight_fail :: proc(
     term: ^model.Terminal_State, failure: protocol.Highlight_Failed) -> bool {
     if term == nil || term.highlighting == nil ||

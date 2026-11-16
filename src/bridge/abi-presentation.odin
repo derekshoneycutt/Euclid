@@ -21,7 +21,7 @@ presentation_mime_from_abi :: proc(
 presentation_bridge_status :: proc(
     outcome: bridgemodel.Communication_Send_Outcome) -> i32 {
     switch outcome {
-    case .Sent, .Queue_Full:
+    case .Sent, .Queue_Full, .Storage_Full:
         return BRIDGE_STATUS_OK
     case .Allocation_Failed:
         return BRIDGE_STATUS_OUT_OF_CAPACITY
@@ -31,7 +31,7 @@ presentation_bridge_status :: proc(
     return BRIDGE_STATUS_ILLEGAL_STATE
 }
 
-//   Publish exact MIME-bearing bytes through the Julia-owned egress link.
+//   Copy exact MIME-bearing bytes into the display-owned inbox.
 @(export)
 publish_presented_text :: proc "c" (
     state: ^core.Euclid_General_State, mime_value: i32,

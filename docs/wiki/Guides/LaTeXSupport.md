@@ -44,7 +44,7 @@ get_view_content(_state_ptr) = Definition
 `TeXDocument` and raw, non-interpolating `tex"..."` literals serialize as
 unwrapped `text/latex` documents. Ordinary strings are always `text/plain`.
 `OdinJuliaBridge.presented_text` selects one exact representation, while
-`publish_view_content` transfers it through bounded producer-owned storage.
+`publish_view_content` copies it into bounded consumer-owned mailbox storage.
 
 Production animations return one canonical displayable from `get_view_content`.
 Use `tex"..."` or `TeXDocument` for complete documents and `L"..."` for one

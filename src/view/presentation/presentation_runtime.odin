@@ -20,7 +20,7 @@ import uiterminal "../ui/terminal"
 import geometry "../../core/geometry"
 import log "core:log"
 
-// Presentation_Operation retains one producer envelope through parse task join.
+// Presentation_Operation borrows display-owned source storage through parse task join.
 Presentation_Operation :: struct {
     message: ^bridgemodel.Julia_Host_Egress,
     handle: taskpool.Task_Handle,
@@ -38,6 +38,7 @@ Presentation_Runtime :: struct {
     state: ^core.Euclid_General_State,
     active: Presentation_Operation,
     pending: ^bridgemodel.Julia_Host_Egress,
+    content_storage: [2]bridgemodel.Owned_View_Content,
     newest_generation: u64,
     observed_runtime_generation: u64,
     observed_animation_generation: u64,
@@ -234,7 +235,7 @@ presentation_sync_lifecycle :: proc(
     superseded := runtime^.newest_generation != 0
     preserve_pending := presentation_pending_matches_current(state, runtime)
     if runtime^.pending != nil && !preserve_pending {
-        _ = bridge.return_julia_egress(service, runtime^.pending)
+        presentation_release_content(runtime, runtime.pending)
         runtime^.pending = nil
     }
     presentation_cancel_active(state, runtime)
@@ -289,12 +290,17 @@ presentation_pending_matches_current :: proc(
 presentation_admit :: proc(
     state: ^core.Euclid_General_State,
     runtime: ^Presentation_Runtime,
-    message: ^bridgemodel.Julia_Host_Egress,
     content: bridgemodel.View_Content_Ready) {
-    service := state^.julia_runtime_service
     if content.presentation_generation <= runtime^.newest_generation ||
         !presentation_content_matches(state, content) {
-        _ = bridge.return_julia_egress(service, message)
+        return
+    }
+    index := 0
+    if runtime.active.message == &runtime.content_storage[0].message {
+        index = 1
+    }
+    destination := &runtime.content_storage[index]
+    if !bridge.owned_view_content_store(destination, content) {
         return
     }
     superseded := runtime^.newest_generation != 0
@@ -307,13 +313,10 @@ presentation_admit :: proc(
         presentation_effects_begin_departure(
             state, runtime, content.presentation_generation)
     }
-    bridge.release_published_view_snapshot(state, service)
+    bridge.release_published_view_snapshot(state, state.julia_runtime_service)
     presentation_record_event(state, .Presentation_Cleared,
         content.animation_generation, content.presentation_generation, content.origin)
-    if runtime^.pending != nil {
-        _ = bridge.return_julia_egress(service, runtime^.pending)
-    }
-    runtime^.pending = message
+    runtime^.pending = &destination.message
     presentation_cancel_active(state, runtime)
     if superseded {
         presentation_record_event(state, .Presentation_Superseded,
@@ -331,7 +334,7 @@ presentation_start_pending :: proc(
     content, ok := message^.(bridgemodel.View_Content_Ready)
     if !ok || !presentation_content_is_current(state, runtime, content) {
         runtime^.pending = nil
-        _ = bridge.return_julia_egress(state^.julia_runtime_service, message)
+        presentation_release_content(runtime, message)
         return
     }
     source := bridge.presentation_literal_source(content.content)
@@ -384,7 +387,7 @@ presentation_release_pending :: proc(
     state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
     message := runtime^.pending
     runtime^.pending = nil
-    _ = bridge.return_julia_egress(state^.julia_runtime_service, message)
+    presentation_release_content(runtime, message)
 }
 
 //   Submit one parser operation while preserving its envelope and exact source borrow.
@@ -453,7 +456,7 @@ presentation_poll_active :: proc(
         presentation_content_is_current(state, runtime, content) {
         presentation_commit_joined(state, runtime, content)
     }
-    _ = bridge.return_julia_egress(state^.julia_runtime_service, message)
+    presentation_release_content(runtime, message)
     result := operation^.result
     operation^ = {
         result = result,
@@ -881,21 +884,33 @@ quiesce_presentation_runtime :: proc(
     if state == nil || runtime == nil || state^.julia_runtime_service == nil {
         return
     }
-    service := state^.julia_runtime_service
     presentation_composition_quiesce(state, runtime)
     if runtime^.active.submitted {
         presentation_cancel_active(state, runtime)
         _, joined := taskpool.task_pool_wait(
             &state^.simulation_executor^.pool, runtime^.active.handle)
         assert(joined == .Joined)
-        _ = bridge.return_julia_egress(service, runtime^.active.message)
+        presentation_release_content(runtime, runtime.active.message)
         result := runtime^.active.result
         runtime^.active = {
             result = result,
         }
     }
     if runtime^.pending != nil {
-        _ = bridge.return_julia_egress(service, runtime^.pending)
+        presentation_release_content(runtime, runtime.pending)
         runtime^.pending = nil
     }
+
+}
+
+// Reclaim a display-owned source slot only after its parse/materialization borrows end.
+presentation_release_content :: proc(
+    runtime: ^Presentation_Runtime, message: ^bridgemodel.Julia_Host_Egress) {
+    for &slot in runtime.content_storage {
+        if message == &slot.message {
+            bridge.owned_view_content_clear(&slot)
+            return
+        }
+    }
+    assert(false, "presentation source must belong to a display-owned slot")
 }

@@ -43,7 +43,7 @@ terminal_service_test_highlight_failure_preserves_presentation :: proc(t: ^testi
     testing.expect_value(t, term.highlighting.failure_count, u64(1))
 }
 
-// Round-trip actual producer-owned envelopes and return them before reading retained runs.
+// Round-trip inbox envelopes and recycle them before reading retained runs.
 @(test)
 terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
@@ -62,8 +62,8 @@ terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     termhist.termhist_insert_text(term.history, "α")
     terminal_highlight_service_update(state, {}, 0)
     terminal_highlight_service_update(state, {}, 1)
-    envelope, received := bridge.communication_link_try_recv(
-        &state.julia_runtime_service.request_link)
+    envelope, received := bridge.consumer_mailbox_try_recv(
+        &state.julia_runtime_service.julia_inbox)
     testing.expect(t, received && envelope != nil)
     request, typed := envelope^.(protocol.Highlight_Requested)
     testing.expect(t, typed && request.source == "α")
@@ -74,14 +74,43 @@ terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     testing.expect_value(t, bridge.send_terminal_highlight_result(
         state.julia_runtime_service, {request.identity, request.source, runs[:]}),
         bridgemodel.Communication_Send_Outcome.Sent)
-    bridge.communication_link_return(&state.julia_runtime_service.request_link, envelope)
+    bridge.consumer_mailbox_release(&state.julia_runtime_service.julia_inbox, envelope)
     testing.expect_value(t, terminal_service_test_dispatch_egress(t, state), 1)
-    _ = bridge.drain_julia_egress_returns(state.julia_runtime_service)
-    _ = bridge.drain_julia_ingress_returns(state.julia_runtime_service)
     testing.expect_value(t, terminalview.terminal_live_highlight_runs(term)[0].weight,
         protocol.Highlight_Weight.Bold)
     terminal_service_test_highlight_publication(
         t, state.evidence_ring.events[0], request.identity)
+}
+
+// Temporary drain pressure reschedules the existing highlight snapshot instead of failing it.
+@(test)
+terminal_service_highlight_retries_drain_pressure :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        &state.terminal, context.allocator, 1))
+    defer terminalview.terminal_destroy(&state.terminal, context.allocator)
+    terminal_service_test_runtime_init(t, state)
+    defer terminal_service_test_runtime_destroy(state)
+    term := &state.terminal
+    term.banner_ready = true
+    term.julia_session_ready = true
+    inbox := &state.julia_runtime_service.julia_inbox
+    _ = bridge.send_terminal_ingress(state.julia_runtime_service, protocol.Tick_Pulse{})
+    blocked, _ := bridge.consumer_mailbox_try_recv(inbox)
+    testing.expect(t, termhist.termhist_insert_text(term.history, "abc"))
+    terminal_highlight_service_update(state, {}, 0)
+    terminal_highlight_service_update(state, {}, 1)
+    testing.expect_value(t, term.highlighting.failure_count, u64(0))
+    testing.expect_value(t, term.highlighting.live.phase,
+        type_of(term.highlighting.live.phase).Scheduled)
+    bridge.consumer_mailbox_release(inbox, blocked)
+    terminal_highlight_service_update(state, {}, 2)
+    message, ready := bridge.consumer_mailbox_try_recv(inbox)
+    testing.expect(t, ready)
+    request := message^.(protocol.Highlight_Requested)
+    testing.expect_value(t, request.source, "abc")
+    bridge.consumer_mailbox_release(inbox, message)
 }
 
 // Accepted evidence retains the request identity and complete UTF-8 coverage counters.
@@ -124,18 +153,18 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
         },
     }
     terminal_highlight_service_update(state, prepared, 1)
-    envelope, received := bridge.communication_link_try_recv(
-        &state.julia_runtime_service.request_link)
+    envelope, received := bridge.consumer_mailbox_try_recv(
+        &state.julia_runtime_service.julia_inbox)
     testing.expect(t, received && envelope != nil)
     request, typed := envelope^.(protocol.Highlight_Requested)
     testing.expect(t, typed && request.identity.target_kind == .History_Entry)
     failure := bridgemodel.Julia_Host_Egress(protocol.Highlight_Failed{
         request.identity, .Mailbox_Full})
     testing.expect(t, terminal_service_dispatch_egress(state, &failure))
-    bridge.communication_link_return(&state.julia_runtime_service.request_link, envelope)
+    bridge.consumer_mailbox_release(&state.julia_runtime_service.julia_inbox, envelope)
     terminal_highlight_service_update(state, prepared, 2)
-    _, duplicate := bridge.communication_link_try_recv(
-        &state.julia_runtime_service.request_link)
+    _, duplicate := bridge.consumer_mailbox_try_recv(
+        &state.julia_runtime_service.julia_inbox)
     testing.expect(t, !duplicate)
     testing.expect(t, term.awaiting_eval)
 }

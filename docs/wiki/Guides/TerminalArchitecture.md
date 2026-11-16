@@ -444,8 +444,11 @@ acceptance still works in multiline source.
 
 Julia retains provider objects under its GC. Native requests and previews reuse the
 existing bounded, animation-generation-owned backing, and bridge responses copy into
-producer-owned pooled bytes. No candidate model, popup, or new native allocation owner
-is involved. Oversized source, replacement, or alternatives fail explicitly without
+consumer-owned native mailbox bytes. Evaluation and completion submissions retain
+their existing source snapshots through temporary mailbox drain pressure;
+highlight requests return to their existing scheduled slots for retry.
+No candidate model, popup, or new native allocation
+owner is involved. Oversized source, replacement, or alternatives fail explicitly without
 truncating text or changing the draft. A permanent oversized bridge result sends one
 correlated failure rather than entering the transient-backpressure retry loop; the
 display retires a matching failed transaction and reports the failure in Terminal.

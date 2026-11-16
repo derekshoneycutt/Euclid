@@ -7,21 +7,20 @@ import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import julialib "../../../libs/julia/bindings"
-import storage "../../core/storage"
 import userdata "../../persistence/userdata"
 
 import "core:encoding/uuid"
 import "core:mem"
 import "core:sync"
-import "core:mem/tlsf"
-import "core:sync/chan"
 import "core:thread"
 import "core:time"
 
-JULIA_REQUEST_CAPACITY :: 16
-JULIA_EVENT_CAPACITY :: 16
-JULIA_REQUEST_LINK_POOL_CAPACITY :: 256 * 1024
-JULIA_EVENT_LINK_POOL_CAPACITY :: 640 * 1024
+JULIA_INBOX_MESSAGE_CAPACITY :: 64
+DISPLAY_INBOX_MESSAGE_CAPACITY :: 64
+JULIA_INBOX_INITIAL_BYTES :: 256 * 1024
+DISPLAY_INBOX_INITIAL_BYTES :: 640 * 1024
+JULIA_INBOX_BYTE_LIMIT :: 1024 * 1024
+DISPLAY_INBOX_BYTE_LIMIT :: 2560 * 1024
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: 32
 HARNESS_SCENARIO_NAME_CAPACITY :: 256
 ANIMATION_TICK_SLOT_COUNT :: 2
@@ -309,12 +308,14 @@ Exercise_Header_Request_Sequence :: struct {
 }
 
 // Communication_Send_Outcome distinguishes pressure, allocation, and closure failures.
+// Queue_Full also reports temporarily paused admission during a mailbox drain.
 Communication_Send_Outcome :: enum u8 {
     Sent,
     Queue_Full,
     Allocation_Failed,
     Runtime_Stopping,
     Channel_Closed,
+    Storage_Full,
 }
 
 // Julia_Host_Ingress contains display-produced messages borrowed by the Julia owner.
@@ -367,24 +368,16 @@ Julia_Host_Egress :: union {
     protocol.Tick_Stream_Stop_Requested,
 }
 
-// Julia_Egress_Dispatch_Proc routes one non-event envelope on the display thread.
+// Julia_Egress_Dispatch_Proc borrows one non-event only through display dispatch.
+// Destinations must copy anything retained; the router always releases the batch borrow.
 Julia_Egress_Dispatch_Proc :: #type proc(
-    user_data: rawptr, message: ^Julia_Host_Egress) -> bool
-
-// Communication_Link retains bounded channels and one producer-owned TLSF pool.
-Communication_Link :: struct($T: typeid) {
-    outbound: chan.Chan(^T),
-    returns: chan.Chan(^T),
-    pool: tlsf.Allocator,
-    backing: []byte,
-}
+    user_data: rawptr, message: ^Julia_Host_Egress)
 
 // Julia_Runtime_Service owns bridge resources and coordinates worker, presentation,
 // request, reload, and animation state for the embedded Julia runtime.
 Julia_Runtime_Service :: struct {
     // Service-lifetime allocation backing and evidence state.
     bootstrap_allocator: mem.Allocator,
-    communication_storage: storage.Arena_Owner,
     asset_root_override: string,
     profile: evidence_profile.State,
     evidence_ring: evidence_trace.Ring,
@@ -398,12 +391,14 @@ Julia_Runtime_Service :: struct {
     runtime_generation: u64,
 
     // Bounded worker transport and messages retained across handoffs.
-    request_link: Communication_Link(Julia_Host_Ingress),
-    event_link: Communication_Link(Julia_Host_Egress),
+    julia_inbox: Consumer_Mailbox(Julia_Host_Ingress),
+    display_inbox: Consumer_Mailbox(Julia_Host_Egress),
     pending_view_content: ^Julia_Host_Egress,
+    pending_view_storage: Owned_View_Content,
     display_egress_dispatch: Julia_Egress_Dispatch_Proc,
     display_egress_user_data: rawptr,
     display_pending_view_content: ^Julia_Host_Egress,
+    display_pending_view_storage: Owned_View_Content,
 
     // Request identity, active work, and admission/failure diagnostics.
     next_request_id: u64,

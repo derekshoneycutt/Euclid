@@ -170,15 +170,17 @@ function close_euclid_terminal_session!(
 end
 
 """Pump bounded application actor work and install a requested Terminal successor."""
-function pump_euclid_reactor!(host::EuclidRuntimeHost)::Bool
+function pump_euclid_reactor_status!(host::EuclidRuntimeHost)
     status = EuclidHost.pump_for_host(
         host.reactor, Int32(8), UInt64(500_000))
     session = host.reactor.session
     desired = host.desired_terminal_generation
+    admitted = false
     if desired > session.generation &&
         session.phase === EuclidHost.HostSessionQuiescent
         EuclidHost.start_session_for_host(host.reactor, desired)
         host.announced_terminal_generation = desired
+        admitted = true
     end
     pending = host.pending_terminal_evaluation
     session = host.reactor.session
@@ -188,8 +190,26 @@ function pump_euclid_reactor!(host::EuclidRuntimeHost)::Bool
         EuclidHost.ingest_evaluation_for_host(
             host.reactor, pending.request_id, pending.source,
             pending.mode, pending.generation)
+        admitted = true
     end
-    return status.immediately_runnable || status.outgoing_available
+    return status, admitted
+end
+
+"""Pump host policy while preserving the existing runnable-work result contract."""
+function pump_euclid_reactor!(host::EuclidRuntimeHost)::Bool
+    status, admitted = pump_euclid_reactor_status!(host)
+    return status.immediately_runnable || status.outgoing_available || admitted
+end
+
+"""Compute a bounded native idle wait in Julia's clock domain; external I/O still polls."""
+function euclid_host_wait_budget_ns(
+    status::EuclidHost.HostPumpStatus, now_ns::UInt64, admitted::Bool)::Int64
+    if admitted || status.immediately_runnable || status.outgoing_available
+        return Int64(0)
+    end
+    deadline = status.next_timer_deadline_ns
+    remaining = deadline > now_ns ? deadline - now_ns : UInt64(0)
+    return Int64(min(remaining, UInt64(1_000_000)))
 end
 
 """Take only the actor result matching one native animation request."""

@@ -12,7 +12,7 @@ Presentation_Mime :: enum u8 {
     Text_Latex,
 }
 
-// Presented_Text borrows exact bytes from its containing producer-owned envelope.
+// Presented_Text borrows exact bytes from an inbox batch or an explicit owner-local source slot.
 Presented_Text :: struct {
     mime: Presentation_Mime,
     bytes: []u8,

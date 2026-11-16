@@ -387,7 +387,7 @@ flowchart TB
     Library["Display collection data and Library view"]
     Font["Font cache and preparation storage"]
     Native["Renderer, GPU, audio and capture owners"]
-    Links["Producer-owned transport pools"]
+    Links["Consumer-owned native mailboxes"]
     Slots["Reusable view snapshot arenas"]
     Host["Julia host thread and GC roots"]
     Generations["Active and staged content arenas"]
@@ -448,9 +448,9 @@ not imply that their owners or lifetimes should be merged.
 | --- | --- | --- |
 | Explicit ordinary allocator | Direct allocations use an explicit allocator expression and paired release. `context.allocator` is limited to root/bootstrap or narrowly reviewed sites, not ambient backing for a reusable domain; it is not a promise that the backing is an uninstrumented system heap. | [Odin allocators](https://pkg.odin-lang.org/core/mem/#overview-allocators) |
 | Temporary allocator | Thread-local operation or frame scratch that cannot escape its reset boundary. Display/Julia loops, task invocations, and catalogue requests reclaim their own scratch; see [Temporary Storage And Joined Work](#temporary-storage-and-joined-work). | [Odin context system](https://odin-lang.org/docs/overview/#implicit-context-system) |
-| Growing virtual arena | Shared animation storage, view snapshot slots, content generations, and derived Dynview cache storage. Bulk reset invalidates all allocations. | [`core:mem/virtual`](https://pkg.odin-lang.org/core/mem/virtual/) |
+| Growing virtual arena | Shared animation storage, view snapshot slots, content generations, derived Dynview cache storage, and one arena per bridge inbox. Bulk reset invalidates all allocations. | [`core:mem/virtual`](https://pkg.odin-lang.org/core/mem/virtual/) |
 | Static virtual arena | Bounded renderer staging and serialized font preparation. Reservation and commitment are distinct; fixed reservation does not mean every byte is initially committed. | [`core:mem/virtual`](https://pkg.odin-lang.org/core/mem/virtual/) |
-| TLSF allocator | Reusable, individually freed variable-sized allocations: bridge messages, scheduler/service storage, and optional font metadata. | [`core:mem/tlsf`](https://pkg.odin-lang.org/core/mem/tlsf/) |
+| TLSF allocator | Reusable, individually freed variable-sized allocations: collections, scheduler/service storage, and optional font metadata. | [`core:mem/tlsf`](https://pkg.odin-lang.org/core/mem/tlsf/) |
 | Mutex allocator wrapper | Synchronizes allocator operations for the task pool and content service. It does not make allocated application objects safe for concurrent mutation. | [`core:mem`](https://pkg.odin-lang.org/core/mem/) |
 | Tracking allocator wrapper | Debug allocation evidence around allocations routed through a tracked domain. Accounting is not ownership of the tracked objects' lifecycles. | [`core:mem`](https://pkg.odin-lang.org/core/mem/) |
 | Inline arrays and retained buffers | Bounded worlds, slots, commands, queues, and reusable workspaces. Logical clearing often changes counts rather than allocating or freeing. | [Odin arrays and slices](https://odin-lang.org/docs/overview/) |
@@ -489,8 +489,8 @@ Exact quotas and byte sizes belong to the linked models and implementations.
 | Animation-generation data | Shared `Animation_Memory` arena, borrowed by values, documents, and production Terminal state | Detach borrowers, reset once, publish new generation | [Animation storage](../../../src/bridge/animation_storage.odin), [Terminal lifecycle](../../../src/view/terminal/lifecycle.odin) |
 | Interface/catalogue materialization | Per-interface registry arena and stable interface slots | Retire or roll back interface generation; destroy at shutdown | [Bridge bootstrap](../../../src/bridge/bootstrap.odin) |
 | Content/search | Dedicated service TLSF storage plus separately owned active/staged content arenas | Transactional generation replacement; stop worker before service release | [Content service](../../../src/view/content/service.odin), [content model](../../../src/core/content/model.odin) |
-| Bridge channel and pool backing | One Julia-service-owned growing arena backs both links' channel buffers and TLSF backing slices | Join the worker, drain returned envelopes, destroy both links, then release the arena | [Runtime service](../../../src/bridge/runtime_service.odin), [arena owner](../../../src/core/storage/arena_owner.odin) |
-| Bridge envelopes and nested bytes | Separate producer-owned fixed TLSF pools with bounded outbound/return channels | Receiver returns envelope; producer reclaims it | [Communication links](../../../src/bridge/communication_link.odin) |
+| Bridge transport | One plain growing Odin arena per one-way inbox, embedded in the service | Pause admission, exhaust accepted messages, reset arena, reopen; stop/join before destruction | [Consumer mailboxes](../../../src/bridge/consumer_mailbox.odin), [mailbox model](../../../src/bridge/model/mailbox.odin) |
+| Retained presentation source | Fixed owner-local records for producer retries, display startup content, and two display parse/replacement slots | Replace pending records locally; active parse source remains valid through task join | [Runtime service](../../../src/bridge/runtime_service.odin), [presentation runtime](../../../src/view/presentation/presentation_runtime.odin) |
 | Tick and lifecycle work | Service-owned reusable slots, pointer-free query snapshots, staged writes and scene commands | Completion accepted or rejected before slot reuse | [Runtime model](../../../src/bridge/model/runtime.odin), [runtime service](../../../src/bridge/runtime_service.odin) |
 | View snapshots | Per-slot growing arena and bounded payload builders | Only a free slot can reset; publication consumers must finish first | [Snapshot model](../../../src/bridge/model/model.odin), [runtime service](../../../src/bridge/runtime_service.odin) |
 | Dynview derived cache | Dedicated cache arena and persistent shaping workspaces | Rebuild under exclusive worker access, then joined display use | [Simulation executor](../../../src/view/simulation/simulation_executor.odin), [compiler](../../../src/dynview/compile/compile.odin) |
@@ -537,27 +537,51 @@ pointer's lifetime.
 
 ## Transport And Publication Lifetimes
 
-### Producer-owned messages
+### Consumer-owned messages
 
-The Julia runtime service owns one arena for both communication links' channel
-buffers and TLSF backing slices. Each
-[communication link](../../../src/bridge/communication_link.odin) retains its own
-fixed TLSF pool within that backing arena. The producer allocates an envelope and
-any nested bytes from its pool, sends it, and later drains returned messages. The
-receiver borrows the envelope and returns it rather than freeing from the
-producer's unsynchronized allocator.
+The [native mailboxes](../../../src/bridge/consumer_mailbox.odin) copy complete typed
+envelopes and nested bytes into receiver-owned storage under a publication mutex.
+Successful publication ends the sender's payload lifetime obligation. The sending
+thread allocates through the inbox's standard arena allocator, but never acquires
+authority to allocate Julia objects or mutate display state. Ordinary send does not
+wait for queue capacity; mutex
+acquisition, copying, and synchronous growth do not have a strict latency bound.
 
-The channels synchronize transfer. They do not authorize both threads to allocate
-from the same raw TLSF pool concurrently, and the shared arena is used only during
-service setup and teardown, not for concurrent message allocation. Stop and join
-the worker and reclaim returned envelopes before destroying either link; release
-the shared arena only after both links are destroyed. Queue capacity and pool-byte
-capacity are separate limits, and both participate in admission.
+Each one-way inbox embeds one plain `core:mem/virtual.Arena`: two arenas total.
+Julia and display initial reservations are 256 KiB and 640 KiB respectively.
+Standard arena code owns backing, growth, alignment, and reclamation; there is no
+mailbox chunk manager or arena-owner wrapper.
 
-The service object and its copied asset-root configuration use the explicit
-bootstrap allocator retained by the service for matching teardown. The communication
-arena has a separate owner and is released after worker join, returned-envelope
-draining, and link destruction.
+Each inbox admits at most 64 messages. Logical accepted-message byte limits are
+1 MiB for Julia and 2.5 MiB for display, including envelope metadata and payload
+layout padding. These are not retained, reserved, or committed memory ceilings.
+The epoch's byte charge remains until reset, including already consumed messages.
+
+The consumer pauses admission and dispatches the entire accepted FIFO outside the
+mutex. Julia drains ingress before ordinary actor service; display service drains
+egress before returning. A nonblocking send during draining reports `Queue_Full`.
+Only after the final borrow ends does the consumer call `vmem.arena_free_all`,
+clear epoch accounting, reopen admission unless closed, and notify waiters.
+Standard reset retains the first block and may release growth blocks. Repeated
+bursts are not guaranteed allocation-free. No return channel, second arena, or
+producer reclamation loop exists.
+
+Display handlers must not wait for Julia while holding a draining egress batch:
+Julia may be waiting to publish a reliable completion. Correlated waits finish
+routing the accepted batch and reset before returning their matched result.
+Full drains are count-bounded, not a wall-clock latency guarantee.
+
+Strings, slices, and highlighting runs are copied by the exhaustive
+[typed copy dispatch](../../../src/bridge/mailbox_copy.odin). Slot handles and explicitly
+borrowed native control pointers retain their independent checked lifetime contracts.
+Storage/count pressure, allocation failure, and closure remain distinct send outcomes.
+The condition variable synchronizes publication, capacity release, and closure;
+waiters always recheck queue state.
+
+Close admission without discarding accepted work, wake waiters, stop publishers, join
+the Julia owner and native parse borrowers, then destroy mailbox storage. The service
+and copied asset-root configuration still use their explicit bootstrap allocator;
+mailbox backing is a separate native virtual-memory domain.
 
 ### A copy can establish the next lifetime
 
@@ -566,17 +590,17 @@ For Julia-produced presentation source, the broad path is:
 ```mermaid
 flowchart LR
     Julia["Julia-owned source"]
-    Envelope["Producer-owned envelope bytes"]
+    Envelope["Display-inbox bytes"]
+    Owned["Display-owned source slot"]
     Parse["Joined parse result"]
     Document["Generation-owned semantic document"]
     Cache["Derived display cache"]
-    Return["Envelope returned to producer"]
 
     Julia -->|"preserved synchronous copy"| Envelope
-    Envelope -->|"borrow source through parse join"| Parse
+    Envelope -->|"copy during dispatch"| Owned
+    Owned -->|"borrow source through parse join"| Parse
     Parse -->|"admit and intern"| Document
     Document -->|"compile and lay out"| Cache
-    Parse -->|"after source consumers finish"| Return
 ```
 
 This diagram describes data dependencies, not a transfer of one allocation through
@@ -584,8 +608,9 @@ all stages. Julia source, envelope bytes, parser output, semantic storage, and
 derived layout have different owners.
 
 The [presentation runtime](../../../src/view/presentation/presentation_runtime.odin)
-retains an active envelope across asynchronous parsing and keeps one newest pending
-replacement. Its durable parse-result storage survives display frames; frame
+retains an active source slot across asynchronous parsing and keeps one newest pending
+replacement in a second fixed slot. Inbox storage recycles independently. Its durable
+parse-result storage survives display frames; frame
 scratch would be inappropriate. Cancellation or supersession does not authorize
 reclaiming a payload while a worker still reads it.
 

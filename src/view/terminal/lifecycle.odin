@@ -589,6 +589,7 @@ terminal_begin_eval :: proc(
     term.next_eval_request_id += 1
     term.pending_eval_request_id = term.next_eval_request_id
     term.awaiting_eval = true
+    term.eval_submission_pending = false
     term.collecting_continuation = false
     return true
 }
@@ -609,6 +610,7 @@ terminal_complete_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     termemulator.interpreter_restore_primary_screen(&term.output_interpreter)
     termemulator.interpreter_finish_input(&term.output_interpreter)
     term.awaiting_eval = false
+    term.eval_submission_pending = false
     term.interactive_input_request_id = 0
     term.collecting_continuation = false
     term.output_checkpoint.valid = false
@@ -677,6 +679,7 @@ terminal_continue_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
         term.pending_eval_source = ""
     }
     term.awaiting_eval = false
+    term.eval_submission_pending = false
     term.collecting_continuation = true
     terminal_clear_completion(term)
 }

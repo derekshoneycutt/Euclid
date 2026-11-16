@@ -108,7 +108,8 @@ window_loading_request :: proc(
     owner: ^Window_Session,
     expected: bridgemodel.Julia_Event_Kind) -> (complete, succeeded: bool) {
     loading := &owner^.loading
-    event, received := julia.try_route_julia_egress(owner^.runtime.julia_service)
+    event, received := julia.try_route_julia_egress(
+        owner^.runtime.julia_service, loading^.request_id, expected)
     if received && event.request_id == loading^.request_id &&
         event.kind == expected {
         if !event.succeeded {

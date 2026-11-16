@@ -22,7 +22,7 @@ window_session_empty_cleanup_preserves_result :: proc(t: ^testing.T) {
 window_startup_test_worker :: proc(worker: ^thread.Thread) {
     service := cast(^bridgemodel.Julia_Runtime_Service)worker.data
     for {
-        message, available := julia.communication_link_try_recv(&service^.request_link)
+        message, available := julia.consumer_mailbox_try_recv(&service^.julia_inbox)
         if !available {
             thread.yield()
             continue
@@ -30,7 +30,7 @@ window_startup_test_worker :: proc(worker: ^thread.Thread) {
         request, shutdown := message^.(bridgemodel.Runtime_Shutdown_Requested)
         assert(shutdown)
         request_id := request.request_id
-        assert(julia.communication_link_return(&service^.request_link, message))
+        julia.consumer_mailbox_release(&service^.julia_inbox, message)
         outcome := julia.send_typed_julia_completion(service, {
             protocol = .Runtime_Shutdown,
             request_kind = .Shutdown,

@@ -10,6 +10,8 @@ import uuid "core:encoding/uuid"
 import fmt "core:fmt"
 import os "core:os"
 import strconv "core:strconv"
+import "core:thread"
+import "core:time"
 import viewsimulation "../view/simulation"
 import simulationmodel "../view/simulation/model"
 
@@ -222,12 +224,27 @@ invoke_configured_harness_scenario :: proc(
     return false
 }
 
-//   Run N deterministic fixed steps, returning false on the first failure.
+// Wait for the scheduled scene batch to commit before the next deterministic harness step.
+wait_harness_animation_tick :: proc(session: view.Euclid_Runtime_Session) -> bool {
+    started := time.tick_now()
+    for session.julia_service.animation_tick_pending {
+        _ = bridge.publish_available_animation_tick(session.state)
+        if time.duration_seconds(time.tick_since(started)) >= 10 {
+            fmt.eprintln("Harness animation tick commit timed out.")
+            return false
+        }
+        thread.yield()
+    }
+    return true
+}
+
+// Run N fixed steps with joined animation commits, returning false on the first failure.
 run_harness_fixed_steps :: proc(
     session: view.Euclid_Runtime_Session, steps: int) -> bool {
     for _ in 0..<steps {
         if !viewsimulation.run_deterministic_fixed_step(
-           session.state, simulationmodel.FIXED_DT) {
+           session.state, simulationmodel.FIXED_DT) ||
+           !wait_harness_animation_tick(session) {
             return false
         }
     }

@@ -305,7 +305,7 @@ ownership, messaging, evaluation, rendering, and lifecycle.
 ## Odin-Julia Bridge: How the Boundary Works
 
 The bridge is a closed typed contract, not a generic callback queue. Small requests and
-results use producer-owned bounded messages; animation work and other long-lived
+results use consumer-owned bounded native mailboxes; animation work and other long-lived
 payloads use checked slots or immutable snapshots. Odin validates and publishes
 results to the owner of visible state. Keep Odin exports, Julia wrappers, message
 identity, and failure handling symmetric.
@@ -430,6 +430,17 @@ interactive work grew, it was moved to a persistent owner thread, with a separat
 native task pool for finite parallel work. The owner thread established a single place
 for Julia C API access and enabled more asynchronous workflows while keeping display
 state under Odin ownership.
+
+Initially, the separate Julia thread communicated with the display thread, and vice versa,
+via standard Odin `chan` messages with sender-owned TLSF ran buffers for message content.
+A slot mechanism was created for large world-update and lifecycle data updates
+inappropriate for the buffered channels. This required such tasks as notifying the sender
+when it was safe to destroy content packets in these buffers. To overcome this and achieve
+a more comfortable architecture overall, this was migrated instead to a new consumer-owned
+mailboxes backed by growing arena storage. This fits tighter with the actor model used
+within the Julia code, although it does not try to implement a full actor model on the
+Odin side. World-update and lifecycle slots remain separate data pipelines for their
+larger data.
 
 ### Content, tools, and native preparation expanded
 

@@ -934,7 +934,7 @@ scenario_expect_view_content_request :: proc(
     t: ^testing.T, service: ^bridgemodel.Julia_Runtime_Service,
     animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     identity: evidence_trace.Identity) {
-    message, received := julia.communication_link_try_recv(&service^.request_link)
+    message, received := julia.consumer_mailbox_try_recv(&service^.julia_inbox)
     testing.expect(t, received)
     request, request_ok := message^.(bridgemodel.Scenario_View_Content_Requested)
     testing.expect(t, request_ok)
@@ -944,8 +944,8 @@ scenario_expect_view_content_request :: proc(
     testing.expect_value(t, request.animation_generation, u64(9))
     testing.expect_value(t, request.animation, animation)
     testing.expect_value(t, request.origin, identity)
-    testing.expect(t, julia.communication_link_return(&service^.request_link, message))
-    testing.expect_value(t, julia.drain_julia_ingress_returns(service), 1)
+    julia.consumer_mailbox_release(&service^.julia_inbox, message)
+    testing.expect_value(t, service.julia_inbox.outstanding, 0)
 }
 
 // Verify view-content actions copy exact source and lifecycle identity into ingress.
@@ -955,9 +955,9 @@ scenario_view_content_submits_typed_owner_request :: proc(t: ^testing.T) {
     defer free(state)
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service)
-    testing.expect_value(t, julia.init_julia_runtime_channels(service),
+    testing.expect_value(t, julia.init_julia_runtime_mailboxes(service),
         runtime.Allocator_Error.None)
-    defer julia.destroy_julia_runtime_channels(service)
+    defer julia.destroy_julia_runtime_mailboxes(service)
     state^.julia_runtime_service = service
     state^.julia_interface = &state^.julia_interface_slots[0]
     animation := &state^.julia_interface^.null_animation

@@ -11,15 +11,15 @@ import "core:log"
 // Route one non-event Julia envelope to its display-owned subsystem.
 julia_egress_router_dispatch :: proc(
     user_data: rawptr,
-    message: ^bridgemodel.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) {
     runtime := cast(^viewpresentation.Presentation_Runtime)user_data
     assert(runtime != nil && runtime^.state != nil)
     if content, is_content := message^.(bridgemodel.View_Content_Ready); is_content {
-        viewpresentation.presentation_admit(runtime^.state, runtime, message, content)
-        return true
+        viewpresentation.presentation_admit(runtime^.state, runtime, content)
+        return
     }
     if julia_egress_router_dispatch_exercise_operation(runtime.state, message) {
-        return false
+        return
     }
     if update, is_update := message^.(bridgemodel.Exercise_Header_Update);
         is_update {
@@ -38,10 +38,9 @@ julia_egress_router_dispatch :: proc(
                 exerciseheader.hide(&state^.exercise_header)
             }
         }
-        return false
+        return
     }
     _ = terminalservice.terminal_service_dispatch_egress(runtime^.state, message)
-    return false
 }
 
 // Route built-in and user exercise work through their respective display owners.

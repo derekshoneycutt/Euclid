@@ -91,14 +91,43 @@ The bridge uses two typed tagged unions:
 - [`Julia_Host_Egress`](../../../src/bridge/model/runtime.odin) carries Julia-produced
   results and events back to the display.
 
-Each direction has a bounded communication link with a producer-owned envelope pool.
-The Julia host drains returned egress envelopes on every worker-loop iteration, even
-when no request or result is ready. Reclamation cannot depend on producing the next
-message: a completed output burst can fill the return queue while the display still
-needs to return its final envelope, blocking the display if the idle host stops draining.
-The consumer borrows a message, interprets or copies its contents, then returns it to
-the link that allocated it. This makes memory ownership travel with the message; the
-receiver does not free memory from the other thread's pool.
+Each direction has a consumer-owned native mailbox. Publication atomically copies the
+complete envelope and nested payload; the sender is done with those bytes when it
+returns. Each inbox uses one plain standard growing `core:mem/virtual.Arena`,
+with initial reservations of 256 KiB for Julia and 640 KiB for display: two arenas
+total, without owner wrappers or custom chunk management. Each permits 64 accepted
+messages, with logical allocation-byte limits of 1 MiB and 2.5 MiB respectively.
+Those include envelope and payload layout, not allocator or OS backing overhead.
+
+Consumers pause admission and dispatch the entire accepted FIFO outside the mutex.
+Julia drains all accepted native requests before its ordinary actor-service step;
+display service drains the full accepted egress batch. The final release resets
+the arena using `vmem.arena_free_all`, clears epoch byte accounting, reopens
+admission unless closed, and wakes waiters. Growth blocks may be released at reset;
+the first block remains reserved. No second arena or return channel is needed.
+Full drains replace the previous one-request/16-message budgets. Count limits do
+not bound execution time: some control requests synchronously execute Julia work.
+Orderly service teardown logs `julia_mailbox_transport` for both directions, including
+accepted/limit/peak logical bytes, outstanding/peak counts, and cumulative publication,
+mutex-wait and payload-copy nanoseconds. These are measured costs, not latency
+guarantees.
+Payloads retained beyond dispatch must be copied into destination-owned storage.
+
+Ordinary display sends do not wait for capacity, but copying and synchronous native
+arena growth can run under the mutex. Count pressure, byte pressure, allocation failure,
+and closure have distinct outcomes. `Queue_Full` also means admission is temporarily
+paused for draining. Reliable completion traffic waits outside the lock and wakes
+on reset or closure. Display dispatch must not synchronously wait for Julia while
+its inbox is draining, since Julia may be waiting to publish into that inbox.
+Startup and correlated lifecycle/shutdown waits retain their matched result while
+finishing the rest of the accepted batch before returning.
+
+Idle Julia uses mailbox notification, not notification counts as queue truth. The
+primitive `terminal_host_pump_wait_ns` wrapper computes a wait budget using Julia's
+`HostPumpStatus` and clock, avoiding a native mirror of the managed status layout.
+Runnable actor work, output, or newly admitted host work yields zero wait; finite timer
+deadlines shorten it. The current pump reports no finite timer deadline, so the maximum
+1 ms external-I/O polling interval remains necessary.
 
 The unions carry several message families. Their differences are part of the design,
 not implementation trivia:
@@ -108,9 +137,9 @@ not implementation trivia:
 | Runtime startup and shutdown | `Runtime_Initialize_Requested`, `Runtime_Content_Initialize_Requested`, `Runtime_Shutdown_Requested` | `Runtime_Initialized`, `Runtime_Content_Initialized`, `Runtime_Shutdown_Completed` | Correlated control message and completion |
 | Animation tick | `Animation_Tick_Requested` with slot identity | `Animation_Tick_Completed` with the same slot identity | Small message; immutable query and scene batch stay in checked service-owned slot |
 | Animation selection, reset, reload | `Animation_Lifecycle_Requested` with transaction identity | `Animation_Lifecycle_Completed` | Checked lifecycle slot plus correlated completion |
-| Terminal session and evaluation | `Terminal_Session_Started`, `Evaluation_Requested`, `Terminal_Interactive_Input`, and other typed Terminal requests | `Terminal_Session_Ready`, `Terminal_Output_Batch`, `Evaluation_Completed`, and other typed results | Pooled typed messages carrying request/session identity |
+| Terminal session and evaluation | `Terminal_Session_Started`, `Evaluation_Requested`, `Terminal_Interactive_Input`, and other typed Terminal requests | `Terminal_Session_Ready`, `Terminal_Output_Batch`, `Evaluation_Completed`, and other typed results | Copied typed messages carrying request/session identity |
 | Completion and shell interaction | `Completion_Requested` and shell/session requests | `Completion_Result`, `Completion_Failed`, and correlated policy results | Bounded typed request and response |
-| Presentation content | Produced directly by Julia as `View_Content_Ready` | Not an actor conversation | Producer-owned MIME bytes in an egress envelope; display stages a pointer-free snapshot |
+| Presentation content | Produced directly by Julia as `View_Content_Ready` | Not an actor conversation | Display-inbox MIME bytes copied into display-owned source slots; display stages a pointer-free snapshot |
 | Terminal tick stream | `Tick_Pulse` and stream acknowledgements/configuration | `Tick_Stream_Configure_Requested`, `Tick_Stream_Stop_Requested` | Typed control and pulse messages, correlated to a Terminal generation |
 
 Message names above are representative, not the complete union. The exhaustive current
@@ -122,21 +151,21 @@ worker dispatches known variants; it is not a generic callback queue.
 ```mermaid
 sequenceDiagram
     participant D as Display owner
-    participant I as Ingress link
+    participant I as Julia inbox
     participant J as Julia owner loop
     participant A as Julia actor runtime
-    participant E as Egress link
+    participant E as Display inbox
     participant C as Display subsystem
 
-    D->>I: typed request and correlation
+    D->>I: copy typed request and correlation
     I->>J: owner receives borrowed envelope
     J->>A: route policy request when actor-owned
     A-->>J: typed policy outcome
-    J->>E: typed result or completion
+    J->>I: recycle exhausted batch locally
+    J->>E: copy typed result or completion
     E-->>D: display routes and validates result
     D->>C: commit to owning display subsystem
-    D-->>I: return consumed ingress envelope
-    D-->>E: return consumed egress envelope
+    D->>E: recycle exhausted batch locally
 ```
 
 ### When a message is not the payload
@@ -148,7 +177,7 @@ request. In those cases the message carries a handle to an explicitly owned slot
   bounded scene-command batch.
 - Lifecycle requests identify a slot containing the frozen selection/reset/reload
   intent.
-- Presentation messages carry source bytes through the producer's bounded pool; after
+- Presentation messages copy source bytes through the display's bounded inbox; after
   parsing and validation, the display publishes pointer-free semantic records into a
   snapshot slot.
 
@@ -336,7 +365,7 @@ the exact period native code relies on them:
   continues to root the active generation until the candidate is committed or rolled
   back.
 - Julia-to-Odin byte transfers use explicit preserved Julia values while native code
-  copies them into producer-owned bridge storage. The receiver does not retain Julia
+  copies them into consumer-owned native inbox storage. The receiver does not retain Julia
   heap pointers.
 
 This is a bounded rooting window, not a global pause of Julia GC: ordinary Julia
@@ -352,7 +381,7 @@ The bridge links, tick slots, lifecycle slot, and view snapshot slots have their
 bounded storage and lifetimes; they do not allocate from the shared animation arena.
 Their definitions and ownership transitions are in
 [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin) and the
-transport helpers in [`communication_link.odin`](../../../src/bridge/communication_link.odin).
+transport helpers in [`consumer_mailbox.odin`](../../../src/bridge/consumer_mailbox.odin).
 
 ## Follow The Main Workflows
 
@@ -481,8 +510,10 @@ needed, validates it, and publishes immutable pointer-free semantics into a snap
 Compilation, shaping, and layout then produce display-readable derived caches.
 
 This path can supersede older content while parsing or compilation is underway. The
-display retains a producer-owned envelope until native parsing joins, returns the
-envelope to the Julia link, and publishes only a complete current-generation snapshot.
+display copies into one of two fixed source slots before inbox dispatch ends, retains
+the active slot until native parsing joins, and publishes only a complete
+current-generation snapshot. Producer retries and startup/lifecycle-deferred content
+also use owner-local fixed records rather than retaining mailbox batches.
 Begin at [`presentation.jl`](../../../src/julia/bridge/presentation.jl),
 [`abi-presentation.odin`](../../../src/bridge/abi-presentation.odin), and
 [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin);
@@ -493,7 +524,7 @@ and [`src/dynview/`](../../../src/dynview/).
 
 | Question | Start here | Continue into |
 | --- | --- | --- |
-| How are Julia requests and events transported? | [`communication_link.odin`](../../../src/bridge/communication_link.odin), [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) | [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin) |
+| How are Julia requests and events transported? | [`consumer_mailbox.odin`](../../../src/bridge/consumer_mailbox.odin), [`mailbox_copy.odin`](../../../src/bridge/mailbox_copy.odin) | [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin), [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) |
 | Where is request dispatch and owner-thread enforcement? | [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) | [`runtime_host.jl`](../../../src/julia/runtime_host.jl), [`src/julia/host/`](../../../src/julia/host/) |
 | How is the Julia runtime initialized and stopped? | [`bootstrap.odin`](../../../src/bridge/bootstrap.odin) | [`src/julia/sysimage_core.jl`](../../../src/julia/sysimage_core.jl), [`src/julia/host/`](../../../src/julia/host/) |
 | Where is actor creation and pump policy? | [`host.jl`](../../../src/julia/host.jl) | [`src/julia/policy/`](../../../src/julia/policy/) |
@@ -501,7 +532,7 @@ and [`src/dynview/`](../../../src/dynview/).
 | How are animation requests and batches handled? | [`animations.odin`](../../../src/bridge/animations.odin), [`scene_commands.odin`](../../../src/bridge/scene_commands.odin) | [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl), [`animation_protocol.jl`](../../../src/julia/policy/animation_protocol.jl) |
 | How is presentation content published? | [`abi-presentation.odin`](../../../src/bridge/abi-presentation.odin) | [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin), [`src/dynview/`](../../../src/dynview/) |
 | Where are bridge payload types defined? | [`src/bridge/model/`](../../../src/bridge/model/) | [`src/core/protocol/`](../../../src/core/protocol/) |
-| Where are focused tests? | [`communication_link_test.odin`](../../../src/bridge/communication_link_test.odin) | [`animations_test.odin`](../../../src/bridge/animations_test.odin), [`src/julia/test/`](../../../src/julia/test/) |
+| Where are focused tests? | [`consumer_mailbox_test.odin`](../../../src/bridge/consumer_mailbox_test.odin), [`mailbox_protocol_test.odin`](../../../src/bridge/mailbox_protocol_test.odin) | [`animations_test.odin`](../../../src/bridge/animations_test.odin), [`src/julia/test/`](../../../src/julia/test/) |
 
 The display frame coordinator that interleaves egress routing, presentation, fixed
 steps, and drawing is [`view.odin`](../../../src/view/view.odin) and
@@ -514,16 +545,17 @@ service are implemented in [`runtime_service.odin`](../../../src/bridge/runtime_
 
 The bridge reports queue saturation, allocation failure, stale identity, invalid
 payloads, and actor failure as explicit outcomes. Display-side submission is bounded
-and nonblocking; a failed send leaves the caller responsible for handling the request
-or releasing its reserved slot. Egress may apply bounded backpressure if the display
-stops draining it. Counters and diagnostics are available in the bridge runtime
-service.
+and nonblocking on capacity; a failed send leaves the caller responsible for handling
+the request or releasing its reserved slot. Egress may apply bounded backpressure if
+the display stops draining it. Counters and diagnostics are available in the bridge
+runtime service.
 
 Shutdown is cooperative because Julia is thread-affine and an arbitrary C API call
 cannot safely be killed from another thread. The display requests shutdown, the owner
 retires animation and Terminal actors in dependency order, Julia performs its own
 teardown, and only after the completion does the display join the thread and destroy
-links and owned storage. Startup and shutdown details are in
+mailboxes and owned storage. Admission closes and wakes waiters only after the shutdown
+request can be consumed and its completion published. Startup and shutdown details are in
 [`bootstrap.odin`](../../../src/bridge/bootstrap.odin) and
 [`runtime_service.odin`](../../../src/bridge/runtime_service.odin).
 
@@ -550,8 +582,9 @@ policy:
 
 - Only the Julia owner thread enters the Julia C API.
 - Julia actors organize policy but never mutate visible display-owned state.
-- A transport envelope stays owned by its producer and returns to that producer after
-  consumption; large or long-lived work uses an explicitly owned slot or snapshot.
+- Successful publication leaves a complete receiver-owned envelope; no sender payload
+  obligation remains. Dispatch borrows end before local batch recycling. Large or
+  long-lived work still uses an explicitly owned slot or snapshot.
 - Animation queries read an immutable submission snapshot; scene changes publish as a
   complete validated batch before constraints.
 - Generation, sequence, and reservation identity are checked before a delayed result is
@@ -563,7 +596,8 @@ policy:
 ### Verification
 
 The bridge and actor behavior have Odin and Julia test coverage. For a focused entry,
-start with [`communication_link_test.odin`](../../../src/bridge/communication_link_test.odin),
+start with [`consumer_mailbox_test.odin`](../../../src/bridge/consumer_mailbox_test.odin),
+[`mailbox_protocol_test.odin`](../../../src/bridge/mailbox_protocol_test.odin),
 [`animations_test.odin`](../../../src/bridge/animations_test.odin), and
 [`src/julia/test/animation_actor_tests.jl`](../../../src/julia/test/animation_actor_tests.jl);
 Terminal, runtime-host, and publication tests are grouped under

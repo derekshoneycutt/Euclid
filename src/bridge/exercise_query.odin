@@ -80,7 +80,7 @@ begin_exercise_query :: proc "c" (
     return enqueue_exercise_query(state, query, input.load, token)
 }
 
-// Reserve the sole reply slot and transfer a small intent through Julia's owned pool.
+// Reserve the sole reply slot and copy a small intent into the display-owned inbox.
 enqueue_exercise_query :: proc(
     state: ^core.Euclid_General_State, query: contentdata.Exercise_Query_Request,
     load: bool, token: ^u64) -> i32 {
@@ -91,11 +91,6 @@ enqueue_exercise_query :: proc(
     if (operation.state != .Idle && !load) ||
        service.host_exercise_header_animation_generation == 0 {
         return BRIDGE_STATUS_ILLEGAL_STATE
-    }
-    _ = drain_julia_egress_returns(service)
-    message, failure := communication_link_alloc(&service.event_link)
-    if failure != .None {
-        return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
     operation.next_token += 1
     intent: bridgemodel.Exercise_Query_Intent = {
@@ -109,9 +104,8 @@ enqueue_exercise_query :: proc(
         intent.header_request_id = bridgemodel.exercise_header_request_next(
             &service.exercise_header_request_sequence)
     }
-    message^ = bridgemodel.Julia_Host_Egress(intent)
-    if !communication_link_try_send(&service.event_link, message) {
-        communication_link_free(&service.event_link, message)
+    if consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(intent)) != .Sent {
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
     operation.intent = intent

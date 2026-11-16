@@ -1715,55 +1715,6 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "bridge-terminal-highlight-result-runs",
-                "src/bridge/terminal_highlighting.odin",
-                "allocate_highlight_result",
-                :custom,
-                "Validated runs are bounded by the highlight protocol and copied into the fixed egress TLSF pool; allocation failure rolls back the envelope and source, and the Julia producer reclaims runs after display return or failed publication.";
-                operation="make",
-                target="[]protocol.Highlight_Run",
-                allocator_source="pool_allocator",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "bridge-communication-link-backing",
-                "src/bridge/communication_link.odin",
-                "communication_link_allocate_pool_backing",
-                :custom,
-                "Aligned fixed-pool backing is retained on the link and reclaimed with the service arena after both channels are destroyed.";
-                operation="make",
-                target="[]byte",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "bridge-communication-link-envelope",
-                "src/bridge/communication_link.odin",
-                "communication_link_alloc",
-                :custom,
-                "Producer-owned envelopes use the bounded link pool and are reclaimed after return.";
-                operation="new",
-                target="T",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "bridge-communication-link-nested-bytes",
-                "src/bridge/communication_link.odin",
-                "communication_link_alloc_bytes",
-                :custom,
-                "Nested payload bytes use the bounded link pool and are reclaimed with their envelope.";
-                operation="make",
-                target="[]u8",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
             # Display presentation allocations live for one runtime session.
             ReviewedAllocationPolicy(
                 "view-presentation-runtime-storage",

@@ -3,10 +3,8 @@ package bridge
 import bridgemodel "model"
 import protocol "../core/protocol"
 import julialib "../../libs/julia/bindings"
-import "core:mem/tlsf"
-import "core:time"
 
-// Clone bounded source into the display producer's pool; never retain caller storage.
+// Copy bounded source into Julia-inbox storage; never retain caller storage.
 send_terminal_highlight_request :: proc(
     service: ^Julia_Runtime_Service,
     request: protocol.Highlight_Requested) -> bridgemodel.Communication_Send_Outcome {
@@ -17,67 +15,11 @@ send_terminal_highlight_request :: proc(
     if service.lifecycle == .Shutdown_Requested || service.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_ingress_returns(service)
-    message, message_error := communication_link_alloc(&service.request_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    source, source_error := communication_link_alloc_bytes(
-        &service.request_link, len(request.source))
-    if source_error != .None {
-        communication_link_free(&service.request_link, message)
-        return .Allocation_Failed
-    }
-    copy(source, transmute([]u8)request.source)
-    cloned := request
-    cloned.source = string(source)
-    message^ = cloned
-    if !communication_link_try_send(&service.request_link, message) {
-        destroy_julia_ingress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.julia_inbox, bridgemodel.Julia_Host_Ingress(request))
 }
 
-// Reclaim source and typed runs only on the Julia egress producer.
-destroy_highlight_result_storage :: proc(
-    service: ^Julia_Runtime_Service, result: protocol.Highlight_Result) {
-    communication_link_free_bytes(&service.event_link, transmute([]u8)result.source)
-    delete(result.runs, tlsf.allocator(&service.event_link.pool))
-}
-
-// Copy a complete validated result transactionally into producer-owned pool storage.
-allocate_highlight_result :: proc(
-    service: ^Julia_Runtime_Service,
-    result: protocol.Highlight_Result) -> ^bridgemodel.Julia_Host_Egress {
-    message, message_error := communication_link_alloc(&service.event_link)
-    if message_error != .None {
-        return nil
-    }
-    source, source_error := communication_link_alloc_bytes(
-        &service.event_link, len(result.source))
-    if source_error != .None {
-        communication_link_free(&service.event_link, message)
-        return nil
-    }
-    pool_allocator := tlsf.allocator(&service.event_link.pool)
-    runs, runs_error := make([]protocol.Highlight_Run, len(result.runs), pool_allocator)
-    if runs_error != .None {
-        communication_link_free_bytes(&service.event_link, source)
-        communication_link_free(&service.event_link, message)
-        return nil
-    }
-    copy(source, transmute([]u8)result.source)
-    copy(runs, result.runs)
-    message^ = protocol.Highlight_Result{
-        identity = result.identity,
-        source = string(source),
-        runs = runs,
-    }
-    return message
-}
-
-// Publish only complete results, reporting pool/queue pressure without a partial envelope.
+// Publish only complete results, reporting storage/queue pressure without partial envelopes.
 send_terminal_highlight_result :: proc(
     service: ^Julia_Runtime_Service,
     result: protocol.Highlight_Result) -> bridgemodel.Communication_Send_Outcome {
@@ -87,16 +29,8 @@ send_terminal_highlight_result :: proc(
     if service.lifecycle == .Shutdown_Requested || service.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_egress_returns(service)
-    message := allocate_highlight_result(service, result)
-    if message == nil {
-        return .Allocation_Failed
-    }
-    if !communication_link_try_send(&service.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(result))
 }
 
 // Box the immutable identity and source under explicit roots on the Julia owner thread.
@@ -185,10 +119,9 @@ julia_terminal_send_highlight :: proc(
                 reason = .Transport_Capacity,
             })
         }
-        if outcome != .Queue_Full {
+        if !julia_egress_wait_for_capacity(service, outcome) {
             return false
         }
-        time.sleep(time.Millisecond)
     }
 }
 

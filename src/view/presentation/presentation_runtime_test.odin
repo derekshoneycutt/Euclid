@@ -28,7 +28,7 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     presentation := create_presentation_runtime()
     testing.expect(t, state != nil && service != nil && presentation != nil)
-    link_error := bridge.init_julia_runtime_channels(service)
+    link_error := bridge.init_julia_runtime_mailboxes(service)
     testing.expect_value(t, link_error, runtime.Allocator_Error.None)
     state^.julia_runtime_service = service
     state^.ui_runtime.preferences.values.interface.enable_particle_effects = true
@@ -68,19 +68,11 @@ presentation_test_fixture_destroy :: proc(
     service := fixture.service
     presentation := fixture.presentation
     quiesce_presentation_runtime(state, presentation)
-    for {
-        message, returned := bridge.communication_link_try_take_return(
-            &service^.event_link)
-        if !returned {
-            break
-        }
-        free(message)
-    }
     destroy_presentation_runtime(presentation)
     taskpool.task_pool_destroy(&state^.simulation_executor^.pool)
     free(state^.simulation_executor)
     bridge.view_snapshot_slots_destroy(service)
-    bridge.destroy_julia_runtime_channels(service)
+    bridge.destroy_julia_runtime_mailboxes(service)
     bridge.animation_storage_destroy(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents)
@@ -93,9 +85,8 @@ presentation_test_fixture_destroy :: proc(
 presentation_test_message :: proc(
     state: ^core.Euclid_General_State,
     generation: u64,
-    bytes: []u8) -> ^bridgemodel.Julia_Host_Egress {
-    message := new(bridgemodel.Julia_Host_Egress, context.allocator)
-    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
+    bytes: []u8) -> bridgemodel.View_Content_Ready {
+    return {
         runtime_generation = 3,
         animation_generation = 5,
         presentation_generation = generation,
@@ -104,8 +95,7 @@ presentation_test_message :: proc(
             mime = .Text_Latex,
             bytes = bytes,
         },
-    })
-    return message
+    }
 }
 
 //   Compare exact bytes without treating embedded zero as a terminator.
@@ -168,19 +158,18 @@ presentation_admission_is_bounded_and_clears_visible_state :: proc(t: ^testing.T
     first := presentation_test_message(state, 11, first_bytes)
     second := presentation_test_message(state, 12, second_bytes)
 
-    first_content, _ := first^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, first, first_content)
-    testing.expect(t, presentation^.pending == first)
+    presentation_admit(state, presentation, first)
+    testing.expect(t, presentation.pending != nil)
     testing.expect_value(t, service^.published_view_snapshot_index, -1)
     testing.expect_value(t, len(state^.dynview.content.commands), 0)
 
-    second_content, _ := second^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, second, second_content)
-    testing.expect(t, presentation^.pending == second)
+    presentation_admit(state, presentation, second)
+    retained := presentation.pending^.(bridgemodel.View_Content_Ready)
+    testing.expect_value(t,
+        retained.presentation_generation, second.presentation_generation)
+    second_bytes[1] = 'z'
+    testing.expect_value(t, string(retained.content.bytes), "$y$")
     testing.expect_value(t, presentation^.newest_generation, u64(12))
-    returned, ok := bridge.communication_link_try_take_return(&service^.event_link)
-    testing.expect(t, ok && returned == first)
-    free(returned)
 }
 
 // Verify accepted replacement copies the last presented samples into owned dust.
@@ -202,9 +191,9 @@ presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
     viewfont.cache_ink_capture_publish(&state^.font_cache)
     bytes: []u8 = {'$', 'x', '$'}
     message := presentation_test_message(state, 13, bytes)
-    content, _ := message^.(bridgemodel.View_Content_Ready)
+    content := message
 
-    presentation_admit(state, presentation, message, content)
+    presentation_admit(state, presentation, content)
 
     testing.expect_value(t, presentation^.dust.particle_count, 2)
     testing.expect_value(t, presentation^.dust.particles.pos_x[0], f32(20))
@@ -218,8 +207,7 @@ presentation_admission_starts_bounded_departure :: proc(t: ^testing.T) {
     testing.expect(t, !presentation^.dust.particles.ink_style[1].authored)
     state^.ui_runtime.preferences.values.interface.reduce_motion = true
     next := presentation_test_message(state, 14, bytes)
-    next_content, _ := next^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, next, next_content)
+    presentation_admit(state, presentation, next)
     testing.expect_value(t, presentation^.dust.particle_count, 0)
     testing.expect(t, !presentation^.dust.incoming_active)
 }
@@ -572,8 +560,7 @@ presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
         fixture.state, fixture.service, fixture.presentation
     source_bytes: []u8 = {'$', 'x', '^', '2', '$'}
     first := presentation_test_message(state, 21, source_bytes)
-    first_content, _ := first^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, first, first_content)
+    presentation_admit(state, presentation, first)
     presentation_start_pending(state, presentation)
     testing.expect(t, presentation^.active.submitted)
 
@@ -583,23 +570,17 @@ presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
     testing.expect(t, state^.dynview.compile_cache.math_program_count > 0)
     testing.expect(t, presentation^.dust.incoming_active)
     testing.expect_value(t, presentation^.dust.incoming_generation, u64(21))
-    returned, first_returned := bridge.communication_link_try_take_return(
-        &service^.event_link)
-    testing.expect(t, first_returned && returned == first)
-    free(returned)
+    testing.expect(t, !presentation.content_storage[0].present &&
+        !presentation.content_storage[1].present)
 
     second := presentation_test_message(state, 22, source_bytes)
-    second_content, _ := second^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, second, second_content)
+    presentation_admit(state, presentation, second)
     presentation_start_pending(state, presentation)
     testing.expect(t, !presentation^.active.submitted)
     testing.expect(t, presentation^.pending == nil)
     testing.expect(t, service^.published_view_snapshot_index >= 0)
-    second_returned: bool
-    returned, second_returned = bridge.communication_link_try_take_return(
-        &service^.event_link)
-    testing.expect(t, second_returned && returned == second)
-    free(returned)
+    testing.expect(t, !presentation.content_storage[0].present &&
+        !presentation.content_storage[1].present)
 }
 
 //   Verify a current rejected document publishes its exact source as visible text.
@@ -611,8 +592,7 @@ presentation_rejected_tex_publishes_exact_literal :: proc(t: ^testing.T) {
         fixture.state, fixture.service, fixture.presentation
     source_bytes: []u8 = {'\\', 't', 'e', 'x', 't', 'b', 'f', '{', 'x'}
     message := presentation_test_message(state, 31, source_bytes)
-    content, _ := message^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, message, content)
+    presentation_admit(state, presentation, message)
     presentation_start_pending(state, presentation)
     presentation_test_wait_for_idle(state, presentation)
 
@@ -631,9 +611,8 @@ presentation_rejected_tex_publishes_exact_literal :: proc(t: ^testing.T) {
         state^.dynview.content.text_bytes[
             literal.text_offset:literal.text_offset+literal.text_len],
         source_bytes))
-    returned, ok := bridge.communication_link_try_take_return(&service^.event_link)
-    testing.expect(t, ok && returned == message)
-    free(returned)
+    testing.expect(t, !presentation.content_storage[0].present &&
+        !presentation.content_storage[1].present)
 }
 
 //   Verify a lifecycle generation change clears content and retires stale parse work.
@@ -648,8 +627,7 @@ presentation_lifecycle_change_cancels_stale_parse :: proc(t: ^testing.T) {
     source_bytes: []u8 = {
         '$', '\\', 'f', 'r', 'a', 'c', '{', '1', '}', '{', '2', '}', '$'}
     message := presentation_test_message(state, 41, source_bytes)
-    content, _ := message^.(bridgemodel.View_Content_Ready)
-    presentation_admit(state, presentation, message, content)
+    presentation_admit(state, presentation, message)
     presentation_start_pending(state, presentation)
     testing.expect(t, presentation^.active.submitted)
 
@@ -663,7 +641,6 @@ presentation_lifecycle_change_cancels_stale_parse :: proc(t: ^testing.T) {
     testing.expect_value(t, presentation^.newest_generation, 0)
     presentation_test_wait_for_idle(state, presentation)
     testing.expect_value(t, service^.published_view_snapshot_index, -1)
-    returned, ok := bridge.communication_link_try_take_return(&service^.event_link)
-    testing.expect(t, ok && returned == message)
-    free(returned)
+    testing.expect(t, !presentation.content_storage[0].present &&
+        !presentation.content_storage[1].present)
 }

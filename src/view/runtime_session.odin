@@ -88,7 +88,7 @@ wait_for_julia_request :: proc(
 
     started_at := time.tick_now()
     for {
-        event, ok := julia.try_route_julia_egress(service)
+        event, ok := julia.try_route_julia_egress(service, request_id, expected_kind)
         if ok && event.request_id == request_id && event.kind == expected_kind {
             return event.succeeded
         }

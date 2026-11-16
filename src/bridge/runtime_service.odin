@@ -33,24 +33,19 @@ import "core:time"
 // Julia_Runtime_Service is a single-owner command processor around the embedded Julia
 // runtime. The display thread submits bounded requests and consumes typed events; only
 // the persistent worker may call Julia. Snapshot and tick slots retain payloads outside
-// the channels so event draining never determines whether completed data survives.
+// the inboxes so event draining never determines whether completed data survives.
 
-JULIA_REQUEST_CAPACITY :: bridgemodel.JULIA_REQUEST_CAPACITY
-JULIA_EVENT_CAPACITY :: bridgemodel.JULIA_EVENT_CAPACITY
-JULIA_REQUEST_LINK_POOL_CAPACITY :: bridgemodel.JULIA_REQUEST_LINK_POOL_CAPACITY
-JULIA_EVENT_LINK_POOL_CAPACITY :: bridgemodel.JULIA_EVENT_LINK_POOL_CAPACITY
+JULIA_INBOX_MESSAGE_CAPACITY :: bridgemodel.JULIA_INBOX_MESSAGE_CAPACITY
+DISPLAY_INBOX_MESSAGE_CAPACITY :: bridgemodel.DISPLAY_INBOX_MESSAGE_CAPACITY
+JULIA_INBOX_INITIAL_BYTES :: bridgemodel.JULIA_INBOX_INITIAL_BYTES
+DISPLAY_INBOX_INITIAL_BYTES :: bridgemodel.DISPLAY_INBOX_INITIAL_BYTES
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: bridgemodel.JULIA_EVIDENCE_HANDOFF_CAPACITY
 VIEW_SNAPSHOT_SLOT_COUNT :: bridgemodel.VIEW_SNAPSHOT_SLOT_COUNT
 VIEW_SNAPSHOT_TEXT_CAPACITY :: bridgemodel.VIEW_SNAPSHOT_TEXT_CAPACITY
 ANIMATION_TICK_SLOT_COUNT :: bridgemodel.ANIMATION_TICK_SLOT_COUNT
 MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
-JULIA_COMMUNICATION_RESERVATION :: uint(
-    JULIA_REQUEST_LINK_POOL_CAPACITY + JULIA_EVENT_LINK_POOL_CAPACITY +
-    2 * (JULIA_REQUEST_CAPACITY + JULIA_EVENT_CAPACITY) * size_of(rawptr) +
-    64 * 1024)
-Julia_Communication_Links_Init_Proc :: #type proc(
-    service: ^Julia_Runtime_Service, allocator: mem.Allocator) ->
-        runtime.Allocator_Error
+Julia_Mailboxes_Init_Proc :: #type proc(
+    service: ^Julia_Runtime_Service) -> runtime.Allocator_Error
 Julia_Runtime_Worker_Start_Proc :: #type proc(data: rawptr) -> ^thread.Thread
 
 // Stack-local Julia host handle retained by the worker's persistent GC frame.
@@ -67,6 +62,7 @@ Julia_Runtime_Host :: struct {
     terminal_ingest_completion_preview: ^julialib.jl_value_t,
     terminal_ingest_completion_candidates: ^julialib.jl_value_t,
     terminal_pump: ^julialib.jl_value_t,
+    idle_wait: time.Duration,
     terminal_shutdown: ^julialib.jl_value_t,
     terminal_take_evaluation: ^julialib.jl_value_t,
     terminal_take_completion: ^julialib.jl_value_t,
@@ -196,6 +192,13 @@ Animation_Egress_Route_Result :: struct {
     event: Julia_Event,
     accepted: bool,
     handled: bool,
+}
+
+// Completion retained by value while the accepted egress batch is exhausted.
+Julia_Egress_Batch_Result :: struct {
+    count: int,
+    event: Julia_Event,
+    matched: bool,
 }
 
 Julia_Event_Handler :: #type proc(service: ^Julia_Runtime_Service, event: Julia_Event)
@@ -1757,52 +1760,43 @@ julia_runtime_diagnostics :: proc(
     }
 }
 
-//   Create both directional links inside one service-lifetime backing arena.
-init_julia_runtime_channels :: proc(
+// Initialize both consumer-owned inboxes before publishing either thread endpoint.
+init_julia_runtime_mailboxes :: proc(
     service: ^Julia_Runtime_Service) -> runtime.Allocator_Error {
-    return init_julia_runtime_channels_with(
-        service, storage.arena_owner_growing_init,
-        julia_runtime_links_initialize)
+    return init_julia_runtime_mailboxes_with(
+        service, julia_runtime_mailboxes_initialize)
 }
 
-//   Initialize the arena and link set through injectable startup primitives.
-init_julia_runtime_channels_with :: proc(
+// Initialize the inbox set through an injectable startup primitive with complete unwind.
+init_julia_runtime_mailboxes_with :: proc(
     service: ^Julia_Runtime_Service,
-    arena_init: storage.Arena_Owner_Init_Proc,
-    links_init: Julia_Communication_Links_Init_Proc) -> runtime.Allocator_Error {
-    if service == nil || service^.communication_storage.initialized ||
-        links_init == nil {
+    mailboxes_init: Julia_Mailboxes_Init_Proc) -> runtime.Allocator_Error {
+    if service == nil || service.julia_inbox.initialized ||
+        service.display_inbox.initialized || mailboxes_init == nil {
         return .Invalid_Argument
     }
-    if !storage.arena_owner_init_with(
-        &service^.communication_storage, JULIA_COMMUNICATION_RESERVATION,
-        arena_init) {
-        return .Out_Of_Memory
-    }
-    allocator := storage.arena_owner_allocator(&service^.communication_storage)
-    links_error := links_init(service, allocator)
-    if links_error != .None {
-        destroy_julia_runtime_channels(service)
-        return links_error
+    mailboxes_error := mailboxes_init(service)
+    if mailboxes_error != .None {
+        destroy_julia_runtime_mailboxes(service)
+        return mailboxes_error
     }
     return .None
 }
 
-//   Initialize request then event links from the service-owned backing arena.
-julia_runtime_links_initialize :: proc(
-    service: ^Julia_Runtime_Service,
-    allocator: mem.Allocator) -> runtime.Allocator_Error {
-    request_error := communication_link_init(
-        &service^.request_link, JULIA_REQUEST_CAPACITY,
-        JULIA_REQUEST_LINK_POOL_CAPACITY, allocator)
+// Establish one growing arena per direction with logical message-byte admission bounds.
+julia_runtime_mailboxes_initialize :: proc(
+    service: ^Julia_Runtime_Service) -> runtime.Allocator_Error {
+    request_error := consumer_mailbox_init(
+        &service.julia_inbox, JULIA_INBOX_INITIAL_BYTES,
+        bridgemodel.JULIA_INBOX_BYTE_LIMIT, JULIA_INBOX_MESSAGE_CAPACITY)
     if request_error != .None {
         return request_error
     }
-    event_err := communication_link_init(
-        &service^.event_link, JULIA_EVENT_CAPACITY,
-        JULIA_EVENT_LINK_POOL_CAPACITY, allocator)
+    event_err := consumer_mailbox_init(
+        &service.display_inbox, DISPLAY_INBOX_INITIAL_BYTES,
+        bridgemodel.DISPLAY_INBOX_BYTE_LIMIT, DISPLAY_INBOX_MESSAGE_CAPACITY)
     if event_err != .None {
-        communication_link_destroy(&service^.request_link, allocator)
+        consumer_mailbox_destroy(&service.julia_inbox)
         return event_err
     }
     return .None
@@ -1813,15 +1807,13 @@ julia_runtime_worker_start :: proc(data: rawptr) -> ^thread.Thread {
     return thread.create_and_start_with_data(data, julia_runtime_worker)
 }
 
-//   Destroy both channels before releasing their shared arena-backed allocations.
-destroy_julia_runtime_channels :: proc(service: ^Julia_Runtime_Service) {
+// Destroy consumer storage after both owners and all native payload borrowers stop.
+destroy_julia_runtime_mailboxes :: proc(service: ^Julia_Runtime_Service) {
     if service == nil {
         return
     }
-    allocator := storage.arena_owner_allocator(&service^.communication_storage)
-    communication_link_destroy(&service^.event_link, allocator)
-    communication_link_destroy(&service^.request_link, allocator)
-    storage.arena_owner_destroy(&service^.communication_storage)
+    consumer_mailbox_destroy(&service.display_inbox)
+    consumer_mailbox_destroy(&service.julia_inbox)
 }
 
 //   Initialize display-independent state before starting the Julia owner worker.
@@ -1848,7 +1840,7 @@ initialize_julia_runtime_state :: proc(
     return true
 }
 
-//   Create the bounded channels, staging storage, and persistent Julia owner worker.
+//   Create bounded consumer inboxes, staging storage, and the persistent Julia owner worker.
 // On partial failure, resources are released in reverse construction order. The caller owns
 // the returned service and must stop Julia before destroy_julia_runtime_service.
 create_julia_runtime_service :: proc(
@@ -1889,7 +1881,7 @@ create_julia_runtime_service_with_worker :: proc(
     }
 
     log.infof("julia_service_created request_capacity=%d event_capacity=%d",
-        JULIA_REQUEST_CAPACITY, JULIA_EVENT_CAPACITY)
+        JULIA_INBOX_MESSAGE_CAPACITY, DISPLAY_INBOX_MESSAGE_CAPACITY)
     return service, .None
 }
 
@@ -1898,17 +1890,17 @@ initialize_julia_runtime_service_storage :: proc(
     service: ^Julia_Runtime_Service,
     profile_path: string,
     asset_config: ^files.Asset_Root_Config) -> runtime.Allocator_Error {
-    channel_error := init_julia_runtime_channels(service)
-    if channel_error != .None {
-        return channel_error
+    mailbox_error := init_julia_runtime_mailboxes(service)
+    if mailbox_error != .None {
+        return mailbox_error
     }
     if !view_snapshot_slots_init(service) {
-        destroy_julia_runtime_channels(service)
+        destroy_julia_runtime_mailboxes(service)
         return .Out_Of_Memory
     }
     if !initialize_julia_runtime_state(service, profile_path, asset_config) {
         view_snapshot_slots_destroy(service)
-        destroy_julia_runtime_channels(service)
+        destroy_julia_runtime_mailboxes(service)
         delete(service^.asset_root_override, service^.bootstrap_allocator)
         return .Out_Of_Memory
     }
@@ -1919,7 +1911,7 @@ initialize_julia_runtime_service_storage :: proc(
 destroy_unstarted_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     evidence_profile.destroy(&service^.profile)
     view_snapshot_slots_destroy(service)
-    destroy_julia_runtime_channels(service)
+    destroy_julia_runtime_mailboxes(service)
     delete(service^.asset_root_override, service^.bootstrap_allocator)
     free(service, service^.bootstrap_allocator)
 }
@@ -1930,72 +1922,35 @@ diagnostic_occurrence_should_log :: proc(count: u64) -> bool {
     return count > 0 && count & (count - 1) == 0
 }
 
-//   Borrow one available Julia-owned egress envelope without blocking.
-// The display owner must return every successful receive exactly once after all aliases
-// into the envelope, including nested presentation bytes, are no longer in use.
+// Borrow one display-inbox envelope until dispatch ends; retained payloads must be copied.
 try_receive_julia_egress :: proc(
     service: ^Julia_Runtime_Service) -> (^bridgemodel.Julia_Host_Egress, bool) {
     if service == nil {
         return nil, false
     }
-    return communication_link_try_recv(&service^.event_link)
+    return consumer_mailbox_try_recv(&service^.display_inbox)
 }
 
-//   Return one consumed Julia-owned egress envelope to its producer for reclamation.
-return_julia_egress :: proc(
+// End one transient display-owner borrow and recycle exhausted local batch storage.
+release_julia_egress :: proc(
     service: ^Julia_Runtime_Service,
     message: ^bridgemodel.Julia_Host_Egress) -> bool {
-    return service != nil && message != nil &&
-        communication_link_return(&service^.event_link, message)
-}
-
-//   Release nested display-owned storage from one ingress envelope.
-destroy_julia_ingress_message :: proc(
-    service: ^Julia_Runtime_Service, message: ^bridgemodel.Julia_Host_Ingress) {
-    if request, ok := message^.(protocol.Evaluation_Requested); ok {
-        communication_link_free_bytes(&service^.request_link,
-            transmute([]u8)request.code)
-    } else if request, complete_ok := message^.(protocol.Completion_Requested);
-              complete_ok {
-        communication_link_free_bytes(&service^.request_link,
-            transmute([]u8)request.code)
-    } else if request, highlight_ok := message^.(protocol.Highlight_Requested);
-              highlight_ok {
-        communication_link_free_bytes(&service^.request_link,
-            transmute([]u8)request.source)
-    } else if request, harness_ok := message^.(bridgemodel.Harness_Scenario_Requested);
-              harness_ok {
-        communication_link_free_bytes(&service^.request_link,
-            transmute([]u8)request.scenario_name)
-    } else if request, content_ok :=
-        message^.(bridgemodel.Scenario_View_Content_Requested); content_ok {
-        communication_link_free_bytes(&service^.request_link, request.source)
+    if service == nil || message == nil {
+        return false
     }
-    message^ = {}
-    communication_link_free(&service^.request_link, message)
-}
-
-//   Reclaim returned display ingress envelopes on the display producer thread.
-drain_julia_ingress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
-    count := 0
-    for {
-        message, ok := communication_link_try_take_return(&service^.request_link)
-        if !ok {
-            return count
-        }
-        destroy_julia_ingress_message(service, message)
-        count += 1
-    }
+    consumer_mailbox_release(&service.display_inbox, message)
+    return true
 }
 
 //   Retain only the newest presentation until the display can validate its generation.
 retain_display_view_content :: proc(
     service: ^Julia_Runtime_Service,
     message: ^bridgemodel.Julia_Host_Egress) {
-    if service^.display_pending_view_content != nil {
-        _ = return_julia_egress(service, service^.display_pending_view_content)
+    content, ok := message^.(bridgemodel.View_Content_Ready)
+    if ok && owned_view_content_store(&service.display_pending_view_storage, content) {
+        service.display_pending_view_content =
+            &service.display_pending_view_storage.message
     }
-    service^.display_pending_view_content = message
 }
 
 //   Route one retained presentation after its owning lifecycle boundary commits.
@@ -2003,7 +1958,12 @@ route_retained_display_view_content :: proc(service: ^Julia_Runtime_Service) {
     message := service^.display_pending_view_content
     service^.display_pending_view_content = nil
     if message != nil {
-        _, _ = route_julia_egress_message(service, message)
+        if service.display_egress_dispatch != nil {
+            service.display_egress_dispatch(service.display_egress_user_data, message)
+            owned_view_content_clear(&service.display_pending_view_storage)
+        } else {
+            service.display_pending_view_content = message
+        }
     }
 }
 
@@ -2145,7 +2105,7 @@ route_animation_egress_completion :: proc(
     message: ^bridgemodel.Julia_Host_Egress) -> Animation_Egress_Route_Result {
     if completed, is_tick := message^.(bridgemodel.Animation_Tick_Completed); is_tick {
         event, accepted := accept_animation_tick_completion(service, completed)
-        _ = return_julia_egress(service, message)
+        _ = release_julia_egress(service, message)
         return {
             event = event,
             accepted = accepted,
@@ -2155,7 +2115,7 @@ route_animation_egress_completion :: proc(
     if completed, is_lifecycle := message^.(
         bridgemodel.Animation_Lifecycle_Completed); is_lifecycle {
         event, accepted := accept_animation_lifecycle_completion(service, completed)
-        _ = return_julia_egress(service, message)
+        _ = release_julia_egress(service, message)
         return {
             event = event,
             accepted = accepted,
@@ -2177,49 +2137,70 @@ route_julia_egress_message :: proc(
         return animation_result.event, animation_result.accepted
     }
     if event, completed := decode_julia_completion(message); completed {
-        _ = return_julia_egress(service, message)
+        _ = release_julia_egress(service, message)
         accept_julia_event(service, event)
         return event, true
     }
     if service^.display_egress_dispatch != nil {
-        retained := service^.display_egress_dispatch(
+        service^.display_egress_dispatch(
             service^.display_egress_user_data, message)
-        if !retained {
-            _ = return_julia_egress(service, message)
-        }
+        _ = release_julia_egress(service, message)
         return {}, false
     }
     if _, is_content := message^.(bridgemodel.View_Content_Ready); is_content &&
         service^.lifecycle != .Shutdown_Requested &&
         service^.lifecycle != .Stopped {
         retain_display_view_content(service, message)
+        _ = release_julia_egress(service, message)
         return {}, false
     }
-    _ = return_julia_egress(service, message)
+    _ = release_julia_egress(service, message)
     return {}, false
 }
 
-//   Route one available egress envelope without blocking the display thread.
+// Route the full accepted batch, retaining the first matching completion before reset.
 try_route_julia_egress :: proc(
-    service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
-    message, received := try_receive_julia_egress(service)
-    if !received {
-        return {}, false
-    }
-    return route_julia_egress_message(service, message)
+    service: ^Julia_Runtime_Service, request_id: u64 = 0,
+    expected: bridgemodel.Julia_Event_Kind = .Initialized,
+    defer_content := false) -> (Julia_Event, bool) {
+    result := route_julia_egress_batch(
+        service, request_id, expected, defer_content)
+    return result.event, result.matched
 }
 
-//   Drain every currently available egress envelope through the registered router.
+// Dispatch every accepted envelope and reset the display inbox before returning.
 drain_julia_egress :: proc(service: ^Julia_Runtime_Service) -> int {
-    count := 0
-    for {
-        message, received := try_receive_julia_egress(service)
-        if !received {
-            return count
-        }
-        _, _ = route_julia_egress_message(service, message)
-        count += 1
+    result := route_julia_egress_batch(service, 0, .Initialized, false)
+    return result.count
+}
+
+// Keep correlated results by value while routing the tail of a paused-admission batch.
+route_julia_egress_batch :: proc(
+    service: ^Julia_Runtime_Service, request_id: u64,
+    expected: bridgemodel.Julia_Event_Kind,
+    defer_content: bool) -> (result: Julia_Egress_Batch_Result) {
+    if service == nil {
+        return
     }
+    budget := consumer_mailbox_batch_count(&service.display_inbox)
+    for result.count < budget {
+        message, received := try_receive_julia_egress(service)
+        assert(received)
+        if _, content := message^.(bridgemodel.View_Content_Ready);
+           defer_content && content {
+            retain_display_view_content(service, message)
+            _ = release_julia_egress(service, message)
+        } else {
+            event, accepted := route_julia_egress_message(service, message)
+            if accepted && !result.matched &&
+                (request_id == 0 || (event.request_id == request_id &&
+                    event.kind == expected)) {
+                result.event, result.matched = event, true
+            }
+        }
+        result.count += 1
+    }
+    return
 }
 
 //   Install the sole normal-runtime non-event destination and route startup content.
@@ -2234,11 +2215,12 @@ configure_julia_egress_dispatch :: proc(
     pending := service^.display_pending_view_content
     service^.display_pending_view_content = nil
     if pending != nil {
-        _, _ = route_julia_egress_message(service, pending)
+        dispatch(user_data, pending)
+        owned_view_content_clear(&service.display_pending_view_storage)
     }
 }
 
-//   Remove the normal-runtime destination and return any unclaimed startup content.
+//   Remove the normal-runtime destination and clear any unclaimed display-owned content.
 clear_julia_egress_dispatch :: proc(service: ^Julia_Runtime_Service) {
     if service == nil {
         return
@@ -2246,49 +2228,12 @@ clear_julia_egress_dispatch :: proc(service: ^Julia_Runtime_Service) {
     service^.display_egress_dispatch = nil
     service^.display_egress_user_data = nil
     if service^.display_pending_view_content != nil {
-        _ = return_julia_egress(service, service^.display_pending_view_content)
+        owned_view_content_clear(&service.display_pending_view_storage)
         service^.display_pending_view_content = nil
     }
 }
 
-//   Destroy one Julia-owned egress envelope and any nested pool allocation.
-destroy_julia_egress_message :: proc(
-    service: ^Julia_Runtime_Service, message: ^bridgemodel.Julia_Host_Egress) {
-    if content, content_ok := message^.(bridgemodel.View_Content_Ready); content_ok {
-        communication_link_free_bytes(&service^.event_link, content.content.bytes)
-    } else if update, update_ok := message^.(bridgemodel.Exercise_Header_Update);
-        update_ok && len(update.text) > 0 {
-        communication_link_free_bytes(&service^.event_link, update.text)
-    } else if output, output_ok := message^.(protocol.Terminal_Output_Batch); output_ok {
-        communication_link_free_bytes(&service^.event_link,
-            transmute([]u8)output.bytes)
-    } else if result, result_ok := message^.(protocol.Completion_Result); result_ok {
-        communication_link_free_bytes(&service^.event_link,
-            transmute([]u8)result.insertion)
-    } else if result, highlight_ok := message^.(protocol.Highlight_Result); highlight_ok {
-        destroy_highlight_result_storage(service, result)
-    } else if ready, ready_ok := message^.(protocol.Terminal_Session_Ready); ready_ok {
-        communication_link_free_bytes(&service^.event_link,
-            transmute([]u8)ready.banner)
-    }
-    message^ = {}
-    communication_link_free(&service^.event_link, message)
-}
-
-//   Reclaim returned Julia egress envelopes on their producer thread.
-drain_julia_egress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
-    count := 0
-    for {
-        message, ok := communication_link_try_take_return(&service^.event_link)
-        if !ok {
-            return count
-        }
-        destroy_julia_egress_message(service, message)
-        count += 1
-    }
-}
-
-// Clone one validated header update into Julia-owned egress storage.
+// Copy one validated header update into display-owned inbox storage.
 send_exercise_header_update :: proc(
     state: ^core.Euclid_General_State, visible: bool,
     source: []u8) -> bridgemodel.Communication_Send_Outcome {
@@ -2299,37 +2244,17 @@ send_exercise_header_update :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_egress_returns(service)
-    message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    bytes: []u8
-    if visible {
-        allocated_bytes, bytes_error := communication_link_alloc_bytes(
-            &service^.event_link, len(source))
-        if bytes_error != .None {
-            communication_link_free(&service^.event_link, message)
-            return .Allocation_Failed
-        }
-        bytes = allocated_bytes
-        copy(bytes, source)
-    }
-    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Exercise_Header_Update{
+    value := bridgemodel.Julia_Host_Egress(bridgemodel.Exercise_Header_Update{
         animation_generation = service^.host_exercise_header_animation_generation,
         request_id = bridgemodel.exercise_header_request_next(
             &service^.exercise_header_request_sequence),
         visible = visible,
-        text = bytes,
+        text = source,
     })
-    if !communication_link_try_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(&service.display_inbox, value)
 }
 
-// Validate the producer boundary before it reserves Julia-owned message storage.
+// Validate the publisher boundary before reserving display-owned message storage.
 exercise_header_update_request_valid :: proc(
     state: ^core.Euclid_General_State, visible: bool, source: []u8) -> bool {
     return state != nil && state^.julia_runtime_service != nil &&
@@ -2337,22 +2262,11 @@ exercise_header_update_request_valid :: proc(
         (!visible || exerciseheader.text_is_valid(source))
 }
 
-//   Clone canonical presentation bytes into the Julia-owned egress pool.
-allocate_view_content_message :: proc(
+// Build a borrowed canonical presentation value; publication or retention copies its bytes.
+make_view_content :: proc(
     state: ^core.Euclid_General_State, mime: presentation_model.Presentation_Mime,
-    source: []u8) -> (^bridgemodel.Julia_Host_Egress, runtime.Allocator_Error) {
+    source: []u8) -> bridgemodel.View_Content_Ready {
     service := state^.julia_runtime_service
-    message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None {
-        return nil, message_error
-    }
-    bytes, bytes_error := communication_link_alloc_bytes(
-        &service^.event_link, len(source))
-    if bytes_error != .None {
-        communication_link_free(&service^.event_link, message)
-        return nil, bytes_error
-    }
-    copy(bytes, source)
     generation := service^.presentation_generation + 1
     animation_generation := service^.animation_generation
     if service^.presentation_animation_generation_override != 0 {
@@ -2362,7 +2276,7 @@ allocate_view_content_message :: proc(
     if service^.presentation_animation_override != nil {
         animation = service^.presentation_animation_override
     }
-    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
+    return {
         request_id = service^.active_request_id,
         runtime_generation = service^.runtime_generation,
         animation_generation = animation_generation,
@@ -2370,31 +2284,18 @@ allocate_view_content_message :: proc(
         animation = animation,
         content = {
             mime = mime,
-            bytes = bytes,
+            bytes = source,
         },
-    })
-    service^.presentation_generation = generation
-    return message, .None
+    }
 }
 
-//   Clone requested scenario content into the Julia-owned egress pool.
-allocate_scenario_view_content_message :: proc(
+// Build correlated debug presentation without retaining its ingress batch.
+make_scenario_view_content :: proc(
     service: ^Julia_Runtime_Service,
     request: bridgemodel.Scenario_View_Content_Requested) ->
-    (^bridgemodel.Julia_Host_Egress, runtime.Allocator_Error) {
-    message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None {
-        return nil, message_error
-    }
-    bytes, bytes_error := communication_link_alloc_bytes(
-        &service^.event_link, len(request.source))
-    if bytes_error != .None {
-        communication_link_free(&service^.event_link, message)
-        return nil, bytes_error
-    }
-    copy(bytes, request.source)
+    bridgemodel.View_Content_Ready {
     generation := service^.presentation_generation + 1
-    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
+    return {
         origin = request.origin,
         request_id = request.request_id,
         runtime_generation = request.runtime_generation,
@@ -2403,11 +2304,9 @@ allocate_scenario_view_content_message :: proc(
         animation = request.animation,
         content = {
             mime = request.mime,
-            bytes = bytes,
+            bytes = request.source,
         },
-    })
-    service^.presentation_generation = generation
-    return message, .None
+    }
 }
 
 //   Publish scenario content from the Julia owner, retaining the newest retry.
@@ -2415,20 +2314,8 @@ send_scenario_presented_text :: proc(
     service: ^Julia_Runtime_Service,
     request: bridgemodel.Scenario_View_Content_Requested) ->
         bridgemodel.Communication_Send_Outcome {
-    _ = drain_julia_egress_returns(service)
-    message, allocation_error := allocate_scenario_view_content_message(
-        service, request)
-    if allocation_error != .None {
-        return .Allocation_Failed
-    }
-    if communication_link_try_send(&service^.event_link, message) {
-        return .Sent
-    }
-    if service^.pending_view_content != nil {
-        destroy_julia_egress_message(service, service^.pending_view_content)
-    }
-    service^.pending_view_content = message
-    return .Queue_Full
+    return publish_or_retain_view_content(
+        service, make_scenario_view_content(service, request))
 }
 
 //   Enqueue canonical view content without blocking, retaining only the newest retry.
@@ -2439,19 +2326,31 @@ send_presented_text :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_egress_returns(service)
-    message, allocation_error := allocate_view_content_message(state, mime, source)
-    if allocation_error != .None {
+    return publish_or_retain_view_content(service, make_view_content(state, mime, source))
+}
+
+// Preserve the newest domain-owned retry only for recoverable count/storage pressure.
+publish_or_retain_view_content :: proc(
+    service: ^Julia_Runtime_Service,
+    content: bridgemodel.View_Content_Ready) -> bridgemodel.Communication_Send_Outcome {
+    if len(content.content.bytes) > presentation_model.PRESENTATION_MAX_SOURCE_BYTES {
         return .Allocation_Failed
     }
-    if communication_link_try_send(&service^.event_link, message) {
-        return .Sent
+    outcome := consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(content))
+    if outcome == .Sent {
+        owned_view_content_clear(&service.pending_view_storage)
+        service.pending_view_content = nil
+    } else if outcome == .Queue_Full || outcome == .Storage_Full {
+        if !owned_view_content_store(&service.pending_view_storage, content) {
+            return .Allocation_Failed
+        }
+        service.pending_view_content = &service.pending_view_storage.message
+    } else {
+        return outcome
     }
-    if service^.pending_view_content != nil {
-        destroy_julia_egress_message(service, service^.pending_view_content)
-    }
-    service^.pending_view_content = message
-    return .Queue_Full
+    service.presentation_generation = content.presentation_generation
+    return outcome
 }
 
 //   Reliably transfer one retained presentation before its request completion event.
@@ -2461,11 +2360,11 @@ flush_pending_view_content :: proc(
     if message == nil {
         return .Sent
     }
-    if !communication_link_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        service^.pending_view_content = nil
-        return .Channel_Closed
+    outcome := consumer_mailbox_send(&service.display_inbox, message^)
+    if outcome != .Sent {
+        return outcome
     }
+    owned_view_content_clear(&service.pending_view_storage)
     service^.pending_view_content = nil
     return .Sent
 }
@@ -2551,7 +2450,7 @@ try_submit_animation_lifecycle :: proc(
 }
 
 when core.HARNESS_ENABLED {
-    //   Submit one typed harness request with producer-pooled scenario-name bytes.
+    //   Submit one typed harness request with receiver-owned scenario-name bytes.
     try_submit_harness_scenario :: proc(
         service: ^Julia_Runtime_Service, scenario_name: string,
         step_count: i64) -> (u64, bool) {
@@ -2560,23 +2459,13 @@ when core.HARNESS_ENABLED {
             step_count < 0 {
             return 0, false
         }
-        _ = drain_julia_ingress_returns(service)
-        bytes, allocation_error := communication_link_alloc_bytes(
-            &service^.request_link, len(scenario_name))
-        if allocation_error != .None {
-            return 0, false
-        }
-        copy(bytes, transmute([]u8)scenario_name)
         request_id := service^.next_request_id
         request: bridgemodel.Harness_Scenario_Requested = {
             request_id = request_id,
-            scenario_name = string(bytes),
+            scenario_name = scenario_name,
             step_count = step_count,
         }
         outcome := send_julia_ingress_control(service, request)
-        if outcome != .Sent {
-            communication_link_free_bytes(&service^.request_link, bytes)
-        }
         if !finish_julia_request_submission(service, request_id, .Invoke, outcome) {
             return 0, false
         }
@@ -2628,7 +2517,8 @@ wait_runtime_shutdown_completion :: proc(
         return false
     }
     for {
-        event, accepted := try_route_julia_egress(service)
+        event, accepted := try_route_julia_egress(
+            service, request_id, .Shutdown_Complete)
         if accepted && event.request_id == request_id &&
             event.kind == .Shutdown_Complete {
             return event.succeeded
@@ -2647,17 +2537,7 @@ send_julia_ingress_control :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_ingress_returns(service)
-    message, allocation_error := communication_link_alloc(&service^.request_link)
-    if allocation_error != .None {
-        return .Allocation_Failed
-    }
-    message^ = value
-    if !communication_link_try_send(&service^.request_link, message) {
-        communication_link_free(&service^.request_link, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(&service.julia_inbox, value)
 }
 
 //   Apply common request identity, saturation, and lifecycle bookkeeping.
@@ -2684,7 +2564,7 @@ finish_julia_request_submission :: proc(
     return true
 }
 
-//   Return whether one ingress variant owns dynamic pooled bytes.
+//   Identify dynamic ingress payloads that require validated publication helpers.
 terminal_ingress_has_dynamic_payload :: proc(
     value: bridgemodel.Julia_Host_Ingress) -> bool {
     #partial switch _ in value {
@@ -2709,20 +2589,10 @@ send_terminal_ingress :: proc(
     if terminal_ingress_has_dynamic_payload(value) {
         return .Allocation_Failed
     }
-    _ = drain_julia_ingress_returns(service)
-    message, allocation_error := communication_link_alloc(&service^.request_link)
-    if allocation_error != .None {
-        return .Allocation_Failed
-    }
-    message^ = value
-    if !communication_link_try_send(&service^.request_link, message) {
-        destroy_julia_ingress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(&service.julia_inbox, value)
 }
 
-//   Clone evaluation source into the display-owned ingress pool and enqueue it.
+//   Copy bounded evaluation source into Julia-inbox storage.
 send_terminal_evaluation :: proc(
     service: ^Julia_Runtime_Service,
     request: protocol.Evaluation_Requested) -> bridgemodel.Communication_Send_Outcome {
@@ -2733,29 +2603,11 @@ send_terminal_evaluation :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_ingress_returns(service)
-    message, message_error := communication_link_alloc(&service^.request_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    bytes, allocation_error := communication_link_alloc_bytes(
-        &service^.request_link, len(request.code))
-    if allocation_error != .None {
-        communication_link_free(&service^.request_link, message)
-        return .Allocation_Failed
-    }
-    copy(bytes, transmute([]u8)request.code)
-    cloned_request := request
-    cloned_request.code = string(bytes)
-    message^ = bridgemodel.Julia_Host_Ingress(cloned_request)
-    if !communication_link_try_send(&service^.request_link, message) {
-        destroy_julia_ingress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.julia_inbox, bridgemodel.Julia_Host_Ingress(request))
 }
 
-//   Clone scenario presentation source into the display-owned ingress pool.
+//   Copy bounded scenario presentation source into Julia-inbox storage.
 send_scenario_view_content :: proc(
     service: ^Julia_Runtime_Service,
     request: bridgemodel.Scenario_View_Content_Requested) ->
@@ -2763,29 +2615,14 @@ send_scenario_view_content :: proc(
     if service == nil || service^.lifecycle != .Ready {
         return .Runtime_Stopping
     }
-    _ = drain_julia_ingress_returns(service)
-    message, message_error := communication_link_alloc(&service^.request_link)
-    if message_error != .None {
+    if len(request.source) > presentation_model.PRESENTATION_MAX_SOURCE_BYTES {
         return .Allocation_Failed
     }
-    bytes, bytes_error := communication_link_alloc_bytes(
-        &service^.request_link, len(request.source))
-    if bytes_error != .None {
-        communication_link_free(&service^.request_link, message)
-        return .Allocation_Failed
-    }
-    copy(bytes, request.source)
-    cloned_request := request
-    cloned_request.source = bytes
-    message^ = bridgemodel.Julia_Host_Ingress(cloned_request)
-    if !communication_link_try_send(&service^.request_link, message) {
-        destroy_julia_ingress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.julia_inbox, bridgemodel.Julia_Host_Ingress(request))
 }
 
-//   Clone completion source into the display-owned ingress pool and enqueue it.
+//   Copy bounded completion source into Julia-inbox storage.
 send_terminal_completion_request :: proc(
     service: ^Julia_Runtime_Service,
     request: protocol.Completion_Requested) -> bridgemodel.Communication_Send_Outcome {
@@ -2796,29 +2633,11 @@ send_terminal_completion_request :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_ingress_returns(service)
-    message, message_error := communication_link_alloc(&service^.request_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    bytes, allocation_error := communication_link_alloc_bytes(
-        &service^.request_link, len(request.code))
-    if allocation_error != .None {
-        communication_link_free(&service^.request_link, message)
-        return .Allocation_Failed
-    }
-    copy(bytes, transmute([]u8)request.code)
-    cloned_request := request
-    cloned_request.code = string(bytes)
-    message^ = bridgemodel.Julia_Host_Ingress(cloned_request)
-    if !communication_link_try_send(&service^.request_link, message) {
-        destroy_julia_ingress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.julia_inbox, bridgemodel.Julia_Host_Ingress(request))
 }
 
-//   Return whether one egress variant owns dynamic pooled bytes.
+//   Identify dynamic egress payloads that require validated publication helpers.
 terminal_egress_has_dynamic_payload :: proc(
     value: bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch _ in value {
@@ -2845,20 +2664,10 @@ send_terminal_egress :: proc(
     if terminal_egress_has_dynamic_payload(value) {
         return .Allocation_Failed
     }
-    _ = drain_julia_egress_returns(service)
-    message, allocation_error := communication_link_alloc(&service^.event_link)
-    if allocation_error != .None {
-        return .Allocation_Failed
-    }
-    message^ = value
-    if !communication_link_try_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(&service.display_inbox, value)
 }
 
-//   Clone ordered terminal bytes into the Julia-owned egress pool and enqueue them.
+//   Copy ordered Terminal bytes into the display-owned inbox.
 send_terminal_output :: proc(
     service: ^Julia_Runtime_Service,
     output: protocol.Terminal_Output_Batch) -> bridgemodel.Communication_Send_Outcome {
@@ -2869,29 +2678,11 @@ send_terminal_output :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_egress_returns(service)
-    message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    bytes, allocation_error := communication_link_alloc_bytes(
-        &service^.event_link, len(output.bytes))
-    if allocation_error != .None {
-        communication_link_free(&service^.event_link, message)
-        return .Allocation_Failed
-    }
-    copy(bytes, transmute([]u8)output.bytes)
-    cloned_output := output
-    cloned_output.bytes = string(bytes)
-    message^ = bridgemodel.Julia_Host_Egress(cloned_output)
-    if !communication_link_try_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(output))
 }
 
-//   Clone completion insertion into the Julia-owned egress pool and enqueue it.
+//   Copy completion insertion into the display-owned inbox.
 send_terminal_completion_result :: proc(
     service: ^Julia_Runtime_Service,
     result: protocol.Completion_Result) -> bridgemodel.Communication_Send_Outcome {
@@ -2902,29 +2693,11 @@ send_terminal_completion_result :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_egress_returns(service)
-    message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    bytes, allocation_error := communication_link_alloc_bytes(
-        &service^.event_link, len(result.insertion))
-    if allocation_error != .None {
-        communication_link_free(&service^.event_link, message)
-        return .Allocation_Failed
-    }
-    copy(bytes, transmute([]u8)result.insertion)
-    cloned_result := result
-    cloned_result.insertion = string(bytes)
-    message^ = bridgemodel.Julia_Host_Egress(cloned_result)
-    if !communication_link_try_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(result))
 }
 
-//   Clone Julia's startup banner into the Julia-owned egress pool and enqueue it.
+//   Copy Julia's startup banner into the display-owned inbox.
 send_terminal_session_ready :: proc(
     service: ^Julia_Runtime_Service,
     ready: protocol.Terminal_Session_Ready) -> bridgemodel.Communication_Send_Outcome {
@@ -2935,26 +2708,8 @@ send_terminal_session_ready :: proc(
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = drain_julia_egress_returns(service)
-    message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None {
-        return .Allocation_Failed
-    }
-    bytes, allocation_error := communication_link_alloc_bytes(
-        &service^.event_link, len(ready.banner))
-    if allocation_error != .None {
-        communication_link_free(&service^.event_link, message)
-        return .Allocation_Failed
-    }
-    copy(bytes, transmute([]u8)ready.banner)
-    cloned_ready := ready
-    cloned_ready.banner = string(bytes)
-    message^ = bridgemodel.Julia_Host_Egress(cloned_ready)
-    if !communication_link_try_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Queue_Full
-    }
-    return .Sent
+    return consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(ready))
 }
 
 //   Apply one worker event to display-owned lifecycle and completion metadata.
@@ -3081,19 +2836,15 @@ wait_animation_lifecycle_completion :: proc(
     service: ^Julia_Runtime_Service,
     request_id: u64) -> bool {
     for {
-        event_message, ok := communication_link_recv(&service^.event_link)
-        if !ok {
-            return false
-        }
-        if _, is_content := event_message^.(bridgemodel.View_Content_Ready); is_content {
-            retain_display_view_content(service, event_message)
-            continue
-        }
-        event, is_event := route_julia_egress_message(service, event_message)
-        if is_event && event.kind == .Invoke_Complete &&
-            event.request_id == request_id {
+        event, matched := try_route_julia_egress(
+            service, request_id, .Invoke_Complete, true)
+        if matched {
             return event.succeeded
         }
+        if consumer_mailbox_finished(&service.display_inbox) {
+            return false
+        }
+        consumer_mailbox_wait(&service.display_inbox, time.Millisecond)
     }
 }
 
@@ -3138,20 +2889,20 @@ when core.HARNESS_ENABLED {
             return false
         }
         for {
-            event_message, ok := communication_link_recv(&service^.event_link)
-            if !ok {
-                return false
-            }
-            event, is_event := route_julia_egress_message(service, event_message)
-            if is_event && event.kind == .Invoke_Complete &&
-                event.request_id == request_id {
+            event, matched := try_route_julia_egress(
+                service, request_id, .Invoke_Complete)
+            if matched {
                 return event.succeeded
             }
+            if consumer_mailbox_finished(&service.display_inbox) {
+                return false
+            }
+            consumer_mailbox_wait(&service.display_inbox, time.Millisecond)
         }
     }
 }
 
-//   Join the stopped worker and release service-owned channels and staging storage.
+//   Join the stopped worker and release receiver inboxes and service staging storage.
 // The shutdown request must already have completed; destroying a live worker would violate
 // Julia ownership and may leave queued payloads unprocessed.
 destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
@@ -3161,21 +2912,27 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     if service^.worker != nil {
         thread.destroy(service^.worker)
     }
+    log_julia_mailbox_diagnostics("julia", &service.julia_inbox)
+    log_julia_mailbox_diagnostics("display", &service.display_inbox)
     evidence_profile.destroy(&service^.profile)
     view_snapshot_slots_destroy(service)
-    _ = drain_julia_ingress_returns(service)
-    _ = drain_julia_egress_returns(service)
-    if service^.display_pending_view_content != nil {
-        destroy_julia_egress_message(
-            service, service^.display_pending_view_content)
-    }
-    if service^.pending_view_content != nil {
-        destroy_julia_egress_message(service, service^.pending_view_content)
-    }
-    destroy_julia_runtime_channels(service)
+    owned_view_content_clear(&service.display_pending_view_storage)
+    owned_view_content_clear(&service.pending_view_storage)
+    destroy_julia_runtime_mailboxes(service)
     allocator := service^.bootstrap_allocator
     delete(service^.asset_root_override, allocator)
     free(service, allocator)
+}
+
+// Report bounded native pressure and measured publication costs after the worker has joined.
+log_julia_mailbox_diagnostics :: proc(
+    direction: string, mailbox: ^bridgemodel.Consumer_Mailbox($T)) {
+    d := consumer_mailbox_diagnostics(mailbox)
+    log.infof(
+        "julia_mailbox_transport direction=%s accepted_bytes=%d byte_limit=%d outstanding=%d peak=%d peak_bytes=%d publications=%d publication_ns=%d lock_wait_ns=%d copy_ns=%d",
+        direction, d.accepted_bytes, d.byte_limit, d.outstanding, d.peak_outstanding,
+        d.peak_bytes, d.publication_count, i64(d.publication_time),
+        i64(d.lock_wait_time), i64(d.copy_time))
 }
 
 //   Resolve Julia callbacks and register content into unpublished host state.
@@ -3272,7 +3029,6 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, "terminal_host_ingest_highlight")
     host^.terminal_highlight_identity_type = julialib.jl_get_global(
         main_module, julialib.jl_symbol("NativeHighlightIdentity"))
-    host^.terminal_pump = julialib.jl_get_function(main_module, "terminal_host_pump")
     host^.terminal_shutdown = julialib.jl_get_function(
         main_module, "terminal_host_shutdown")
     host^.terminal_ingest_tick_configuration = julialib.jl_get_function(
@@ -3291,7 +3047,7 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, julialib.jl_symbol("NativeAnimationLifecyclePayload"))
 }
 
-//   Bind Julia functions that expose Terminal results to the native host.
+//   Bind Terminal result callbacks and the primitive Julia pump scheduling query.
 bind_julia_terminal_egress_callbacks :: proc(
     host: ^Julia_Runtime_Host, main_module: ^julialib.jl_module_t) {
 
@@ -3305,6 +3061,8 @@ bind_julia_terminal_egress_callbacks :: proc(
         main_module, "terminal_host_take_session_lifecycle")
     host^.terminal_take_tick_stream = julialib.jl_get_function(
         main_module, "terminal_host_take_tick_stream")
+    host^.terminal_pump = julialib.jl_get_function(
+        main_module, "terminal_host_pump_wait_ns")
 }
 
 //   Report whether every required Terminal callback was bound.
@@ -3483,7 +3241,7 @@ execute_julia_control_handler :: proc(
     return shutting_down
 }
 
-//   Execute one typed control while borrowing its producer-owned ingress envelope.
+//   Execute one typed control while borrowing its Julia-inbox envelope.
 execute_julia_control :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
     message: ^bridgemodel.Julia_Host_Ingress,
@@ -3574,26 +3332,18 @@ encode_typed_julia_completion :: proc(
     }
 }
 
-//   Publish one matching typed completion through the producer-owned egress pool.
+//   Publish one matching typed completion into the display-owned inbox.
 send_typed_julia_completion :: proc(
     service: ^Julia_Runtime_Service,
     decoded: Julia_Decoded_Control,
     event: Julia_Event) -> bridgemodel.Communication_Send_Outcome {
-    _ = drain_julia_egress_returns(service)
     pending_outcome := flush_pending_view_content(service)
     if pending_outcome != .Sent {
         return pending_outcome
     }
-    message, allocation_error := communication_link_alloc(&service^.event_link)
-    if allocation_error != .None {
-        return .Allocation_Failed
-    }
-    encode_typed_julia_completion(message, decoded, event)
-    if !communication_link_send(&service^.event_link, message) {
-        destroy_julia_egress_message(service, message)
-        return .Channel_Closed
-    }
-    return .Sent
+    message: bridgemodel.Julia_Host_Egress
+    encode_typed_julia_completion(&message, decoded, event)
+    return consumer_mailbox_send(&service.display_inbox, message)
 }
 
 //   Decode one animation control into a bridge-private compatibility request.
@@ -3821,7 +3571,7 @@ julia_terminal_emit_input_lease :: proc(
     return send_terminal_value_until_sent(service, value)
 }
 
-//   Convert one Julia evaluation command into a producer-owned terminal envelope.
+//   Copy one Julia evaluation command into a display-inbox Terminal envelope.
 send_terminal_value_until_sent :: proc(
     service: ^Julia_Runtime_Service, value: bridgemodel.Julia_Host_Egress) -> bool {
     for {
@@ -3829,11 +3579,24 @@ send_terminal_value_until_sent :: proc(
         if outcome == .Sent {
             return true
         }
-        if outcome == .Runtime_Stopping {
+        if !julia_egress_wait_for_capacity(service, outcome) {
             return false
         }
-        time.sleep(time.Millisecond)
     }
+}
+
+// Retry only recoverable receiver pressure; closure/allocation errors terminate explicitly.
+julia_egress_wait_for_capacity :: proc(
+    service: ^Julia_Runtime_Service,
+    outcome: bridgemodel.Communication_Send_Outcome) -> bool {
+    if outcome == .Queue_Full || outcome == .Storage_Full {
+        consumer_mailbox_wait(&service.display_inbox, time.Millisecond, true)
+        return true
+    }
+    if outcome != .Runtime_Stopping {
+        log.errorf("julia_egress_publication_failed outcome=%d", int(outcome))
+    }
+    return false
 }
 
 //   Retry one dynamic Terminal output batch until sent or runtime shutdown.
@@ -3844,14 +3607,13 @@ send_terminal_output_until_sent :: proc(
         if outcome == .Sent {
             return true
         }
-        if outcome == .Runtime_Stopping {
+        if !julia_egress_wait_for_capacity(service, outcome) {
             return false
         }
-        time.sleep(time.Millisecond)
     }
 }
 
-//   Emit one Julia Terminal output command through producer-owned pooled bytes.
+//   Copy one Julia Terminal output command into receiver-owned storage.
 julia_terminal_emit_output :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     command: ^julialib.jl_value_t, request_id: protocol.Request_Id) -> bool {
@@ -3885,7 +3647,7 @@ julia_terminal_emit_completion :: proc(
     return send_terminal_value_until_sent(service, value)
 }
 
-//   Convert one Julia evaluation command into a producer-owned terminal envelope.
+//   Copy one Julia evaluation command into a display-inbox Terminal envelope.
 julia_terminal_emit_evaluation :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     command: ^julialib.jl_value_t) -> (bool, bool) {
@@ -3937,10 +3699,9 @@ julia_terminal_emit_session_ready :: proc(
         if outcome == .Sent {
             return true
         }
-        if outcome == .Runtime_Stopping {
+        if !julia_egress_wait_for_capacity(service, outcome) {
             return false
         }
-        time.sleep(time.Millisecond)
     }
 }
 
@@ -4083,14 +3844,13 @@ send_terminal_completion_until_sent :: proc(
         if outcome == .Sent {
             return true
         }
-        if outcome == .Runtime_Stopping {
+        if !julia_egress_wait_for_capacity(service, outcome) {
             return false
         }
-        time.sleep(time.Millisecond)
     }
 }
 
-//   Publish every ready completion result through producer-owned pooled bytes.
+//   Copy every ready completion result into the display-owned inbox.
 julia_terminal_emit_completions :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
     for {
@@ -4145,6 +3905,7 @@ julia_terminal_service :: proc(
         print_julia_exception("terminal_host_pump")
         return false
     }
+    host.idle_wait = time.Duration(julialib.jl_unbox_int64(result))
     if !julia_terminal_emit_ready_commands(service, host) {
         return false
     }
@@ -4195,6 +3956,36 @@ julia_terminal_dispatch_ingress :: proc(
     return false
 }
 
+// Retire unprocessed ingress only after a fatal failure or accepted terminal shutdown.
+retire_stopped_julia_ingress :: proc(service: ^Julia_Runtime_Service) {
+    consumer_mailbox_close(&service.julia_inbox)
+    remaining := consumer_mailbox_batch_count(&service.julia_inbox)
+    if remaining > 0 {
+        log.warnf("julia_worker_retiring_pending_requests count=%d", remaining)
+    }
+    for _ in 0..<remaining {
+        message, received := consumer_mailbox_try_recv(&service.julia_inbox)
+        assert(received)
+        consumer_mailbox_release(&service.julia_inbox, message)
+    }
+}
+
+// Dispatch the entire accepted ingress batch before pumping ordinary Julia actor work.
+drain_julia_worker_ingress :: proc(
+    service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
+    count: int) -> (Julia_Worker_Run_Result, bool) {
+    for _ in 0..<count {
+        message, received := consumer_mailbox_try_recv(&service.julia_inbox)
+        assert(received)
+        result, accepted := process_julia_worker_ingress(service, state, message)
+        if result.shutting_down || !accepted {
+            retire_stopped_julia_ingress(service)
+            return result, accepted
+        }
+    }
+    return {}, true
+}
+
 //   Own the rooted Julia host stack frame and serialized requests until shutdown.
 shutdown_julia_runtime_host :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
@@ -4237,13 +4028,13 @@ process_julia_worker_control :: proc(
     }
 }
 
-//   Dispatch and return one Terminal ingress envelope to its producer.
+//   Dispatch one Terminal ingress envelope and release its Julia-inbox borrow.
 process_julia_terminal_ingress :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     message: ^bridgemodel.Julia_Host_Ingress) -> bool {
     accepted := host^.runtime != nil &&
         julia_terminal_dispatch_ingress(service, host, message)
-    _ = communication_link_return(&service^.request_link, message)
+    consumer_mailbox_release(&service^.julia_inbox, message)
     if !accepted {
         fmt.eprintln("Julia worker: Terminal ingress rejected")
     }
@@ -4266,15 +4057,15 @@ process_julia_worker_ingress :: proc(
         if current {
             outcome = send_scenario_presented_text(service, request)
         }
-        _ = communication_link_return(&service^.request_link, message)
-        return {}, outcome == .Sent || outcome == .Queue_Full
+        consumer_mailbox_release(&service^.julia_inbox, message)
+        return {}, outcome == .Sent || outcome == .Queue_Full || outcome == .Storage_Full
     }
     decoded, is_control := decode_julia_control(message)
     if !is_control {
         return {}, process_julia_terminal_ingress(service, &state^.host, message)
     }
     result := process_julia_worker_control(service, state, message, decoded)
-    _ = communication_link_return(&service^.request_link, message)
+    consumer_mailbox_release(&service^.julia_inbox, message)
     if result.shutting_down {
         return {
             shutdown_request = decoded,
@@ -4295,22 +4086,18 @@ julia_runtime_worker_run_host :: proc(
     worker_context := context
     state: Julia_Worker_State
     for {
-        _ = drain_julia_egress_returns(service)
-        request_message, received := communication_link_try_recv(
-            &service^.request_link)
-        if received {
-            result, accepted := process_julia_worker_ingress(
-                service, &state, request_message)
-            if result.shutting_down {
-                return result
-            }
-            if !accepted {
-                return {}
-            }
+        count := consumer_mailbox_batch_count(&service.julia_inbox)
+        if count == 0 && consumer_mailbox_finished(&service.julia_inbox) {
+            return {}
+        }
+        result, accepted := drain_julia_worker_ingress(service, &state, count)
+        if result.shutting_down || !accepted {
+            return result
         }
         if state.host.runtime != nil &&
             !julia_terminal_service(service, &state.host) {
             fmt.eprintln("Julia worker: Terminal service failed")
+            retire_stopped_julia_ingress(service)
             return {}
         }
 
@@ -4320,8 +4107,12 @@ julia_runtime_worker_run_host :: proc(
         // but it has its own thread-local temp_allocator as well.
         context = worker_context
         free_all(context.temp_allocator)
-        if !received {
-            time.sleep(time.Millisecond)
+        if count == 0 {
+            wait := time.Millisecond
+            if state.host.runtime != nil {
+                wait = state.host.idle_wait
+            }
+            consumer_mailbox_wait(&service.julia_inbox, wait)
         }
     }
 }
@@ -4329,6 +4120,8 @@ julia_runtime_worker_run_host :: proc(
 //   Own Julia lifecycle and publish termination only after the rooted host frame is gone.
 julia_runtime_worker :: proc(data: rawptr) {
     service := cast(^Julia_Runtime_Service)data
+    defer consumer_mailbox_close(&service.julia_inbox)
+    defer consumer_mailbox_close(&service.display_inbox)
     service^.owner_thread_id = os.get_current_thread_id()
     evidence_profile.thread_name(&service^.profile, "julia-worker")
     log.info("julia_worker_started")

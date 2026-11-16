@@ -7,7 +7,6 @@ there are some things that do need to start early.
 
 ## Current Backlog
 
-- Terminal exercises
 - Animation builder
 - Terminal animation recording
 - Accessibility completion work
@@ -226,7 +225,7 @@ General features:
   - [X] Julia syntax highlighting
   - [X] History explorer, Julia-familiar
   - [X] Complete Terminal shape suite
-  - [ ] REPL-focused exercises
+  - [X] REPL-focused exercises
   - [ ] Animation builder
   - [ ] Terminal animation recorder w/ playback & save (e.g. start_recording! ...
      end_recording! ... replay_recording!)
@@ -255,7 +254,7 @@ Final tasks:
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Isolate SQLite persistence module
-  - [ ] Julia thread mailboxes optimizations & cleaning
+  - [X] Julia thread mailboxes optimizations & cleaning
 - [ ] Render polishes
   - [X] Shader-based particle drawing
   - [X] PIC dust particle physics

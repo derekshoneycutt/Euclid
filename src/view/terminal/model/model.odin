@@ -108,6 +108,8 @@ Terminal_State :: struct {
     julia_session_ready: bool,
     julia_session_start_sent: bool,
     awaiting_eval: bool,
+    eval_submission_pending: bool,
+    pending_eval_mode: protocol.Evaluation_Mode,
     julia_capabilities_observed: bool,
     pending_eval_storage: []u8,
     pending_eval_source: string,
@@ -122,6 +124,8 @@ Terminal_State :: struct {
     // generation-owned storage slices, never returned bridge-message storage.
     completion_result_received: bool,
     completion_request_scheduled: bool,
+    completion_submission_pending: bool,
+    pending_completion_show_candidates: bool,
     next_completion_request_id: protocol.Request_Id,
     pending_completion_request_id: protocol.Request_Id,
     pending_completion_cursor: int,

@@ -114,6 +114,12 @@ function terminal_host_pump(host::EuclidRuntimeHost)::Bool
     return pump_euclid_reactor!(host)
 end
 
+"""Pump host policy and return a primitive wait duration, never a managed status pointer."""
+function terminal_host_pump_wait_ns(host::EuclidRuntimeHost)::Int64
+    status, admitted = pump_euclid_reactor_status!(host)
+    return euclid_host_wait_budget_ns(status, time_ns(), admitted)
+end
+
 """Retire all application actors before the native Julia owner shuts down."""
 function terminal_host_shutdown(host::EuclidRuntimeHost)::Bool
     return shutdown_euclid_reactor!(host)

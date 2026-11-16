@@ -296,7 +296,7 @@ animation_value_stale_tick_does_not_commit_typed_write :: proc(t: ^testing.T) {
     interface: bridgemodel.Euclid_Julia_Interface
     service := new(Julia_Runtime_Service, context.allocator)
     service^.bootstrap_allocator = context.allocator
-    testing.expect_value(t, init_julia_runtime_channels(service),
+    testing.expect_value(t, init_julia_runtime_mailboxes(service),
         runtime.Allocator_Error.None)
     defer destroy_julia_runtime_service(service)
     animation := &interface.null_animation
@@ -333,7 +333,7 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     interface: bridgemodel.Euclid_Julia_Interface
     service := new(Julia_Runtime_Service, context.allocator)
     service^.bootstrap_allocator = context.allocator
-    testing.expect_value(t, init_julia_runtime_channels(service),
+    testing.expect_value(t, init_julia_runtime_mailboxes(service),
         runtime.Allocator_Error.None)
     defer destroy_julia_runtime_service(service)
     animation := &interface.null_animation
@@ -464,7 +464,7 @@ animation_completed_publication_is_transactional_and_not_elapsed_time :: proc(
         interface: bridgemodel.Euclid_Julia_Interface
         service := new(Julia_Runtime_Service, context.allocator)
         service^.bootstrap_allocator = context.allocator
-        testing.expect_value(t, init_julia_runtime_channels(service),
+        testing.expect_value(t, init_julia_runtime_mailboxes(service),
             runtime.Allocator_Error.None)
         defer destroy_julia_runtime_service(service)
         state^.julia_interface = &interface
@@ -511,7 +511,7 @@ animation_tick_effective_progress_includes_accumulated_dt :: proc(t: ^testing.T)
     interface: bridgemodel.Euclid_Julia_Interface
     service := new(Julia_Runtime_Service, context.allocator)
     service^.bootstrap_allocator = context.allocator
-    testing.expect_value(t, init_julia_runtime_channels(service),
+    testing.expect_value(t, init_julia_runtime_mailboxes(service),
         runtime.Allocator_Error.None)
     defer destroy_julia_runtime_service(service)
     state^.julia_interface = &interface

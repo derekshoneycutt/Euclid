@@ -203,11 +203,6 @@ enqueue_user_exercise_operation :: proc(
        service.host_exercise_header_animation_generation == 0 {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
-    _ = drain_julia_egress_returns(service)
-    message, failure := communication_link_alloc(&service.event_link)
-    if failure != .None {
-        return BRIDGE_STATUS_OUT_OF_CAPACITY
-    }
     operation.next_request_id += 1
     copied_task := task
     copied_task.request_id = operation.next_request_id
@@ -222,9 +217,8 @@ enqueue_user_exercise_operation :: proc(
     }
     operation.intent = intent
     operation.task = copied_task
-    message^ = bridgemodel.Julia_Host_Egress(intent)
-    if !communication_link_try_send(&service.event_link, message) {
-        communication_link_free(&service.event_link, message)
+    if consumer_mailbox_publish(
+        &service.display_inbox, bridgemodel.Julia_Host_Egress(intent)) != .Sent {
         operation.intent = {}
         operation.task = {}
         return BRIDGE_STATUS_OUT_OF_CAPACITY

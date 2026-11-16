@@ -58,22 +58,18 @@ terminal_service_test_history_skips_empty_standalone_input :: proc(t: ^testing.T
         t, state^.terminal_history_runtime.queued_mutations[0].kind,
         historyruntime.History_Mutation_Kind.Update)
 }
-
-
-
 // Dispatch one test envelope through the same display-owned Terminal path as production.
 terminal_service_test_route_egress :: proc(
-    user_data: rawptr, message: ^bridgemodel.Julia_Host_Egress) -> bool {
+    user_data: rawptr, message: ^bridgemodel.Julia_Host_Egress) {
     state := cast(^core.Euclid_General_State)user_data
     _ = terminal_service_dispatch_egress(state, message)
-    return false
 }
 
 // Initialize one link-only Julia service without starting or entering libjulia.
 terminal_service_test_runtime_init :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) {
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
-    testing.expect_value(t, bridge.init_julia_runtime_channels(service),
+    testing.expect_value(t, bridge.init_julia_runtime_mailboxes(service),
         runtime.Allocator_Error.None)
     service.lifecycle = .Ready
     state^.julia_runtime_service = service
@@ -85,9 +81,7 @@ terminal_service_test_runtime_init :: proc(
 terminal_service_test_runtime_destroy :: proc(state: ^core.Euclid_General_State) {
     service := state^.julia_runtime_service
     bridge.clear_julia_egress_dispatch(service)
-    _ = bridge.drain_julia_ingress_returns(service)
-    _ = bridge.drain_julia_egress_returns(service)
-    bridge.destroy_julia_runtime_channels(service)
+    bridge.destroy_julia_runtime_mailboxes(service)
     free(service, context.allocator)
     state^.julia_runtime_service = nil
 }
@@ -102,8 +96,8 @@ terminal_service_test_dispatch_egress :: proc(
 // Consume and validate one built-in alias-resolution request from the link owner.
 terminal_service_test_expect_builtin_link_intent :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) {
-    message, message_received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.event_link)
+    message, message_received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.display_inbox)
     testing.expect(t, message_received)
     intent, is_builtin := message^.(bridgemodel.Exercise_Query_Intent)
     testing.expect(t, is_builtin)
@@ -111,8 +105,8 @@ terminal_service_test_expect_builtin_link_intent :: proc(
         intent.query.kind, contentdata.Exercise_Query_Kind.Resolve_Alias)
     testing.expect_value(t,
         string(intent.query.reference[:intent.query.reference_length]), "elements-i-1")
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.event_link, message))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.display_inbox, message)
 }
 
 // Verify internal activation did not create an editor, evaluation, or history entry.
@@ -139,11 +133,11 @@ terminal_service_test_internal_exercise_link_routes_by_namespace :: proc(
     defer terminal_service_test_runtime_destroy(state)
     state^.julia_runtime_service^.host_exercise_header_animation_generation = 31
     testing.expect(t, terminal_service_enter(state))
-    ingress, ingress_received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.request_link)
+    ingress, ingress_received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.julia_inbox)
     testing.expect(t, ingress_received)
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.request_link, ingress))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.julia_inbox, ingress)
     testing.expect(t, terminal_service_activate_uri(rawptr(state), cstring(
         "euclid:exercise/builtin/elements-i-1")))
     terminal_service_test_expect_builtin_link_intent(t, state)
@@ -151,14 +145,14 @@ terminal_service_test_internal_exercise_link_routes_by_namespace :: proc(
 
     testing.expect(t, terminal_service_activate_uri(rawptr(state), cstring(
         "euclid:exercise/user/uuid/a9237c51-c9f6-4d54-8bf5-f8c651906e1c")))
-    message, message_received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.event_link)
+    message, message_received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.display_inbox)
     testing.expect(t, message_received)
     user_intent, is_user := message^.(bridgemodel.User_Exercise_Intent)
     testing.expect(t, is_user)
     testing.expect_value(t, user_intent.load, false)
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.event_link, message))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.display_inbox, message)
     exercise_link.exercise_link_cancel(state, "")
     terminal_service_test_expect_internal_link_no_submission(t, state)
     terminalview.terminal_destroy(&state^.terminal,
@@ -612,14 +606,14 @@ terminal_service_test_entry_waits_for_julia_session :: proc(t: ^testing.T) {
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
     testing.expect(t, !terminal_service_test_contains(state, "Euclid Terminal"))
-    ingress, received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.request_link)
+    ingress, received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.julia_inbox)
     testing.expect(t, received)
     started, is_started := ingress^.(protocol.Terminal_Session_Started)
     testing.expect(t, is_started)
     testing.expect_value(t, started.animation_generation, u64(4))
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.request_link, ingress))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.julia_inbox, ingress)
     testing.expect_value(t, bridge.send_terminal_session_ready(
         state^.julia_runtime_service, protocol.Terminal_Session_Ready{
             animation_generation = 4,
@@ -668,24 +662,24 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
-    started, started_received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.request_link)
+    started, started_received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.julia_inbox)
     testing.expect(t, started_received)
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.request_link, started))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.julia_inbox, started)
     state^.terminal.julia_session_ready = true
     testing.expect_value(t, terminal_service_submit_evaluation(state, "1 + 1"),
         bridgemodel.Communication_Send_Outcome.Sent)
 
-    ingress, received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.request_link)
+    ingress, received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.julia_inbox)
     testing.expect(t, received)
     request, is_request := ingress^.(protocol.Evaluation_Requested)
     testing.expect(t, is_request)
     testing.expect_value(t, request.code, "1 + 1")
     testing.expect_value(t, request.animation_generation, u64(12))
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.request_link, ingress))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.julia_inbox, ingress)
 
     terminal_service_test_send_evaluation_result(
         t, state^.julia_runtime_service, request)
@@ -695,6 +689,65 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
     testing.expect(t, !state^.terminal.awaiting_eval)
     terminalview.terminal_destroy(&state^.terminal,
         animation_model.animation_memory_allocator(&state^.animation_memory))
+}
+
+// Temporary inbox draining retains the exact evaluation until admission reopens.
+@(test)
+terminal_service_evaluation_retries_drain_pressure :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        &state.terminal, context.allocator, 1))
+    defer terminalview.terminal_destroy(&state.terminal, context.allocator)
+    terminal_service_test_runtime_init(t, state)
+    defer terminal_service_test_runtime_destroy(state)
+    inbox := &state.julia_runtime_service.julia_inbox
+    _ = bridge.send_terminal_ingress(state.julia_runtime_service, protocol.Tick_Pulse{})
+    blocked, _ := bridge.consumer_mailbox_try_recv(inbox)
+    testing.expect_value(t, terminal_service_submit_evaluation(state, "1 + 1", .Help),
+        bridgemodel.Communication_Send_Outcome.Queue_Full)
+    identity := state.terminal.pending_eval_request_id
+    testing.expect(t, state.terminal.awaiting_eval &&
+        state.terminal.eval_submission_pending)
+    bridge.consumer_mailbox_release(inbox, blocked)
+    terminal_service_retry_requests(state)
+    testing.expect(t, !state.terminal.eval_submission_pending)
+    message, ready := bridge.consumer_mailbox_try_recv(inbox)
+    testing.expect(t, ready)
+    request := message^.(protocol.Evaluation_Requested)
+    testing.expect_value(t, request.request_id, identity)
+    testing.expect_value(t, request.code, "1 + 1")
+    testing.expect_value(t, request.mode, protocol.Evaluation_Mode.Help)
+    bridge.consumer_mailbox_release(inbox, message)
+}
+
+// Completion retries borrow existing source storage and keep the original request identity.
+@(test)
+terminal_service_completion_retries_drain_pressure :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    testing.expect(t, terminalview.terminal_init_with_allocator(
+        &state.terminal, context.allocator, 1))
+    defer terminalview.terminal_destroy(&state.terminal, context.allocator)
+    terminal_service_test_runtime_init(t, state)
+    defer terminal_service_test_runtime_destroy(state)
+    inbox := &state.julia_runtime_service.julia_inbox
+    _ = bridge.send_terminal_ingress(state.julia_runtime_service, protocol.Tick_Pulse{})
+    blocked, _ := bridge.consumer_mailbox_try_recv(inbox)
+    testing.expect(t, termhist.termhist_insert_text(state.terminal.history, "pri"))
+    request := terminalview.terminal_request_completion(&state.terminal, true)
+    terminal_service_send_completion(state, request)
+    testing.expect(t, state.terminal.completion_submission_pending)
+    bridge.consumer_mailbox_release(inbox, blocked)
+    terminal_service_retry_requests(state)
+    testing.expect(t, !state.terminal.completion_submission_pending)
+    message, ready := bridge.consumer_mailbox_try_recv(inbox)
+    testing.expect(t, ready)
+    copied := message^.(protocol.Completion_Requested)
+    testing.expect_value(t, copied.request_id, request.request_id)
+    testing.expect_value(t, copied.code, "pri")
+    testing.expect(t, copied.show_candidates)
+    bridge.consumer_mailbox_release(inbox, message)
 }
 
 // Verify history admission failure cannot block or duplicate evaluation acceptance.
@@ -710,11 +763,11 @@ terminal_service_test_history_failure_does_not_block_evaluation :: proc(
     defer terminal_service_test_runtime_destroy(state)
     state^.terminal_history_runtime.status = .Unavailable
     testing.expect(t, terminal_service_enter(state))
-    started, started_received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.request_link)
+    started, started_received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.julia_inbox)
     testing.expect(t, started_received)
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.request_link, started))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.julia_inbox, started)
     testing.expect(t, terminal_service_test_contains(
         state, "History recall unavailable"))
     state^.terminal.julia_session_ready = true
@@ -725,14 +778,14 @@ terminal_service_test_history_failure_does_not_block_evaluation :: proc(
     })
     testing.expect(t, state^.terminal.awaiting_eval)
     testing.expect(t, !state^.terminal.provisional_recording_valid)
-    ingress, received := bridge.communication_link_try_recv(
-        &state^.julia_runtime_service^.request_link)
+    ingress, received := bridge.consumer_mailbox_try_recv(
+        &state^.julia_runtime_service^.julia_inbox)
     testing.expect(t, received)
     request, is_request := ingress^.(protocol.Evaluation_Requested)
     testing.expect(t, is_request)
     testing.expect_value(t, request.code, "accepted once")
-    testing.expect(t, bridge.communication_link_return(
-        &state^.julia_runtime_service^.request_link, ingress))
+    bridge.consumer_mailbox_release(
+        &state^.julia_runtime_service^.julia_inbox, ingress)
     terminalview.terminal_complete_eval(&state^.terminal)
     terminalview.terminal_destroy(&state^.terminal,
         animation_model.animation_memory_allocator(&state^.animation_memory))

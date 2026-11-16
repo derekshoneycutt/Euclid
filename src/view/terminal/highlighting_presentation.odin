@@ -148,7 +148,7 @@ terminal_highlight_observe_presentation :: proc(
     }
 }
 
-// Install exact styles only after full result validation, copying all producer-owned storage.
+// Install exact styles only after full result validation, copying all borrowed inbox storage.
 terminal_highlight_publish_presentation :: proc(
     term: ^model.Terminal_State, result: protocol.Highlight_Result) {
     p := &term.highlighting.presentation

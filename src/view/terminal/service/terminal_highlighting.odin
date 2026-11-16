@@ -61,7 +61,11 @@ terminal_highlight_service_update :: proc(
         return
     }
     outcome := julia.send_terminal_highlight_request(state.julia_runtime_service, request)
-    if outcome != .Sent {
+    if outcome == .Queue_Full || outcome == .Storage_Full {
+        if !terminalview.terminal_highlight_defer(term, request.identity) {
+            log.error("terminal_highlight_retry_identity_lost")
+        }
+    } else if outcome != .Sent {
         failure := bridgemodel.Julia_Host_Egress(protocol.Highlight_Failed{
             identity = request.identity,
             reason = .Transport_Capacity,

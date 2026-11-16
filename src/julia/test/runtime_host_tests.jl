@@ -57,6 +57,30 @@ end
     @test Float64(1) / Float64(Main.EuclidPolicy.TICK_FIXED_RATE_HZ) == 1 / 60
 end
 
+@testset "native mailbox idle wait honors scheduling and external I/O" begin
+    status = EuclidHost.HostPumpStatus(false, typemax(UInt64), false, true,
+        false, Int32(0), Int32(0), UInt64(0), UInt64(0), false, false,
+        Int32(0), Int32(0), UInt64(0))
+    now = UInt64(2_000_000)
+    @test euclid_host_wait_budget_ns(status, now, false) == 1_000_000
+    @test euclid_host_wait_budget_ns(status, now, true) == 0
+    fields = [getfield(status, index) for index in 1:fieldcount(typeof(status))]
+    fields[1] = true
+    @test euclid_host_wait_budget_ns(
+        EuclidHost.HostPumpStatus(fields...), now, false) == 0
+    fields[1] = false
+    fields[3] = true
+    @test euclid_host_wait_budget_ns(
+        EuclidHost.HostPumpStatus(fields...), now, false) == 0
+    fields[3] = false
+    fields[2] = now + UInt64(250_000)
+    @test euclid_host_wait_budget_ns(
+        EuclidHost.HostPumpStatus(fields...), now, false) == 250_000
+    fields[2] = now
+    @test euclid_host_wait_budget_ns(
+        EuclidHost.HostPumpStatus(fields...), now, false) == 0
+end
+
 @testset "Terminal drawings advance only through native animation ticks" begin
     host = create_euclid_runtime_host(Ptr{Cvoid}(1))
     runtime = host.reactor.session.euclid_repl_runtime

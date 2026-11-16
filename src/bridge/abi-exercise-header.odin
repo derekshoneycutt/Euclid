@@ -10,7 +10,7 @@ exercise_header_bridge_status :: proc(
     switch outcome {
     case .Sent:
         return BRIDGE_STATUS_OK
-    case .Queue_Full, .Allocation_Failed:
+    case .Queue_Full, .Storage_Full, .Allocation_Failed:
         return BRIDGE_STATUS_OUT_OF_CAPACITY
     case .Runtime_Stopping, .Channel_Closed:
         return BRIDGE_STATUS_ILLEGAL_STATE

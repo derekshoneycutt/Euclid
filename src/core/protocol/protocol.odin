@@ -1,8 +1,8 @@
 package protocol
 
 // Package protocol defines the typed messages exchanged between the display and
-// Julia worker threads. Dynamic strings belong to the producing communication
-// link and remain borrowed by the consumer until it returns the message envelope.
+// Julia worker threads. Publication copies dynamic strings into consumer-owned
+// inbox storage. Dispatch borrows end before recycling; retained data must be copied.
 
 // Correlates one request with every intermediate and final result it produces.
 // Zero means no active request; request owners issue monotonically increasing IDs.
@@ -245,7 +245,7 @@ Terminal_Capabilities_Accepted :: struct {
     capabilities: Terminal_Capabilities,
 }
 
-// Ordered worker-owned output borrowed by the display until envelope return.
+// Ordered display-inbox output borrowed until the receiver releases the envelope.
 Terminal_Output_Batch :: struct {
     request_id: Request_Id,
     animation_generation: u64,
@@ -266,7 +266,7 @@ Evaluation_Completed :: struct {
     succeeded: bool,
 }
 
-// Correlated completion replacement borrowed from the worker-owned envelope.
+// Correlated completion replacement borrowed from the display-inbox envelope.
 Completion_Result :: struct {
     request_id: Request_Id,
     animation_generation: u64,
@@ -341,8 +341,8 @@ Tick_Stream_Stop_Requested :: struct {
 
 // Display-to-worker telemetry, evaluation, and interaction requests.
 //
-// Request IDs correlate asynchronous results. Dynamic source strings are owned
-// by the display link and borrowed by the worker until envelope return.
+// Request IDs correlate asynchronous results. Dynamic source strings are copied
+// into Julia-inbox storage and borrowed by the worker until local release.
 // Empty telemetry probe requesting confirmation that the worker remains responsive.
 Heartbeat_Requested :: struct {}
 
