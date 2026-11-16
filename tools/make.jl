@@ -26,6 +26,8 @@ Commands:
                                  Build debug and run one named scenario.
     scenario --all [--format=text|json]
                                  Build debug and run the scenario corpus.
+    scenario --list [--format=text|json]
+                                 List public names, categories, and workflows without building.
     accesskit-abi                Validate the pinned AccessKit C host ABI.
     accessibility-tree           Validate Linux AT-SPI controls and interfaces.
     accessibility-macos          Validate macOS Phase 3 AX controls.
@@ -1823,9 +1825,16 @@ function run_evidence_command(arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
-"""Build the headed debug application and run selected scenarios through it."""
+"""List scenarios without building, or build debug and run selected workflows."""
 function run_scenario_command(arguments::Vector{String})
-    isempty(arguments) && error("scenario requires one NAME or --all")
+    isempty(arguments) && error("scenario requires one NAME, --all, or --list")
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    if "--list" in arguments
+        command = Cmd([JULIA_EXE, "--project=$analysis_project",
+            SCENARIO_RUNNER_SCRIPT, arguments...])
+        return run_command(command; cwd=SCRIPT_DIR).exit_code
+    end
     build = BuildCommand(:build, true, false, String[])
     build_status = if "--format=json" in arguments
         redirect_stdout(stderr) do
@@ -1835,8 +1844,6 @@ function run_scenario_command(arguments::Vector{String})
         execute_build_plan(build, build_plan_for(:build))
     end
     build_status == 0 || return build_status
-    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
-        joinpath(SCRIPT_DIR, "tools", "analysis"))
     command = Cmd(vcat([
         JULIA_EXE, "--project=$analysis_project", SCENARIO_RUNNER_SCRIPT,
         "--binary=$(debug_app_binary_path())"], arguments))

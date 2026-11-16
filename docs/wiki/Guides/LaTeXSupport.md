@@ -671,12 +671,13 @@ Bridge status failures also stop publication without exposing partial content.
 
 ## Visual Semantic Acceptance
 
-The checked-in `tools/scenarios/elements-tex-math-corpus.jsonl` and
-`tools/scenarios/elements-tex-document-corpus.jsonl` programs publish the supported
-math and document corpus through `set_view_content`. Every independently published
-group waits for correlated `presentation_semantic_published` evidence before capture,
-so literal fallback cannot satisfy the acceptance condition. These scenarios are run
-explicitly and are not discovered automatically by the standard `check` target.
+The checked-in `tools/scenarios/presentation/tex/elements-tex-math-corpus.jsonl` and
+`tools/scenarios/presentation/tex/elements-tex-document-corpus.jsonl` programs publish
+the supported math and document corpus through `set_view_content`. Every independently
+published group waits for correlated `presentation_semantic_published` evidence
+before capture, so literal fallback cannot satisfy the acceptance condition.
+These scenarios are run explicitly and are not discovered automatically by the
+standard `check` target.
 
 ## Appendix: Module Architecture
 

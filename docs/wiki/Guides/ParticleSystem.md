@@ -294,13 +294,13 @@ For implementation and exact limits, start with:
 The field tests are the clearest place to understand transfer conservation, boundary
 handling, impulses, and solver behavior. Particle tests cover emission, fixed-step
 transitions, and the interaction between field state and particle state. The checked-in
-[`dust-emission-acceptance`](../../../tools/scenarios/dust-emission-acceptance.jsonl),
-[`dust-settling-acceptance`](../../../tools/scenarios/dust-settling-acceptance.jsonl), and
-[`dust-pic-dense-acceptance`](../../../tools/scenarios/dust-pic-dense-acceptance.jsonl)
+[`dust-emission-acceptance`](../../../tools/scenarios/particles/dust-emission-acceptance.jsonl),
+[`dust-settling-acceptance`](../../../tools/scenarios/particles/dust-settling-acceptance.jsonl), and
+[`dust-pic-dense-acceptance`](../../../tools/scenarios/particles/dust-pic-dense-acceptance.jsonl)
 scenarios exercise progressively broader runtime behavior.
 
-For pane dust, run [`reclaim acceptance`](../../../tools/scenarios/dynview-dust-reclaim-acceptance.jsonl)
-for interrupted reuse and [`capacity acceptance`](../../../tools/scenarios/dynview-dust-capacity-acceptance.jsonl)
+For pane dust, run [`reclaim acceptance`](../../../tools/scenarios/presentation/effects/dynview-dust-reclaim-acceptance.jsonl)
+for interrupted reuse and [`capacity acceptance`](../../../tools/scenarios/presentation/effects/dynview-dust-capacity-acceptance.jsonl)
 for shortages, floor residue, and eviction. `state.json` retains phase counts and
 the latest formation outcome. Completion duration is logical effect time, not
 wall-clock frame latency. Predicate names live in

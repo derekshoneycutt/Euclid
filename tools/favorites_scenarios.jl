@@ -50,7 +50,7 @@ function run_favorites_roundtrip(binary::String, root::String, migrated::Bool)
     mkpath(directory)
     database = joinpath(directory, "user.sqlite3")
     migrated && favorites_migration_fixture(database)
-    source = joinpath("tools", "scenarios", "collections-favorites-acceptance.jsonl")
+    source = scenario_source("collections-favorites-acceptance")
     first = favorites_launch(binary, directory, database, "acceptance", source)
     rows = favorites_database_rows(database)
     length(rows) == 2 || error("Favorites did not persist exactly B/A membership")
@@ -60,7 +60,7 @@ function run_favorites_roundtrip(binary::String, root::String, migrated::Bool)
         error("Favorites order was not preserved")
     require_setting_row(settings_database_rows(database), "drawing", "dust_limit", 1400)
     restore = favorites_launch(binary, directory, database, "restore",
-        joinpath("tools", "scenarios", "favorites", "restore.jsonl");
+        joinpath("tools", "scenarios", "library", "favorites", "restore.jsonl");
         arguments=["--layout=portrait", "--window-size=640x900"])
     favorites_database_rows(database) == rows ||
         error("Favorites restore changed committed placement identities")
@@ -69,7 +69,7 @@ end
 
 """Remove the external SQLite fault after the scenario proves retained failure state."""
 function favorites_recovery_launch(binary::String, root::String, database::String;
-    source=joinpath("tools", "scenarios", "favorites", "recovery.jsonl"))
+    source=joinpath("tools", "scenarios", "library", "favorites", "recovery.jsonl"))
     baseline = favorites_database_rows(database)
     diagnostics = joinpath(root, "recovery.log")
     task = @async favorites_launch(binary, root, database, "recovery",
@@ -104,7 +104,7 @@ function run_favorites_failure_cases(binary::String, root::String, database::Str
         "CREATE TRIGGER favorites_acceptance_failure BEFORE INSERT ON user_collection_entry " *
         "BEGIN SELECT RAISE(ABORT,'favorites acceptance fault'); END")
     push!(records, favorites_launch(binary, root, database, "degraded",
-        joinpath("tools", "scenarios", "favorites", "degraded.jsonl")))
+        joinpath("tools", "scenarios", "library", "favorites", "degraded.jsonl")))
     favorites_database_rows(database) == baseline ||
         error("Failed transaction partially published collection rows")
     require_setting_row(settings_database_rows(database), "drawing", "dust_limit", 1400)
@@ -113,7 +113,8 @@ function run_favorites_failure_cases(binary::String, root::String, database::Str
         error("Recovery did not persist the retained Favorites edit")
     require_setting_row(settings_database_rows(database), "drawing", "dust_limit", 1500)
     push!(records, favorites_launch(binary, root, database, "recovered-restore",
-        joinpath("tools", "scenarios", "favorites", "recovered-restore.jsonl")))
+        joinpath("tools", "scenarios", "library", "favorites",
+            "recovered-restore.jsonl")))
     return records
 end
 
@@ -125,7 +126,7 @@ function run_favorites_acceptance(binary::String)
     mkpath(session_root)
     push!(records, favorites_launch(binary, session_root,
         joinpath(session_root, "user.sqlite3"), "acceptance",
-        joinpath("tools", "scenarios", "favorites", "empty-session.jsonl")))
+        joinpath("tools", "scenarios", "library", "favorites", "empty-session.jsonl")))
     migrated, _ = run_favorites_roundtrip(binary, root, true)
     append!(records, migrated)
     append!(records, run_favorites_failure_cases(binary, root, database))
@@ -141,7 +142,7 @@ function run_empty_collections_acceptance(binary::String)
     mkpath(root)
     database = joinpath(root, "user.sqlite3")
     first = favorites_launch(binary, root, database, "create",
-        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))
+        scenario_source("empty-collections-acceptance"))
     query = "SELECT hex(collection_id) AS id,display_name,collection_order " *
         "FROM user_collection WHERE system_role IS NULL ORDER BY collection_order"
     rows = favorites_fixture_sql(database, query)
@@ -152,7 +153,7 @@ function run_empty_collections_acceptance(binary::String)
     rows[1]["collection_order"] < rows[2]["collection_order"] ||
         error("Custom collection order changed")
     restore = favorites_launch(binary, root, database, "restore",
-        joinpath("tools", "scenarios", "collections", "empty-restore.jsonl"))
+        joinpath("tools", "scenarios", "library", "collections", "empty-restore.jsonl"))
     favorites_fixture_sql(database, query) == rows ||
         error("Restore changed empty collection identity, order or labels")
     return [first, restore]
@@ -163,14 +164,14 @@ function run_collection_heads_acceptance(binary::String)
     root = fresh_artifact_path("collection-heads")
     mkpath(root)
     database = joinpath(root, "user.sqlite3")
-    sources = joinpath("tools", "scenarios", "collections")
+    sources = joinpath("tools", "scenarios", "library", "collections")
     records = [favorites_launch(binary, root, database, "create",
-        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+        scenario_source("empty-collections-acceptance"))]
     query = "SELECT hex(collection_id) AS id,display_name,collection_order " *
         "FROM user_collection WHERE system_role IS NULL ORDER BY collection_order"
     baseline = favorites_fixture_sql(database, query)
     push!(records, favorites_launch(binary, root, database, "edit",
-        joinpath("tools", "scenarios", "collection-heads-acceptance.jsonl")))
+        scenario_source("collection-heads-acceptance")))
     edited = favorites_fixture_sql(database, query)
     length(edited) == length(baseline) == 2 || error("Head edit changed collection count")
     edited[1]["id"] == baseline[2]["id"] &&
@@ -189,9 +190,9 @@ function run_collection_delete_acceptance(binary::String)
     mkpath(root)
     database = joinpath(root, "user.sqlite3")
     records = [favorites_launch(binary, root, database, "create",
-        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+        scenario_source("empty-collections-acceptance"))]
     push!(records, favorites_launch(binary, root, database, "delete",
-        joinpath("tools", "scenarios", "collection-delete-acceptance.jsonl")))
+        scenario_source("collection-delete-acceptance")))
     query = "SELECT count(*) AS count FROM user_collection WHERE system_role IS NULL"
     favorites_fixture_sql(database, query)[1]["count"] == 0 ||
         error("Guarded deletion retained custom collection rows")
@@ -199,7 +200,7 @@ function run_collection_delete_acceptance(binary::String)
         "SELECT count(*) AS count FROM user_collection_entry")[1]["count"] == 0 ||
         error("Guarded deletion retained placement rows")
     push!(records, favorites_launch(binary, root, database, "restore",
-        joinpath("tools", "scenarios", "collections", "delete-restore.jsonl");
+        joinpath("tools", "scenarios", "library", "collections", "delete-restore.jsonl");
         arguments=["--layout=portrait", "--window-size=640x900"]))
     favorites_fixture_sql(database, query)[1]["count"] == 0 ||
         error("Restart resurrected deleted heads")
@@ -212,9 +213,9 @@ function run_collection_membership_acceptance(binary::String)
     mkpath(root)
     database = joinpath(root, "user.sqlite3")
     records = [favorites_launch(binary, root, database, "create",
-        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+        scenario_source("empty-collections-acceptance"))]
     push!(records, favorites_launch(binary, root, database, "membership",
-        joinpath("tools", "scenarios", "collection-membership-acceptance.jsonl")))
+        scenario_source("collection-membership-acceptance")))
     query = "SELECT hex(entry_id) AS id,hex(collection_id) AS owner," *
         "hex(animation_id) AS animation,sibling_order,custom_name " *
         "FROM user_collection_entry ORDER BY owner,sibling_order"
@@ -225,7 +226,7 @@ function run_collection_membership_acceptance(binary::String)
     all(row -> row["custom_name"] === nothing, rows) ||
         error("Re-added membership retained an obsolete alias")
     push!(records, favorites_launch(binary, root, database, "restore",
-        joinpath("tools", "scenarios", "collections", "membership-restore.jsonl");
+        joinpath("tools", "scenarios", "library", "collections", "membership-restore.jsonl");
         arguments=["--layout=portrait", "--window-size=640x900"]))
     favorites_fixture_sql(database, query) == rows ||
         error("Membership restart changed durable placement identities or order")
@@ -250,7 +251,8 @@ end
 function collection_note_recovery_launch(binary, root, database)
     diagnostics = joinpath(root, "note-recovery.log")
     task = @async favorites_launch(binary, root, database, "note-recovery",
-        joinpath("tools", "scenarios", "collection-notes", "recovery.jsonl");
+        joinpath("tools", "scenarios", "library", "collections", "notes",
+            "recovery.jsonl");
         arguments=["--diagnostics=$diagnostics"])
     deadline = time() + 30
     observed = false
@@ -301,14 +303,15 @@ function run_collection_notes_acceptance(binary::String)
     mkpath(root)
     database = joinpath(root, "user.sqlite3")
     records = [favorites_launch(binary, root, database, "create",
-        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl"))]
+        scenario_source("empty-collections-acceptance"))]
     push!(records, favorites_launch(binary, root, database, "membership",
-        joinpath("tools", "scenarios", "collection-membership-acceptance.jsonl")))
+        scenario_source("collection-membership-acceptance")))
     push!(records, favorites_launch(binary, root, database, "author",
-        joinpath("tools", "scenarios", "collection-notes-acceptance.jsonl")))
+        scenario_source("collection-notes-acceptance")))
     rows = require_authored_collection_notes(database)
     push!(records, favorites_launch(binary, root, database, "restore",
-        joinpath("tools", "scenarios", "collection-notes", "restore.jsonl")))
+        joinpath("tools", "scenarios", "library", "collections", "notes",
+            "restore.jsonl")))
     collection_note_database_rows(database) == rows ||
         error("Independent note readback changed durable rows")
 
@@ -319,7 +322,8 @@ function run_collection_notes_acceptance(binary::String)
     push!(records, collection_note_recovery_launch(binary, root, database))
     recovered = require_recovered_collection_notes(database, rows)
     push!(records, favorites_launch(binary, root, database, "recovered-restore",
-        joinpath("tools", "scenarios", "collection-notes", "restore.jsonl")))
+        joinpath("tools", "scenarios", "library", "collections", "notes",
+            "restore.jsonl")))
     collection_note_database_rows(database) == recovered ||
         error("Restart did not restore recovered placement notes")
     return records
@@ -349,7 +353,7 @@ function run_favorites_ordering(binary::String, root::String)
     directory = joinpath(root, "ordering")
     mkpath(directory)
     database = joinpath(directory, "user.sqlite3")
-    sources = joinpath("tools", "scenarios", "favorites")
+    sources = joinpath("tools", "scenarios", "library", "favorites")
     records = [favorites_launch(binary, directory, database, "seed",
         joinpath(sources, "reorder-seed.jsonl"))]
     baseline = favorites_database_rows(database)
@@ -370,7 +374,7 @@ end
 """Prove failed moves roll back durably while later retained moves recover in order."""
 function run_favorites_reorder_failure(binary::String, root::String,
     database::String, seed)
-    sources = joinpath("tools", "scenarios", "favorites")
+    sources = joinpath("tools", "scenarios", "library", "favorites")
     baseline = favorites_database_rows(database)
     favorites_fixture_sql(database,
         "CREATE TRIGGER favorites_acceptance_failure BEFORE INSERT ON user_collection_entry " *
@@ -404,7 +408,7 @@ function run_favorites_motion(binary::String, root::String)
         mkpath(directory)
         push!(records, favorites_launch(binary, directory,
             joinpath(directory, "user.sqlite3"), "acceptance",
-            joinpath("tools", "scenarios", "favorites", source); arguments))
+            joinpath("tools", "scenarios", "library", "favorites", source); arguments))
     end
     return records
 end
@@ -415,18 +419,18 @@ function run_favorites_capacity(binary::String, root::String)
     mkpath(directory)
     database = joinpath(directory, "user.sqlite3")
     initialized = favorites_launch(binary, directory, database, "initialize",
-        joinpath("tools", "scenarios", "favorites", "initialize.jsonl"))
+        joinpath("tools", "scenarios", "library", "favorites", "initialize.jsonl"))
     seed_favorites_capacity(database)
     before = favorites_database_rows(database)
     collections_before = favorites_collection_rows(database)
     maximum = favorites_launch(binary, directory, database, "maximum",
-        joinpath("tools", "scenarios", "favorites", "capacity.jsonl"))
+        joinpath("tools", "scenarios", "library", "favorites", "capacity.jsonl"))
     after = favorites_database_rows(database)
     validate_favorites_capacity_rows(before, after)
     favorites_collection_rows(database) == collections_before ||
         error("Large save lost retained collections")
     restored = favorites_launch(binary, directory, database, "large-restore",
-        joinpath("tools", "scenarios", "favorites", "large-restore.jsonl"))
+        joinpath("tools", "scenarios", "library", "favorites", "large-restore.jsonl"))
     favorites_database_rows(database) == after ||
         error("Reopen changed durable membership")
     favorites_collection_rows(database) == collections_before ||

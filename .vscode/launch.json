@@ -57,7 +57,7 @@
       "id": "scenarioPath",
       "type": "promptString",
       "description": "Scenario path relative to the repository root",
-      "default": "tools/scenarios/scratchpad-tex-baseline-restores-allocations.jsonl"
+      "default": "tools/scenarios/presentation/mime-presentation-acceptance.jsonl"
     },
     {
       "id": "scenarioArtifacts",

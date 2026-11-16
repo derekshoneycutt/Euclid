@@ -510,8 +510,8 @@ Start here:
   layout, rendering, pointer input, and accessibility.
 - [Draft editor](../../../src/terminal/history/termhist.odin) and
   [undo](../../../src/terminal/history/undo.odin): unsent source and edit history.
-- [Interaction acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
-  and [layout coverage](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl):
+- [Interaction acceptance](../../../tools/scenarios/terminal/history/terminal-history-explorer-acceptance.jsonl)
+  and [layout coverage](../../../tools/scenarios/terminal/history/explorer-layouts.jsonl):
   executable end-to-end examples.
 
 The native [PCRE2 owner](../../../src/pcre2/) and
@@ -613,11 +613,11 @@ The hooks neither replace PCRE2's allocator nor exist in production builds. Join
 tests keep a real interpreter borrow live through cancellation before replacement
 and shutdown release the handles.
 
-The isolated [explorer acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
+The isolated [explorer acceptance](../../../tools/scenarios/terminal/history/terminal-history-explorer-acceptance.jsonl)
 preserves draft/mode/recall, duplicates, persistence, clear, and allocation checks.
-Its [search phase](../../../tools/scenarios/terminal-history/explorer-search.jsonl)
+Its [search phase](../../../tools/scenarios/terminal/history/explorer-search.jsonl)
 exercises every query form, skipped patterns, help and stale-search revalidation;
-its [layout phase](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl)
+its [layout phase](../../../tools/scenarios/terminal/history/explorer-layouts.jsonl)
 captures wrapped match emphasis and compact help at multiple text sizes.
 
 Some Julia operations request terminal input while evaluation is active. The evaluator
@@ -668,9 +668,9 @@ evaluation or the underlying VT grid.
 - [History source retrieval](../../../src/view/terminal/highlighting_history.odin).
 - [Rendering](../../../src/view/terminal/highlighting_render.odin) and
   [tests](../../../src/view/terminal/highlighting_render_test.odin).
-- [Explorer syntax, contrast, persisted-source, and session-reset acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl),
-  [general highlighting/session-reset acceptance](../../../tools/scenarios/terminal-highlighting-acceptance.jsonl),
-  and [explorer layout coverage](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl).
+- [Explorer syntax, contrast, persisted-source, and session-reset acceptance](../../../tools/scenarios/terminal/history/terminal-history-explorer-acceptance.jsonl),
+  [general highlighting/session-reset acceptance](../../../tools/scenarios/terminal/terminal-highlighting-acceptance.jsonl),
+  and [explorer layout coverage](../../../tools/scenarios/terminal/history/explorer-layouts.jsonl).
 
 ## Output, Emulation, And Rendering
 
@@ -937,10 +937,10 @@ changes; they never become text in a later prompt. Geometry/capability snapshots
 retried until Julia acknowledges the exact accepted values.
 
 The real-input
-[`exercise-menu-acceptance` scenario](../../../tools/scenarios/exercise-menu-acceptance.jsonl)
+[`exercise-menu-acceptance` scenario](../../../tools/scenarios/exercises/exercise-menu-acceptance.jsonl)
 navigates to Proposition I, loads exact instructions, verifies attempt preservation,
 resizes and cancels, then types into the restored REPL. The
-[`lifecycle scenario`](../../../tools/scenarios/exercise-menu-lifecycle-acceptance.jsonl)
+[`lifecycle scenario`](../../../tools/scenarios/exercises/exercise-menu-lifecycle-acceptance.jsonl)
 checks back navigation, Ctrl-C, and leaving Terminal while a menu awaits input.
 
 ### Programmatic Exercise Queries
@@ -995,7 +995,7 @@ intent identities. Hide, newer show/load, navigation/reset, and content replacem
 prevent stale instruction publication. Accepted loads call the existing header
 show operation. They do not navigate, reset the Terminal, clear output, discard
 variables, or alter the drawing. The
-[`exercise-repl-acceptance` scenario](../../../tools/scenarios/exercise-repl-acceptance.jsonl)
+[`exercise-repl-acceptance` scenario](../../../tools/scenarios/exercises/exercise-repl-acceptance.jsonl)
 loads through actual Terminal input and checks preserved attempt state.
 
 ### User-Authored Exercises
@@ -1161,25 +1161,25 @@ shape's current plane; whole-shape rotations update positions and orientation
 together.
 
 The bounded real-Terminal acceptance scenarios cover the
-[base constructors](../../../tools/scenarios/terminal-shapes-basic-acceptance.jsonl),
-[roulette inventory](../../../tools/scenarios/terminal-shapes-roulette-acceptance.jsonl),
-[defining-point and analytic motion](../../../tools/scenarios/terminal-shapes-motion-acceptance.jsonl),
-and [conics and branch selection](../../../tools/scenarios/terminal-shapes-conics-acceptance.jsonl).
+[base constructors](../../../tools/scenarios/geometry/terminal-shapes-basic-acceptance.jsonl),
+[roulette inventory](../../../tools/scenarios/geometry/terminal-shapes-roulette-acceptance.jsonl),
+[defining-point and analytic motion](../../../tools/scenarios/geometry/terminal-shapes-motion-acceptance.jsonl),
+and [conics and branch selection](../../../tools/scenarios/geometry/terminal-shapes-conics-acceptance.jsonl).
 Input is chunked to fit ordinary frame admission, and returned markers are split in
 source so input echo cannot satisfy an output wait. Native geometry checks follow a
 committed animation tick, not queue-capture completion alone. Allocation baselines
 measure quiet frame reuse after constructor, tool, and Terminal-input admission.
 
 The default diagonal draw has a
-[line acceptance scenario](../../../tools/scenarios/terminal-line-acceptance.jsonl).
+[line acceptance scenario](../../../tools/scenarios/terminal/terminal-line-acceptance.jsonl).
 It verifies animation pause freezes job progress and captures the completed line before
 checking allocation safety and orderly shutdown.
-The [queue acceptance](../../../tools/scenarios/terminal-queue-acceptance.jsonl)
+The [queue acceptance](../../../tools/scenarios/terminal/terminal-queue-acceptance.jsonl)
 checks construction order, tool retirement, pause, copied inputs, successive motion,
 ordered hide/clear, and capture. Its constructors use one-second full tool
 sequences to keep the run within bounded evidence retention; native inspection
 uses the session's `EuclidRepl.OdinJuliaBridge` binding. The
-[capacity/lifecycle acceptance](../../../tools/scenarios/terminal-queue-lifecycle-acceptance.jsonl)
+[capacity/lifecycle acceptance](../../../tools/scenarios/terminal/terminal-queue-lifecycle-acceptance.jsonl)
 checks exact admission capacity, rejection, FIFO drain, reload, and teardown.
 
 ## Backpressure And Memory Ownership
@@ -1251,9 +1251,9 @@ Use the narrowest registered suite for the owner being changed:
 | --- | --- |
 | Julia actors, evaluation, completion, or lifecycle | Julia runtime tests |
 | Terminal editing, selection, rendering, and geometry | Terminal view and UI tests |
-| History persistence, clear, and cross-launch behavior | History store/runtime/UI tests; [isolated database acceptance](../../../tools/scenarios/terminal-history-persistence-acceptance.jsonl) |
-| Live and historical Julia highlighting | Adapter, cache, and renderer tests; [highlighting acceptance scenario](../../../tools/scenarios/terminal-highlighting-acceptance.jsonl) |
-| Evaluation error recovery and idle bridge reclamation | Full-return-queue bridge regression; [error acceptance scenario](../../../tools/scenarios/terminal-error-acceptance.jsonl) |
+| History persistence, clear, and cross-launch behavior | History store/runtime/UI tests; [isolated database acceptance](../../../tools/scenarios/terminal/history/terminal-history-persistence-acceptance.jsonl) |
+| Live and historical Julia highlighting | Adapter, cache, and renderer tests; [highlighting acceptance scenario](../../../tools/scenarios/terminal/terminal-highlighting-acceptance.jsonl) |
+| Evaluation error recovery and idle bridge reclamation | Full-return-queue bridge regression; [error acceptance scenario](../../../tools/scenarios/terminal/terminal-error-acceptance.jsonl) |
 | VT/DEC parsing, modes, OSC, DCS, APC, and queries | Emulator and input-encoding tests |
 | Grid, scrollback, and reflow | Termgrid tests |
 | PTY/ConPTY and shell behavior | Terminal session and shell tests |

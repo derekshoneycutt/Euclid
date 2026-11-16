@@ -6,6 +6,7 @@ using Dates
 using JSON
 using UUIDs
 using SHA
+using TOML
 
 include(joinpath(@__DIR__, "evidence.jl"))
 using .EuclidEvidence
@@ -19,6 +20,7 @@ const ARTIFACT_ROOT = joinpath(REPOSITORY_ROOT, ".build", "scenarios")
 struct ScenarioOptions
     names::Vector{String}
     format::Symbol
+    listing::Bool
 end
 
 """Captured process outcome for one application invocation."""
@@ -28,15 +30,41 @@ struct ProcessResult
     stderr::String
 end
 
-"""Return all behavior names represented by source-controlled scenarios."""
-function scenario_names(root::AbstractString=SCENARIO_ROOT)
-    isdir(root) || error("Scenario directory is missing: $root")
-    names = [splitext(name)[1] for name in readdir(root) if endswith(name, ".jsonl")]
-    isempty(names) && error("No scenarios found in $root")
-    return sort!(names)
+"""Validate one catalog entry's relative JSONL path and require its source to exist."""
+function validate_scenario_source(root::AbstractString, name::String, source)
+    source isa String || error("Scenario source must be a string: $name")
+    components = split(source, '/')
+    !isabspath(source) && !occursin('\\', source) &&
+        all(part -> !(part in ("", ".", "..")), components) &&
+        endswith(source, ".jsonl") ||
+        error("Scenario source must be a safe relative JSONL path: $name")
+    isfile(joinpath(root, components...)) ||
+        error("Scenario source is missing: $name ($source)")
+    return source
 end
 
-"""Parse one named scenario or the complete corpus plus output format."""
+"""Resolve public names to existing sources without exposing workflow-only phases."""
+function scenario_sources(root::AbstractString=SCENARIO_ROOT)
+    isdir(root) || error("Scenario directory is missing: $root")
+    catalog = TOML.parsefile(joinpath(root, "catalog.toml"))
+    entries = get(catalog, "scenarios", nothing)
+    entries isa AbstractDict || error("Scenario catalog requires a scenarios table")
+    isempty(entries) && error("Scenario catalog is empty: $root")
+    sources = Dict{String,String}(name => validate_scenario_source(root, name, source)
+        for (name, source) in entries)
+    allunique(values(sources)) || error("Scenario catalog contains duplicate sources")
+    return sources
+end
+
+"""Return sorted public CLI names independently of source directory placement."""
+scenario_names(root::AbstractString=SCENARIO_ROOT) =
+    sort!(collect(keys(scenario_sources(root))))
+
+"""Return the repository-relative source path for one public scenario."""
+scenario_source(name::String) =
+    joinpath("tools", "scenarios", split(scenario_sources()[name], '/')...)
+
+"""Parse one public scenario, the complete corpus, or a build-free listing."""
 function parse_scenario_options(arguments::Vector{String}; root=SCENARIO_ROOT)
     format = :text
     selectors = String[]
@@ -49,12 +77,13 @@ function parse_scenario_options(arguments::Vector{String}; root=SCENARIO_ROOT)
             push!(selectors, argument)
         end
     end
-    length(selectors) == 1 || error("scenario requires one NAME or --all")
+    length(selectors) == 1 || error("scenario requires one NAME, --all, or --list")
     available = scenario_names(root)
-    names = only(selectors) == "--all" ? available : [only(selectors)]
+    listing = only(selectors) == "--list"
+    names = only(selectors) in ("--all", "--list") ? available : [only(selectors)]
     all(name -> name in available, names) || error(
         "Unknown scenario: $(only(selectors))")
-    return ScenarioOptions(names, format)
+    return ScenarioOptions(names, format, listing)
 end
 
 """Create a collision-resistant repository-relative artifact path for one run."""
@@ -130,7 +159,7 @@ function run_scenario(binary::String, name::String)
         append!(arguments, ["--layout=portrait", "--window-size=640x900"])
     end
     return run_scenario_launch(binary, name,
-        joinpath("tools", "scenarios", "$name.jsonl"),
+        scenario_source(name),
         artifacts, arguments)
 end
 
@@ -248,8 +277,8 @@ function run_settings_acceptance(binary::String)
         return validate_settings_launch(record)
     end
     source = name -> joinpath("tools", "scenarios", "settings", "$name.jsonl")
-    first = launch("first", joinpath("tools", "scenarios",
-        "settings-persistence-acceptance.jsonl"), ["--user-db=$database", "--persist",
+    first = launch("first", scenario_source("settings-persistence-acceptance"),
+        ["--user-db=$database", "--persist",
         "--window-size=900x650", "--window-mode=fixed", "--layout=landscape",
         "--no-simd", "--no-gpu-dust-instancing"])
     first.state.settings.commit_count == 1 ||
@@ -277,7 +306,7 @@ function run_completed_preferences_acceptance(binary::String)
     database = joinpath(root, "user.sqlite3")
     records = NamedTuple[]
     for (name, source) in (
-        ("save", "completed-preferences-persistence-acceptance.jsonl"),
+        ("save", "settings/completed-preferences-persistence-acceptance.jsonl"),
         ("restore", "settings/completed-restore.jsonl"))
         record = run_scenario_launch(binary, "completed-preferences-$name",
             joinpath("tools", "scenarios", source),
@@ -380,16 +409,17 @@ function run_user_exercise_persistence_acceptance(binary::String)
     fake_home = joinpath(root, "data-home")
     records = NamedTuple[]
     seed = launch_user_exercise_phase(binary, root, database, fake_home,
-        "seed", joinpath("tools", "scenarios", "user-exercises", "seed.jsonl"))
+        "seed", joinpath("tools", "scenarios", "exercises", "user-exercises",
+            "seed.jsonl"))
     push!(records, seed)
     validate_user_exercise_seed(database)
     workflow = launch_user_exercise_phase(binary, root, database, fake_home,
-        "workflow", joinpath("tools", "scenarios",
-            "user-exercise-persistence-acceptance.jsonl"))
+        "workflow", scenario_source("user-exercise-persistence-acceptance"))
     push!(records, workflow)
     identity = validate_user_exercise_retirement(database)
     restart = launch_user_exercise_phase(binary, root, database, fake_home,
-        "restart", joinpath("tools", "scenarios", "user-exercises", "restart.jsonl");
+        "restart", joinpath("tools", "scenarios", "exercises", "user-exercises",
+            "restart.jsonl");
         identity)
     push!(records, restart)
     persisted_identity = validate_user_exercise_retirement(database)
@@ -501,8 +531,7 @@ function run_terminal_history_acceptance(binary::String)
     fake_home = joinpath(root, "data-home")
     records = NamedTuple[]
     first = launch_history_phase(binary, root, database, fake_home,
-        "session-only", joinpath("tools", "scenarios",
-            "terminal-history-persistence-acceptance.jsonl"))
+        "session-only", scenario_source("terminal-history-persistence-acceptance"))
     push!(records, first)
     isempty(terminal_history_database_rows(database)) ||
         error("Default-off submission created durable history")
@@ -512,7 +541,7 @@ function run_terminal_history_acceptance(binary::String)
     run_terminal_history_durable_phases(binary, root, database, fake_home, records)
     run_terminal_history_delete_phases(binary, root, database, fake_home, records)
     inject_terminal_history_insert_failure(database)
-    failure_source = joinpath("tools", "scenarios", "terminal-history",
+    failure_source = joinpath("tools", "scenarios", "terminal", "history",
         "write-failure.jsonl")
     failed = launch_history_phase(binary, root, database, fake_home,
         "write-failure", failure_source)
@@ -525,7 +554,7 @@ end
 
 """Prove all-scope clear succeeds off-preference and failed clear retains both scopes."""
 function run_terminal_history_delete_phases(binary, root, database, fake_home, records)
-    clear_source = joinpath("tools", "scenarios", "terminal-history",
+    clear_source = joinpath("tools", "scenarios", "terminal", "history",
         "clear-success.jsonl")
     cleared = launch_history_phase(binary, root, database, fake_home,
         "clear-success", clear_source)
@@ -535,14 +564,14 @@ function run_terminal_history_delete_phases(binary, root, database, fake_home, r
     require_setting_row(settings_database_rows(database), "terminal",
         "persist_history", 0)
     seeded = launch_history_phase(binary, root, database, fake_home,
-        "clear-failure-seed", joinpath("tools", "scenarios", "terminal-history",
+        "clear-failure-seed", joinpath("tools", "scenarios", "terminal", "history",
             "persist-and-submit.jsonl"))
     push!(records, seeded)
     validate_terminal_history_rows("clear-failure-seed",
         terminal_history_database_rows(database))
     inject_terminal_history_clear_failure(database)
     failed_clear = launch_history_phase(binary, root, database, fake_home,
-        "clear-failure", joinpath("tools", "scenarios", "terminal-history",
+        "clear-failure", joinpath("tools", "scenarios", "terminal", "history",
             "clear-failure.jsonl"))
     push!(records, failed_clear)
     validate_terminal_history_rows("failed clear", terminal_history_database_rows(database))
@@ -552,7 +581,7 @@ end
 
 """Prove opt-in writes survive launches and disabling only hides saved rows."""
 function run_terminal_history_durable_phases(binary, root, database, fake_home, records)
-    source = name -> joinpath("tools", "scenarios", "terminal-history", "$name.jsonl")
+    source = name -> joinpath("tools", "scenarios", "terminal", "history", "$name.jsonl")
     for (phase, filename) in [
         ("persist-and-submit", "persist-and-submit"),
         ("persist-off-hides", "persist-off-hides"),
@@ -591,13 +620,14 @@ function run_dynview_exercise_links_acceptance(binary::String)
     fake_home = joinpath(root, "data-home")
     records = NamedTuple[]
     push!(records, launch_user_exercise_phase(binary, root, database, fake_home,
-        "seed", joinpath("tools", "scenarios", "user-exercises", "seed.jsonl")))
+        "seed", joinpath("tools", "scenarios", "exercises", "user-exercises",
+            "seed.jsonl")))
     push!(records, favorites_launch(binary, root, database, "collections",
-        joinpath("tools", "scenarios", "empty-collections-acceptance.jsonl")))
+        scenario_source("empty-collections-acceptance")))
     push!(records, favorites_launch(binary, root, database, "membership",
-        joinpath("tools", "scenarios", "collection-membership-acceptance.jsonl")))
+        scenario_source("collection-membership-acceptance")))
     push!(records, favorites_launch(binary, root, database, "note-link",
-        joinpath("tools", "scenarios", "dynview-exercise-links-acceptance.jsonl")))
+        scenario_source("dynview-exercise-links-acceptance")))
     notes = collection_note_database_rows(database)
     length(notes) == 1 || error("Dynview exercise-link note was not persisted")
     notes[1]["note_text"] ==
@@ -615,11 +645,10 @@ function run_terminal_history_explorer_acceptance(binary::String)
     fake_home = joinpath(root, "data-home")
     records = NamedTuple[]
     for (phase, source) in [
-        ("interaction", joinpath("tools", "scenarios",
-            "terminal-history-explorer-acceptance.jsonl")),
-        ("layouts", joinpath("tools", "scenarios", "terminal-history",
+        ("interaction", scenario_source("terminal-history-explorer-acceptance")),
+        ("layouts", joinpath("tools", "scenarios", "terminal", "history",
             "explorer-layouts.jsonl")),
-        ("search", joinpath("tools", "scenarios", "terminal-history",
+        ("search", joinpath("tools", "scenarios", "terminal", "history",
             "explorer-search.jsonl")),
     ]
         phase_database = phase == "search" ? joinpath(root, "search.sqlite3") : database
@@ -636,9 +665,9 @@ function run_terminal_history_explorer_acceptance(binary::String)
     return records
 end
 
-"""Dispatch acceptance workflows explicitly, otherwise launch one ordinary scenario."""
-function run_named_scenario(binary::String, name::String)
-    workflows = (
+"""Identify orchestrated workflows independently of their source file locations."""
+function scenario_workflows()
+    return [
         "terminal-history-explorer-acceptance" =>
             run_terminal_history_explorer_acceptance,
         "terminal-history-persistence-acceptance" => run_terminal_history_acceptance,
@@ -654,11 +683,35 @@ function run_named_scenario(binary::String, name::String)
         "collection-heads-acceptance" => run_collection_heads_acceptance,
         "collection-delete-acceptance" => run_collection_delete_acceptance,
         "collection-membership-acceptance" => run_collection_membership_acceptance,
-        "collection-notes-acceptance" => run_collection_notes_acceptance)
-    for (workflow_name, launch) in workflows
+        "collection-notes-acceptance" => run_collection_notes_acceptance]
+end
+
+"""Dispatch acceptance workflows explicitly, otherwise launch one ordinary scenario."""
+function run_named_scenario(binary::String, name::String)
+    for (workflow_name, launch) in scenario_workflows()
         name == workflow_name && return launch(binary)
     end
     return [run_scenario(binary, name)]
+end
+
+"""List public names, feature categories, launch kinds, and source paths without running."""
+function write_scenario_listing(io::IO, format::Symbol; root=SCENARIO_ROOT)
+    sources = scenario_sources(root)
+    workflows = first.(scenario_workflows())
+    records = [(name=name, category=replace(dirname(sources[name]), '\\' => '/'),
+        kind=name in workflows ? "workflow" : "scenario", file=sources[name])
+        for name in sort!(collect(keys(sources)))]
+    if format == :json
+        println(io, JSON.json((schema_version=SCENARIO_SCHEMA_VERSION,
+            scenarios=records)))
+    else
+        println(io, "NAME  CATEGORY  KIND  SOURCE")
+        for record in records
+            println(io,
+                "$(record.name)  $(record.category)  $(record.kind)  $(record.file)")
+        end
+    end
+    return nothing
 end
 
 """Write scenario records as stable machine-readable JSON."""
@@ -692,11 +745,17 @@ end
 
 """Run the standalone scenario boundary used by the repository driver."""
 function main(arguments::Vector{String}=collect(ARGS))
-    binary_index = findfirst(startswith("--binary="), arguments)
-    binary_index === nothing && error("scenario runner requires --binary=PATH")
-    binary = String(split(arguments[binary_index], "="; limit=2)[2])
+    binaries = filter(startswith("--binary="), arguments)
+    length(binaries) <= 1 || error("scenario runner accepts only one --binary=PATH")
+    options = parse_scenario_options(filter(
+        argument -> !startswith(argument, "--binary="), arguments))
+    if options.listing
+        write_scenario_listing(stdout, options.format)
+        return 0
+    end
+    isempty(binaries) && error("scenario runner requires --binary=PATH")
+    binary = String(split(only(binaries), "="; limit=2)[2])
     isfile(binary) || error("Scenario binary is missing: $binary")
-    options = parse_scenario_options(deleteat!(copy(arguments), binary_index))
     return run_selected(binary, options)
 end
 

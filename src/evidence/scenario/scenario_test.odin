@@ -138,7 +138,7 @@ scenario_test_playback_state_predicates :: proc(t: ^testing.T) {
 @(test)
 scenario_test_exercise_header_lifecycle_fixture :: proc(t: ^testing.T) {
     source := #load(
-        "../../../tools/scenarios/exercise-header-lifecycle-acceptance.jsonl",
+        "../../../tools/scenarios/exercises/exercise-header-lifecycle-acceptance.jsonl",
         string)
     program: Program
     testing.expect_value(t, parse(source, &program), Parse_Error.None)
@@ -165,7 +165,9 @@ scenario_test_exercise_header_lifecycle_fixture :: proc(t: ^testing.T) {
 // Verify the checked-in selection fixture stays accepted by the shipped scenario parser.
 @(test)
 scenario_test_dynview_selection_fixture :: proc(t: ^testing.T) {
-    source := #load("../../../tools/scenarios/dynview-selection-acceptance.jsonl", string)
+    source := #load(
+        "../../../tools/scenarios/presentation/dynview-selection-acceptance.jsonl",
+        string)
     program: Program
     testing.expect_value(t, parse(source, &program), Parse_Error.None)
     testing.expect_value(t, program.count, 30)

@@ -49,11 +49,37 @@ The final tables and estimates are unchanged.
 ## Runtime Scenarios
 
 Scenarios are bounded JSONL programs in [`tools/scenarios/`](../../../tools/scenarios/).
+Their directories follow the behavior under test, not the mechanism used to drive it:
+shape API scenarios belong to `geometry`, even when they submit Terminal commands.
+Acceptance entry points and their seed, restore, recovery, and failure phases live
+together under the owning feature.
+
+| Directory | Coverage |
+| --- | --- |
+| `animation/` | Controls, speed, completed figures, selection and content publication |
+| `content/curves/`, `content/logic/` | Authored showcases and content-specific lifecycles |
+| `runtime/` | Reset, reload, rollback, simulation and allocation preservation |
+| `presentation/` | MIME publication, documents, selection, layout and exercise links |
+| `presentation/effects/`, `presentation/tex/` | Presentation particles and TeX corpora/layout |
+| `terminal/`, `terminal/history/`, `terminal/graphics/` | Terminal interaction, durable history and graphics protocols |
+| `geometry/` | Shape APIs, constraints, handles and world transforms |
+| `library/` | Search, tree navigation, collections, notes and favorites |
+| `exercises/` | Exercise menus, headers, REPL integration and durable user exercises |
+| `ui/`, `settings/` | Shared interaction/accessibility and durable preferences |
+| `capture/`, `rendering/`, `particles/` | Capture, native/font rendering and loose-dust physics |
+
+[`catalog.toml`](../../../tools/scenarios/catalog.toml) explicitly maps stable public
+CLI names to source paths. Moving a program does not rename its command.
+Only catalog entries are selected by `--all`; unlisted JSONL files are supporting
+workflow phases, not independently runnable acceptance tests. The
+[runner](../../../tools/scenario_runner.jl) retains explicit multi-process workflow
+dispatch, isolated databases, fault injection and post-launch evidence validation.
+Do not recursively discover JSONL files as public scenarios.
 
 Unified shape motion is covered by
-[`terminal-world-transforms-acceptance`](../../../tools/scenarios/terminal-world-transforms-acceptance.jsonl)
+[`terminal-world-transforms-acceptance`](../../../tools/scenarios/geometry/terminal-world-transforms-acceptance.jsonl)
 (tilted arcs, sectors, lenses/lunes, polygons, inverse motion and directed reflection)
-and [`terminal-world-curves-acceptance`](../../../tools/scenarios/terminal-world-curves-acceptance.jsonl)
+and [`terminal-world-curves-acceptance`](../../../tools/scenarios/geometry/terminal-world-curves-acceptance.jsonl)
 (vertical/oblique cycloids, ellipses, conics, departure and allocation baselines).
 Native tests assert rigid evaluation equivariance, orientation transport/lifetime,
 atomic final-plane validation, and split-triangle area/winding conservation.
@@ -66,7 +92,15 @@ state change, or shutdown evidence matters.
 ```sh
 julia tools/make.jl scenario SCENARIO_NAME
 julia tools/make.jl scenario --all
+julia tools/make.jl scenario --list
+julia tools/make.jl scenario --list --format=json
 ```
+
+Listing requires neither a build nor a display. It reports each public name,
+feature category, source path, and whether it is a single scenario or an
+orchestrated workflow. When adding a public scenario, register its source in the
+catalog; add workflow dispatch when it needs orchestration. Keep supporting phases
+out of the catalog, and update source references and documentation when moving files.
 
 An ad hoc scenario can exercise a debug build and retain its evidence bundle:
 
@@ -130,28 +164,28 @@ completed-form commit, not elapsed playback. `resume_construction` continues an
 ordinary pause or resets a completed form; await `animation_reset_committed` in
 the latter case. Full `pause_simulation` and policy `pause_animation` are separate.
 
-The [completed-figure acceptance](../../../tools/scenarios/completed-figure-acceptance.jsonl)
+The [completed-figure acceptance](../../../tools/scenarios/animation/completed-figure-acceptance.jsonl)
 checks transport, completed-first selection, and independent particle disablement.
-The [completed-figure lifecycle acceptance](../../../tools/scenarios/completed-figure-lifecycle-acceptance.jsonl)
+The [completed-figure lifecycle acceptance](../../../tools/scenarios/animation/completed-figure-lifecycle-acceptance.jsonl)
 checks reload retention, selection-policy isolation, ordinary Resume, and captures
 representative null, surface, polygon, curve, reflection, and Hilbert figures.
 `particle_effects_disabled` requires disabled preference intent and empty world
 and presentation material. Do not use `dust_settled` for this: that predicate
 intentionally requires live grounded dust. Preference snapshots retain both
 `interface.enable_particle_effects` and `animation.open_completed`.
-The isolated [completed-preferences persistence acceptance](../../../tools/scenarios/completed-preferences-persistence-acceptance.jsonl)
+The isolated [completed-preferences persistence acceptance](../../../tools/scenarios/settings/completed-preferences-persistence-acceptance.jsonl)
 checks both committed database rows and their restored values in a new process,
 including the held completed figure on startup.
 
-The isolated [user-exercise persistence acceptance](../../../tools/scenarios/user-exercise-persistence-acceptance.jsonl)
+The isolated [user-exercise persistence acceptance](../../../tools/scenarios/exercises/user-exercise-persistence-acceptance.jsonl)
 creates and renames a user exercise, restarts the application against the same
 temporary database, browses and loads it through the real Terminal menu, then
 edits and deletes it while checking attempt and displayed-instruction preservation.
 A final restart verifies the retired aliases and UUID remain unavailable. The
 scenario runner supplies its own `--user-db` and rejects use of the default data home.
 
-The [Parabola showcase](../../../tools/scenarios/parabola-showcase.jsonl) and
-[Hyperbola showcase](../../../tools/scenarios/hyperbola-showcase.jsonl) capture their
+The [Parabola showcase](../../../tools/scenarios/content/curves/parabola-showcase.jsonl) and
+[Hyperbola showcase](../../../tools/scenarios/content/curves/hyperbola-showcase.jsonl) capture their
 apparatus during drawing and the finished ink after tool lift. The typed
 `parabola_frontier_committed` and `hyperbola_frontier_committed` events report actual
 native frontier commits, not elapsed animation time. Hyperbola evidence identifies
@@ -164,10 +198,10 @@ trails, reset, and completed form. Neither a frontier event nor a screenshot alo
 proves those invariants. Existing scenarios use the default both mode; one-sided
 application/visual acceptance is not currently covered by them.
 
-The [parabola lifecycle acceptance](../../../tools/scenarios/conic-lifecycle-acceptance.jsonl)
-and [hyperbola lifecycle acceptance](../../../tools/scenarios/hyperbola-lifecycle-acceptance.jsonl)
+The [parabola lifecycle acceptance](../../../tools/scenarios/content/curves/conic-lifecycle-acceptance.jsonl)
+and [hyperbola lifecycle acceptance](../../../tools/scenarios/content/curves/hyperbola-lifecycle-acceptance.jsonl)
 check reset, correlated completed-form publication, and allocation baselines.
-The [conic switching acceptance](../../../tools/scenarios/conic-switching-acceptance.jsonl)
+The [conic switching acceptance](../../../tools/scenarios/content/curves/conic-switching-acceptance.jsonl)
 checks switching back to existing instruments and runtime reload. These runs are
 separate to preserve the bounded evidence history. Inspect each artifact manifest's
 result and trace completeness in addition to the captures.
@@ -182,11 +216,11 @@ pass condition.
 The scenario runner enforces bounded command, source, line, payload, alias, wait, and
 event-retention limits. Query `evidence capabilities` and `evidence schema` for the
 current vocabulary and bounds. Keep scenarios focused on one behavioral claim, and use
-the checked-in [MIME presentation](../../../tools/scenarios/mime-presentation-acceptance.jsonl),
-[keyboard focus](../../../tools/scenarios/keyboard-focus-acceptance.jsonl), and
-[context menu](../../../tools/scenarios/context-menu-acceptance.jsonl) scenarios as
+the checked-in [MIME presentation](../../../tools/scenarios/presentation/mime-presentation-acceptance.jsonl),
+[keyboard focus](../../../tools/scenarios/ui/keyboard-focus-acceptance.jsonl), and
+[context menu](../../../tools/scenarios/ui/context-menu-acceptance.jsonl) scenarios as
 examples of longer flows.
-The [Dynview exercise-link acceptance](../../../tools/scenarios/dynview-exercise-links-acceptance.jsonl)
+The [Dynview exercise-link acceptance](../../../tools/scenarios/presentation/dynview-exercise-links-acceptance.jsonl)
 loads a persisted user exercise from a saved collection-note link through keyboard
 focus and the shared fresh-session destination.
 
@@ -207,11 +241,11 @@ transactional scene-target replacement. Run the complete documented Odin suite;
 the driver does not accept invented file or test selectors.
 
 Use the existing
-[geometry lifecycle](../../../tools/scenarios/sdl3-geometry-lifecycle.jsonl),
-[keyboard focus](../../../tools/scenarios/keyboard-focus-acceptance.jsonl),
-[IME targeting](../../../tools/scenarios/ime-text-target-acceptance.jsonl),
-[MIME presentation](../../../tools/scenarios/mime-presentation-acceptance.jsonl), and
-[GIF cancellation](../../../tools/scenarios/gif-armed-cancellation-restores-allocations.jsonl)
+[geometry lifecycle](../../../tools/scenarios/rendering/sdl3-geometry-lifecycle.jsonl),
+[keyboard focus](../../../tools/scenarios/ui/keyboard-focus-acceptance.jsonl),
+[IME targeting](../../../tools/scenarios/ui/ime-text-target-acceptance.jsonl),
+[MIME presentation](../../../tools/scenarios/presentation/mime-presentation-acceptance.jsonl), and
+[GIF cancellation](../../../tools/scenarios/capture/gif-armed-cancellation-restores-allocations.jsonl)
 scenarios as bounded integration checks. A successful process alone is insufficient:
 inspect each manifest's result and trace-completeness fields. These scenarios do not
 themselves synthesize native interactive window resizing.
@@ -236,12 +270,12 @@ do not infer a scheduling failure solely from compositor/GPU presentation cadenc
 
 ### Input And IME Evidence
 
-The [IME text-target scenario](../../../tools/scenarios/ime-text-target-acceptance.jsonl)
+The [IME text-target scenario](../../../tools/scenarios/ui/ime-text-target-acceptance.jsonl)
 checks real field-to-Terminal focus ownership. The
-[Terminal editor scenario](../../../tools/scenarios/terminal-editor-acceptance.jsonl)
+[Terminal editor scenario](../../../tools/scenarios/terminal/terminal-editor-acceptance.jsonl)
 checks selection replacement, explicit multiline source, continuation, and clean
 shutdown. Run the existing keyboard-focus and context-menu scenarios alongside them.
-The [Terminal undo scenario](../../../tools/scenarios/terminal-undo-acceptance.jsonl)
+The [Terminal undo scenario](../../../tools/scenarios/terminal/terminal-undo-acceptance.jsonl)
 checks desktop undo/redo shortcuts, redo-branch replacement, completed-command reset,
 and retained edits across incomplete evaluation using evaluated output and clean
 shutdown. Its `z` key uses the existing structured `ctrl`/`shift` modifiers.
@@ -251,7 +285,7 @@ Undo model and Terminal tests also cover Julia aliases, cursor/selection restora
 operation grouping, transient preedit, completion, retained capacity, and allocation
 failure without partial draft/timeline publication.
 
-The [Terminal completion scenario](../../../tools/scenarios/terminal-completion-acceptance.jsonl)
+The [Terminal completion scenario](../../../tools/scenarios/terminal/terminal-completion-acceptance.jsonl)
 exercises `func` → `function`, subsequent alternatives without replacing the draft,
 evaluation of the resulting function, unique `println` completion, and clean shutdown.
 The debug/test-only `terminal_completion_ready` predicate waits for a retained useful

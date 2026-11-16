@@ -469,7 +469,7 @@ Julia API and ownership boundary.
 A committed animation selection clears the prior header and invalidates requests issued
 before that transition; a restart preserves its prompt, disclosure, and scroll offset.
 The next prepared geometry clamps the retained offset to the rebuilt viewport. The
-[exercise-header lifecycle acceptance](../../../tools/scenarios/exercise-header-lifecycle-acceptance.jsonl)
+[exercise-header lifecycle acceptance](../../../tools/scenarios/exercises/exercise-header-lifecycle-acceptance.jsonl)
 checks replacement, dismissal, restart, navigation, capture, and allocation cleanup.
 
 The star reads accepted placement state and submits edits through the serialized
@@ -580,10 +580,10 @@ Scenario targets resolve UUIDs, never display names—even when names are duplic
 
 | Scenario | Coverage |
 | --- | --- |
-| [Empty collections](../../../tools/scenarios/empty-collections-acceptance.jsonl) | Keyboard/pointer creation, empty disclosure, save, reload, and independent restart |
-| [Head editing](../../../tools/scenarios/collection-heads-acceptance.jsonl) | Submit/blur naming, repeated/reversed moves, playback preservation, portrait restart, and durable UUID/order comparison |
-| [Guarded deletion](../../../tools/scenarios/collection-delete-acceptance.jsonl) | Pointer arming, rapid native rejection, disarm/reopen, keyboard/reduced-motion confirmation, final-head focus repair, and SQL absence after restart |
-| [Membership](../../../tools/scenarios/collection-membership-acceptance.jsonl) | Independent checks/aliases, moves, remove/re-add, Favorites independence, reload, SQL readback, and portrait restoration |
+| [Empty collections](../../../tools/scenarios/library/collections/empty-collections-acceptance.jsonl) | Keyboard/pointer creation, empty disclosure, save, reload, and independent restart |
+| [Head editing](../../../tools/scenarios/library/collections/collection-heads-acceptance.jsonl) | Submit/blur naming, repeated/reversed moves, playback preservation, portrait restart, and durable UUID/order comparison |
+| [Guarded deletion](../../../tools/scenarios/library/collections/collection-delete-acceptance.jsonl) | Pointer arming, rapid native rejection, disarm/reopen, keyboard/reduced-motion confirmation, final-head focus repair, and SQL absence after restart |
+| [Membership](../../../tools/scenarios/library/collections/collection-membership-acceptance.jsonl) | Independent checks/aliases, moves, remove/re-add, Favorites independence, reload, SQL readback, and portrait restoration |
 
 Creation uses `create_focus`, `create_press`, and `create_release` on `collections`;
 its semantic focus name is `library_create_collection`.
@@ -688,8 +688,8 @@ The [contrast tests](../../../src/view/ui/contrast_test.odin) cover production
 colors and composited states. Draw-encoder tests and rendered scenarios separately
 check that the intended colors actually reach the draw paths. Explorer Standard and
 Increased captures, selected/unselected Julia rows, and compact/narrow layouts are
-covered by the [history explorer acceptance](../../../tools/scenarios/terminal-history-explorer-acceptance.jsonl)
-and [layout scenario](../../../tools/scenarios/terminal-history/explorer-layouts.jsonl).
+covered by the [history explorer acceptance](../../../tools/scenarios/terminal/history/terminal-history-explorer-acceptance.jsonl)
+and [layout scenario](../../../tools/scenarios/terminal/history/explorer-layouts.jsonl).
 
 Selection, keyboard focus, and pressing have independent meanings. Selected rows
 keep their drawer-rose fill when focus leaves; labels, disclosures, and action

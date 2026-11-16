@@ -8,7 +8,7 @@ using Test
 include(joinpath(@__DIR__, "..", "verify.jl"))
 include(joinpath(@__DIR__, "..", "make.jl"))
 include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
-include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
+include(joinpath(@__DIR__, "scenario_runner_tests.jl"))
 include(joinpath(@__DIR__, "shader_tests.jl"))
 include(joinpath(@__DIR__, "harfbuzz_linker_tests.jl"))
 include(joinpath(@__DIR__, "pcre2_linker_tests.jl"))
@@ -18,7 +18,6 @@ const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
 const BuildConfiguration = Main.EuclidBuildConfiguration
 const JuliaTestReporter = Main.EuclidJuliaTestReporter
-const ScenarioRunner = Main.EuclidScenarioRunner
 
 include(joinpath(@__DIR__, "verification_statistics_tests.jl"))
 include(joinpath(@__DIR__, "sqlite_analysis_tests.jl"))
@@ -433,34 +432,6 @@ end
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])
         @test_throws ErrorException parse_driver_invocation(["unknown"])
-    end
-
-    @testset "scenario selection and reporting" begin
-        mktempdir() do root
-            write(joinpath(root, "second.jsonl"), "{}\n")
-            write(joinpath(root, "first.jsonl"), "{}\n")
-            @test ScenarioRunner.scenario_names(root) == ["first", "second"]
-            selected = ScenarioRunner.parse_scenario_options(
-                ["second", "--format=json"]; root)
-            @test selected.names == ["second"]
-            @test selected.format == :json
-            @test ScenarioRunner.parse_scenario_options(["--all"]; root).names ==
-                ["first", "second"]
-            @test_throws ErrorException ScenarioRunner.parse_scenario_options(
-                ["missing"]; root)
-        end
-
-        first_path = ScenarioRunner.fresh_artifact_path("example")
-        second_path = ScenarioRunner.fresh_artifact_path("example")
-        @test first_path != second_path
-        @test !ispath(first_path)
-        inconclusive = (result="inconclusive", trace_complete=false, exit_code=1)
-        @test !ScenarioRunner.scenario_passed(inconclusive)
-        output = IOBuffer()
-        ScenarioRunner.write_json_report(output, [inconclusive])
-        report = ScenarioRunner.JSON.parse(String(take!(output)))
-        @test !report.passed
-        @test report.scenarios[1].result == "inconclusive"
     end
 
     @testset "check command arguments" begin
