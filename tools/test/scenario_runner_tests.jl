@@ -61,7 +61,7 @@ const ScenarioRunner = EuclidScenarioRunner
     end
 
     sources = ScenarioRunner.scenario_sources()
-    @test length(sources) == 123
+    @test length(sources) == 125
     @test all(source -> occursin('/', source), values(sources))
     @test isempty(filter(endswith(".jsonl"), readdir(ScenarioRunner.SCENARIO_ROOT)))
     workflows = first.(ScenarioRunner.scenario_workflows())
@@ -69,6 +69,8 @@ const ScenarioRunner = EuclidScenarioRunner
     @test all(name -> haskey(sources, name), workflows)
     @test ScenarioRunner.scenario_source("keyboard-focus-acceptance") ==
         joinpath("tools", "scenarios", "ui", "keyboard-focus-acceptance.jsonl")
+    @test ScenarioRunner.scenario_source("native-basic-acceptance") ==
+        joinpath("tools", "scenarios", "geometry", "native-basic-acceptance.jsonl")
     listing = IOBuffer()
     ScenarioRunner.write_scenario_listing(listing, :json)
     records = ScenarioRunner.JSON.parse(String(take!(listing))).scenarios

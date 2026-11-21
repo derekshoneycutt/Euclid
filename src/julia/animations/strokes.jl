@@ -124,15 +124,24 @@ function animate_draw_point(
         animate_pen_cone(
             state_ptr, timer - duration * TiltToConeDuration,
             penpos, PenConeFloorAngle, PenConeSpinSpeed)
-
-        OdinJuliaBridge.set_point_color(state_ptr, pointid, pencolor)
-        OdinJuliaBridge.set_point_position(state_ptr, pointid, penpos)
-        OdinJuliaBridge.set_point_brush(state_ptr, pointid, penbrush)
-        OdinJuliaBridge.show_point(state_ptr, pointid)
-
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, penpos, pencolor)
-
-        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+        if !native_adapter_available()
+            OdinJuliaBridge.set_point_color(state_ptr, pointid, pencolor)
+            OdinJuliaBridge.set_point_position(state_ptr, pointid, penpos)
+            OdinJuliaBridge.set_point_brush(state_ptr, pointid, penbrush)
+            OdinJuliaBridge.show_point(state_ptr, pointid)
+            OdinJuliaBridge.emit_trailing_particle(
+                state_ptr, penpos, pencolor)
+            OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+        else
+            request = OdinJuliaBridge.native_modifier_request(
+                OdinJuliaBridge.NATIVE_MODIFIER_DRAW_POINT;
+                entity=pointid, elapsed=timer - duration * TiltToConeDuration,
+                duration=duration * GroundTrailDuration,
+                start_position=penpos,
+                brush=penbrush,
+                color=OdinJuliaBridge.bridge_color(pencolor))
+            OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+        end
     else
         end_azimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
         animate_pen_tilt(
@@ -181,19 +190,35 @@ function animate_draw_line(
         animate_pen_tilt(state_ptr, timer, duration * TiltToLineDuration, startpos,
             PenStraightFloorAngle, PenDrawLineAngle, azimuth)
     elseif t < GroundLineEndTime
-        tippos = animate_pen_drag(state_ptr, timer - duration * TiltToLineDuration,
+        animate_pen_drag(state_ptr, timer - duration * TiltToLineDuration,
             duration * GroundLineDuration, startpos, endpos, PenDrawLineAngle,
             azimuth, pencolor)
-
-        OdinJuliaBridge.set_point_color(state_ptr, line_host_id, pencolor)
-        OdinJuliaBridge.set_point_brush(state_ptr, line_host_id, penbrush)
-        OdinJuliaBridge.set_point_position(state_ptr, line_joint1_id, startpos)
-        OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id, tippos)
-        OdinJuliaBridge.show_point(state_ptr, line_host_id)
-
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
-
-        OdinJuliaBridge.set_pen_active(state_ptr, 1, pencolor)
+        if !native_adapter_available()
+            tippos = startpos + (endpos - startpos) *
+                normalized_progress(
+                    timer - duration * TiltToLineDuration,
+                    duration * GroundLineDuration)
+            OdinJuliaBridge.set_point_color(
+                state_ptr, line_host_id, pencolor)
+            OdinJuliaBridge.set_point_brush(
+                state_ptr, line_host_id, penbrush)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, line_joint1_id, startpos)
+            OdinJuliaBridge.set_point_position(
+                state_ptr, line_joint2_id, tippos)
+            OdinJuliaBridge.show_point(state_ptr, line_host_id)
+        else
+            request = OdinJuliaBridge.native_modifier_request(
+                OdinJuliaBridge.NATIVE_MODIFIER_DRAW_LINE;
+                entity=line_host_id, second_entity=line_joint1_id,
+                third_entity=line_joint2_id,
+                elapsed=timer - duration * TiltToLineDuration,
+                duration=duration * GroundLineDuration,
+                start_position=startpos, second_position=endpos,
+                brush=penbrush,
+                color=OdinJuliaBridge.bridge_color(pencolor))
+            OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+        end
     else
         animate_pen_tilt(
             state_ptr, timer - duration * GroundTrailEndTime,

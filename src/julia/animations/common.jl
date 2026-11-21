@@ -43,3 +43,8 @@ function curve_parameter(timer::Real, duration::Real, first::Real, last::Real)
     progress == 1f0 && return Float32(last)
     return Float32(first + (last - first) * progress)
 end
+
+"""Report whether the active bridge exposes typed native modifier adapters."""
+@inline native_adapter_available() =
+    isdefined(OdinJuliaBridge, :native_modifier_request) &&
+    isdefined(OdinJuliaBridge, :apply_native_modifier_request)

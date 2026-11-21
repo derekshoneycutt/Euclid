@@ -5,6 +5,15 @@ function place_pen_at_angles(
     state_ptr::Ptr{Cvoid}, pen_x::Real, pen_y::Real, base_z::Real,
     floor_angle::Real, azimuth::Real)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_POSE;
+            entity=0, second_entity=1,
+            start_position=(pen_x, pen_y, base_z),
+            radius=PenLength, angle=floor_angle, scalar=azimuth)
+        OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+        return
+    end
     horizontal_length = PenLength * Float32(cos(floor_angle))
     vertical_length = PenLength * Float32(sin(floor_angle))
 
@@ -48,12 +57,24 @@ function animate_pen_descend(
     timer::Real, duration::Real,
     topz::Real, penx::Real, peny::Real)
 
-    t = clamp(timer / duration, 0f0, 1f0)
-    penz = topz - (topz * t)
-    OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
-    OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
-    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
-    OdinJuliaBridge.show_pen(state_ptr)
+    if !native_adapter_available()
+        t = clamp(timer / duration, 0f0, 1f0)
+        penz = topz - topz * t
+        OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
+        OdinJuliaBridge.move_pen_joint2(
+            state_ptr, penx, peny, penz + PenLength)
+        OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
+        OdinJuliaBridge.show_pen(state_ptr)
+        return
+    end
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_PEN_DESCEND;
+        entity=0, second_entity=1,
+        elapsed=timer, duration=duration,
+        start_position=(penx, peny, topz),
+        second_position=(penx, peny, topz),
+        scalar=topz, brush=PenLength)
+    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 """
@@ -80,22 +101,41 @@ function animate_pen_rise(
     timer::Real, duration::Real,
     topz::Real, penx::Real, peny::Real)
 
-    t = clamp(timer / duration, 0f0, 1f0)
-    penz = topz * t
-    OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
-    OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
-    OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
-    OdinJuliaBridge.show_pen(state_ptr)
+    if !native_adapter_available()
+        t = clamp(timer / duration, 0f0, 1f0)
+        penz = topz * t
+        OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
+        OdinJuliaBridge.move_pen_joint2(
+            state_ptr, penx, peny, penz + PenLength)
+        OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
+        OdinJuliaBridge.show_pen(state_ptr)
+        return
+    end
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_PEN_RISE;
+        entity=0, second_entity=1,
+        elapsed=timer, duration=duration,
+        start_position=(penx, peny, 0f0),
+        second_position=(penx, peny, 0f0),
+        scalar=topz, brush=PenLength)
+    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
+"""Raise the pen from an explicit starting height without changing its length."""
 function animate_pen_rise(
     state_ptr::Ptr{Cvoid},
     timer::Real, duration::Real,
     startz::Real, topz::Real, penx::Real, peny::Real)
-
-    t = clamp(timer / duration, 0f0, 1f0)
-    diffz = topz - startz
-    penzoffset = diffz * t
-    penz = startz + penzoffset
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_RISE;
+            entity=0, second_entity=1, elapsed=timer, duration=duration,
+            start_position=(penx, peny, startz),
+            second_position=(penx, peny, startz), scalar=topz, brush=PenLength)
+        OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+        return
+    end
+    progress = normalized_progress(timer, duration)
+    penz = startz + (topz - startz) * progress
     OdinJuliaBridge.lock_pen_joint1(state_ptr, penx, peny, penz)
     OdinJuliaBridge.move_pen_joint2(state_ptr, penx, peny, penz + PenLength)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)

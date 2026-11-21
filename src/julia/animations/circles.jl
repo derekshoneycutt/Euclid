@@ -48,28 +48,41 @@ function animate_draw_circle(
     color=:black,
     marker_host_id::Integer=0)
 
-    t = clamp(timer / duration, 0f0, 1f0)
-    start_theta = Float32(atan(start_point[2] - joint_point[2],
-        start_point[1] - joint_point[1]))
-    theta = start_theta + angle_theta * t
-
-    end_point = [
-        joint_point[1] + radius * Float32(cos(theta)),
-        joint_point[2] + radius * Float32(sin(theta)),
-        0f0]
-
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point, sweep = false)
-    OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point, sweep = false)
-    OdinJuliaBridge.show_compass(state_ptr)
-
-    OdinJuliaBridge.set_point_color(state_ptr, marker_host_id, color)
-    OdinJuliaBridge.set_point_brush(state_ptr, marker_host_id, brush)
-    OdinJuliaBridge.set_arc_geometry(
-        state_ptr, marker_host_id, radius, start_theta, angle_theta * t)
-    OdinJuliaBridge.show_point(state_ptr, marker_host_id)
-
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
+    if !native_adapter_available()
+        t = clamp(timer / duration, 0f0, 1f0)
+        start_theta = Float32(atan(start_point[2] - joint_point[2],
+            start_point[1] - joint_point[1]))
+        theta = start_theta + angle_theta * t
+        end_point = [
+            joint_point[1] + radius * Float32(cos(theta)),
+            joint_point[2] + radius * Float32(sin(theta)),
+            0f0]
+        OdinJuliaBridge.lock_compass_joint1(
+            state_ptr, joint_point, sweep=false)
+        OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
+        OdinJuliaBridge.lock_compass_joint2(
+            state_ptr, end_point, sweep=false)
+        OdinJuliaBridge.show_compass(state_ptr)
+        OdinJuliaBridge.set_point_color(
+            state_ptr, marker_host_id, color)
+        OdinJuliaBridge.set_point_brush(
+            state_ptr, marker_host_id, brush)
+        OdinJuliaBridge.set_arc_geometry(
+            state_ptr, marker_host_id, radius,
+            start_theta, angle_theta * t)
+        OdinJuliaBridge.show_point(state_ptr, marker_host_id)
+        OdinJuliaBridge.emit_trailing_particle(
+            state_ptr, end_point, color)
+        return
+    end
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_DRAW_CIRCLE;
+        entity=marker_host_id, second_entity=2, third_entity=3,
+        elapsed=timer, duration=duration,
+        start_position=joint_point, second_position=start_point,
+        angle=angle_theta, radius=radius, brush=brush,
+        color=OdinJuliaBridge.bridge_color(color))
+    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 """
@@ -107,34 +120,74 @@ function animate_draw_filledcircle(
     marker_host_id::Integer=0,
     formation::Bool=true)
 
+    if !native_adapter_available()
+        animate_filledcircle_legacy(
+            state_ptr, timer, duration, joint_point, start_point,
+            angle_theta, radius, brush;
+            color=color, marker_host_id=marker_host_id,
+            formation=formation)
+        return
+    end
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_DRAW_FILLED_CIRCLE;
+        entity=marker_host_id, second_entity=2, third_entity=3,
+        elapsed=timer, duration=duration,
+        start_position=joint_point, second_position=start_point,
+        angle=angle_theta, radius=radius, brush=brush,
+        color=OdinJuliaBridge.bridge_color(color), flag=formation)
+    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    if !formation
+        start_theta = Float32(atan(start_point[2] - joint_point[2],
+            start_point[1] - joint_point[1]))
+        theta = start_theta + angle_theta * normalized_progress(timer, duration)
+        end_point = [
+            joint_point[1] + radius * Float32(cos(theta)),
+            joint_point[2] + radius * Float32(sin(theta)),
+            0f0]
+        emit_filledcircle_radius_trail(
+            state_ptr, joint_point, end_point, color)
+    end
+end
+
+"""Run the legacy filled-circle fixture path when native adapters are unavailable."""
+function animate_filledcircle_legacy(
+    state_ptr::Ptr{Cvoid},
+    timer::Real, duration::Real,
+    joint_point::AbstractVector{<:Real},
+    start_point::AbstractVector{<:Real},
+    angle_theta::Real, radius::Real, brush::Real;
+    color, marker_host_id::Integer, formation::Bool)
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
         start_point[1] - joint_point[1]))
     theta = start_theta + angle_theta * t
-
     end_point = [
         joint_point[1] + radius * Float32(cos(theta)),
         joint_point[2] + radius * Float32(sin(theta)),
         0f0]
-
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point; sweep = false)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, joint_point, sweep=false)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
     OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point)
     OdinJuliaBridge.show_compass(state_ptr)
-
-    OdinJuliaBridge.set_point_color(state_ptr, marker_host_id, color)
-    OdinJuliaBridge.set_point_brush(state_ptr, marker_host_id, brush)
+    OdinJuliaBridge.set_point_color(
+        state_ptr, marker_host_id, color)
+    OdinJuliaBridge.set_point_brush(
+        state_ptr, marker_host_id, brush)
     OdinJuliaBridge.set_arc_geometry(
-        state_ptr, marker_host_id, radius, start_theta, angle_theta * t)
+        state_ptr, marker_host_id, radius,
+        start_theta, angle_theta * t)
     OdinJuliaBridge.show_point(state_ptr, marker_host_id)
-
     if !formation
-        emit_filledcircle_radius_trail(state_ptr, joint_point, end_point, color)
-    else
-        OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
-        if timer <= 0
-            OdinJuliaBridge.reveal_sweep!(state_ptr, marker_host_id, duration)
-        end
+        emit_filledcircle_radius_trail(
+            state_ptr, joint_point, end_point, color)
+        return
+    end
+    OdinJuliaBridge.emit_trailing_particle(
+        state_ptr, end_point, color)
+    if timer <= 0
+        OdinJuliaBridge.reveal_sweep!(
+            state_ptr, marker_host_id, duration)
     end
 end
 

@@ -535,6 +535,11 @@ An old pointer is invalid after reset even if the arena retains the same backing
 block. Generation identities reject stale operations; they do not extend a
 pointer's lifetime.
 
+Native modifier markers are ephemeral callback data. They live in the checked
+animation scene batch, evaluate with copied explicit inputs, and disappear when the
+batch is committed or rejected. They do not allocate persistent motion instances,
+borrow generation arena storage, or require a second retired data domain.
+
 ## Transport And Publication Lifetimes
 
 ### Consumer-owned messages

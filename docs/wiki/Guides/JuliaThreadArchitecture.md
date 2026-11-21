@@ -307,6 +307,12 @@ The Odin bridge decides how requests and results cross threads, and display-owne
 subsystems decide whether published results are still valid and when they affect
 visible state.
 
+Basic native animation helpers use native explicit-time modifier markers in the ordinary
+animation scene batch. Julia keeps phase-local elapsed time and helper call policy;
+Odin evaluates the marker, expands it to ordinary shape, tool, effect, or reveal
+commands, validates the complete batch, and then commits it once at the fixed-step
+boundary. The marker carries no native clock and creates no persistent motion slot.
+
 ## Memory And Lifetime Boundaries
 
 There are two memory stories here, and they should not be conflated: native

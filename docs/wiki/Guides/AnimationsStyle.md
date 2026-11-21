@@ -138,6 +138,18 @@ phase-local elapsed time, duration, geometry, and native identities. They perfor
 the requested motion or drawing step; they do not own a content module's clock,
 successor phase, reset, text publication, or catalogue registration.
 
+Basic native helpers are compatibility adapters over native explicit-time modifiers.
+Their public signatures and Julia call sites remain unchanged: Julia still advances
+the local phase and passes elapsed time, geometry, identities, brush, and color.
+Odin evaluates the operation and expands it into ordinary scene commands under the
+existing whole-batch validation boundary. The adapters do not introduce native
+phase scheduling or persistent motion objects.
+Tool samples preserve physical host visibility and active-contact state, not just
+the construction ink. Pen descent/rise locks the base but moves the upper joint
+without enabling its snap lock; tilt, cone, and drag use the native fixed-length
+pose evaluator. Compass samples lock both legs, with filled-sector sweep contact
+kept separate from the lock-enable flag.
+
 Named curves retain their own animation flows even when they share an apparatus.
 Use the Cycloid, Trochoid, Parabola, and Hyperbola motion/draw helpers for common
 mechanics, just as other content uses the pen and compass helpers. Circle uses

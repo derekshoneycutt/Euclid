@@ -5,6 +5,7 @@ import shapemodel "../shapes/model"
 
 import audio "../audio"
 import animation_model "../core/animation"
+import modifier "../animation"
 
 import "../core"
 import evidence_session "../evidence/session"
@@ -34,6 +35,7 @@ Scene_Command_Validator :: #type proc(
 SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Position = validate_command_shape_transform,
     .Set_Shape_Orientation = validate_command_shape_orientation,
+    .Apply_Native_Modifier = validate_native_modifier_marker,
     .Set_Shape_Color = validate_command_shape_style,
     .Set_Shape_Active_Color = validate_command_shape_style,
     .Set_Shape_Brush = validate_command_shape_style,
@@ -77,6 +79,7 @@ Scene_Command_Applier :: #type proc(
 SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Position = apply_set_shape_position,
     .Set_Shape_Orientation = apply_set_shape_orientation,
+    .Apply_Native_Modifier = nil,
     .Set_Shape_Color = apply_set_shape_color,
     .Set_Shape_Active_Color = apply_set_shape_active_color,
     .Set_Shape_Brush = apply_set_shape_brush,
@@ -114,6 +117,7 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
 SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Shape_Position = .Point_Position_Committed,
     .Set_Shape_Orientation = .Shape_Orientation_Committed,
+    .Apply_Native_Modifier = .Unknown,
     .Set_Shape_Color = .Point_Style_Committed,
     .Set_Shape_Active_Color = .Point_Style_Committed,
     .Set_Shape_Brush = .Point_Style_Committed,
@@ -215,6 +219,7 @@ end_scene_command_batch :: proc(state: ^core.Euclid_General_State) {
     state^.scene_command_batch_target = nil
 }
 
+
 //   Reserve and initialize one command in the active bounded batch.
 // Returns captured=true when capture mode handled the operation, including overflow.
 // Overflow marks the whole batch invalid and deliberately suppresses direct mutation.
@@ -306,6 +311,127 @@ validate_command_animation_reveal :: proc(
         return has_geometry && geometry.kind == .Filled_Arc
     }
     return false
+}
+
+// Resolve native joint sentinels without confusing them with packed shape IDs.
+native_modifier_tool_entity :: proc(
+    state: ^core.Euclid_General_State, entity: u64) -> shapemodel.Shape_Entity {
+    switch entity {
+    case 0:
+        return state^.world_pen.joint1
+    case 1:
+        return state^.world_pen.joint2
+    case 2:
+        return state^.world_compass.joint1
+    case 3:
+        return state^.world_compass.joint2
+    case:
+        return shapemodel.shape_entity_unpack(entity)
+    }
+}
+
+// Resolve the physical host for a native tool-style output.
+native_modifier_tool_host :: proc(
+    state: ^core.Euclid_General_State, entity: u64) -> u64 {
+    if entity <= 1 {
+        return shapemodel.shape_entity_pack(state^.world_pen.shape)
+    }
+    return shapemodel.shape_entity_pack(state^.world_compass.shape)
+}
+
+// Validate native tool movement against the resolved transform and snap owner.
+native_modifier_tool_output_valid :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) -> bool {
+    entity := native_modifier_tool_entity(state, evaluated.entity)
+    if evaluated.kind == .Set_Tool_Lock {
+        _, found := tool_lock_constraint(state, entity)
+        return found
+    }
+    return shapemodel.shape_component_contains(
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
+}
+
+// Validate native point-style outputs against canonical render-style ownership.
+native_modifier_style_output_valid :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) -> bool {
+    command: Scene_Command = {
+        entity = evaluated.entity,
+    }
+    entity, found := validate_command_shape_entity(state, &command)
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world.render_styles,
+        &state^.shape_world.registry, entity)
+}
+
+// Validate every output in one native modifier evaluation.
+native_modifier_output_valid :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) -> bool {
+    #partial switch evaluated.kind {
+    case .Set_Tool_Position, .Set_Tool_Lock:
+        return native_modifier_tool_output_valid(state, evaluated)
+    case .Set_Tool_Style:
+        style := evaluated^
+        style.entity = native_modifier_tool_host(state, evaluated.entity)
+        return evaluated.entity <= 3 &&
+            native_modifier_style_output_valid(state, &style)
+    case .Set_Point_Position:
+        entity, found := validate_command_shape_entity(
+            state, &Scene_Command{
+                kind = .Set_Shape_Position,
+                entity = evaluated.entity,
+                position = evaluated.position,
+            })
+        if !found {
+            return false
+        }
+        return shapemodel.shape_component_contains(
+            &state^.shape_world.transforms,
+            &state^.shape_world.registry, entity)
+    case .Set_Point_Color, .Set_Point_Brush,
+        .Set_Point_Visible, .Set_Point_Active_Color,
+        .Set_Point_Active_Feature:
+        return native_modifier_style_output_valid(state, evaluated)
+    case .Set_Shape_Arc:
+        entity, found := validate_command_shape_entity(
+            state, &Scene_Command{
+                entity = evaluated.entity,
+            })
+        if !found {
+            return false
+        }
+        return shapemodel.shape_component_contains(
+            &state^.shape_world.arcs,
+            &state^.shape_world.registry, entity)
+    case:
+        return true
+    }
+}
+
+// Validate every native output against canonical shape/tool ownership.
+validate_native_modifier_marker :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    if state == nil || command == nil ||
+        !modifier.modifier_request_valid(command^.modifier) {
+        return false
+    }
+    if command^.modifier.kind == .Identity {
+        return true
+    }
+    output: modifier.Modifier_Output_Buffer
+    status := modifier.evaluate_modifier(command^.modifier, &output)
+    if status != .Ok || output.count <= 0 {
+        return false
+    }
+    for output_index in 0..<output.count {
+        evaluated := &output.outputs[output_index]
+        if !native_modifier_output_valid(state, evaluated) {
+            return false
+        }
+    }
+    return true
 }
 
 // Validate one packed command target that requires a transform component.
@@ -625,10 +751,31 @@ scene_command_batch_wellformed :: proc(
 }
 
 // Count commands that can enqueue one compound tool-contact intent.
+native_modifier_tool_contact_count :: proc(request: modifier.Modifier_Request) -> int {
+    output: modifier.Modifier_Output_Buffer
+    status := modifier.evaluate_modifier(request, &output)
+    assert(status == .Ok)
+    count := 0
+    for index in 0..<output.count {
+        value := &output.outputs[index]
+        produces_contact := value.kind == .Set_Tool_Position ||
+            (value.kind == .Set_Tool_Lock && value.flag)
+        if produces_contact && tool_dust_contact_on_floor(value.position) {
+            count += 1
+        }
+    }
+    return count
+}
+
+// Count direct and native-expanded floor contacts before any owner mutation.
 scene_command_batch_tool_contact_count :: proc(batch: ^Scene_Command_Batch) -> int {
     count := 0
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
+        if command^.kind == .Apply_Native_Modifier {
+            count += native_modifier_tool_contact_count(command^.modifier)
+            continue
+        }
         produces_contact := command^.kind == .Set_Tool_Position ||
             (command^.kind == .Set_Tool_Lock && command^.flag)
         if produces_contact && tool_dust_contact_on_floor(command^.position) {
@@ -852,8 +999,10 @@ validate_scene_command_batch :: proc(
     if !scene_command_batch_wellformed(state, batch) {
         return false
     }
-    if !scene_command_batch_progress_valid(state, batch) ||
-        !scene_command_batch_reveals_fit(state, batch) {
+    if !scene_command_batch_progress_valid(state, batch) {
+        return false
+    }
+    if !scene_command_batch_reveals_fit(state, batch) {
         return false
     }
     if animation_model.animation_value_store_validate_pending(
@@ -1053,6 +1202,114 @@ commit_scene_command_batch :: proc(
     return true
 }
 
+// Decode one little-endian RGBA packed native modifier value.
+native_modifier_color :: proc(packed: u32) -> Bridge_Color {
+    return Bridge_Color{
+        u8(packed),
+        u8(packed >> 8),
+        u8(packed >> 16),
+        u8(packed >> 24),
+    }
+}
+
+// Apply native point style, brush, visibility, and active-feature outputs.
+apply_native_modifier_style_output :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) {
+    #partial switch evaluated.kind {
+    case .Set_Point_Color:
+        apply_set_shape_color(state, &Scene_Command{
+            kind = .Set_Shape_Color,
+            entity = evaluated.entity,
+            color = native_modifier_color(evaluated.color_packed),
+        })
+    case .Set_Point_Brush:
+        apply_set_shape_brush(state, &Scene_Command{
+            kind = .Set_Shape_Brush,
+            entity = evaluated.entity,
+            scalar = evaluated.scalar,
+        })
+    case .Set_Point_Visible:
+        _ = shape_set_visible(state, evaluated.entity, u8(evaluated.flag))
+    case .Set_Point_Active_Color:
+        apply_set_shape_active_color(state, &Scene_Command{
+            kind = .Set_Shape_Active_Color,
+            entity = evaluated.entity,
+            color = native_modifier_color(evaluated.color_packed),
+        })
+    case .Set_Point_Active_Feature:
+        apply_set_shape_active_feature(state, &Scene_Command{
+            kind = .Set_Shape_Active_Feature,
+            entity = evaluated.entity,
+            integer = evaluated.integer,
+        })
+    }
+}
+
+// Apply native pen and compass tool position and lock outputs.
+apply_native_modifier_tool_output :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) {
+    #partial switch evaluated.kind {
+    case .Set_Tool_Position:
+        set_tool_position(state, native_modifier_tool_entity(
+            state, evaluated.entity), evaluated.position, evaluated.integer != 0)
+    case .Set_Tool_Lock:
+        set_tool_lock(state, native_modifier_tool_entity(state, evaluated.entity),
+            evaluated.position, evaluated.flag, evaluated.integer != 0)
+    case .Set_Tool_Style:
+        host := native_modifier_tool_host(state, evaluated.entity)
+        _ = shape_set_active_color(state, host,
+            native_modifier_color(evaluated.color_packed))
+        _ = shape_set_active_feature(state, host, u16(evaluated.integer))
+        _ = shape_set_visible(state, host, u8(evaluated.flag))
+    }
+}
+
+// Apply native particle and sweep reveal outputs.
+apply_native_modifier_effect_output :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) {
+    #partial switch evaluated.kind {
+    case .Emit_Trailing_Particle:
+        emit_trailing_particle(state, evaluated.position,
+            native_modifier_color(evaluated.color_packed))
+    case .Reveal_Sweep:
+        _ = shape_reveal_sweep(state, evaluated.entity, evaluated.scalar)
+    }
+}
+
+// Convert a validated native output into the ordinary owner-side scene API.
+apply_native_modifier_output :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) {
+    #partial switch evaluated.kind {
+    case .Set_Point_Position:
+        apply_set_shape_position(state, &Scene_Command{
+            kind = .Set_Shape_Position,
+            entity = evaluated.entity,
+            position = evaluated.position,
+        })
+    case .Set_Point_Color, .Set_Point_Brush, .Set_Point_Visible,
+        .Set_Point_Active_Color, .Set_Point_Active_Feature:
+        apply_native_modifier_style_output(state, evaluated)
+    case .Set_Shape_Arc:
+        apply_set_shape_arc(state, &Scene_Command{
+            kind = .Set_Shape_Arc,
+            entity = evaluated.entity,
+            arc = shapemodel.Shape_Arc{
+                radius = evaluated.arc_radius,
+                start_theta = evaluated.arc_start,
+                sweep_theta = evaluated.arc_sweep,
+            },
+        })
+    case .Set_Tool_Position, .Set_Tool_Lock, .Set_Tool_Style:
+        apply_native_modifier_tool_output(state, evaluated)
+    case .Emit_Trailing_Particle, .Reveal_Sweep:
+        apply_native_modifier_effect_output(state, evaluated)
+    }
+}
+
 // Apply commands in callback order after complete batch preflight succeeds.
 apply_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
@@ -1060,7 +1317,15 @@ apply_scene_command_batch :: proc(
     hide_burst_kicked := false
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
-        if command^.kind == .Reveal_Label || command^.kind == .Reveal_Region ||
+        if command^.kind == .Apply_Native_Modifier {
+            output: modifier.Modifier_Output_Buffer
+            if modifier.evaluate_modifier(command^.modifier, &output) == .Ok {
+                for output_index in 0..<output.count {
+                    evaluated := &output.outputs[output_index]
+                    apply_native_modifier_output(state, evaluated)
+                }
+            }
+        } else if command^.kind == .Reveal_Label || command^.kind == .Reveal_Region ||
             command^.kind == .Reveal_Sweep {
             if !scene_reveal_superseded_later(batch, command_index) {
                 apply_animation_reveal(state, command, batch)

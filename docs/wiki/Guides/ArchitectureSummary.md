@@ -310,6 +310,13 @@ payloads use checked slots or immutable snapshots. Odin validates and publishes
 results to the owner of visible state. Keep Odin exports, Julia wrappers, message
 identity, and failure handling symmetric.
 
+Basic reusable native mechanics cross this boundary as explicit-time native modifier
+markers. Julia-authored phases still select elapsed time and phase transitions,
+while Odin evaluates the marker and expands it into ordinary scene commands before
+whole-batch validation and commit. The marker is callback-owned and has no
+independent clock or persistent motion slot. Direct bridge scene writes remain
+available and mixed direct/modifier batches keep callback order.
+
 Start at [`src/bridge/model/`](../../../src/bridge/model/),
 [`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin), and
 [`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl). Follow

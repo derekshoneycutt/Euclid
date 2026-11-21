@@ -24,14 +24,26 @@ function animate_compass_descend(
     topz::Real, joint1x::Real, joint1y::Real,
     joint2x::Real, joint2y::Real)
 
-    t = clamp(timer / duration, 0f0, 1f0)
-    tip_z = topz + (0f0 - topz) * t
-    OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
-    OdinJuliaBridge.lock_compass_joint1(
-        state_ptr, joint1x, joint1y, tip_z, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(
-        state_ptr, joint2x, joint2y, tip_z, sweep = false)
-    OdinJuliaBridge.show_compass(state_ptr)
+    if !native_adapter_available()
+        t = clamp(timer / duration, 0f0, 1f0)
+        tip_z = topz + (0f0 - topz) * t
+        OdinJuliaBridge.set_compass_active(
+            state_ptr, 0, :white)
+        OdinJuliaBridge.lock_compass_joint1(
+            state_ptr, joint1x, joint1y, tip_z, sweep=false)
+        OdinJuliaBridge.lock_compass_joint2(
+            state_ptr, joint2x, joint2y, tip_z, sweep=false)
+        OdinJuliaBridge.show_compass(state_ptr)
+        return
+    end
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_COMPASS_DESCEND;
+        entity=2, second_entity=3,
+        elapsed=timer, duration=duration,
+        start_position=(joint1x, joint1y, topz),
+        second_position=(joint2x, joint2y, topz),
+        scalar=topz)
+    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 """
@@ -60,15 +72,26 @@ function animate_compass_rise(
     topz::Real, joint1x::Real, joint1y::Real,
     joint2x::Real, joint2y::Real)
 
-    t = clamp(timer / duration, 0f0, 1f0)
-    tip_z = 0f0 + (topz - 0f0) * t
-
-    OdinJuliaBridge.lock_compass_joint1(
-        state_ptr, joint1x, joint1y, tip_z, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(
-        state_ptr, joint2x, joint2y, tip_z, sweep = false)
-    OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
-    OdinJuliaBridge.show_compass(state_ptr)
+    if !native_adapter_available()
+        t = clamp(timer / duration, 0f0, 1f0)
+        tip_z = topz * t
+        OdinJuliaBridge.lock_compass_joint1(
+            state_ptr, joint1x, joint1y, tip_z, sweep=false)
+        OdinJuliaBridge.lock_compass_joint2(
+            state_ptr, joint2x, joint2y, tip_z, sweep=false)
+        OdinJuliaBridge.set_compass_active(
+            state_ptr, 0, :white)
+        OdinJuliaBridge.show_compass(state_ptr)
+        return
+    end
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_COMPASS_RISE;
+        entity=2, second_entity=3,
+        elapsed=timer, duration=duration,
+        start_position=(joint1x, joint1y, 0f0),
+        second_position=(joint2x, joint2y, 0f0),
+        scalar=topz)
+    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 """

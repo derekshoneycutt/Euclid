@@ -1,6 +1,7 @@
 package bridge
 
 import animation_model "../core/animation"
+import modifier "../animation"
 
 import julialib "../../libs/julia/bindings"
 import "../core"
@@ -70,6 +71,7 @@ set_animation_value :: proc "c" (
     if state == nil {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
+    context = state^.saved_context
     if source == nil || byte_count <= 0 ||
         byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
@@ -222,6 +224,124 @@ notify_animation_cycle_boundary :: proc "c" (state: ^core.Euclid_General_State) 
     notify_animation_cycle_boundary_local(state)
 }
 
+// Resolve one ABI kind to a native modifier kind for transaction capture.
+native_modifier_kind_from_abi :: proc(kind: i32) -> (modifier.Modifier_Kind, bool) {
+    switch kind {
+    case 0:
+        return .Identity, true
+    case 1:
+        return .Set_Point_Position, true
+    case 2:
+        return .Pen_Descend, true
+    case 3:
+        return .Pen_Rise, true
+    case 4:
+        return .Pen_Pose, true
+    case 5:
+        return .Compass_Descend, true
+    case 6:
+        return .Compass_Rise, true
+    case 7:
+        return .Draw_Point, true
+    case 8:
+        return .Draw_Line, true
+    case 9:
+        return .Draw_Circle, true
+    case 10:
+        return .Draw_Filled_Circle, true
+    case 11:
+        return .Complete_Point, true
+    case 12:
+        return .Complete_Line, true
+    case 13:
+        return .Complete_Circle, true
+    case 14:
+        return .Translate_Point, true
+    case 15:
+        return .Rotate_Point, true
+    case 16:
+        return .Reflect_Point_Xy_Above, true
+    case 17:
+        return .Reflect_Point_Xy_Below, true
+    case:
+        return .Identity, false
+    }
+}
+
+// Capture one native explicit-time modifier request for display-thread expansion.
+@(export)
+apply_native_modifier :: proc "c" (
+    state: ^core.Euclid_General_State,
+    request_abi: Bridge_Native_Modifier_Request) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    modifier_kind, kind_valid :=
+        native_modifier_kind_from_abi(request_abi.kind)
+    if !kind_valid {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    request: modifier.Modifier_Request = {
+        kind = modifier_kind,
+        entity = request_abi.entity,
+        second_entity = request_abi.second_entity,
+        third_entity = request_abi.third_entity,
+        elapsed = request_abi.elapsed,
+        duration = request_abi.duration,
+        start_position = {
+            request_abi.start[0],
+            request_abi.start[1],
+            request_abi.start[2],
+        },
+        second_position = {
+            request_abi.second[0],
+            request_abi.second[1],
+            request_abi.second[2],
+        },
+        third_position = {
+            request_abi.third[0],
+            request_abi.third[1],
+            request_abi.third[2],
+        },
+        displacement = {
+            request_abi.displacement[0],
+            request_abi.displacement[1],
+            request_abi.displacement[2],
+        },
+        axis_a = {
+            request_abi.axis_a[0],
+            request_abi.axis_a[1],
+            request_abi.axis_a[2],
+        },
+        axis_b = {
+            request_abi.axis_b[0],
+            request_abi.axis_b[1],
+            request_abi.axis_b[2],
+        },
+        angle = request_abi.angle,
+        radius = request_abi.radius,
+        brush = request_abi.brush,
+        color_packed = request_abi.color_packed,
+        scalar = request_abi.scalar,
+        integer = int(request_abi.integer),
+        flag = request_abi.flag != 0,
+    }
+    command, captured := append_scene_command(state, .Apply_Native_Modifier)
+    if !captured {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if command == nil {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    command^.entity = request_abi.entity
+    command^.modifier = request
+    if !modifier.modifier_request_valid(request) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return BRIDGE_STATUS_OK
+}
+
 //   Return the bridge ABI version expected by Julia-side integration code.
 //
 // Returns:
@@ -239,4 +359,3 @@ get_bridge_version :: proc "c" () -> i32 {
 get_bridge_feature_flags :: proc "c" () -> i32 {
     return BRIDGE_FEATURE_FLAGS
 }
-

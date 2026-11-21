@@ -1,0 +1,25 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"interface.enable_particle_effects","value":false}}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"p=point!([0.2,0.25,0];duration=0.1); l=line!([0.25,0.25,0],[0.55,0.25,0];duration=0.1); c=circle!([0.5,0.5,0],0.12;duration=0.1); f=circle!([0.75,0.5,0],0.12;filled=true,duration=0.1); @assert all(x->x.status==0,(p,l,c,f)); println(\"native-basic-\"*\"admitted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"native-basic-admitted","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; aq=OdinJuliaBridge.get_arc_geometry(state_ptr,c.host_id); fq=OdinJuliaBridge.get_arc_geometry(state_ptr,f.host_id); @assert !status().failed && aq.status==0 && fq.status==0; println(\"native-basic-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"native-basic-verified","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"screenshot":".build/native-basic-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"particle_effects_disabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

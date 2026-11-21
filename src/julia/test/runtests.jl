@@ -32,6 +32,10 @@ using Test
         include("conic_animation_tests.jl")
     end
 
+    @testset "Native Modifier Compatibility Inventory" begin
+        include("native_modifier_inventory_tests.jl")
+    end
+
     @testset "Localized Content" begin
         include("localized_content_tests.jl")
     end

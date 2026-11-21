@@ -891,6 +891,12 @@ EuclidRepl animated jobs advance through Terminal's native animation callback, i
 the ordinary bounded scene-command capture. The display commits those commands before
 constraint solving and frame preparation. Independent `Ticks` callbacks do not advance
 drawing jobs: they run outside capture and must not mutate display-owned tool state.
+
+Basic point, line, circle, filled-sector, pen, compass, completed-form, and
+transform jobs can use native explicit-time modifiers beneath existing EuclidRepl
+helpers. Terminal queue activation, FIFO progression, elapsed progress, and finalize
+policy remain Julia/session-owned; each native modifier is copied into a bounded tick
+batch and published only after display-thread validation.
 Animation pause also pauses drawing-job progress.
 
 ```julia

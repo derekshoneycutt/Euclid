@@ -180,10 +180,21 @@ function transform_translate_point(
     if start_vec === nothing || displacement_vec === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
+    if !native_adapter_available()
+        t = normalized_progress(current_time, total_duration)
+        point = start_vec + displacement_vec * t
+        return OdinJuliaBridge.set_point_position_status(
+            state_ptr, point_id, point)
+    end
 
-    t = normalized_progress(current_time, total_duration)
-    point = start_vec + displacement_vec * t
-    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_TRANSLATE_POINT;
+        entity=point_id, elapsed=current_time, duration=total_duration,
+        start_position=start_vec, displacement=displacement_vec)
+    status = OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        return status
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
 
@@ -271,15 +282,24 @@ function transform_rotate_point(
     if start_vec === nothing || axis_a === nothing || axis_b === nothing
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
-
-    t = normalized_progress(current_time, total_duration)
-    frame_angle = Float32(theta) * t
-    rotated = rotate_point_about_axis_line(start_vec, axis_a, axis_b, frame_angle)
-    if rotated === nothing
-        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    if !native_adapter_available()
+        t = normalized_progress(current_time, total_duration)
+        frame_angle = Float32(theta) * t
+        rotated = rotate_point_about_axis_line(
+            start_vec, axis_a, axis_b, frame_angle)
+        if rotated === nothing
+            return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+        end
+        return OdinJuliaBridge.set_point_position_status(
+            state_ptr, point_id, rotated)
     end
 
-    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, rotated)
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_POINT;
+        entity=point_id, elapsed=current_time, duration=total_duration,
+        start_position=start_vec, axis_a=axis_a, axis_b=axis_b,
+        angle=theta)
+    return OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 
@@ -400,17 +420,42 @@ function transform_reflect2d_point(
     if abs(line_a[3]) > TransformEps || abs(line_b[3]) > TransformEps
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
-
-    t = normalized_progress(current_time, total_duration)
-    start_on_plane = Float32[start_vec[1], start_vec[2], 0f0]
-    angle = Float32(pi) * t
-    rotated = reflection_arc_point_above_surface(start_on_plane, line_a, line_b, angle)
-    if rotated === nothing
-        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+    if !native_adapter_available()
+        t = normalized_progress(current_time, total_duration)
+        start_on_plane = Float32[
+            start_vec[1], start_vec[2], 0f0]
+        angle = Float32(pi) * t
+        rotated = reflection_arc_point_below_surface(
+            start_on_plane, line_a, line_b, angle)
+        if rotated === nothing
+            return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+        end
+        point = Float32[
+            rotated[1], rotated[2], start_vec[3] + rotated[3]]
+        return OdinJuliaBridge.set_point_position_status(
+            state_ptr, point_id, point)
+    end
+    if !native_adapter_available()
+        t = normalized_progress(current_time, total_duration)
+        start_on_plane = Float32[
+            start_vec[1], start_vec[2], 0f0]
+        angle = Float32(pi) * t
+        rotated = reflection_arc_point_above_surface(
+            start_on_plane, line_a, line_b, angle)
+        if rotated === nothing
+            return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
+        end
+        point = Float32[
+            rotated[1], rotated[2], start_vec[3] + rotated[3]]
+        return OdinJuliaBridge.set_point_position_status(
+            state_ptr, point_id, point)
     end
 
-    point = Float32[rotated[1], rotated[2], start_vec[3] + rotated[3]]
-    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_REFLECT_POINT_XY_ABOVE;
+        entity=point_id, elapsed=current_time, duration=total_duration,
+        start_position=start_vec, axis_a=line_a, axis_b=line_b)
+    return OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 
@@ -439,16 +484,11 @@ function transform_reflect2d_point_negative(
         return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
     end
 
-    t = normalized_progress(current_time, total_duration)
-    start_on_plane = Float32[start_vec[1], start_vec[2], 0f0]
-    angle = Float32(pi) * t
-    rotated = reflection_arc_point_below_surface(start_on_plane, line_a, line_b, angle)
-    if rotated === nothing
-        return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
-    end
-
-    point = Float32[rotated[1], rotated[2], start_vec[3] + rotated[3]]
-    return OdinJuliaBridge.set_point_position_status(state_ptr, point_id, point)
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_REFLECT_POINT_XY_BELOW;
+        entity=point_id, elapsed=current_time, duration=total_duration,
+        start_position=start_vec, axis_a=line_a, axis_b=line_b)
+    return OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
 end
 
 

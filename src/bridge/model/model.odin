@@ -9,6 +9,7 @@ import dynviewmodel "../../dynview/model"
 import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import shapemodel "../../shapes/model"
+import modifier "../../animation"
 import julialib "../../../libs/julia/bindings"
 
 import "base:runtime"
@@ -67,6 +68,7 @@ Scene_Command_Kind :: enum u8 {
     Set_Hyperbola_Tool_Parameter,
     Set_Hyperbola_Tool_Active,
     Set_Shape_Orientation,
+    Apply_Native_Modifier,
 }
 
 // Animation_Reveal_Kind names one authored target without guessing from geometry.
@@ -88,6 +90,7 @@ Scene_Command :: struct {
     kind: Scene_Command_Kind,
     entity: u64,
     position: geometry.Vector3,
+    modifier: modifier.Modifier_Request,
     orientation: quaternion128,
     second_position: geometry.Vector3,
     arc: shapemodel.Shape_Arc,

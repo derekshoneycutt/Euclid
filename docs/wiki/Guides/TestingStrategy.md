@@ -81,6 +81,19 @@ Unified shape motion is covered by
 (tilted arcs, sectors, lenses/lunes, polygons, inverse motion and directed reflection)
 and [`terminal-world-curves-acceptance`](../../../tools/scenarios/geometry/terminal-world-curves-acceptance.jsonl)
 (vertical/oblique cycloids, ellipses, conics, departure and allocation baselines).
+The native basic path is covered by
+[`native-basic-acceptance`](../../../tools/scenarios/geometry/native-basic-acceptance.jsonl),
+which covers Terminal point/line/circle construction, allocation samples, capture,
+and shutdown with particle effects disabled. It does not establish intermediate
+tool-pose parity or allocation stability across repeated operations.
+Native tool regression tests use real pen and compass hosts and snap constraints
+to check descent/rise visibility, the unlocked pen upper joint, fixed-length
+tilted/dragged poses, and active compass visibility on the first and second circles.
+[`native-tool-motion-acceptance`](../../../tools/scenarios/geometry/native-tool-motion-acceptance.jsonl)
+samples ordinary queued Terminal jobs at intermediate descent, circle, tilt, drag,
+and rise poses, checking both joints after publication and capturing each pose.
+It sets the Julia-owned job elapsed time while animation scheduling is paused,
+then resumes ordinary native ticks to evaluate and publish each sample.
 Native tests assert rigid evaluation equivariance, orientation transport/lifetime,
 atomic final-plane validation, and split-triangle area/winding conservation.
 Julia tests compare every typed family against an independent Rodrigues oracle,

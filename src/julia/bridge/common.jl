@@ -379,7 +379,7 @@ const SHAPE_KIND_PARABOLA = Int32(9)
 const SHAPE_KIND_HYPERBOLA = Int32(10)
 const SHAPE_KIND_POLYGON = Int32(13)
 
-const BRIDGE_VERSION = Int32(15)
+const BRIDGE_VERSION = Int32(16)
 
 const HYPERBOLA_POSITIVE = Int32(1)
 const HYPERBOLA_NEGATIVE = Int32(2)
@@ -393,6 +393,44 @@ const BRIDGE_FEATURE_CIRCLE_REGIONS = Int32(1 << 9)
 const BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION = Int32(1 << 10)
 const BRIDGE_FEATURE_SETTLING_FORMATION = Int32(1 << 11)
 const BRIDGE_FEATURE_CONICS = Int32(1 << 12)
+const BRIDGE_FEATURE_NATIVE_MODIFIERS = Int32(1 << 13)
+
+"""C-compatible native explicit-time modifier request."""
+struct BridgeNativeModifierRequest
+    kind::Int32
+    entity::UInt64
+    second_entity::UInt64
+    third_entity::UInt64
+    elapsed::Cfloat
+    duration::Cfloat
+    start::NTuple{3,Cfloat}
+    second::NTuple{3,Cfloat}
+    third::NTuple{3,Cfloat}
+    displacement::NTuple{3,Cfloat}
+    axis_a::NTuple{3,Cfloat}
+    axis_b::NTuple{3,Cfloat}
+    angle::Cfloat
+    radius::Cfloat
+    brush::Cfloat
+    color_packed::UInt32
+    scalar::Cfloat
+    integer::Int32
+    flag::Bool
+end
+
+"""Construct a native modifier request with zeroed optional payload fields."""
+function BridgeNativeModifierRequest(
+    kind::Integer, entity::Integer, elapsed::Real, duration::Real,
+    start, displacement)
+    zero3 = (Cfloat(0), Cfloat(0), Cfloat(0))
+    return BridgeNativeModifierRequest(
+        Int32(kind), UInt64(entity), UInt64(0), UInt64(0),
+        Cfloat(elapsed), Cfloat(duration),
+        (Cfloat(start[1]), Cfloat(start[2]), Cfloat(start[3])), zero3, zero3,
+        (Cfloat(displacement[1]), Cfloat(displacement[2]), Cfloat(displacement[3])),
+        zero3, zero3,
+        Cfloat(0), Cfloat(0), Cfloat(0), UInt32(0), Cfloat(0), Int32(0), false)
+end
 
 const TROCHOID_EXTERNAL = Int32(0)
 const TROCHOID_INTERNAL = Int32(1)
@@ -412,6 +450,9 @@ function bridge_color(c::Colorant)
         UInt8(round(Int, rgba.b * 255.0)),
         UInt8(round(Int, rgba.alpha * 255.0)))
 end
+
+"""Preserve an already-packed bridge color without conversion or rounding."""
+bridge_color(color::BridgeColor) = color
 
 """Return one named Julia logo color, or `nothing` for other color names."""
 function julia_palette_color(name::AbstractString)

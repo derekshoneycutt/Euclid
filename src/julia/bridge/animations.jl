@@ -50,6 +50,104 @@ function reveal_sweep!(
         Cfloat(duration)::Cfloat)::Int32
 end
 
+const NATIVE_MODIFIER_IDENTITY = Int32(0)
+const NATIVE_MODIFIER_SET_POINT_POSITION = Int32(1)
+const NATIVE_MODIFIER_PEN_DESCEND = Int32(2)
+const NATIVE_MODIFIER_PEN_RISE = Int32(3)
+const NATIVE_MODIFIER_PEN_POSE = Int32(4)
+const NATIVE_MODIFIER_COMPASS_DESCEND = Int32(5)
+const NATIVE_MODIFIER_COMPASS_RISE = Int32(6)
+const NATIVE_MODIFIER_DRAW_POINT = Int32(7)
+const NATIVE_MODIFIER_DRAW_LINE = Int32(8)
+const NATIVE_MODIFIER_DRAW_CIRCLE = Int32(9)
+const NATIVE_MODIFIER_DRAW_FILLED_CIRCLE = Int32(10)
+const NATIVE_MODIFIER_COMPLETE_POINT = Int32(11)
+const NATIVE_MODIFIER_COMPLETE_LINE = Int32(12)
+const NATIVE_MODIFIER_COMPLETE_CIRCLE = Int32(13)
+const NATIVE_MODIFIER_TRANSLATE_POINT = Int32(14)
+const NATIVE_MODIFIER_ROTATE_POINT = Int32(15)
+const NATIVE_MODIFIER_REFLECT_POINT_XY_ABOVE = Int32(16)
+const NATIVE_MODIFIER_REFLECT_POINT_XY_BELOW = Int32(17)
+
+"""Capture one native explicit-time identity modifier in the current scene batch."""
+function apply_native_identity(
+    state_ptr::Ptr{Cvoid})
+    request = BridgeNativeModifierRequest(
+        NATIVE_MODIFIER_IDENTITY, UInt64(0), Cfloat(0), Cfloat(0),
+        (Cfloat(0), Cfloat(0), Cfloat(0)),
+        (Cfloat(0), Cfloat(0), Cfloat(0)))
+    return @ccall apply_native_modifier(
+        state_ptr::Ptr{Cvoid},
+        request::BridgeNativeModifierRequest)::Int32
+end
+
+"""Capture one native explicit-point-position sample in the current scene batch."""
+function apply_native_set_point_position(
+    state_ptr::Ptr{Cvoid}, entity::Integer,
+    elapsed::Real, duration::Real,
+    start_position, displacement)
+    start = (Cfloat(start_position[1]), Cfloat(start_position[2]),
+        Cfloat(start_position[3]))
+    delta = (Cfloat(displacement[1]), Cfloat(displacement[2]),
+        Cfloat(displacement[3]))
+    request = BridgeNativeModifierRequest(
+        NATIVE_MODIFIER_SET_POINT_POSITION, UInt64(entity),
+        Cfloat(elapsed), Cfloat(duration), start, delta)
+    return @ccall apply_native_modifier(
+        state_ptr::Ptr{Cvoid},
+        request::BridgeNativeModifierRequest)::Int32
+end
+
+"""Capture a typed native modifier request in the current scene transaction."""
+function apply_native_modifier_request(
+    state_ptr::Ptr{Cvoid}, request::BridgeNativeModifierRequest)
+    return @ccall apply_native_modifier(
+        state_ptr::Ptr{Cvoid},
+        request::BridgeNativeModifierRequest)::Int32
+end
+
+"""Build a native modifier request from one explicit typed field set."""
+function native_modifier_request(
+    kind::Integer;
+    entity::Integer=0,
+    second_entity::Integer=0,
+    third_entity::Integer=0,
+    elapsed::Real=0,
+    duration::Real=0,
+    start_position=(0f0, 0f0, 0f0),
+    second_position=(0f0, 0f0, 0f0),
+    third_position=(0f0, 0f0, 0f0),
+    displacement=(0f0, 0f0, 0f0),
+    axis_a=(0f0, 0f0, 0f0),
+    axis_b=(0f0, 0f0, 1f0),
+    angle::Real=0,
+    radius::Real=0,
+    brush::Real=0,
+    color::BridgeColor=BridgeColor(0, 0, 0, 0),
+    scalar::Real=0,
+    integer::Integer=0,
+    flag::Bool=false)
+    packed_color = UInt32(color.r) |
+        (UInt32(color.g) << 8) |
+        (UInt32(color.b) << 16) |
+        (UInt32(color.a) << 24)
+    return BridgeNativeModifierRequest(
+        Int32(kind), UInt64(entity), UInt64(second_entity),
+        UInt64(third_entity), Cfloat(elapsed), Cfloat(duration),
+        (Cfloat(start_position[1]), Cfloat(start_position[2]),
+            Cfloat(start_position[3])),
+        (Cfloat(second_position[1]), Cfloat(second_position[2]),
+            Cfloat(second_position[3])),
+        (Cfloat(third_position[1]), Cfloat(third_position[2]),
+            Cfloat(third_position[3])),
+        (Cfloat(displacement[1]), Cfloat(displacement[2]),
+            Cfloat(displacement[3])),
+        (Cfloat(axis_a[1]), Cfloat(axis_a[2]), Cfloat(axis_a[3])),
+        (Cfloat(axis_b[1]), Cfloat(axis_b[2]), Cfloat(axis_b[3])),
+        Cfloat(angle), Cfloat(radius), Cfloat(brush), packed_color,
+        Cfloat(scalar), Int32(integer), flag)
+end
+
 
 """Write one unsigned integer in fixed-width little-endian form."""
 function _animation_schema_write_uint(io::IO, value::Unsigned, width::Int)

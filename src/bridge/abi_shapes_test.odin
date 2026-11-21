@@ -801,6 +801,168 @@ bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing
         particlemodel.DUST_TOOL_CONTACT_CAP)
 }
 
+// Verify native circle markers publish to one real arc host.
+@(test)
+bridge_native_circle_modifier_commits :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    service := new(Julia_Runtime_Service, context.allocator)
+    defer free(service)
+    service^.animation_generation = 4
+    service^.animation_last_committed_sequence = 0
+    service^.animation_progress = 0
+    state^.julia_runtime_service = service
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+
+    state^.world_compass, _ = shapes.world_create_compass(&state^.shape_world, {
+        joint1 = {0, 0, 0},
+        joint2 = {0.12, 0, 0},
+        limb_length = 0.2,
+    })
+    arc := shape_create_arc(state, {0, 0, 0},
+        {
+            radius = 0.12,
+            start_theta = 0,
+            sweep_theta = 1,
+        },
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t, arc.status, i32(BRIDGE_STATUS_OK))
+    batch: Scene_Command_Batch
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.25
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(9),
+            entity = arc.shape,
+            second_entity = 2,
+            third_entity = 3,
+            elapsed = 0.5,
+            duration = 1,
+            start = {0, 0, 0},
+            second = {0.12, 0, 0},
+            angle = f32(1),
+            radius = 0.12,
+            brush = 0.1,
+        }),
+        i32(BRIDGE_STATUS_OK))
+    end_scene_command_batch(state)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    geometry, found := shapemodel.shape_component_get(
+        &state^.shape_world.arcs, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(arc.shape))
+    testing.expect(t, found)
+    testing.expect_value(t, geometry.sweep_theta, f32(0.5))
+}
+
+// Verify native modifier request layout matches the 144-byte Julia ABI.
+@(test)
+bridge_native_modifier_request_layout :: proc(t: ^testing.T) {
+    testing.expect_value(t, size_of(Bridge_Native_Modifier_Request), 144)
+}
+
+// Verify native modifier markers expand once and publish through a real scene batch.
+@(test)
+bridge_native_modifier_transaction_and_mixed_order :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+
+    point := shape_create_point(state, bridge_shape_test_input({0, 0, 0}))
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.25
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(0),
+        }),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(1),
+            entity = point.entity,
+            elapsed = 0.25,
+            duration = 1,
+            start = {1, 2, 3},
+            displacement = {4, 4, 4},
+        }),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, shape_set_position(state, point.entity,
+        geometry.Vector3{9, 9, 9}), i32(BRIDGE_STATUS_OK))
+    end_scene_command_batch(state)
+
+    testing.expect_value(t, batch.command_count, 3)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    position, found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(point.entity))
+    testing.expect(t, found)
+    testing.expect_value(t, position.position,
+        geometry.Vector3{9, 9, 9})
+
+    before_position := position.position
+    replay: Scene_Command_Batch
+    replay = batch
+    replay.animation = nil
+    testing.expect(t, !commit_scene_command_batch(state, &replay))
+    replay_position, replay_found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(point.entity))
+    testing.expect(t, replay_found)
+    testing.expect_value(t, replay_position.position, before_position)
+}
+
+// Verify malformed modifiers and capture overflow reject without canonical mutation.
+@(test)
+bridge_native_modifier_malformed_and_overflow :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+
+    batch: Scene_Command_Batch
+    begin_scene_command_batch(state, &batch)
+    batch.animation_progress = 0
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(1),
+            entity = 0,
+            elapsed = 0,
+            duration = 1,
+        }),
+        i32(BRIDGE_STATUS_INVALID_ARGUMENT))
+    end_scene_command_batch(state)
+    testing.expect(t, !commit_scene_command_batch(state, &batch))
+
+    overflow: Scene_Command_Batch
+    begin_scene_command_batch(state, &overflow)
+    overflow.animation_progress = 0
+    for _ in 0..<SCENE_COMMAND_BATCH_CAPACITY {
+        command, captured := append_scene_command(state, .Notify_Animation_Cycle_Boundary)
+        testing.expect(t, captured)
+        testing.expect(t, command != nil)
+    }
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(0),
+        }),
+        i32(BRIDGE_STATUS_OUT_OF_CAPACITY))
+    end_scene_command_batch(state)
+    testing.expect(t, !commit_scene_command_batch(state, &overflow))
+}
+
 // Verify accepted batches replace drawing activity and rejected batches clear it.
 @(test)
 bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.T) {
