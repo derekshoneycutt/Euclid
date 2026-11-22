@@ -1,0 +1,76 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"type":"highlight_pen!([0.3,0.4,0],[0.7,0.6,0];duration=1000); EUCLID_REPL_RUNTIME.session.active_job.elapsed=350f0; println(\"compound-\"*\"pen-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-pen-queued","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"screenshot":".build/native-compound-pen.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"a=OdinJuliaBridge.get_pen_joint1_position(state_ptr); b=OdinJuliaBridge.get_pen_joint2_position(state_ptr); @assert isapprox(a[1],0.5;atol=0.002) && isapprox(a[2],0.5;atol=0.002) && isapprox(sum(abs2,b.-a),0.35^2;atol=0.001); EUCLID_REPL_RUNTIME.session.active_job.elapsed=650f0; println(\"compound-\"*\"pen-return\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-pen-return","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"type":"a=OdinJuliaBridge.get_pen_joint1_position(state_ptr); b=OdinJuliaBridge.get_pen_joint2_position(state_ptr); @assert b[1]<a[1] && b[2]<a[2]; EUCLID_REPL_RUNTIME.session.active_job.elapsed=1000f0; highlight_compass!([0.5,0.5,0],[0.7,0.5,0],-pi,0.2;filled=true,duration=1000); println(\"compound-\"*\"compass-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-compass-queued","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"type":"EUCLID_REPL_RUNTIME.session.active_job.elapsed=350f0; println(\"compound-\"*\"compass-sample\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-compass-sample","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"screenshot":".build/native-compound-compass.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"b=OdinJuliaBridge.get_compass_joint2_position(state_ptr); @assert isapprox(b[1],0.5;atol=0.002) && isapprox(b[2],0.3;atol=0.002); EUCLID_REPL_RUNTIME.session.active_job.elapsed=1000f0; println(\"compound-\"*\"finish-highlight\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-finish-highlight","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"t=triangle!([0.3,0.3,0],[0.7,0.3,0],[0.5,0.7,0];duration=0.6); q=label!(\"Native\",[0.3,0.8,0];duration=0.2); r=lens!([0.4,0.5,0],0.2,[0.6,0.5,0],0.2;duration=0.3); println(\"compound-\"*\"regions-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-regions-queued","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && t.status==0 && q.status==0 && r.status==0; println(\"compound-\"*\"regions-complete\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-regions-complete","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/native-compound-regions.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"highlight_pen!([0.3,0.4,0],[0.7,0.6,0];duration=1000); println(\"compound-\"*\"interrupt-reset\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-interrupt-reset","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_reset_committed","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@assert status().drained && !status().failed; highlight_compass!([0.5,0.5,0],[0.7,0.5,0],pi,0.2;filled=true,duration=1000); println(\"compound-\"*\"interrupt-reload\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-interrupt-reload","timeout_ms":10000}
+{"do":"reload_runtime","as":"reload"}
+{"wait_event":"runtime_reload_committed","correlation":"reload","timeout_ms":20000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@assert status().drained && !status().failed; highlight_pen!([0.4,0.4,0],[0.6,0.6,0];duration=0.2); highlight_compass!([0.5,0.5,0],[0.7,0.5,0],pi,0.2;duration=0.2); println(\"compound-\"*\"reloaded\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-reloaded","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; println(\"compound-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"compound-verified","timeout_ms":20000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -3,6 +3,16 @@ function place_cycloid_tools(state_ptr::Ptr{Cvoid}, first, second,
     radius::Real, tracer_distance::Real, parameter::Real,
     elevation::Real; parameter_start::Real, parameter_finish::Real,
     tracer_phase::Real=0f0)
+    if native_adapter_available()
+        submit_cycloid_motion(state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_CYCLOID_PLACE,
+            first, second, radius; tracer_distance, parameter_start, parameter_finish,
+            draw_parameter=parameter, topz=elevation, tracer_phase)
+        raised_first = (first[1], first[2], first[3] + elevation)
+        raised_second = (second[1], second[2], second[3] + elevation)
+        return EuclidGeometry.cycloid_point(raised_first, raised_second,
+            radius, tracer_distance, parameter;
+            parameter_start, parameter_finish, tracer_phase)
+    end
     raised_first = (first[1], first[2], first[3] + elevation)
     raised_second = (second[1], second[2], second[3] + elevation)
     pose = EuclidGeometry.cycloid_tool_pose(raised_first, raised_second,
@@ -24,6 +34,12 @@ function animate_cycloid_descend(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, topz::Real, first, second, radius::Real;
     tracer_distance::Real, parameter_start::Real, parameter_finish::Real,
     tracer_phase::Real=0f0)
+    if native_adapter_available()
+        return submit_cycloid_motion(
+            state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_CYCLOID_DESCEND,
+            first, second, radius; timer, duration, topz, tracer_distance,
+            parameter_start, parameter_finish, tracer_phase)
+    end
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     place_cycloid_tools(state_ptr, first, second, radius, tracer_distance,
         parameter_start, topz * (1f0 - normalized_progress(timer, duration));
@@ -38,6 +54,13 @@ function animate_draw_cycloid(state_ptr::Ptr{Cvoid}, timer::Real,
     tracer_distance::Real, parameter_start::Real, parameter_finish::Real,
     curve_id::Integer, color, brush::Real, tracer_phase::Real=0f0,
     draw_parameter::Real=parameter_finish)
+    if native_adapter_available()
+        return submit_cycloid_motion(
+            state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_CYCLOID_DRAW,
+            first, second, radius; timer, duration, tracer_distance,
+            parameter_start, parameter_finish, tracer_phase,
+            draw_parameter, curve_id, color, brush)
+    end
     parameter = curve_parameter(timer, duration, parameter_start, draw_parameter)
     tracer = place_cycloid_tools(state_ptr, first, second, radius, tracer_distance,
         parameter, 0f0; parameter_start, parameter_finish, tracer_phase)
@@ -55,8 +78,31 @@ function animate_cycloid_rise(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, topz::Real, first, second, radius::Real;
     tracer_distance::Real, parameter_start::Real, parameter_finish::Real,
     tracer_phase::Real=0f0, draw_parameter::Real=parameter_finish)
+    if native_adapter_available()
+        return submit_cycloid_motion(
+            state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_CYCLOID_RISE,
+            first, second, radius; timer, duration, topz, tracer_distance,
+            parameter_start, parameter_finish, tracer_phase, draw_parameter)
+    end
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     place_cycloid_tools(state_ptr, first, second, radius, tracer_distance,
         draw_parameter, topz * normalized_progress(timer, duration);
         parameter_start, parameter_finish, tracer_phase)
+end
+
+"""Copy literal-rail inputs for native rolling mechanics; retain no sampled state."""
+function submit_cycloid_motion(
+    state_ptr::Ptr{Cvoid}, kind::Integer, first, second, radius::Real;
+    tracer_distance::Real, parameter_start::Real, parameter_finish::Real,
+    draw_parameter::Real=parameter_start, timer::Real=0, duration::Real=0,
+    topz::Real=0, tracer_phase::Real=0, curve_id::Integer=0,
+    color=:white, brush::Real=0)
+    request = OdinJuliaBridge.native_modifier_request(kind;
+        entity=curve_id, elapsed=timer, duration=duration,
+        start_position=first, second_position=second,
+        third_position=(parameter_start, parameter_finish, draw_parameter),
+        displacement=(tracer_distance, tracer_phase, 0f0),
+        radius=radius, scalar=topz, brush=brush,
+        color=OdinJuliaBridge.bridge_color(color))
+    return submit_native_modifier(state_ptr, request)
 end

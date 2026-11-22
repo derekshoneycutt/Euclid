@@ -61,7 +61,7 @@ const ScenarioRunner = EuclidScenarioRunner
     end
 
     sources = ScenarioRunner.scenario_sources()
-    @test length(sources) == 125
+    @test length(sources) == 128
     @test all(source -> occursin('/', source), values(sources))
     @test isempty(filter(endswith(".jsonl"), readdir(ScenarioRunner.SCENARIO_ROOT)))
     workflows = first.(ScenarioRunner.scenario_workflows())

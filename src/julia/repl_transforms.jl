@@ -260,19 +260,38 @@ end
 function render_rigid_transform!(
     state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::TransformPayload,
     spec::Union{TranslateSpec,RotateSpec})
-    progress = clamp(Float32(elapsed / duration), 0f0, 1f0)
-    rotation = spec isa RotateSpec ? motion_rotation(spec, progress) :
-        (0f0, 0f0, 0f0, 1f0)
     for (index, id) in pairs(payload.point_ids)
-        point = motion_position(spec, payload.start_positions[index], progress, rotation)
-        checked_terminal_status(
-            OdinJuliaBridge.set_point_position_status(state_ptr, id, point),
-            "shape defining-point motion")
+        request = rigid_position_request(
+            spec, id, payload.start_positions[index], elapsed, duration)
+        checked_terminal_status(OdinJuliaBridge.apply_native_modifier_request(
+            state_ptr, request), "shape defining-point motion")
     end
     if payload.oriented && spec isa RotateSpec
-        orientation = motion_compose(rotation, payload.start_orientation)
-        checked_terminal_status(OdinJuliaBridge.set_shape_orientation(
-            state_ptr, payload.host_id, orientation), "shape plane rotation")
+        orientation = payload.start_orientation
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_SHAPE_ORIENTATION;
+            entity=payload.host_id, elapsed, duration,
+            axis_a=spec.axis_a, axis_b=spec.axis_b, angle=spec.theta,
+            displacement=orientation[1:3], scalar=orientation[4])
+        checked_terminal_status(OdinJuliaBridge.apply_native_modifier_request(
+            state_ptr, request), "shape plane rotation")
     end
+
     return nothing
+end
+
+"""Copy activation-time translation inputs without computing a sampled position."""
+function rigid_position_request(spec::TranslateSpec, id, start, elapsed, duration)
+    return OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_TRANSLATE_POINT;
+        entity=id, start_position=start,
+        displacement=spec.displacement, elapsed, duration)
+end
+
+"""Copy a signed world-axis rotation without shortest-path interpolation."""
+function rigid_position_request(spec::RotateSpec, id, start, elapsed, duration)
+    return OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_POINT;
+        entity=id, start_position=start, axis_a=spec.axis_a, axis_b=spec.axis_b,
+        angle=spec.theta, elapsed, duration)
 end

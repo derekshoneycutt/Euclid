@@ -435,22 +435,6 @@ function transform_reflect2d_point(
         return OdinJuliaBridge.set_point_position_status(
             state_ptr, point_id, point)
     end
-    if !native_adapter_available()
-        t = normalized_progress(current_time, total_duration)
-        start_on_plane = Float32[
-            start_vec[1], start_vec[2], 0f0]
-        angle = Float32(pi) * t
-        rotated = reflection_arc_point_above_surface(
-            start_on_plane, line_a, line_b, angle)
-        if rotated === nothing
-            return OdinJuliaBridge.BRIDGE_STATUS_INVALID_ARGUMENT
-        end
-        point = Float32[
-            rotated[1], rotated[2], start_vec[3] + rotated[3]]
-        return OdinJuliaBridge.set_point_position_status(
-            state_ptr, point_id, point)
-    end
-
     request = OdinJuliaBridge.native_modifier_request(
         OdinJuliaBridge.NATIVE_MODIFIER_REFLECT_POINT_XY_ABOVE;
         entity=point_id, elapsed=current_time, duration=total_duration,
@@ -696,7 +680,15 @@ function animate_reflect2d_filled_angle_marker(
     total_duration::Real=0f0,
     preserve_interior::Bool=true)
 
-    # TODO : This looks like ass lmfao we should fix this.
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_REFLECT_ANGLE_MARKER;
+            entity=marker_host_id, elapsed=current_time, duration=total_duration,
+            start_position=start_center, second_position=start_point,
+            third_position=end_point, axis_a=line_point_a, axis_b=line_point_b,
+            flag=preserve_interior)
+        return OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    end
 
     reflected_center = reflected_arc_point_xy_progress(
         start_center, line_point_a, line_point_b, current_time, total_duration)

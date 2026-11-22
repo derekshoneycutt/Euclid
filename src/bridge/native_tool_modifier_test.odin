@@ -9,6 +9,174 @@ import shapemodel "../shapes/model"
 import testing "core:testing"
 import math "core:math"
 
+// Read a defining point after native publication and ordinary constraint solving.
+native_shape_test_position :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State, packed: u64) -> geometry.Vector3 {
+    transform, found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(packed))
+    testing.expect(t, found)
+    return transform.position
+}
+
+// Verify an extension publishes the original anchor and the sampled moving endpoint.
+@(test)
+native_extension_publishes_real_line_geometry :: proc(t: ^testing.T) {
+    state := native_tool_test_state()
+    defer free(state, context.allocator)
+    line := shape_create_line(state, {0.2, 0.3, 0}, {0.4, 0.3, 0},
+        bridge_shape_test_input({}).style)
+    native_tool_test_sample(t, state, {
+        kind = .Extend_Line,
+        entity = line.shape,
+        second_entity = line.first,
+        third_entity = line.second,
+        elapsed = 0.5,
+        duration = 1,
+        start_position = {0.4, 0.3, 0},
+        second_position = {0.6, 0.3, 0},
+        third_position = {0.2, 0.3, 0},
+        radius = 0.14,
+        angle = f32(math.PI / 3),
+        brush = 0.01,
+    })
+    expect_native_tool_position(t, native_shape_test_position(t, state, line.first),
+        geometry.Vector3{0.2, 0.3, 0})
+    expect_native_tool_position(t, native_shape_test_position(t, state, line.second),
+        geometry.Vector3{0.5, 0.3, 0})
+}
+
+// Verify reflected markers publish through both canonical transform and arc owners.
+@(test)
+native_reflected_marker_publishes_real_arc :: proc(t: ^testing.T) {
+    state := native_tool_test_state()
+    defer free(state, context.allocator)
+    arc := shape_create_arc(state, {0.4, 0.5, 0},
+        {
+            radius = 0.1,
+        }, bridge_shape_test_input({}).style)
+    native_tool_test_sample(t, state, {
+        kind = .Reflect_Angle_Marker,
+        entity = arc.shape,
+        elapsed = 1,
+        duration = 1,
+        start_position = {0.4, 0.5, 0},
+        second_position = {0.5, 0.5, 0},
+        third_position = {0.4, 0.6, 0},
+        axis_a = {0, 0.4, 0},
+        axis_b = {1, 0.4, 0},
+        flag = true,
+    })
+    expect_native_tool_position(t, native_shape_test_position(t, state, arc.shape),
+        geometry.Vector3{0.4, 0.3, 0})
+    arc_geometry, found := shapemodel.shape_component_get(&state^.shape_world.arcs,
+        &state^.shape_world.registry, shapemodel.shape_entity_unpack(arc.shape))
+    testing.expect(t, found && math.abs(arc_geometry.sweep_theta -
+        f32(math.PI / 2)) < 1e-6)
+}
+
+// Keep every compound ABI discriminator symmetric with its native evaluator.
+@(test)
+native_compound_abi_kinds_are_closed :: proc(t: ^testing.T) {
+    kinds: [12]modifier.Modifier_Kind = {
+        .Pen_Tilt, .Pen_Cone, .Pen_Drag, .Pen_Transfer,
+        .Compass_Transfer, .Compass_Highlight, .Line_Segment,
+        .Reflect_Angle_Marker, .Pen_Highlight_Point, .Pen_Stroke,
+        .Extend_Line, .Two_Segment_Stroke,
+    }
+    for kind, index in kinds {
+        actual, valid := native_modifier_kind_from_abi(i32(index + 18))
+        testing.expect(t, valid)
+        testing.expect_value(t, actual, kind)
+    }
+    _, valid := native_modifier_kind_from_abi(47)
+    testing.expect(t, !valid)
+}
+
+// Preserve caller-owned visibility during pen travel instead of implicitly showing it.
+@(test)
+native_pen_transfer_preserves_hidden_host :: proc(t: ^testing.T) {
+    state := native_tool_test_state()
+    defer free(state, context.allocator)
+    hide_pen(state)
+    native_tool_test_sample(t, state, {
+        kind = .Pen_Transfer,
+        second_entity = 1,
+        elapsed = 0.5,
+        duration = 1,
+        start_position = {0.4, 0.6, 0},
+        second_position = {0.6, 0.4, 0},
+        radius = 0.14,
+        scalar = 0.2,
+        integer = 1,
+    })
+    style, found := shapemodel.shape_component_get(
+        &state^.shape_world.render_styles, &state^.shape_world.registry,
+        state^.world_pen.shape)
+    testing.expect(t, found && !style.visible)
+    expect_native_tool_position(t, get_pen_joint1_position(state),
+        geometry.Vector3{0.5, 0.5, 0.2})
+}
+
+// Verify native compound pen motion survives real constraint solving and retirement.
+@(test)
+native_compound_pen_samples_preserve_tool_ownership :: proc(t: ^testing.T) {
+    state := native_tool_test_state()
+    defer free(state, context.allocator)
+    kinds: [4]modifier.Modifier_Kind = {
+        .Pen_Tilt, .Pen_Cone, .Pen_Stroke, .Pen_Highlight_Point,
+    }
+    for kind in kinds {
+        native_tool_test_sample(t, state, {
+            kind = kind,
+            second_entity = 1,
+            elapsed = 0.5,
+            duration = 1,
+            start_position = {0.4, 0.6, 0},
+            second_position = {0.6, 0.4, 0},
+            radius = 0.14,
+            angle = f32(math.PI / 3),
+            brush = f32(math.PI / 2),
+            scalar = 6,
+        })
+        first := get_pen_joint1_position(state)
+        second := get_pen_joint2_position(state)
+        delta := second - first
+        testing.expect(t, math.abs(delta.x * delta.x + delta.y * delta.y +
+            delta.z * delta.z - 0.14 * 0.14) < 1e-6)
+        lock, found := tool_lock_constraint(state, state^.world_pen.joint2)
+        testing.expect(t, found && !lock.enabled)
+        hide_pen(state)
+        testing.expect_value(t, shape_set_visible(state,
+            shapemodel.shape_entity_pack(state^.world_pen.shape), 0),
+            i32(BRIDGE_STATUS_OK))
+    }
+}
+
+// Verify highlights retain both ordinary locks without enabling filled sweep contact.
+@(test)
+native_compass_highlight_preserves_real_locks :: proc(t: ^testing.T) {
+    state := native_tool_test_state()
+    defer free(state, context.allocator)
+    native_tool_test_sample(t, state, {
+        kind = .Compass_Highlight,
+        entity = 2,
+        second_entity = 3,
+        elapsed = 0.5,
+        duration = 1,
+        start_position = {0.4, 0.6, 0},
+        second_position = {0.6, 0.6, 0},
+        angle = -f32(math.PI),
+        radius = 0.2,
+        flag = true,
+    })
+    expect_native_tool_position(t, get_compass_joint2_position(state),
+        geometry.Vector3{0.4, 0.4, 0})
+    expect_native_tool_style(t, state, state^.world_compass.shape, 3)
+    lock, found := tool_lock_constraint(state, state^.world_compass.joint2)
+    testing.expect(t, found && lock.enabled)
+}
+
 // Allow solver roundoff without hiding a measurable tool-pose displacement.
 expect_native_tool_position :: proc(
     t: ^testing.T, actual, expected: geometry.Vector3) {

@@ -48,3 +48,11 @@ end
 @inline native_adapter_available() =
     isdefined(OdinJuliaBridge, :native_modifier_request) &&
     isdefined(OdinJuliaBridge, :apply_native_modifier_request)
+
+"""Submit a sampled native operation and surface capture rejection to its caller."""
+function submit_native_modifier(state_ptr::Ptr{Cvoid}, request)
+    status = OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("Native animation bridge operation failed with status $status")
+    return nothing
+end

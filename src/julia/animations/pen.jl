@@ -11,7 +11,7 @@ function place_pen_at_angles(
             entity=0, second_entity=1,
             start_position=(pen_x, pen_y, base_z),
             radius=PenLength, angle=floor_angle, scalar=azimuth)
-        OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+        submit_native_modifier(state_ptr, request)
         return
     end
     horizontal_length = PenLength * Float32(cos(floor_angle))
@@ -74,7 +74,7 @@ function animate_pen_descend(
         start_position=(penx, peny, topz),
         second_position=(penx, peny, topz),
         scalar=topz, brush=PenLength)
-    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    submit_native_modifier(state_ptr, request)
 end
 
 """
@@ -118,7 +118,7 @@ function animate_pen_rise(
         start_position=(penx, peny, 0f0),
         second_position=(penx, peny, 0f0),
         scalar=topz, brush=PenLength)
-    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    submit_native_modifier(state_ptr, request)
 end
 """Raise the pen from an explicit starting height without changing its length."""
 function animate_pen_rise(
@@ -131,7 +131,7 @@ function animate_pen_rise(
             entity=0, second_entity=1, elapsed=timer, duration=duration,
             start_position=(penx, peny, startz),
             second_position=(penx, peny, startz), scalar=topz, brush=PenLength)
-        OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+        submit_native_modifier(state_ptr, request)
         return
     end
     progress = normalized_progress(timer, duration)
@@ -169,6 +169,14 @@ function animate_pen_tilt(
     penpos::AbstractVector{<:Real},
     startθ::Real, endθ::Real, azimuth::Real)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_TILT;
+            entity=0, second_entity=1, elapsed=timer, duration=duration,
+            start_position=penpos, radius=PenLength,
+            angle=startθ, brush=endθ, scalar=azimuth)
+        return submit_native_modifier(state_ptr, request)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
     floor_angle = startθ + (endθ - startθ) * t
 
@@ -211,6 +219,14 @@ function animate_pen_cone(
     penpos::AbstractVector{<:Real}, pen_floor_angle::Real,
     spin_speed::Real)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_CONE;
+            entity=0, second_entity=1, elapsed=timer,
+            start_position=penpos, radius=PenLength,
+            angle=pen_floor_angle, scalar=spin_speed)
+        return submit_native_modifier(state_ptr, request)
+    end
     θ = timer * spin_speed
 
     place_pen_at_angles(state_ptr, penpos, pen_floor_angle, θ)
@@ -244,6 +260,15 @@ function animate_pen_drag(
     endpos::AbstractVector{<:Real},
     dragθ::Real, drag_azimuth::Real, color)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_DRAG;
+            entity=0, second_entity=1, elapsed=timer, duration=duration,
+            start_position=startpos, second_position=endpos, radius=PenLength,
+            angle=dragθ, scalar=drag_azimuth, color=OdinJuliaBridge.bridge_color(color))
+        submit_native_modifier(state_ptr, request)
+        return startpos + (endpos - startpos) * normalized_progress(timer, duration)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
 
     tippos = startpos + (endpos - startpos) * t
@@ -284,6 +309,16 @@ function animate_pen_arcmove(
     endpos::AbstractVector{<:Real},
     height::Real, periods::Integer, strikecolor)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_TRANSFER;
+            entity=0, second_entity=1, elapsed=timer, duration=duration,
+            start_position=startpos, second_position=endpos, radius=PenLength,
+            scalar=height, integer=periods, flag=strikecolor != :none,
+            color=OdinJuliaBridge.bridge_color(
+                strikecolor == :none ? :white : strikecolor))
+        return submit_native_modifier(state_ptr, request)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_pen_active(state_ptr, 0, :white)
 

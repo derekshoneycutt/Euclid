@@ -7,6 +7,14 @@ function place_trochoid_tools(state_ptr::Ptr{Cvoid}, center, mode,
     geometry_mode = mode == OdinJuliaBridge.TROCHOID_EXTERNAL ?
         EuclidGeometry.TrochoidExternal : EuclidGeometry.TrochoidInternal
     raised_center = (center[1], center[2], center[3] + elevation)
+    if native_adapter_available()
+        submit_trochoid_motion(state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_TROCHOID_PLACE,
+            center, parameter; mode, fixed_radius, rolling_radius, tracer_distance,
+            draw_parameter=parameter, topz=elevation, rotation, tracer_phase)
+        return EuclidGeometry.trochoid_point(raised_center, geometry_mode,
+            fixed_radius, rolling_radius, tracer_distance, parameter;
+            rotation, tracer_phase)
+    end
     pose = EuclidGeometry.trochoid_tool_pose(raised_center, geometry_mode,
         fixed_radius, rolling_radius, parameter; rotation)
     tracer = EuclidGeometry.trochoid_point(raised_center, geometry_mode,
@@ -25,6 +33,12 @@ function animate_trochoid_descend(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, topz::Real, center, parameter_start::Real;
     mode, fixed_radius::Real, rolling_radius::Real, tracer_distance::Real,
     rotation::Real=0f0, tracer_phase::Real=0f0)
+    if native_adapter_available()
+        return submit_trochoid_motion(
+            state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_TROCHOID_DESCEND,
+            center, parameter_start; timer, duration, topz, mode,
+            fixed_radius, rolling_radius, tracer_distance, rotation, tracer_phase)
+    end
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     place_trochoid_tools(state_ptr, center, mode, fixed_radius, rolling_radius,
         tracer_distance, parameter_start,
@@ -39,6 +53,13 @@ function animate_draw_trochoid(state_ptr::Ptr{Cvoid}, timer::Real,
     mode, fixed_radius::Real, rolling_radius::Real, tracer_distance::Real,
     curve_id::Integer, color, brush::Real, rotation::Real=0f0, tracer_phase::Real=0f0,
     draw_parameter::Real=parameter_finish)
+    if native_adapter_available()
+        return submit_trochoid_motion(
+            state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_TROCHOID_DRAW,
+            center, parameter_start; parameter_finish, draw_parameter,
+            timer, duration, mode, fixed_radius, rolling_radius,
+            tracer_distance, curve_id, color, brush, rotation, tracer_phase)
+    end
     parameter = curve_parameter(timer, duration, parameter_start, draw_parameter)
     tracer = place_trochoid_tools(state_ptr, center, mode, fixed_radius,
         rolling_radius, tracer_distance, parameter, 0f0; rotation, tracer_phase)
@@ -56,8 +77,33 @@ function animate_trochoid_rise(state_ptr::Ptr{Cvoid}, timer::Real,
     duration::Real, topz::Real, center, parameter_finish::Real;
     mode, fixed_radius::Real, rolling_radius::Real, tracer_distance::Real,
     rotation::Real=0f0, tracer_phase::Real=0f0)
+    if native_adapter_available()
+        return submit_trochoid_motion(
+            state_ptr, OdinJuliaBridge.NATIVE_MODIFIER_TROCHOID_RISE,
+            center, parameter_finish; timer, duration, topz, mode,
+            fixed_radius, rolling_radius, tracer_distance, rotation, tracer_phase)
+    end
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
     place_trochoid_tools(state_ptr, center, mode, fixed_radius, rolling_radius,
         tracer_distance, parameter_finish, topz * normalized_progress(timer, duration);
         rotation, tracer_phase)
+end
+
+"""Copy ring geometry for native sampled mechanics beneath unchanged helper callers."""
+function submit_trochoid_motion(
+    state_ptr::Ptr{Cvoid}, kind::Integer, center, parameter_start::Real;
+    mode, fixed_radius::Real, rolling_radius::Real, tracer_distance::Real,
+    parameter_finish::Real=parameter_start, draw_parameter::Real=parameter_finish,
+    timer::Real=0, duration::Real=0, topz::Real=0, rotation::Real=0,
+    tracer_phase::Real=0, curve_id::Integer=0, color=:white, brush::Real=0)
+    mode in (OdinJuliaBridge.TROCHOID_EXTERNAL, OdinJuliaBridge.TROCHOID_INTERNAL) ||
+        throw(ArgumentError("trochoid animation mode must be external or internal"))
+    request = OdinJuliaBridge.native_modifier_request(kind;
+        entity=curve_id, elapsed=timer, duration=duration,
+        start_position=center,
+        third_position=(parameter_start, parameter_finish, draw_parameter),
+        displacement=(fixed_radius, tracer_distance, tracer_phase),
+        radius=rolling_radius, angle=rotation, scalar=topz, integer=mode,
+        brush=brush, color=OdinJuliaBridge.bridge_color(color))
+    return submit_native_modifier(state_ptr, request)
 end

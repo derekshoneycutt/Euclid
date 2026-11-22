@@ -138,17 +138,10 @@ phase-local elapsed time, duration, geometry, and native identities. They perfor
 the requested motion or drawing step; they do not own a content module's clock,
 successor phase, reset, text publication, or catalogue registration.
 
-Basic native helpers are compatibility adapters over native explicit-time modifiers.
-Their public signatures and Julia call sites remain unchanged: Julia still advances
-the local phase and passes elapsed time, geometry, identities, brush, and color.
-Odin evaluates the operation and expands it into ordinary scene commands under the
-existing whole-batch validation boundary. The adapters do not introduce native
-phase scheduling or persistent motion objects.
-Tool samples preserve physical host visibility and active-contact state, not just
-the construction ink. Pen descent/rise locks the base but moves the upper joint
-without enabling its snap lock; tilt, cone, and drag use the native fixed-length
-pose evaluator. Compass samples lock both legs, with filled-sector sweep contact
-kept separate from the lock-enable flag.
+Keep the whole tool visible through descent, drawing, and rise. Pen motion should
+preserve its physical length and follow the drawing tip rather than stretching
+between a moving tip and a stationary upper joint. Show active contact only while
+drawing, not during descent or rise.
 
 Named curves retain their own animation flows even when they share an apparatus.
 Use the Cycloid, Trochoid, Parabola, and Hyperbola motion/draw helpers for common
@@ -206,53 +199,26 @@ meaningful action, and legible finish.
 | `z < 0.0` | Below surface | Avoid unless a script documents a specific need. |
 
 Pen and compass rise phases should target a positive top height, commonly
-around `1.4` in existing scripts. Shared pen poses use a `0.35` world-unit length,
-matching the native tool distance constraint; do not author a shorter pose and rely
-on a later constraint solve to stretch it. Plane primitives require an intentional
-profile:
+around `1.4` in existing scripts. Plane primitives require an intentional profile:
 
 - Flat or on-surface demonstrations keep plane vertices at `z = 0.0`.
 - Perspective or emphasis demonstrations may use positive `z` offsets for
   elevated vertices.
 - Negative `z` is not the default way to communicate depth.
 
-Trochoid and cycloid construction animations initially keep the analytic curve on
-one constant-z plane. Completed geometry can subsequently be tilted with world-space
-shape transformations. The
-permanent guide and compass descend together, remain aligned while drawing, then rise
-together before either tool is hidden. Hiding a guide is intentionally silent; hiding
-the finished curve is the operation that emits clear dust.
+For curve constructions:
 
-Parabola and hyperbola constructions use integrated tracing tips rather than a separate
-compass. The Inwards-inspired parabola apparatus sweeps one finite open arc through its
-vertex. The hyperbola's asymptote X stays fixed while its third rail pivots and opposing
-pen carriages slide symmetrically, drawing both branches simultaneously through their
-vertices. Minimum-radius ticks stay on the moving rail; do not treat them as stationary
-board marks or imply the pen separation is constant.
-
-Keep the analytic ink on the board plane and synchronize tool parameters with reveal
-frontiers in the same animation batch. Each active tip emits its ordinary drawing trail;
-rails and other reference parts do not create extra construction strokes. Lower the
-whole apparatus, activate contact only at the surface, then deactivate and lift from
-the final endpoints. Hide it before the readable finished-curve hold. Immediate
-completed-form selection must show the curves without the apparatus or drawing trails.
-Finite endpoints are display extents, not mathematical endpoints of either conic.
-
-Clamp the final phase-local draw step to its exact finishing parameter before
-entering rise, including when a tick overshoots the phase duration. Both apparatus
-and ink must reach that same endpoint. Descent and rise keep contact inactive and
-emit no drawing trails; cleanup hides the apparatus before the finished hold.
-
-Hypocycloid families use one common fixed-circle scale so changes in `k = R/r` remain
-visually comparable. For reduced rational `k = p/q`, animate one uninterrupted parameter
-domain of `0..2pi*q`; scale draw duration with `q` to preserve angular speed. The fixed
-and internally rolling rings remain guides, while the compass from rolling center to
-tracer is the drawing instrument.
-
-Long rational Trochoid showcases may deliberately increase angular speed when preserving
-the baseline would make the construction drag. The 5-point Hypotrochoid covers its full
-`0..6pi` closure domain in 10 seconds rather than the 15-second baseline; it still uses
-one uninterrupted draw phase and one cycle boundary.
+- Keep ink on the board plane while drawing; tilt completed geometry when that
+  helps explain its spatial relationships.
+- Lower and lift the apparatus together, keeping tracing tips aligned with the
+  ink. Reference rails and rings are guides, not extra construction strokes.
+- Conic drawing nibs push floor dust at the tracing point, not the apparatus anchor;
+  lifted tools and unselected Hyperbola branches produce no floor contacts.
+- Finish at the actual draw endpoint, then hide the apparatus for the readable
+  hold. Finite conic endpoints are display extents, not mathematical endpoints.
+- Use comparable scales and angular speeds across related rolling curves.
+  Show a full closure without resetting midway; speed up a long showcase when
+  the baseline would make it drag.
 
 ## Isometric Projection and Right-Hand Rule
 

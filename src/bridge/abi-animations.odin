@@ -165,7 +165,7 @@ get_animation_value :: proc "c" (
 set_null_animations :: proc "c" (
     state: ^core.Euclid_General_State,
     entry: ^julialib.jl_value_t) {
-    
+
     state^.julia_interface^.null_animation.entry = entry
 }
 
@@ -263,12 +263,70 @@ native_modifier_kind_from_abi :: proc(kind: i32) -> (modifier.Modifier_Kind, boo
         return .Reflect_Point_Xy_Above, true
     case 17:
         return .Reflect_Point_Xy_Below, true
+    case 18:
+        return .Pen_Tilt, true
+    case 19:
+        return .Pen_Cone, true
+    case 20:
+        return .Pen_Drag, true
+    case 21:
+        return .Pen_Transfer, true
+    case 22:
+        return .Compass_Transfer, true
+    case 23:
+        return .Compass_Highlight, true
+    case 24:
+        return .Line_Segment, true
+    case 25:
+        return .Reflect_Angle_Marker, true
+    case 26:
+        return .Pen_Highlight_Point, true
+    case 27:
+        return .Pen_Stroke, true
+    case 28:
+        return .Extend_Line, true
+    case 29:
+        return .Two_Segment_Stroke, true
+    case 30:
+        return .Cycloid_Place, true
+    case 31:
+        return .Cycloid_Descend, true
+    case 32:
+        return .Cycloid_Draw, true
+    case 33:
+        return .Cycloid_Rise, true
+    case 34:
+        return .Trochoid_Place, true
+    case 35:
+        return .Trochoid_Descend, true
+    case 36:
+        return .Trochoid_Draw, true
+    case 37:
+        return .Trochoid_Rise, true
+    case 38:
+        return .Parabola_Place, true
+    case 39:
+        return .Parabola_Descend, true
+    case 40:
+        return .Parabola_Draw, true
+    case 41:
+        return .Parabola_Rise, true
+    case 42:
+        return .Hyperbola_Place, true
+    case 43:
+        return .Hyperbola_Descend, true
+    case 44:
+        return .Hyperbola_Draw, true
+    case 45:
+        return .Hyperbola_Rise, true
+    case 46:
+        return .Rotate_Shape_Orientation, true
     case:
         return .Identity, false
     }
 }
 
-// Capture one native explicit-time modifier request for display-thread expansion.
+// Capture native motion; curve setup alone may use the quiesced lifecycle handoff.
 @(export)
 apply_native_modifier :: proc "c" (
     state: ^core.Euclid_General_State,
@@ -282,8 +340,28 @@ apply_native_modifier :: proc "c" (
     if !kind_valid {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    request: modifier.Modifier_Request = {
-        kind = modifier_kind,
+    request := native_modifier_request_from_abi(request_abi, modifier_kind)
+    command, captured := append_scene_command(state, .Apply_Native_Modifier)
+    if !captured {
+        return apply_native_lifecycle_placement(state, request)
+    }
+    if command == nil {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    command^.entity = request_abi.entity
+    command^.modifier = request
+    if !modifier.modifier_request_valid(request) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return BRIDGE_STATUS_OK
+}
+
+// Copy ABI fields into the native request without changing capture or validation order.
+native_modifier_request_from_abi :: proc(
+    request_abi: Bridge_Native_Modifier_Request,
+    kind: modifier.Modifier_Kind) -> modifier.Modifier_Request {
+    return {
+        kind = kind,
         entity = request_abi.entity,
         second_entity = request_abi.second_entity,
         third_entity = request_abi.third_entity,
@@ -327,19 +405,6 @@ apply_native_modifier :: proc "c" (
         integer = int(request_abi.integer),
         flag = request_abi.flag != 0,
     }
-    command, captured := append_scene_command(state, .Apply_Native_Modifier)
-    if !captured {
-        return BRIDGE_STATUS_ILLEGAL_STATE
-    }
-    if command == nil {
-        return BRIDGE_STATUS_OUT_OF_CAPACITY
-    }
-    command^.entity = request_abi.entity
-    command^.modifier = request
-    if !modifier.modifier_request_valid(request) {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
-    }
-    return BRIDGE_STATUS_OK
 }
 
 //   Return the bridge ABI version expected by Julia-side integration code.

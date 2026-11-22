@@ -43,7 +43,7 @@ function animate_compass_descend(
         start_position=(joint1x, joint1y, topz),
         second_position=(joint2x, joint2y, topz),
         scalar=topz)
-    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    submit_native_modifier(state_ptr, request)
 end
 
 """
@@ -91,7 +91,7 @@ function animate_compass_rise(
         start_position=(joint1x, joint1y, 0f0),
         second_position=(joint2x, joint2y, 0f0),
         scalar=topz)
-    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    submit_native_modifier(state_ptr, request)
 end
 
 """
@@ -262,14 +262,22 @@ function animate_compass_arcmove(
     periods::Integer=1,
     strikecolor=:none)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_COMPASS_TRANSFER;
+            entity=2, second_entity=3, elapsed=timer, duration=duration,
+            start_position=start_joint1, second_position=end_joint1,
+            third_position=start_joint2, displacement=end_joint2,
+            scalar=height, integer=periods, flag=strikecolor != :none,
+            color=OdinJuliaBridge.bridge_color(
+                strikecolor == :none ? :white : strikecolor))
+        return submit_native_modifier(state_ptr, request)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
     OdinJuliaBridge.set_compass_active(state_ptr, 0, :white)
 
-    vec1 = end_joint1 - start_joint1
-    vec2 = end_joint2 - start_joint2
-
-    tvec1 = t * vec1
-    tvec2 = t * vec2
+    tvec1 = t * (end_joint1 - start_joint1)
+    tvec2 = t * (end_joint2 - start_joint2)
 
     z_arc = sin(t * periods * π) * height
     tvec1[3] = z_arc

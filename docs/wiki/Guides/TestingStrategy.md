@@ -3,6 +3,9 @@
 > Tests provide evidence for specific behavior; choose the narrowest useful check, and
 > do not claim more than its evidence shows.
 
+This document currently remains as a bit of a rough draft during initial development. We
+will continue to improve it in future development.
+
 ## Choose A Verification Path
 
 - **Local Odin or Julia behavior:** Run the corresponding language suite:
@@ -94,10 +97,47 @@ samples ordinary queued Terminal jobs at intermediate descent, circle, tilt, dra
 and rise poses, checking both joints after publication and capturing each pose.
 It sets the Julia-owned job elapsed time while animation scheduling is paused,
 then resumes ordinary native ticks to evaluate and publish each sample.
+[`native-compound-acceptance`](../../../tools/scenarios/geometry/native-compound-acceptance.jsonl)
+samples queued pen highlights in both directions and a filled compass highlight,
+checks published joints, captures those poses and label/region construction, then
+resets, reloads, and runs fresh highlights. Native unit tests cover travel heights,
+crossed compass detours, stroke boundaries, hidden future segments, extension
+frontiers, reflected marker ordering, and measured expansion counts. Julia adapter
+fixtures record actual typed payloads and reject any fallback setter call.
+Rolling tests execute every authored Cycloid/Trochoid leaf through production-shaped
+native adapters, including placement returns, phase boundaries, exact completion,
+and rejected capture. Native tests cover reversed partial domains, oblique rails,
+both ring modes, tracer ratios, rotation/phase, real guide and curve publication,
+interpolation history, host-orientation preservation, and measured output bounds.
+[`native-rolling-acceptance`](../../../tools/scenarios/geometry/native-rolling-acceptance.jsonl)
+samples queued oblique Cycloid and rotated Trochoid apparatus, then exercises all
+named Terminal variants, reset/reload interruption, captures, and orderly shutdown.
+Conic adapter tests run unchanged Parabola/Hyperbola content through typed native
+requests, including all three branch selections. Native publication tests cover
+rotated trails, reversed partial frontiers, inactive travel, linkage preservation,
+output bounds, drawing audio, and transactional rejection. Use the existing conic
+showcase/lifecycle and Terminal conic scenarios for rendered and shutdown evidence.
 Native tests assert rigid evaluation equivariance, orientation transport/lifetime,
 atomic final-plane validation, and split-triangle area/winding conservation.
 Julia tests compare every typed family against an independent Rodrigues oracle,
 including signed full-turn paths and noncommuting queued rotations.
+Coverage closure requires the exact 144-byte request ABI, a contiguous closed kind
+inventory, and native-only adapter fixtures covering overloads and rejected requests.
+[`native-sampled-coverage-acceptance`](../../../tools/scenarios/geometry/native-sampled-coverage-acceptance.jsonl)
+combines all sampled families in one Terminal FIFO, then checks activation-time
+composition, native rail/plane rotation, exact frontiers, ordered clear/show,
+allocation baselines, capture, and shutdown.
+Native filled-sector tests compare formation records with captured Julia sweep
+reveals, including once-only activation, particle preparation, capacity rejection,
+and supersession.
+
+| Remaining Julia work | Boundary |
+| --- | --- |
+| Phase selection, queues, construction, cleanup | Policy; no native scheduler. |
+| Vector helpers, reflection-plane checks, returned drag positions | Pure calculations; native evaluators own writes. |
+| Exact full-sweep setup before compass rise, curve completion/retirement | Checked direct completion policy, not sampled motion. |
+| Label/region reveals and visibility/clear batches | Existing native owner APIs, not a second modifier lifecycle. |
+
 Use them when a behavioral claim crosses ordinary application boundaries—for example,
 when a request must be correlated with a later event, a frame must be captured after a
 state change, or shutdown evidence matters.

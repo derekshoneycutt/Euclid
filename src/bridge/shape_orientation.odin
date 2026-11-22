@@ -3,6 +3,7 @@ package bridge
 import "../core"
 import geometry "../core/geometry"
 import shapemodel "../shapes/model"
+import modifier "../animation"
 import "core:math"
 import "core:math/linalg"
 
@@ -90,6 +91,18 @@ apply_set_shape_orientation :: proc(
     value.orientation = linalg.normalize(command.orientation)
 }
 
+// Preserve ordinary owner-ring orientation evidence for native Terminal samples.
+apply_native_shape_orientation :: proc(
+    state: ^core.Euclid_General_State, output: ^modifier.Modifier_Output) {
+    command: Scene_Command = {
+        kind = .Set_Shape_Orientation,
+        entity = output.entity,
+        orientation = output.orientation,
+    }
+    apply_set_shape_orientation(state, &command)
+    record_scene_command_evidence(state, &command)
+}
+
 // Resolve the last prospective position without partially applying a coordinated edit.
 prospective_shape_position :: proc(
     world: ^shapemodel.Shape_World, commands: []Scene_Command,
@@ -104,6 +117,13 @@ prospective_shape_position :: proc(
     for command in commands {
         if command.kind == .Set_Shape_Position && command.entity == packed {
             result = command.position
+        } else if command.kind == .Apply_Native_Modifier {
+            sampled, valid := prospective_native_position(
+                command.modifier, packed, result)
+            if !valid {
+                return result, false
+            }
+            result = sampled
         }
     }
     return result, true
@@ -112,15 +132,65 @@ prospective_shape_position :: proc(
 // Resolve the last prospective plane normal from the same transactional batch.
 prospective_shape_orientation :: proc(
     commands: []Scene_Command, entity: shapemodel.Shape_Entity,
-    initial: quaternion128) -> quaternion128 {
+    initial: quaternion128) -> (quaternion128, bool) {
     result := initial
     packed := shapemodel.shape_entity_pack(entity)
     for command in commands {
         if command.kind == .Set_Shape_Orientation && command.entity == packed {
             result = command.orientation
+        } else if command.kind == .Apply_Native_Modifier {
+            sampled, valid := prospective_native_orientation(
+                command.modifier, packed, result)
+            if !valid {
+                return result, false
+            }
+            result = sampled
         }
     }
-    return result
+    return result, true
+}
+
+// Include native defining-point samples in whole-batch final-plane validation.
+prospective_native_position :: proc(
+    request: modifier.Modifier_Request, packed: u64,
+    initial: geometry.Vector3) -> (geometry.Vector3, bool) {
+    if request.entity != packed && request.second_entity != packed &&
+        request.third_entity != packed {
+        return initial, true
+    }
+    output: modifier.Modifier_Output_Buffer
+    if modifier.evaluate_modifier(request, &output) != .Ok {
+        return initial, false
+    }
+    result := initial
+    for index in 0..<output.count {
+        value := &output.outputs[index]
+        if value.kind == .Set_Point_Position && value.entity == packed {
+            result = value.position
+        }
+    }
+    return result, true
+}
+
+// Include native plane rotation in the same proposed state as defining-point motion.
+prospective_native_orientation :: proc(
+    request: modifier.Modifier_Request, packed: u64,
+    initial: quaternion128) -> (quaternion128, bool) {
+    if request.kind != .Rotate_Shape_Orientation || request.entity != packed {
+        return initial, true
+    }
+    output: modifier.Modifier_Output_Buffer
+    if modifier.evaluate_modifier(request, &output) != .Ok {
+        return initial, false
+    }
+    result := initial
+    for index in 0..<output.count {
+        value := &output.outputs[index]
+        if value.kind == .Set_Shape_Orientation && value.entity == packed {
+            result = value.orientation
+        }
+    }
+    return result, true
 }
 
 // Reject incompatible final rail/center geometry, not intermediate individual writes.
@@ -140,9 +210,10 @@ shape_plane_edits_valid :: proc(
         if !found {
             return false
         }
-        q := prospective_shape_orientation(
+        q, orientation_ok := prospective_shape_orientation(
             commands, entity, world.orientations.values[index].orientation)
-        if !prospective_shape_plane_valid(world, commands, entity, definition^, q) {
+        if !orientation_ok ||
+            !prospective_shape_plane_valid(world, commands, entity, definition^, q) {
             return false
         }
     }

@@ -910,14 +910,21 @@ bridge_native_modifier_transaction_and_mixed_order :: proc(t: ^testing.T) {
     testing.expect_value(t, position.position,
         geometry.Vector3{9, 9, 9})
 
-    before_position := position.position
+    expect_native_modifier_replay_rejected(
+        t, state, batch, point.entity, position.position)
+}
+
+// Reject replay of a committed tick while preserving its canonical point position.
+expect_native_modifier_replay_rejected :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    batch: Scene_Command_Batch, entity: u64, before_position: geometry.Vector3) {
     replay: Scene_Command_Batch
     replay = batch
     replay.animation = nil
     testing.expect(t, !commit_scene_command_batch(state, &replay))
     replay_position, replay_found := shapemodel.shape_component_get(
         &state^.shape_world.transforms, &state^.shape_world.registry,
-        shapemodel.shape_entity_unpack(point.entity))
+        shapemodel.shape_entity_unpack(entity))
     testing.expect(t, replay_found)
     testing.expect_value(t, replay_position.position, before_position)
 }

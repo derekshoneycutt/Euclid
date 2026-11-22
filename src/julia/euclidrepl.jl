@@ -1094,29 +1094,26 @@ end
 
 """Apply final visible state for a point payload."""
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::PointPayload)
-    OdinJuliaBridge.set_point_color(state_ptr, payload.point_id, payload.color)
-    OdinJuliaBridge.set_point_brush(state_ptr, payload.point_id, payload.brush)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.point_id, payload.pos)
-    OdinJuliaBridge.show_point(state_ptr, payload.point_id)
+    checked_terminal_status(EuclidAnimations.complete_point(
+        state_ptr, payload.pos, payload.brush, payload.color, payload.point_id),
+        "point completion")
 end
 
 """Apply final visible state for a line payload."""
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::LinePayload)
-    OdinJuliaBridge.set_point_color(state_ptr, payload.host_id, payload.color)
-    OdinJuliaBridge.set_point_brush(state_ptr, payload.host_id, payload.brush)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.start_id, payload.start_pos)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.end_id, payload.end_pos)
-    OdinJuliaBridge.show_point(state_ptr, payload.host_id)
+    checked_terminal_status(EuclidAnimations.complete_line(
+        state_ptr, payload.start_pos, payload.end_pos;
+        penbrush=payload.brush, pencolor=payload.color, line_host_id=payload.host_id,
+        line_joint1_id=payload.start_id, line_joint2_id=payload.end_id),
+        "line completion")
 end
 
 """Apply final visible state for a circle payload."""
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::CirclePayload)
-    OdinJuliaBridge.set_point_color(state_ptr, payload.host_id, payload.color)
-    OdinJuliaBridge.set_point_brush(state_ptr, payload.host_id, payload.brush)
-    start_theta = theta_from_center(payload.center, payload.start_pos)
-    OdinJuliaBridge.set_arc_geometry(state_ptr, payload.host_id,
-        payload.radius, start_theta, payload.sweep_theta)
-    OdinJuliaBridge.show_point(state_ptr, payload.host_id)
+    checked_terminal_status(EuclidAnimations.complete_circle(
+        state_ptr, payload.center, payload.start_pos, payload.sweep_theta, payload.radius;
+        brush=payload.brush, color=payload.color, marker_host_id=payload.host_id),
+        "circle completion")
 end
 
 """Finalize a label after its native reveal interval."""

@@ -539,54 +539,38 @@ Native modifier markers are ephemeral callback data. They live in the checked
 animation scene batch, evaluate with copied explicit inputs, and disappear when the
 batch is committed or rejected. They do not allocate persistent motion instances,
 borrow generation arena storage, or require a second retired data domain.
+Compound travel/stroke markers reuse the fixed sixteen-output evaluation buffer.
+Filled highlights expand one compact radial marker into nine trail calls only
+after validation, using the display-owned particle RNG and existing bounded
+particle storage. They do not grow a temporary list or retain sampled geometry.
+Rolling samples use that same fixed output count (at most nine outputs) and carry
+typed guide values in stack-local evaluation storage. Guide and curve components
+remain display-owned; publication preserves their previous interpolation samples.
+No rolling motion state, allocation domain, retained pointer, or native clock is added.
 
 ## Transport And Publication Lifetimes
 
 ### Consumer-owned messages
 
-The [native mailboxes](../../../src/bridge/consumer_mailbox.odin) copy complete typed
-envelopes and nested bytes into receiver-owned storage under a publication mutex.
-Successful publication ends the sender's payload lifetime obligation. The sending
-thread allocates through the inbox's standard arena allocator, but never acquires
-authority to allocate Julia objects or mutate display state. Ordinary send does not
-wait for queue capacity; mutex
-acquisition, copying, and synchronous growth do not have a strict latency bound.
+The [native mailboxes](../../../src/bridge/consumer_mailbox.odin) give each
+consumer its own arena-backed message storage.
 
-Each one-way inbox embeds one plain `core:mem/virtual.Arena`: two arenas total.
-Julia and display initial reservations are 256 KiB and 640 KiB respectively.
-Standard arena code owns backing, growth, alignment, and reclamation; there is no
-mailbox chunk manager or arena-owner wrapper.
+- **Copy at publication.** Envelopes and nested bytes are copied into the inbox.
+  Successful publication ends the sender's obligation to keep those source bytes
+  alive; it does not grant access to Julia's heap or display state.
+- **Borrow during dispatch.** Message data remains valid until the consumer finishes
+  the accepted batch. Reset storage only after every borrow ends. Handles and
+  explicitly borrowed control pointers keep their separate lifetime contracts.
+- **Avoid circular waits.** Display handlers must not wait for Julia while retaining
+  an egress batch that Julia needs drained to publish a completion.
+- **Handle pressure explicitly.** Capacity pressure, allocation failure, and closure
+  are distinct outcomes. Bounded queues do not guarantee bounded send latency or
+  allocation-free bursts.
+- **Join before destruction.** Close admission, preserve accepted work, wake waiters,
+  stop publishers, and join Julia and native parse borrowers before freeing storage.
 
-Each inbox admits at most 64 messages. Logical accepted-message byte limits are
-1 MiB for Julia and 2.5 MiB for display, including envelope metadata and payload
-layout padding. These are not retained, reserved, or committed memory ceilings.
-The epoch's byte charge remains until reset, including already consumed messages.
-
-The consumer pauses admission and dispatches the entire accepted FIFO outside the
-mutex. Julia drains ingress before ordinary actor service; display service drains
-egress before returning. A nonblocking send during draining reports `Queue_Full`.
-Only after the final borrow ends does the consumer call `vmem.arena_free_all`,
-clear epoch accounting, reopen admission unless closed, and notify waiters.
-Standard reset retains the first block and may release growth blocks. Repeated
-bursts are not guaranteed allocation-free. No return channel, second arena, or
-producer reclamation loop exists.
-
-Display handlers must not wait for Julia while holding a draining egress batch:
-Julia may be waiting to publish a reliable completion. Correlated waits finish
-routing the accepted batch and reset before returning their matched result.
-Full drains are count-bounded, not a wall-clock latency guarantee.
-
-Strings, slices, and highlighting runs are copied by the exhaustive
-[typed copy dispatch](../../../src/bridge/mailbox_copy.odin). Slot handles and explicitly
-borrowed native control pointers retain their independent checked lifetime contracts.
-Storage/count pressure, allocation failure, and closure remain distinct send outcomes.
-The condition variable synchronizes publication, capacity release, and closure;
-waiters always recheck queue state.
-
-Close admission without discarding accepted work, wake waiters, stop publishers, join
-the Julia owner and native parse borrowers, then destroy mailbox storage. The service
-and copied asset-root configuration still use their explicit bootstrap allocator;
-mailbox backing is a separate native virtual-memory domain.
+The [typed copy dispatch](../../../src/bridge/mailbox_copy.odin) defines what is copied.
+Queue limits and synchronization mechanics belong in the implementation.
 
 ### A copy can establish the next lifetime
 
@@ -688,99 +672,59 @@ their native lifecycle APIs; resetting an Odin arena is not their destructor.
 
 ## Library And Persistence Memory
 
-The [collection model](../../../src/collections/model.odin) stores actual-sized
-collection and placement arrays, UUID indexes, and optional names in a TLSF domain
-owned by each initialized `Set`. `Set` is not a freely copyable value: callers
-transfer data with `clone`, and each initialized owner must be destroyed exactly
-once. Optional custom and canonical labels are separately owned; canonical labels
-are copied from the active catalogue generation and refreshed when that generation's
-projection is replaced. A placement view borrows those bytes only for the query's
-immediate consumer.
+### Storage Owners
 
-The display owns the editable collection `Set` and its
-[Library UI projection](../../../src/view/ui/library/). The projection allocates
-each tree node and copied canonical label from its own TLSF owner; a growable pointer
-table and UUID index may move without relocating live nodes. Same-generation
-membership and order changes patch topology in place, while names resolve through
-the current collection owner. Catalogue changes are built in a staged projection and
-replace the live tree only after the complete candidate succeeds. A mutation is
-admitted against the display owner after pending/in-flight save capacity and tree
-resources are reserved; it does not stage or replace a complete collection snapshot.
-The bounded immutable mutation crosses to persistence, while frame scratch and
-borrowed placement views must not escape their operation.
+| Storage | Owner and lifetime |
+| --- | --- |
+| [Collection `Set`](../../../src/collections/model.odin) | Each initialized `Set` owns its TLSF arrays, indexes, and labels. Transfer with `clone`, not a shallow copy; destroy each owner exactly once. |
+| [Library projection](../../../src/view/ui/library/) | Display-owned TLSF nodes, copied labels, and reusable workspaces. Nodes remain stable when indexes grow; workspace row pointers do not. |
+| Library search | Separate display-owned TLSF accepted/staging buffers. Only complete results replace accepted results. |
+| Semantic focus slots | Each slot owns TLSF node, text, and index buffers. Owner headers are not copyable snapshots. |
+| [Durable replay](../../../src/persistence/userdata/collections.odin) | Store-owned TLSF `Set`, backed by the explicit runtime heap allocator; reused by save work and destroyed when the Store closes. |
+| [SQLite](../../../src/sqlite/model.odin) | Native connection and statement handles, not display data. Copy column bytes before statement validity ends. |
+| [History search](../../../src/persistence/userdata/history/model.odin) | Store-owned inline query storage and native PCRE2 handles, retained across pages. |
 
-The projection also owns typed reusable frame rows, independent scratch rows,
-motion branches, reorder rows, and iterative traversal frames. These buffers grow
-with actual catalogue demand, not a fixed node ceiling. Preliminary preparation
-is discarded before a projection mutation or replacement. Final preparation is
-borrowed by semantic publication, pointer handling, drawing, and the final scroll
-decision in that frame; the next preparation may overwrite it only after those
-consumers finish. Scratch queries do not overwrite frame rows. Stable node identity
-does not make a row pointer valid after workspace growth.
+Display shutdown destroys projection, search, and semantic-slot domains.
+SQLite and PCRE2 internal allocations remain native-library allocations, not
+Odin allocator domains.
 
-Search has a separate display-owned TLSF domain with accepted and staging
-visibility-ID buffers. Admission failure retains the accepted result, and only a
-complete result exchanges the buffers. Projection, search, and semantic snapshot
-domains are destroyed during display shutdown.
+### Display Borrows And Publication
 
-Each semantic focus slot owns actual-sized node, UTF-8, identity-index, and
-traversal-index buffers in its own TLSF domain. The owner header is not a copyable
-snapshot value. Registration admits node/index/text growth before copying a node;
-rejection leaves the committed slot authoritative. Identity and hierarchy checks
-use complete qualified IDs and reusable indexes; parent-cycle validation and tree
-publication are iterative. Text lengths, tree facts, and traversal order use checked
-32-bit representation rather than the former fixed capacities and 16-bit widths.
-Only populated logical content affects publication generation; retained capacity
-and diagnostic work counters do not. Offscreen expanded nodes remain in the logical
-semantic tree with clipped bounds, while outgoing visual-only rows have no actions.
+- Placement views borrow collection labels only for their immediate consumer.
+  Canonical labels are copied from the catalogue and refreshed on replacement.
+- Reserve save capacity and tree resources before admitting a collection mutation.
+  Patch same-generation topology in place; stage catalogue replacements and publish
+  only a complete candidate.
+- Discard preliminary frame preparation before mutation. Final rows remain borrowed
+  until semantic publication, input, drawing, and scroll consumers finish.
+  Scratch queries use independent rows.
+- Admit semantic-slot growth before copying; rejection preserves committed content.
+- Logical identity does not extend pointer lifetime.
+  [Accessibility publication](../../../src/accessibility/publication.odin) owns
+  callback-safe snapshots and retirement; callbacks cannot retain mutable display data.
 
-Persistence has a separate consumption lifetime:
+### Save And Database Boundaries
 
-- A bounded immutable mutation batch crosses to save work; the worker does not
-  borrow the display's mutable collection state.
-- [Durable replay](../../../src/persistence/userdata/collections.odin) loads a separate
-  Store-owned TLSF `Set`, backed by the explicit runtime heap allocator. It is
-  reused to validate and apply the batch, persists it within the database
-  transaction, and is destroyed when the Store closes. Launch deep-clones the
-  loaded replay into the display owner; the display never retains the replay
-  allocator or records.
-- The save coordinator joins outstanding work before reusing its payload or
-  closing the sequentially accessed user-data store.
+- Save workers receive bounded immutable batches, never borrowed mutable display
+  collections. Startup deep-clones durable replay into the display owner.
+- Join outstanding saves before reusing payloads or closing the Store.
+- [Persistence APIs](../../../src/persistence/) bind and decode database values into
+  existing generation storage or caller-owned bounded destinations. They do not
+  create allocator domains or take scheduling ownership.
 
-The [SQLite boundary](../../../src/sqlite/model.odin) owns connection and
-statement handles, not display collection data. SQLite column bytes are copied
-into snapshot storage rather than retained past statement validity.
-The [runtime persistence APIs](../../../src/persistence/) own database-specific
-binding and decoding, not new allocator domains. Content reading populates the
-existing generation owner directly; history writes into caller-owned bounded
-destinations. Moving database operations does not transfer scheduling or memory
-ownership from the existing service and task owners.
+### History Search And Explorer Scratch
 
-Terminal history's [search owner](../../../src/persistence/userdata/history/model.odin)
-retains its query and condition storage inline and owns PCRE2 handles across pages.
-SQLite registers a stable adapter borrowed from that store; its destructor ends the
-registration borrow without freeing the inline child. Each execution temporarily
-borrows the admitted plan, exclusive mutable workspace, atomic cancellation token,
-and callback source bytes. Reset and progress-handler restoration end those borrows
-before connection admission is released. Query retirement requests cancellation;
-native handle release follows the worker join, and unregister precedes store teardown.
-Neither SQLite's nor PCRE2's internal allocations acquire an Odin allocator domain.
-
-Explorer presentation ranges use fixed inline storage: one packed 256-range page
-buffer and one independent 256-range preview buffer per transport/display owner.
-Rows retain offsets/counts, not a full range array per row. Full-source range
-collection reuses idle mutation scratch while the worker holds exclusive admission,
-clears borrowed source bytes after use, and joins before display publication.
-Range overflow is a nonblocking presentation error, not a history/filter limit.
-Help retains only bounded prior-query bytes and cursor/selection positions; it
-reuses the suspended page and preview rather than allocating another full page.
-
-Collection snapshots, display projection, semantic publication, and native
-callback storage have distinct validity contracts. A logical identity does not
-extend a borrowed pointer's lifetime. Callback-safe publication and retirement
-remain the responsibility of
-[accessibility publication](../../../src/accessibility/publication.odin), not
-permission for callbacks to retain mutable display storage.
+- A search execution borrows its plan, exclusive workspace, cancellation token,
+  and callback source bytes. End these borrows and restore SQLite handlers before
+  releasing connection admission.
+- Query retirement requests cancellation, joins the worker, then releases native
+  handles. Unregister SQLite's borrowed adapter before Store teardown; its destructor
+  does not free the inline child.
+- Explorer uses separate fixed page and preview range buffers; rows store offsets
+  and counts rather than their own arrays. Help reuses the suspended buffers.
+- Full-source range collection borrows idle mutation scratch under exclusive worker
+  admission. Clear source borrows and join before display publication. Range overflow
+  is an explicit presentation error, not a history or filter limit.
 
 ## Julia Heap And Rooting Windows
 

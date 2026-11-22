@@ -163,12 +163,18 @@ set_cycloid_tool_geometry :: proc "c" (state: ^core.Euclid_General_State,
     }
     previous := current^
     current^ = value
+    bridge_cycloid_tool_preserve_previous(current, previous)
+    return BRIDGE_STATUS_OK
+}
+
+// Preserve the Cycloid guide's last display interpolation sample across scalar updates.
+bridge_cycloid_tool_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Cycloid_Tool, previous: shapemodel.Shape_Cycloid_Tool) {
     current.previous_rolling_radius = previous.previous_rolling_radius
     current.previous_parameter_start = previous.previous_parameter_start
     current.previous_parameter_finish = previous.previous_parameter_finish
     current.previous_parameter = previous.previous_parameter
     current.previous_orientation_phase = previous.previous_orientation_phase
-    return BRIDGE_STATUS_OK
 }
 
 // Change only the process-global Cycloid guide's rolling parameter.

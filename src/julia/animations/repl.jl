@@ -98,8 +98,8 @@ function animate_repl_circle_phases(
     draw_end = duration * (ReplDescendShare + ReplDrawShare)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
         start_point[1] - joint_point[1]))
-    OdinJuliaBridge.set_arc_geometry(
-        state_ptr, marker_host_id, radius, start_theta, angle_theta)
+    checked_curve_status(OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, radius, start_theta, angle_theta))
     final_theta = start_theta + angle_theta
     end_point = Float32[
         joint_point[1] + radius * Float32(cos(final_theta)),

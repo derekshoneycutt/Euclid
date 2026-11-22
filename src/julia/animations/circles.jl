@@ -82,7 +82,7 @@ function animate_draw_circle(
         start_position=joint_point, second_position=start_point,
         angle=angle_theta, radius=radius, brush=brush,
         color=OdinJuliaBridge.bridge_color(color))
-    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+    submit_native_modifier(state_ptr, request)
 end
 
 """
@@ -135,18 +135,7 @@ function animate_draw_filledcircle(
         start_position=joint_point, second_position=start_point,
         angle=angle_theta, radius=radius, brush=brush,
         color=OdinJuliaBridge.bridge_color(color), flag=formation)
-    OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
-    if !formation
-        start_theta = Float32(atan(start_point[2] - joint_point[2],
-            start_point[1] - joint_point[1]))
-        theta = start_theta + angle_theta * normalized_progress(timer, duration)
-        end_point = [
-            joint_point[1] + radius * Float32(cos(theta)),
-            joint_point[2] + radius * Float32(sin(theta)),
-            0f0]
-        emit_filledcircle_radius_trail(
-            state_ptr, joint_point, end_point, color)
-    end
+    submit_native_modifier(state_ptr, request)
 end
 
 """Run the legacy filled-circle fixture path when native adapters are unavailable."""
@@ -217,6 +206,11 @@ function animate_compass_fill_arc_highlight(
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
     angle_theta::Real, radius::Real, color)
 
+    if native_adapter_available()
+        return submit_compass_highlight(
+            state_ptr, timer, duration, joint_point, start_point, angle_theta,
+            radius, color; filled=true)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
         start_point[1] - joint_point[1]))
@@ -261,6 +255,11 @@ function animate_compass_arc_highlight(
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
     angle_theta::Real, radius::Real, color)
 
+    if native_adapter_available()
+        return submit_compass_highlight(
+            state_ptr, timer, duration, joint_point, start_point, angle_theta,
+            radius, color; filled=false)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
         start_point[1] - joint_point[1]))
@@ -277,4 +276,16 @@ function animate_compass_arc_highlight(
     OdinJuliaBridge.show_compass(state_ptr)
 
     OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
+end
+
+"""Capture marker-free highlight mechanics while preserving directed sweeps."""
+function submit_compass_highlight(
+    state_ptr::Ptr{Cvoid}, timer::Real, duration::Real,
+    center, start, angle::Real, radius::Real, color; filled::Bool)
+    request = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_COMPASS_HIGHLIGHT;
+        entity=2, second_entity=3, elapsed=timer, duration=duration,
+        start_position=center, second_position=start, angle=angle, radius=radius,
+        color=OdinJuliaBridge.bridge_color(color), flag=filled)
+    return submit_native_modifier(state_ptr, request)
 end

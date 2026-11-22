@@ -21,6 +21,14 @@ function animate_pen_tilt_and_drag(
     timer::Real, duration::Real,
     startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real}, color)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_STROKE;
+            elapsed=timer, duration=duration, start_position=startpos,
+            second_position=endpos, radius=PenLength, angle=PenDrawLineAngle,
+            color=OdinJuliaBridge.bridge_color(color))
+        return submit_native_modifier(state_ptr, request)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
 
     azimuth = Float32(atan(endpos[2] - startpos[2], endpos[1] - startpos[1]))
@@ -66,6 +74,14 @@ function animate_highlight_point(
     timer::Real, duration::Real,
     penpos::AbstractVector{<:Real}, pencolor)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_HIGHLIGHT_POINT;
+            elapsed=timer, duration=duration, start_position=penpos,
+            radius=PenLength, angle=PenConeFloorAngle, scalar=PenConeSpinSpeed,
+            color=OdinJuliaBridge.bridge_color(pencolor))
+        return submit_native_modifier(state_ptr, request)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
 
     if t < TiltToConeDuration
@@ -140,7 +156,7 @@ function animate_draw_point(
                 start_position=penpos,
                 brush=penbrush,
                 color=OdinJuliaBridge.bridge_color(pencolor))
-            OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
+            submit_native_modifier(state_ptr, request)
         end
     else
         end_azimuth = (GroundTrailDuration * duration) * PenConeSpinSpeed
@@ -190,40 +206,42 @@ function animate_draw_line(
         animate_pen_tilt(state_ptr, timer, duration * TiltToLineDuration, startpos,
             PenStraightFloorAngle, PenDrawLineAngle, azimuth)
     elseif t < GroundLineEndTime
-        animate_pen_drag(state_ptr, timer - duration * TiltToLineDuration,
-            duration * GroundLineDuration, startpos, endpos, PenDrawLineAngle,
-            azimuth, pencolor)
-        if !native_adapter_available()
-            tippos = startpos + (endpos - startpos) *
-                normalized_progress(
-                    timer - duration * TiltToLineDuration,
-                    duration * GroundLineDuration)
-            OdinJuliaBridge.set_point_color(
-                state_ptr, line_host_id, pencolor)
-            OdinJuliaBridge.set_point_brush(
-                state_ptr, line_host_id, penbrush)
-            OdinJuliaBridge.set_point_position(
-                state_ptr, line_joint1_id, startpos)
-            OdinJuliaBridge.set_point_position(
-                state_ptr, line_joint2_id, tippos)
-            OdinJuliaBridge.show_point(state_ptr, line_host_id)
-        else
-            request = OdinJuliaBridge.native_modifier_request(
-                OdinJuliaBridge.NATIVE_MODIFIER_DRAW_LINE;
-                entity=line_host_id, second_entity=line_joint1_id,
-                third_entity=line_joint2_id,
-                elapsed=timer - duration * TiltToLineDuration,
-                duration=duration * GroundLineDuration,
-                start_position=startpos, second_position=endpos,
-                brush=penbrush,
-                color=OdinJuliaBridge.bridge_color(pencolor))
-            OdinJuliaBridge.apply_native_modifier_request(state_ptr, request)
-        end
+        animate_line_contact(
+            state_ptr, timer - duration * TiltToLineDuration,
+            duration * GroundLineDuration, startpos, endpos;
+            azimuth, penbrush, pencolor, line_host_id, line_joint1_id, line_joint2_id)
     else
         animate_pen_tilt(
             state_ptr, timer - duration * GroundTrailEndTime,
             duration * (1f0 - GroundTrailEndTime), endpos,
             PenDrawLineAngle, PenStraightFloorAngle, azimuth)
+    end
+end
+
+"""Advance pen contact and line ink together using phase-local draw time."""
+function animate_line_contact(
+    state_ptr::Ptr{Cvoid}, timer::Real, duration::Real,
+    startpos::AbstractVector{<:Real}, endpos::AbstractVector{<:Real};
+    azimuth::Real, penbrush::Real, pencolor,
+    line_host_id::Integer, line_joint1_id::Integer, line_joint2_id::Integer)
+
+    animate_pen_drag(
+        state_ptr, timer, duration, startpos, endpos, PenDrawLineAngle, azimuth, pencolor)
+    if !native_adapter_available()
+        tippos = startpos + (endpos - startpos) * normalized_progress(timer, duration)
+        OdinJuliaBridge.set_point_color(state_ptr, line_host_id, pencolor)
+        OdinJuliaBridge.set_point_brush(state_ptr, line_host_id, penbrush)
+        OdinJuliaBridge.set_point_position(state_ptr, line_joint1_id, startpos)
+        OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id, tippos)
+        OdinJuliaBridge.show_point(state_ptr, line_host_id)
+    else
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_DRAW_LINE;
+            entity=line_host_id, second_entity=line_joint1_id,
+            third_entity=line_joint2_id, elapsed=timer, duration=duration,
+            start_position=startpos, second_position=endpos, brush=penbrush,
+            color=OdinJuliaBridge.bridge_color(pencolor))
+        submit_native_modifier(state_ptr, request)
     end
 end
 
@@ -260,6 +278,13 @@ function animate_draw_two_line_segments(
     line1_host_id::Integer, line1_joint1_id::Integer, line1_joint2_id::Integer,
     line2_host_id::Integer, line2_joint1_id::Integer, line2_joint2_id::Integer)
 
+    if native_adapter_available()
+        return submit_two_segment_stroke(
+            state_ptr, timer, duration, (startpos, midpos, endpos),
+            penbrush, pencolor,
+            (line1_host_id, line1_joint1_id, line1_joint2_id),
+            (line2_host_id, line2_joint1_id, line2_joint2_id))
+    end
     t = clamp(timer / duration, 0f0, 1f0)
 
     seg1 = max(norm(midpos - startpos), TransformEps)
@@ -337,6 +362,14 @@ function set_line_segment_points(
     joint1_pos::AbstractVector{<:Real}, joint2_pos::AbstractVector{<:Real},
     show_host::Bool)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_LINE_SEGMENT;
+            entity=host_id, second_entity=joint_ids[1], third_entity=joint_ids[2],
+            start_position=joint1_pos, second_position=joint2_pos,
+            brush=penbrush, color=OdinJuliaBridge.bridge_color(pencolor), flag=show_host)
+        return submit_native_modifier(state_ptr, request)
+    end
     OdinJuliaBridge.set_point_color(state_ptr, host_id, pencolor)
     OdinJuliaBridge.set_point_brush(state_ptr, host_id, penbrush)
     OdinJuliaBridge.set_point_position(state_ptr, joint_ids[1], joint1_pos)
@@ -381,6 +414,16 @@ function animate_extend_line(
     line_joint1_id::Integer=0,
     line_joint2_id::Integer=0)
 
+    if native_adapter_available()
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_EXTEND_LINE;
+            entity=line_host_id, second_entity=line_joint1_id,
+            third_entity=line_joint2_id, elapsed=timer, duration=duration,
+            start_position=midpos, second_position=endpos, third_position=startpos,
+            radius=PenLength, angle=PenDrawLineAngle, brush=penbrush,
+            color=OdinJuliaBridge.bridge_color(pencolor))
+        return submit_native_modifier(state_ptr, request)
+    end
     t = clamp(timer / duration, 0f0, 1f0)
 
     azimuth = Float32(atan(endpos[2] - startpos[2], endpos[1] - startpos[1]))
@@ -392,11 +435,8 @@ function animate_extend_line(
             duration * GroundLineDuration, midpos, endpos, PenDrawLineAngle,
             azimuth, pencolor)
 
-        OdinJuliaBridge.set_point_color(state_ptr, line_host_id, pencolor)
-        OdinJuliaBridge.set_point_brush(state_ptr, line_host_id, penbrush)
-        OdinJuliaBridge.set_point_position(state_ptr, line_joint1_id, startpos)
-        OdinJuliaBridge.set_point_position(state_ptr, line_joint2_id, tippos)
-        OdinJuliaBridge.show_point(state_ptr, line_host_id)
+        set_line_segment_points(state_ptr, penbrush, pencolor, line_host_id,
+            (line_joint1_id, line_joint2_id), startpos, tippos, true)
 
         OdinJuliaBridge.emit_trailing_particle(state_ptr, tippos, pencolor)
 
@@ -407,4 +447,22 @@ function animate_extend_line(
             duration * (1f0 - GroundTrailEndTime), endpos,
             PenDrawLineAngle, PenStraightFloorAngle, azimuth)
     end
+end
+
+"""Capture two host markers with one shared native pen and arc-length frontier."""
+function submit_two_segment_stroke(
+    state_ptr::Ptr{Cvoid}, timer::Real, duration::Real, positions,
+    brush::Real, color, first_ids, second_ids)
+    for (ids, second) in ((first_ids, false), (second_ids, true))
+        second && normalized_progress(timer, duration) < TiltToLineDuration && continue
+        request = OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_TWO_SEGMENT_STROKE;
+            entity=ids[1], second_entity=ids[2], third_entity=ids[3],
+            elapsed=timer, duration=duration,
+            start_position=positions[1], second_position=positions[2],
+            third_position=positions[3], radius=PenLength, angle=PenDrawLineAngle,
+            brush=brush, color=OdinJuliaBridge.bridge_color(color), flag=second)
+        submit_native_modifier(state_ptr, request)
+    end
+    return nothing
 end

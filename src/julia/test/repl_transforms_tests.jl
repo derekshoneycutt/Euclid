@@ -10,6 +10,7 @@ using LinearAlgebra
     for (name, value) in expected
         @test getfield(OdinJuliaBridge, name) === Int32(value)
     end
+
 end
 
 """Prepare one managed typed result with distinct, coplanar defining positions."""
@@ -42,6 +43,25 @@ function drain_transform_test!(runtime)
         EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 10f0)
     end
     error("transformation test queue did not drain")
+end
+
+@testset "Terminal rigid dispatch copies snapshots instead of sampling Julia mechanics" begin
+    empty!(REPL_TEST_NATIVE_REQUESTS)
+    shape = OdinJuliaBridge.BridgeShapeCircle(0, 899)
+    runtime, _ = transform_test_fixture(shape)
+    EuclidRepl.rotate_x!(
+        runtime, TEST_STATE_PTR, shape, -4pi; pivot=[0, 0, 0], duration=1)
+    payload = runtime.session.active_job.payload
+    EuclidRepl.activate_payload!(TEST_STATE_PTR, payload)
+    EuclidRepl.render_payload!(TEST_STATE_PTR, 0.125f0, 1f0, payload)
+    @test length(REPL_TEST_NATIVE_REQUESTS) == 2
+    point, plane = REPL_TEST_NATIVE_REQUESTS
+    @test point.kind == OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_POINT
+    @test plane.kind == OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_SHAPE_ORIENTATION
+    @test point.start == Tuple(only(payload.start_positions))
+    @test point.elapsed == plane.elapsed == 0.125f0
+    @test point.angle == plane.angle == Float32(-4pi)
+    @test (plane.displacement..., plane.scalar) == payload.start_orientation
 end
 
 @testset "Unified typed world transformations" begin

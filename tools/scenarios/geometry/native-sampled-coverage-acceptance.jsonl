@@ -1,0 +1,46 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"interface.enable_particle_effects","value":true}}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"p=point!([0.15,0.15,0];duration=0.1); l=line!([0.3,0.15,0],[0.5,0.15,0];duration=0.1); c=circle!([0.7,0.2,0],0.08;duration=0.1); f=circle!([0.85,0.2,0],0.08;filled=true,duration=0.1); "}
+{"type":"t=triangle!([0.1,0.35,0],[0.25,0.35,0],[0.18,0.5,0];duration=0.1); y=cycloid!([0.3,0.4,0],[0.7,0.4,0];rolling_radius=0.03,parameter_start=-1,parameter_finish=1,draw_parameter=0.5,duration=0.1); "}
+{"type":"e=ellipse!([0.8,0.45,0],0.1,0.05;duration=0.1); b=parabola!([0.3,0.7,0];focal_distance=0.08,parameter_start=-0.5,parameter_finish=0.5,draw_parameter=0.25,duration=0.1); "}
+{"type":"h=hyperbola!([0.7,0.7,0];semimajor=0.08,semiminor=0.04,branches=:both,parameter_start=-0.3,parameter_finish=0.3,draw_parameter=-0.2,duration=0.1); @assert all(x->x.status==0,(p,l,c,f,t,y,e,b,h)); "}
+{"type":"@assert translate!(p,[0.05,0,0];duration=0.1)===p; @assert translate!(p,[0.05,0,0];duration=0.1)===p; @assert rotate_x!(y,pi/3;pivot=[0.5,0.4,0],duration=0.1)===y; println(\"sampled-\"*\"admitted\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"sampled-admitted","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==12 && status().managed_shape_count==9; println(\"sampled-\"*\"drained\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"sampled-drained","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"@assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.index).pos[1],0.25;atol=1f-5); q=OdinJuliaBridge.get_shape_orientation(state_ptr,y.host_id); @assert q.status==0 && isapprox(q.orientation[1],0.5;atol=1f-5); "}
+{"type":"@assert OdinJuliaBridge.get_cycloid_geometry(state_ptr,y.host_id).geometry.draw_parameter==0.5f0; @assert OdinJuliaBridge.get_parabola_geometry(state_ptr,b.host_id).geometry.draw_parameter==0.25f0; @assert OdinJuliaBridge.get_hyperbola_geometry(state_ptr,h.host_id).geometry.draw_parameter==-0.2f0; println(\"sampled-\"*\"verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"sampled-verified","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"screenshot":".build/native-sampled-coverage.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"@assert clear!(); @assert isnothing(show!(p)); @assert translate!(p,[0.05,0,0];duration=0.1)===p; println(\"sampled-\"*\"clear-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"sampled-clear-queued","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed && status().completed_count==15; println(\"sampled-\"*\"clear-drained\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"sampled-clear-drained","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"type":"@assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.index).pos[1],0.3;atol=1f-5); println(\"sampled-\"*\"clear-verified\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"sampled-clear-verified","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

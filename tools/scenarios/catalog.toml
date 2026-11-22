@@ -1,5 +1,6 @@
 # Public CLI names are stable; unlisted JSONL files are workflow phases.
 [scenarios]
+native-rolling-acceptance = "geometry/native-rolling-acceptance.jsonl"
 accordion-portrait-acceptance = "ui/accordion-portrait-acceptance.jsonl"
 accordion-transition-acceptance = "ui/accordion-transition-acceptance.jsonl"
 algebra-groups-reset-and-reload = "runtime/algebra-groups-reset-and-reload.jsonl"
@@ -72,6 +73,8 @@ logic-not = "content/logic/logic-not.jsonl"
 mime-presentation-acceptance = "presentation/mime-presentation-acceptance.jsonl"
 nephroid-showcase = "content/curves/nephroid-showcase.jsonl"
 native-basic-acceptance = "geometry/native-basic-acceptance.jsonl"
+native-sampled-coverage-acceptance = "geometry/native-sampled-coverage-acceptance.jsonl"
+native-compound-acceptance = "geometry/native-compound-acceptance.jsonl"
 native-tool-motion-acceptance = "geometry/native-tool-motion-acceptance.jsonl"
 parabola-showcase = "content/curves/parabola-showcase.jsonl"
 png-sharing-acceptance = "capture/png-sharing-acceptance.jsonl"

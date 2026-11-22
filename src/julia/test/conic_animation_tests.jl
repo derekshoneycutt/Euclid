@@ -237,11 +237,11 @@ end
 const ConicAnimationTestBridge = ConicAnimationTestEnvironment.OdinJuliaBridge
 
 """Load real animation helpers and snapshot a fresh program's test-visible bindings."""
-function conic_test_program(name::String)
+function conic_test_program(name::String; bridge=ConicAnimationTestBridge)
     owner = Module(gensym(:ConicAnimationTest), false, false)
     for (symbol, value) in (
         :AnimationCatalog => AnimationCatalog,
-        :OdinJuliaBridge => ConicAnimationTestBridge,
+        :OdinJuliaBridge => bridge,
         :EuclidGeometry => EuclidGeometry,
         :EuclidLatex => EuclidLatex,
         :EuclidSearchContent => EuclidSearchContent)

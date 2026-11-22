@@ -365,46 +365,68 @@ native_modifier_style_output_valid :: proc(
         &state^.shape_world.registry, entity)
 }
 
+// Resolve tool-host sentinels before validating their render-style ownership.
+native_modifier_tool_style_output_valid :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) -> bool {
+    style := evaluated^
+    style.entity = native_modifier_tool_host(state, evaluated.entity)
+    return evaluated.entity <= 3 && native_modifier_style_output_valid(state, &style)
+}
+
+// Require a canonical arc component for a native sweep output.
+native_modifier_arc_output_valid :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) -> bool {
+    entity, found := validate_command_shape_entity(
+        state, &Scene_Command{
+            entity = evaluated.entity,
+        })
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world.arcs, &state^.shape_world.registry, entity)
+}
+
+// Validate native reveal ownership with the captured Julia descriptor contract.
+native_sweep_reveal_valid :: proc(
+    state: ^core.Euclid_General_State, evaluated: ^modifier.Modifier_Output) -> bool {
+    command := native_sweep_reveal_command(evaluated)
+    return validate_command_animation_reveal(state, &command)
+}
+
 // Validate every output in one native modifier evaluation.
 native_modifier_output_valid :: proc(
     state: ^core.Euclid_General_State,
     evaluated: ^modifier.Modifier_Output) -> bool {
     #partial switch evaluated.kind {
+    case .Reveal_Sweep:
+        return native_sweep_reveal_valid(state, evaluated)
+    case .Set_Shape_Orientation:
+        return validate_command_shape_orientation(state, &Scene_Command{
+            entity = evaluated.entity,
+            orientation = evaluated.orientation,
+        })
+    case .Set_Conic_Sample, .Set_Conic_Active, .Set_Conic_Visible, .Set_Conic_Frontier:
+        return native_conic_output_valid(state, evaluated)
+    case .Set_Cycloid_Guide_Sample, .Set_Trochoid_Guide_Sample,
+        .Set_Rolling_Guide_Visible, .Set_Cycloid_Frontier, .Set_Trochoid_Frontier:
+        return native_rolling_output_valid(state, evaluated)
     case .Set_Tool_Position, .Set_Tool_Lock:
         return native_modifier_tool_output_valid(state, evaluated)
-    case .Set_Tool_Style:
-        style := evaluated^
-        style.entity = native_modifier_tool_host(state, evaluated.entity)
-        return evaluated.entity <= 3 &&
-            native_modifier_style_output_valid(state, &style)
+    case .Set_Tool_Style, .Set_Tool_Visible, .Set_Tool_Active:
+        return native_modifier_tool_style_output_valid(state, evaluated)
     case .Set_Point_Position:
-        entity, found := validate_command_shape_entity(
+        return validate_command_shape_transform(
             state, &Scene_Command{
                 kind = .Set_Shape_Position,
                 entity = evaluated.entity,
                 position = evaluated.position,
             })
-        if !found {
-            return false
-        }
-        return shapemodel.shape_component_contains(
-            &state^.shape_world.transforms,
-            &state^.shape_world.registry, entity)
     case .Set_Point_Color, .Set_Point_Brush,
         .Set_Point_Visible, .Set_Point_Active_Color,
         .Set_Point_Active_Feature:
         return native_modifier_style_output_valid(state, evaluated)
     case .Set_Shape_Arc:
-        entity, found := validate_command_shape_entity(
-            state, &Scene_Command{
-                entity = evaluated.entity,
-            })
-        if !found {
-            return false
-        }
-        return shapemodel.shape_component_contains(
-            &state^.shape_world.arcs,
-            &state^.shape_world.registry, entity)
+        return native_modifier_arc_output_valid(state, evaluated)
     case:
         return true
     }
@@ -759,6 +781,7 @@ native_modifier_tool_contact_count :: proc(request: modifier.Modifier_Request) -
     for index in 0..<output.count {
         value := &output.outputs[index]
         produces_contact := value.kind == .Set_Tool_Position ||
+            value.kind == .Queue_Tool_Contact ||
             (value.kind == .Set_Tool_Lock && value.flag)
         if produces_contact && tool_dust_contact_on_floor(value.position) {
             count += 1
@@ -1059,12 +1082,12 @@ scene_command_batch_reveals_fit :: proc(
         }
     }
     for command_index in 0..<batch^.command_count {
-        command := &batch^.commands[command_index]
-        if command^.kind != .Reveal_Label && command^.kind != .Reveal_Region &&
-            command^.kind != .Reveal_Sweep {
+        command, has_reveal := scene_command_animation_reveal(
+            &batch^.commands[command_index])
+        if !has_reveal {
             continue
         }
-        descriptor := command^.reveal
+        descriptor := command.reveal
         if scene_reveal_superseded_later(batch, command_index) {
             continue
         }
@@ -1083,17 +1106,55 @@ scene_command_batch_reveals_fit :: proc(
 // Find whether a later descriptor supersedes this reveal in callback order.
 scene_reveal_superseded_later :: proc(
     batch: ^Scene_Command_Batch, command_index: int) -> bool {
-    descriptor := batch^.commands[command_index].reveal
+    command, has_reveal := scene_command_animation_reveal(
+        &batch^.commands[command_index])
+    if !has_reveal {
+        return false
+    }
+    descriptor := command.reveal
     for later_index in command_index+1..<batch^.command_count {
-        later := &batch^.commands[later_index]
-        if (later^.kind == .Reveal_Label || later^.kind == .Reveal_Region ||
-            later^.kind == .Reveal_Sweep) &&
-            later^.reveal.kind == descriptor.kind &&
-            later^.reveal.owner_entity == descriptor.owner_entity {
+        later, later_has_reveal := scene_command_animation_reveal(
+            &batch^.commands[later_index])
+        if later_has_reveal && later.reveal.kind == descriptor.kind &&
+            later.reveal.owner_entity == descriptor.owner_entity {
             return true
         }
     }
     return false
+}
+
+// Give native sweep effects the same descriptor used by captured Julia reveals.
+native_sweep_reveal_command :: proc(
+    evaluated: ^modifier.Modifier_Output) -> Scene_Command {
+    return {
+        kind = .Reveal_Sweep,
+        entity = evaluated.entity,
+        reveal = {
+            kind = .Sweep,
+            owner_entity = evaluated.entity,
+            duration = evaluated.scalar,
+        },
+    }
+}
+
+// Resolve a direct or native-expanded reveal for shared admission and FIFO supersession.
+scene_command_animation_reveal :: proc(
+    command: ^Scene_Command) -> (Scene_Command, bool) {
+    #partial switch command.kind {
+    case .Reveal_Label, .Reveal_Region, .Reveal_Sweep:
+        return command^, true
+    case .Apply_Native_Modifier:
+        output: modifier.Modifier_Output_Buffer
+        if modifier.evaluate_modifier(command.modifier, &output) != .Ok {
+            return {}, false
+        }
+        for index in 0..<output.count {
+            if output.outputs[index].kind == .Reveal_Sweep {
+                return native_sweep_reveal_command(&output.outputs[index]), true
+            }
+        }
+    }
+    return {}, false
 }
 
 // Locate one record that survives through this batch's accepted endpoint.
@@ -1167,7 +1228,27 @@ scene_command_batch_has_drawing_activity :: proc(batch: ^Scene_Command_Batch) ->
         return false
     }
     for command_index in 0..<batch^.command_count {
-        if batch^.commands[command_index].kind == .Emit_Trailing_Particle {
+        if scene_command_has_drawing_activity(&batch^.commands[command_index]) {
+            return true
+        }
+    }
+    return false
+}
+
+// Observe native-expanded trails through the same drawing-audio policy as direct ink.
+scene_command_has_drawing_activity :: proc(command: ^Scene_Command) -> bool {
+    if command.kind == .Emit_Trailing_Particle {
+        return true
+    }
+    if command.kind != .Apply_Native_Modifier {
+        return false
+    }
+    output: modifier.Modifier_Output_Buffer
+    status := modifier.evaluate_modifier(command.modifier, &output)
+    assert(status == .Ok)
+    for index in 0..<output.count {
+        if output.outputs[index].kind == .Emit_Trailing_Particle ||
+            output.outputs[index].kind == .Emit_Radial_Trail {
             return true
         }
     }
@@ -1257,12 +1338,32 @@ apply_native_modifier_tool_output :: proc(
     case .Set_Tool_Lock:
         set_tool_lock(state, native_modifier_tool_entity(state, evaluated.entity),
             evaluated.position, evaluated.flag, evaluated.integer != 0)
-    case .Set_Tool_Style:
+    case .Set_Tool_Style, .Set_Tool_Active:
         host := native_modifier_tool_host(state, evaluated.entity)
         _ = shape_set_active_color(state, host,
             native_modifier_color(evaluated.color_packed))
         _ = shape_set_active_feature(state, host, u16(evaluated.integer))
-        _ = shape_set_visible(state, host, u8(evaluated.flag))
+        if evaluated.kind == .Set_Tool_Style {
+            _ = shape_set_visible(state, host, u8(evaluated.flag))
+        }
+    case .Set_Tool_Visible:
+        _ = shape_set_visible(state,
+            native_modifier_tool_host(state, evaluated.entity), u8(evaluated.flag))
+    }
+}
+
+// Expand nine legacy radius samples using the display-owned particle RNG.
+apply_native_radial_trail :: proc(
+    state: ^core.Euclid_General_State,
+    evaluated: ^modifier.Modifier_Output) {
+    intervals := f32(modifier.RADIAL_TRAIL_SAMPLES - 1)
+    for index in 0..<modifier.RADIAL_TRAIL_SAMPLES {
+        jitter := particles.random_f32_range(&state^.particle_system, -0.5, 0.5)
+        progress := (f32(index) + jitter) / intervals
+        position := evaluated.position +
+            (evaluated.second_position - evaluated.position) * progress
+        emit_trailing_particle(state, position,
+            native_modifier_color(evaluated.color_packed))
     }
 }
 
@@ -1274,8 +1375,10 @@ apply_native_modifier_effect_output :: proc(
     case .Emit_Trailing_Particle:
         emit_trailing_particle(state, evaluated.position,
             native_modifier_color(evaluated.color_packed))
-    case .Reveal_Sweep:
-        _ = shape_reveal_sweep(state, evaluated.entity, evaluated.scalar)
+    case .Emit_Radial_Trail:
+        apply_native_radial_trail(state, evaluated)
+    case .Queue_Tool_Contact:
+        queue_tool_dust_contact(state, evaluated.position)
     }
 }
 
@@ -1284,6 +1387,13 @@ apply_native_modifier_output :: proc(
     state: ^core.Euclid_General_State,
     evaluated: ^modifier.Modifier_Output) {
     #partial switch evaluated.kind {
+    case .Set_Shape_Orientation:
+        apply_native_shape_orientation(state, evaluated)
+    case .Set_Conic_Sample, .Set_Conic_Active, .Set_Conic_Visible, .Set_Conic_Frontier:
+        apply_native_conic_output(state, evaluated)
+    case .Set_Cycloid_Guide_Sample, .Set_Trochoid_Guide_Sample,
+        .Set_Rolling_Guide_Visible, .Set_Cycloid_Frontier, .Set_Trochoid_Frontier:
+        apply_native_rolling_output(state, evaluated)
     case .Set_Point_Position:
         apply_set_shape_position(state, &Scene_Command{
             kind = .Set_Shape_Position,
@@ -1303,10 +1413,32 @@ apply_native_modifier_output :: proc(
                 sweep_theta = evaluated.arc_sweep,
             },
         })
-    case .Set_Tool_Position, .Set_Tool_Lock, .Set_Tool_Style:
+    case .Set_Tool_Position, .Set_Tool_Lock, .Set_Tool_Style,
+        .Set_Tool_Visible, .Set_Tool_Active:
         apply_native_modifier_tool_output(state, evaluated)
-    case .Emit_Trailing_Particle, .Reveal_Sweep:
+    case .Emit_Trailing_Particle, .Emit_Radial_Trail, .Queue_Tool_Contact:
         apply_native_modifier_effect_output(state, evaluated)
+    }
+}
+
+// Publish sampled outputs while starting formation at the same endpoint as Julia reveals.
+apply_native_modifier_batch_command :: proc(
+    state: ^core.Euclid_General_State,
+    batch: ^Scene_Command_Batch, command_index: int) {
+    output: modifier.Modifier_Output_Buffer
+    status := modifier.evaluate_modifier(
+        batch.commands[command_index].modifier, &output)
+    assert(status == .Ok)
+    for output_index in 0..<output.count {
+        evaluated := &output.outputs[output_index]
+        if evaluated.kind == .Reveal_Sweep {
+            if !scene_reveal_superseded_later(batch, command_index) {
+                command := native_sweep_reveal_command(evaluated)
+                apply_animation_reveal(state, &command, batch)
+            }
+        } else {
+            apply_native_modifier_output(state, evaluated)
+        }
     }
 }
 
@@ -1318,13 +1450,7 @@ apply_scene_command_batch :: proc(
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
         if command^.kind == .Apply_Native_Modifier {
-            output: modifier.Modifier_Output_Buffer
-            if modifier.evaluate_modifier(command^.modifier, &output) == .Ok {
-                for output_index in 0..<output.count {
-                    evaluated := &output.outputs[output_index]
-                    apply_native_modifier_output(state, evaluated)
-                }
-            }
+            apply_native_modifier_batch_command(state, batch, command_index)
         } else if command^.kind == .Reveal_Label || command^.kind == .Reveal_Region ||
             command^.kind == .Reveal_Sweep {
             if !scene_reveal_superseded_later(batch, command_index) {

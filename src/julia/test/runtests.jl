@@ -34,6 +34,9 @@ using Test
 
     @testset "Native Modifier Compatibility Inventory" begin
         include("native_modifier_inventory_tests.jl")
+        include("native_compound_adapter_tests.jl")
+        include("native_rolling_adapter_tests.jl")
+        include("native_conic_adapter_tests.jl")
     end
 
     @testset "Localized Content" begin

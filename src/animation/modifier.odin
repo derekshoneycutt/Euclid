@@ -3,6 +3,7 @@ package modifier
 import geometry "../core/geometry"
 import math "core:math"
 import linalg "core:math/linalg"
+import shapemodel "../shapes/model"
 
 MODIFIER_OUTPUT_CAPACITY :: 16
 
@@ -25,6 +26,35 @@ Modifier_Kind :: enum u8 {
     Rotate_Point,
     Reflect_Point_Xy_Above,
     Reflect_Point_Xy_Below,
+    Pen_Tilt,
+    Pen_Cone,
+    Pen_Drag,
+    Pen_Transfer,
+    Compass_Transfer,
+    Compass_Highlight,
+    Line_Segment,
+    Reflect_Angle_Marker,
+    Pen_Highlight_Point,
+    Pen_Stroke,
+    Extend_Line,
+    Two_Segment_Stroke,
+    Cycloid_Place,
+    Cycloid_Descend,
+    Cycloid_Draw,
+    Cycloid_Rise,
+    Trochoid_Place,
+    Trochoid_Descend,
+    Trochoid_Draw,
+    Trochoid_Rise,
+    Parabola_Place,
+    Parabola_Descend,
+    Parabola_Draw,
+    Parabola_Rise,
+    Hyperbola_Place,
+    Hyperbola_Descend,
+    Hyperbola_Draw,
+    Hyperbola_Rise,
+    Rotate_Shape_Orientation,
 }
 
 Modifier_Status :: enum u8 {
@@ -68,6 +98,20 @@ Modifier_Output_Kind :: enum u8 {
     Set_Tool_Style,
     Emit_Trailing_Particle,
     Reveal_Sweep,
+    Emit_Radial_Trail,
+    Set_Tool_Visible,
+    Set_Tool_Active,
+    Set_Cycloid_Guide_Sample,
+    Set_Trochoid_Guide_Sample,
+    Set_Rolling_Guide_Visible,
+    Set_Cycloid_Frontier,
+    Set_Trochoid_Frontier,
+    Set_Conic_Sample,
+    Set_Conic_Active,
+    Set_Conic_Visible,
+    Set_Conic_Frontier,
+    Set_Shape_Orientation,
+    Queue_Tool_Contact,
 }
 
 Modifier_Output :: struct {
@@ -82,6 +126,9 @@ Modifier_Output :: struct {
     scalar: f32,
     integer: int,
     flag: bool,
+    cycloid_tool: shapemodel.Shape_Cycloid_Tool,
+    trochoid_tool: shapemodel.Shape_Trochoid_Tool,
+    orientation: quaternion128,
 }
 
 Modifier_Output_Buffer :: struct {
@@ -95,7 +142,7 @@ modifier_request_valid :: proc(request: Modifier_Request) -> bool {
     if math.is_nan(request.elapsed) || math.is_inf(request.elapsed) ||
         request.elapsed < 0 ||
         math.is_nan(request.duration) || math.is_inf(request.duration) ||
-        request.duration < 0 {
+        request.duration < 0 || !modifier_fields_finite(request) {
         return false
     }
     #partial switch request.kind {
@@ -103,15 +150,27 @@ modifier_request_valid :: proc(request: Modifier_Request) -> bool {
         return true
     case .Set_Point_Position, .Translate_Point, .Rotate_Point,
         .Reflect_Point_Xy_Above, .Reflect_Point_Xy_Below,
-        .Draw_Point, .Complete_Point, .Complete_Circle:
+        .Draw_Point, .Complete_Point, .Complete_Circle,
+        .Reflect_Angle_Marker:
         return request.entity != 0
     case .Pen_Descend, .Pen_Rise, .Pen_Pose,
-        .Compass_Descend, .Compass_Rise:
+        .Compass_Descend, .Compass_Rise, .Pen_Tilt, .Pen_Cone,
+        .Pen_Drag, .Pen_Transfer, .Compass_Transfer, .Compass_Highlight:
         return request.second_entity != 0
+    case .Pen_Highlight_Point, .Pen_Stroke:
+        return request.radius > 0
     case .Draw_Line, .Complete_Line, .Draw_Circle,
-        .Draw_Filled_Circle:
+        .Draw_Filled_Circle, .Line_Segment, .Extend_Line, .Two_Segment_Stroke:
         return request.entity != 0 && request.second_entity != 0 &&
             request.third_entity != 0
+    case .Cycloid_Place, .Cycloid_Descend, .Cycloid_Draw, .Cycloid_Rise,
+        .Trochoid_Place, .Trochoid_Descend, .Trochoid_Draw, .Trochoid_Rise:
+        return rolling_request_valid(request)
+    case .Parabola_Place, .Parabola_Descend, .Parabola_Draw, .Parabola_Rise,
+        .Hyperbola_Place, .Hyperbola_Descend, .Hyperbola_Draw, .Hyperbola_Rise:
+        return conic_request_valid(request)
+    case .Rotate_Shape_Orientation:
+        return orientation_request_valid(request)
     }
     return false
 }
@@ -336,12 +395,19 @@ evaluate_complete_point :: proc(
     if status != .Ok {
         return status
     }
+    return append_visible_point_style(request, output)
+}
+
+// Append the shared brush, color, and visibility of established point-backed ink.
+append_visible_point_style :: proc(
+    request: Modifier_Request,
+    output: ^Modifier_Output_Buffer) -> Modifier_Status {
     brush: Modifier_Output = {
         kind = .Set_Point_Brush,
         entity = request.entity,
         scalar = request.brush,
     }
-    status = modifier_output_append(output, brush)
+    status := modifier_output_append(output, brush)
     if status != .Ok {
         return status
     }
@@ -379,30 +445,7 @@ evaluate_draw_point :: proc(
     if status != .Ok {
         return status
     }
-    brush: Modifier_Output = {
-        kind = .Set_Point_Brush,
-        entity = request.entity,
-        scalar = request.brush,
-    }
-    status = modifier_output_append(output, brush)
-    if status != .Ok {
-        return status
-    }
-    color: Modifier_Output = {
-        kind = .Set_Point_Color,
-        entity = request.entity,
-        color_packed = request.color_packed,
-    }
-    status = modifier_output_append(output, color)
-    if status != .Ok {
-        return status
-    }
-    visible: Modifier_Output = {
-        kind = .Set_Point_Visible,
-        entity = request.entity,
-        flag = true,
-    }
-    status = modifier_output_append(output, visible)
+    status = append_visible_point_style(request, output)
     if status != .Ok {
         return status
     }
@@ -454,30 +497,7 @@ evaluate_line :: proc(
     if status != .Ok {
         return status
     }
-    brush: Modifier_Output = {
-        kind = .Set_Point_Brush,
-        entity = request.entity,
-        scalar = request.brush,
-    }
-    status = modifier_output_append(output, brush)
-    if status != .Ok {
-        return status
-    }
-    color: Modifier_Output = {
-        kind = .Set_Point_Color,
-        entity = request.entity,
-        color_packed = request.color_packed,
-    }
-    status = modifier_output_append(output, color)
-    if status != .Ok {
-        return status
-    }
-    visible: Modifier_Output = {
-        kind = .Set_Point_Visible,
-        entity = request.entity,
-        flag = true,
-    }
-    status = modifier_output_append(output, visible)
+    status = append_visible_point_style(request, output)
     if status != .Ok {
         return status
     }
@@ -573,15 +593,30 @@ evaluate_circle_outputs :: proc(
     if status != .Ok {
         return status
     }
+    return evaluate_circle_effects(request, end_point, output)
+}
+
+// Emit a circle's ordinary trail, radial highlight, or once-only sweep reveal.
+evaluate_circle_effects :: proc(
+    request: Modifier_Request, end_point: geometry.Vector3,
+    output: ^Modifier_Output_Buffer) -> Modifier_Status {
     if request.kind == .Complete_Circle {
         return .Ok
+    }
+    if request.kind == .Draw_Filled_Circle && !request.flag {
+        return modifier_output_append(output, {
+            kind = .Emit_Radial_Trail,
+            position = request.start_position,
+            second_position = end_point,
+            color_packed = request.color_packed,
+        })
     }
     particle: Modifier_Output = {
         kind = .Emit_Trailing_Particle,
         position = end_point,
         color_packed = request.color_packed,
     }
-    status = modifier_output_append(output, particle)
+    status := modifier_output_append(output, particle)
     if status != .Ok {
         return status
     }
@@ -654,6 +689,13 @@ evaluate_modifier :: proc(
     if !modifier_request_valid(request) {
         return .Invalid_Argument
     }
+    return evaluate_valid_modifier(request, output)
+}
+
+// Dispatch one validated explicit-time sample through a single flat switch.
+evaluate_valid_modifier :: proc(
+    request: Modifier_Request,
+    output: ^Modifier_Output_Buffer) -> Modifier_Status {
     #partial switch request.kind {
     case .Identity:
         return .Ok
@@ -669,6 +711,29 @@ evaluate_modifier :: proc(
         .Draw_Filled_Circle, .Complete_Point, .Complete_Line,
         .Complete_Circle:
         return evaluate_construction(request, output)
+    case .Pen_Tilt, .Pen_Cone, .Pen_Drag, .Pen_Transfer:
+        return evaluate_pen_motion(request, output)
+    case .Compass_Transfer:
+        return evaluate_compass_transfer(request, output)
+    case .Compass_Highlight:
+        return evaluate_compass_highlight(request, output)
+    case .Line_Segment:
+        return evaluate_line_segment(request, output)
+    case .Reflect_Angle_Marker:
+        return evaluate_reflected_angle_marker(request, output)
+    case .Pen_Highlight_Point, .Pen_Stroke, .Extend_Line:
+        return evaluate_pen_stroke(request, output)
+    case .Two_Segment_Stroke:
+        return evaluate_two_segment_stroke(request, output)
+    case .Cycloid_Place, .Cycloid_Descend, .Cycloid_Draw, .Cycloid_Rise:
+        return evaluate_cycloid_motion(request, output)
+    case .Trochoid_Place, .Trochoid_Descend, .Trochoid_Draw, .Trochoid_Rise:
+        return evaluate_trochoid_motion(request, output)
+    case .Parabola_Place, .Parabola_Descend, .Parabola_Draw, .Parabola_Rise,
+        .Hyperbola_Place, .Hyperbola_Descend, .Hyperbola_Draw, .Hyperbola_Rise:
+        return evaluate_conic_motion(request, output)
+    case .Rotate_Shape_Orientation:
+        return evaluate_shape_orientation(request, output)
     }
     return .Invalid_Argument
 }

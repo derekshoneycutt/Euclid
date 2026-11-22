@@ -1,0 +1,100 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_focus":"terminal"}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"type":"c=cycloid!([0.1,0.2,0],[0.9,0.8,0];rolling_radius=0.05,tracer_distance=0.08,tracer_phase=0.3,parameter_start=2,parameter_finish=-2,draw_parameter=-1,duration=1000); EUCLID_REPL_RUNTIME.session.active_job.elapsed=190f0; println(\"rolling-\"*\"descend\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-queued.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_terminal_contains":"rolling-descend","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-descend.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"a=OdinJuliaBridge.get_compass_joint1_position(state_ptr); b=OdinJuliaBridge.get_compass_joint2_position(state_ptr); @assert isapprox(a[3],0.07;atol=0.002) && isapprox(b[3],0.07;atol=0.002); EUCLID_REPL_RUNTIME.session.active_job.elapsed=500f0; println(\"rolling-\"*\"cycloid-sample\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-cycloid-sample","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-cycloid.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"g=OdinJuliaBridge.get_cycloid_geometry(state_ptr,c.host_id); @assert g.status==0 && isapprox(g.geometry.draw_parameter,0.5;atol=0.002); b=OdinJuliaBridge.get_compass_joint2_position(state_ptr); q=EuclidAnimations.EuclidGeometry.cycloid_point([0.1,0.2,0],[0.9,0.8,0],0.05,0.08,0.5;parameter_start=2,parameter_finish=-2,tracer_phase=0.3); @assert all(isapprox.(b,q;atol=0.002)); EUCLID_REPL_RUNTIME.session.active_job.elapsed=810f0; println(\"rolling-\"*\"rise-sample\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-rise-sample","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-rise.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"b=OdinJuliaBridge.get_compass_joint2_position(state_ptr); @assert isapprox(b[3],0.07;atol=0.002); EUCLID_REPL_RUNTIME.session.active_job.elapsed=1000f0; t=trochoid!([0.5,0.5,0];mode=:external,fixed_radius=0.2,rolling_radius=0.05,tracer_distance=0.08,rotation=0.4,tracer_phase=0.3,parameter_start=2,parameter_finish=-2,draw_parameter=-1,duration=1000); println(\"rolling-\"*\"trochoid-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-trochoid-queued","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"type":"@assert OdinJuliaBridge.get_cycloid_geometry(state_ptr,c.host_id).geometry.draw_parameter == -1f0; EUCLID_REPL_RUNTIME.session.active_job.elapsed=500f0; println(\"rolling-\"*\"trochoid-sample\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-trochoid-sample","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_animation"}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-trochoid.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"g=OdinJuliaBridge.get_trochoid_geometry(state_ptr,t.host_id); b=OdinJuliaBridge.get_compass_joint2_position(state_ptr); q=EuclidAnimations.EuclidGeometry.trochoid_point([0.5,0.5,0],EuclidAnimations.EuclidGeometry.TrochoidExternal,0.2,0.05,0.08,0.5;rotation=0.4,tracer_phase=0.3); println((g.status,g.geometry.draw_parameter,g.geometry.rotation,Tuple(b),Tuple(q))); println(\"rolling-\"*\"trochoid-values\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-trochoid-values.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_terminal_contains":"rolling-trochoid-values","timeout_ms":10000}
+{"type":"@assert g.status==0 && isapprox(g.geometry.draw_parameter,0.5;atol=0.002) && g.geometry.rotation==0.4f0; @assert all(isapprox.(b,q;atol=0.002)); EUCLID_REPL_RUNTIME.session.active_job.elapsed=1000f0; println(\"rolling-\"*\"named-begin\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-named-begin","timeout_ms":10000}
+{"do":"resume_animation"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"type":"@assert OdinJuliaBridge.get_trochoid_geometry(state_ptr,t.host_id).geometry.draw_parameter == -1f0; clear!(); a=[0.1,0.3,0]; z=[0.9,0.3,0]; o=[0.5,0.5,0]; results=Any[ordinary_cycloid!(a,z,0.02;duration=0.3),curtate_cycloid!(a,z,0.02,0.01;duration=0.3),prolate_cycloid!(a,z,0.02,0.03;duration=0.3),ellipse!(o,0.2,0.1;duration=0.3)]; println(\"rolling-\"*\"named-cycloids\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-named-cycloids","timeout_ms":10000}
+{"type":"for f in (cardioid!,convex_limacon!,dimpled_limacon!,deltoid!,astroid!,five_hypocycloid!,eleven_half_hypocycloid!,nephroid!,five_point_hypotrochoid!); push!(results,f(o,0.12;duration=0.3)); end; println(\"rolling-\"*\"named-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-named-queued","timeout_ms":10000}
+{"type":"push!(results,limacon!(o,0.1,0.08;duration=0.3)); push!(results,three_dimple_epitrochoid!(o,0.12,0.06;duration=0.3)); push!(results,epitrochoid!(o,0.12,3//1,0.06;duration=0.3)); push!(results,hypotrochoid!(o,0.12,3//1,0.06;duration=0.3)); push!(results,hypocycloid!(o,0.12,3//1;duration=0.3)); println(\"rolling-\"*\"generic-queued\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-generic-queued","timeout_ms":10000}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; @assert status().drained && !status().failed && length(results)==18 && all(r->r.status==0,results); println(\"rolling-\"*\"named-complete\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-named-complete","timeout_ms":20000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"screenshot":".build/native-rolling-named.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"clear!(); cycloid!([0.1,0.3,0],[0.9,0.3,0];rolling_radius=0.02,tracer_distance=0.03,duration=1000); println(\"rolling-\"*\"interrupt-reset\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-interrupt-reset","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_reset_committed","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@assert status().drained && !status().failed; trochoid!([0.5,0.5,0];mode=:internal,fixed_radius=0.2,rolling_radius=0.05,tracer_distance=0.08,duration=1000); println(\"rolling-\"*\"interrupt-reload\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-interrupt-reload","timeout_ms":10000}
+{"do":"reload_runtime","as":"reload"}
+{"wait_event":"runtime_reload_committed","correlation":"reload","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@assert status().drained && !status().failed; astroid!([0.5,0.5,0],0.2;duration=0.3); while !status().drained && !status().failed; sleep(0.01); end; @assert !status().failed; println(\"rolling-\"*\"fresh-complete\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"rolling-fresh-complete","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

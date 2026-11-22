@@ -24,21 +24,21 @@ const NATIVE_MODIFIER_EXPORT_INVENTORY = Dict(
     :animate_pen_rise => :basic,
     :animate_compass_descend => :basic,
     :animate_compass_rise => :basic,
-    :animate_pen_tilt => :later,
-    :animate_pen_cone => :later,
+    :animate_pen_tilt => :sampled,
+    :animate_pen_cone => :sampled,
     :animate_pen_drag => :basic,
-    :animate_pen_arcmove => :later,
-    :animate_compass_arcmove => :later,
-    :animate_highlight_point => :later,
-    :animate_extend_line => :later,
-    :animate_pen_tilt_and_drag => :later,
+    :animate_pen_arcmove => :sampled,
+    :animate_compass_arcmove => :sampled,
+    :animate_highlight_point => :sampled,
+    :animate_extend_line => :sampled,
+    :animate_pen_tilt_and_drag => :sampled,
     :animate_draw_point => :basic,
     :animate_draw_line => :basic,
     :animate_draw_filledcircle => :basic,
-    :animate_draw_two_line_segments => :later,
+    :animate_draw_two_line_segments => :sampled,
     :animate_draw_circle => :basic,
-    :animate_compass_fill_arc_highlight => :later,
-    :animate_compass_arc_highlight => :later,
+    :animate_compass_fill_arc_highlight => :sampled,
+    :animate_compass_arc_highlight => :sampled,
     :animate_repl_draw_point => :basic,
     :animate_repl_draw_line => :basic,
     :animate_repl_draw_circle => :basic,
@@ -48,28 +48,28 @@ const NATIVE_MODIFIER_EXPORT_INVENTORY = Dict(
     :transform_rotate_point_x => :basic,
     :transform_rotate_point_y => :basic,
     :transform_rotate_point_z => :basic,
-    :transform_reflect2d_point => :later,
-    :transform_reflect2d_point_negative => :later,
-    :transform_reflect2d_point_x_axis => :later,
-    :transform_reflect2d_point_y_axis => :later,
-    :transform_reflect2d_point_diag_pos => :later,
-    :transform_reflect2d_point_diag_neg => :later,
-    :reflected_angle_marker_pose_xy => :later,
-    :animate_reflect2d_filled_angle_marker => :later,
-    :reveal_label => :later,
-    :reveal_region => :later,
-    :animate_cycloid_descend => :later,
-    :animate_draw_cycloid => :later,
-    :animate_cycloid_rise => :later,
-    :animate_trochoid_descend => :later,
-    :animate_draw_trochoid => :later,
-    :animate_trochoid_rise => :later,
-    :animate_parabola_descend => :later,
-    :animate_draw_parabola => :later,
-    :animate_parabola_rise => :later,
-    :animate_hyperbola_descend => :later,
-    :animate_draw_hyperbola => :later,
-    :animate_hyperbola_rise => :later,)
+    :transform_reflect2d_point => :basic,
+    :transform_reflect2d_point_negative => :basic,
+    :transform_reflect2d_point_x_axis => :basic,
+    :transform_reflect2d_point_y_axis => :basic,
+    :transform_reflect2d_point_diag_pos => :basic,
+    :transform_reflect2d_point_diag_neg => :basic,
+    :reflected_angle_marker_pose_xy => :pure,
+    :animate_reflect2d_filled_angle_marker => :sampled,
+    :reveal_label => :native_reveal,
+    :reveal_region => :native_reveal,
+    :animate_cycloid_descend => :sampled,
+    :animate_draw_cycloid => :sampled,
+    :animate_cycloid_rise => :sampled,
+    :animate_trochoid_descend => :sampled,
+    :animate_draw_trochoid => :sampled,
+    :animate_trochoid_rise => :sampled,
+    :animate_parabola_descend => :sampled,
+    :animate_draw_parabola => :sampled,
+    :animate_parabola_rise => :sampled,
+    :animate_hyperbola_descend => :sampled,
+    :animate_draw_hyperbola => :sampled,
+    :animate_hyperbola_rise => :sampled,)
 
 const NATIVE_MODIFIER_SUPPORT_INVENTORY = (:normalized_progress, :curve_parameter,
     :displacement_from_vector_and_length, :rotate_point_about_axis_line,
@@ -115,8 +115,15 @@ end
         if name != :EuclidAnimations)
     @test exported == Set(keys(NATIVE_MODIFIER_EXPORT_INVENTORY))
     @test length(NATIVE_MODIFIER_EXPORT_INVENTORY) == length(exported)
-    @test all(disposition -> disposition in (:basic, :later),
+    @test all(disposition ->
+        disposition in (:basic, :sampled, :pure, :native_reveal),
         values(NATIVE_MODIFIER_EXPORT_INVENTORY))
+    for name in exported
+        expected = name in (:animate_pen_cone, :animate_pen_rise,
+            :transform_translate_point) ? 2 : 1
+        @test length(methods(getfield(EuclidAnimations, name))) == expected
+    end
+    @test length(methods(EuclidAnimations.place_pen_at_angles)) == 2
     for name in NATIVE_MODIFIER_SUPPORT_INVENTORY
         @test isdefined(EuclidAnimations, name)
     end
@@ -186,8 +193,17 @@ end
     @test request.start == (Cfloat(1), Cfloat(2), Cfloat(3))
     @test request.displacement ==
         (Cfloat(4), Cfloat(4), Cfloat(4))
-    @test sizeof(BridgeNativeModifierRequest) >= 144
+    @test sizeof(BridgeNativeModifierRequest) == 144
+    @test fieldnames(BridgeNativeModifierRequest) == (
+        :kind, :entity, :second_entity, :third_entity, :elapsed, :duration,
+        :start, :second, :third, :displacement, :axis_a, :axis_b,
+        :angle, :radius, :brush, :color_packed, :scalar, :integer, :flag)
+    @test ntuple(i -> fieldoffset(BridgeNativeModifierRequest, i), 19) == (
+        0, 8, 16, 24, 32, 36, 40, 52, 64, 76, 88, 100, 112, 116, 120, 124, 128, 132, 136)
     @test isdefined(OdinJuliaBridge, :apply_native_modifier_request)
+    kinds = sort([getfield(OdinJuliaBridge, name) for name in
+        names(OdinJuliaBridge; all=true) if startswith(String(name), "NATIVE_MODIFIER_")])
+    @test kinds == Int32.(0:46)
 end
 
 @testset "Terminal and stochastic effect inventory" begin
@@ -198,7 +214,5 @@ end
     @test occursin("animate_repl_draw_circle", repl_source)
     @test occursin("animate_repl_draw_filledcircle", repl_source)
 
-    stochastic_sources = (read(normpath(joinpath(
-        @__DIR__, "..", "animations", "circles.jl")), String),)
-    @test any(occursin("rand()", source) for source in stochastic_sources)
+    @test NATIVE_MODIFIER_EXPORT_INVENTORY[:animate_draw_filledcircle] == :basic
 end

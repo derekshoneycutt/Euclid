@@ -45,6 +45,35 @@ const REPL_TEST_REVEALED = UInt64[]
 const REPL_TEST_FRONTIERS = Dict{UInt64,Float32}()
 const REPL_TEST_ARCS = Tuple{Bool,Float32,Float32,Float32}[]
 const REPL_TEST_CURVE_DOMAINS = Tuple{Float32,Float32,Float32}[]
+const REPL_TEST_NATIVE_REQUESTS = OdinJuliaBridge.BridgeNativeModifierRequest[]
+
+"""Record typed native rigid requests and use the independent Julia oracle in fixtures."""
+function OdinJuliaBridge.apply_native_modifier_request(
+    state::Ptr{Cvoid}, request::OdinJuliaBridge.BridgeNativeModifierRequest)
+    if state != C_NULL
+        return @ccall apply_native_modifier(
+            state::Ptr{Cvoid},
+            request::OdinJuliaBridge.BridgeNativeModifierRequest)::Int32
+    end
+    push!(REPL_TEST_NATIVE_REQUESTS, request)
+    progress = EuclidAnimations.normalized_progress(request.elapsed, request.duration)
+    if request.kind == OdinJuliaBridge.NATIVE_MODIFIER_TRANSLATE_POINT
+        point = ntuple(i -> request.start[i] + request.displacement[i] * progress, 3)
+        return OdinJuliaBridge.set_point_position_status(state, request.entity, point)
+    end
+    spec = EuclidRepl.RotateSpec(
+        collect(request.axis_a), collect(request.axis_b), request.angle)
+    rotation = EuclidRepl.motion_rotation(spec, progress)
+    if request.kind == OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_POINT
+        point = EuclidRepl.motion_position(spec, request.start, progress, rotation)
+        return OdinJuliaBridge.set_point_position_status(state, request.entity, point)
+    end
+    request.kind == OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_SHAPE_ORIENTATION ||
+        error("unexpected native request in rigid fixture")
+    orientation = EuclidRepl.motion_compose(rotation,
+        (request.displacement..., request.scalar))
+    return OdinJuliaBridge.set_shape_orientation(state, request.entity, orientation)
+end
 
 """Record a curve's reserved domain and return a unique null-state host identity."""
 function record_test_curve_domain!(parameters)

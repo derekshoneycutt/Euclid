@@ -547,71 +547,42 @@ form a union before combining with source conditions. Escape a separator with
 
 No effective conditions means ordinary browsing. Negative and mode-only
 conditions produce no source emphasis. Positive ranges come from the same
-compiled conditions, not another matcher. Queries are bounded to 1,024 UTF-8 bytes
-and 64 conditions; generated patterns and range output have separate fixed limits.
-Exceeding a compiler/native resource bound is an explicit failure, never a skipped
-term or successful no-match.
+compiled conditions, not another matcher. Resource limits fail explicitly rather
+than silently skipping terms or returning a successful no-match.
 
-Fixed store SQL calls `history_matches(source, mode, search_identity)` before its
-matching-row limit. Session pages retain submission-ID order; combined pages retain
-timestamp/scope/ID order and suppress linked saved rows independently of whether
-the session row matches. One matching-row lookahead establishes exhaustion. Summary
-byte pressure leaves an unconsumed match beyond the returned cursor, with no
-application-side scan-window continuation or examined-candidate counter.
+#### Search execution and cancellation
 
-The store's stable inline callback adapter is registered `DIRECTONLY`, never
-`DETERMINISTIC`. Its SQLite destructor notification ends registration ownership;
-unregister occurs after statement finalization and before the store can die.
-Each exclusive execution attaches a checked identity and native workspace,
-establishes the saved Odin callback context, and borrows SQLite source bytes only
-until callback return. Statement reset precedes progress-handler restoration and
-binding detachment, all before shared-connection admission is released.
+- SQL applies matching before pagination, preserving history order and suppressing
+  linked saved duplicates. Page boundaries must not skip an unreturned match.
+- The SQLite matcher is registered `DIRECTONLY`, not `DETERMINISTIC`: it depends on
+  the admitted search identity and workspace. Source bytes are borrowed only during
+  the callback; finalize statements and unregister before destroying the store.
+- Retiring a query cancels SQLite progress and PCRE2 callouts. Join the worker before
+  releasing native resources, and restore any prior SQLite progress handler.
+- Cancellation, resource exhaustion, and SQL failures remain distinct outcomes.
+  Failed pages publish no partial rows.
 
-Retiring a query atomically cancels both SQLite progress and PCRE2 callouts, but
-native resources remain alive until the worker joins. The scoped progress callback
-chains any prior tracked handler and restores its exact registration. Cancellation,
-native limits/OOM, callback validation, and SQL failures remain explicit; failed
-pages publish no partial rows.
+#### Match emphasis and help
 
-Positive-match presentation borrows the same retained plan and workspace under the
-history worker's exclusive lease; it never recompiles or filters clipped summaries.
-Accepted rows are reread with exact metadata checks before ranges are collected
-from their complete source. A page packs at most 256 ranges into one inline buffer;
-the exact-source preview has a separate 256-range buffer. Query/request identities
-and record revisions guard publication. A range failure leaves source and recall
-available, reports a nonblocking localized status, and never changes SQL acceptance.
-The [safe display mapping](../../../src/view/ui/terminal/history_explorer_text.odin)
-expands intersecting byte ranges to whole displayed fragments. The match overline
-uses the existing Text role without replacing syntax faces, backgrounds, or underlines.
+- Collect emphasis from complete source using the retained search plan, not clipped
+  summaries. Query identities and record revisions reject stale publication.
+- [Display mapping](../../../src/view/ui/terminal/history_explorer_text.odin) expands
+  match ranges to whole displayed fragments. Overlines supplement syntax styling.
+  Emphasis failure reports a nonblocking status without removing source or recall.
+- `?` and `??` open localized help while preserving the prior query and explorer
+  position. Help cannot recall or evaluate candidates; Escape restores the query
+  after identity revalidation. Editing away from help admits a new query.
 
-An exact whitespace-trimmed `?` or `??` query opens short or extended localized
-help in place. Help saves only the prior query and editor selection; the existing
-page, selected candidate, preview, and independent scroll positions stay suspended.
-Help scrolling and accessibility actions address the help document, never hidden
-candidates. Enter cannot recall or evaluate; Escape restores the prior editor and
-the service revalidates its identity before reuse. Editing away from help starts
-ordinary new-query admission. Skipped malformed patterns remain informational;
-native resource, SQL, cancellation, and invalid-query failures have distinct copy.
+#### PCRE2 compatibility and ownership
 
-The build resolves `PCRE2_jll` from the selected Julia runtime for application and
-unit-test linkage, independently of the HarfBuzz provider. Windows import libraries
-are generated from that runtime's DLL; no independent system-regex provider is used.
-
-PCRE2 retains its default memory management. The native owner pairs compiled code,
-match data, and match contexts with their PCRE2 release functions and clears released
-handles. Callers must serialize matches and join all borrowers before replacement or
-release. Subject and atomic cancellation-token borrows end when matching returns.
-Matching is native, without Julia entry or JIT, and uses Julia's UTF, UCP,
-invalid-UTF, and backslash defaults plus automatic cancellation callouts. Default
-limits are 1,000,000 match operations, depth 1,000, and 8,192 KiB of PCRE2 match heap;
-exhaustion and cancellation are explicit outcomes rather than successful no-matches.
-The [root substrate test](../../../src/pcre2_substrate_test.odin) imports the owner
-so the standard Odin suite includes its tests.
-Test-only resource hooks inject acquisition failures and count native handle releases;
-each owner explicitly borrows a caller-owned tracker without mutable global state.
-The hooks neither replace PCRE2's allocator nor exist in production builds. Joined-worker
-tests keep a real interpreter borrow live through cancellation before replacement
-and shutdown release the handles.
+- Link `PCRE2_jll` from the selected Julia runtime, not an independent system provider.
+  Matching runs natively without entering Julia, using Julia's UTF, UCP, invalid-UTF,
+  and backslash defaults plus cancellation callouts.
+- Retain PCRE2's native memory management and pair each handle with its release API.
+  Serialize workspace use and join borrowers before replacement or destruction.
+- The [substrate test](../../../src/pcre2_substrate_test.odin) includes native owner
+  tests in the Odin suite, covering acquisition failure, cancellation, and joined
+  teardown. Exact capacities and test-hook mechanics remain in the implementation.
 
 The isolated [explorer acceptance](../../../tools/scenarios/terminal/history/terminal-history-explorer-acceptance.jsonl)
 preserves draft/mode/recall, duplicates, persistence, clear, and allocation checks.
@@ -793,48 +764,25 @@ flowchart LR
 | Publication | Display graphics service | Revalidate generation, create textures, commit mutations, and advance playback. |
 | Composition | Terminal view | Draw placements at their sealed z-order relative to text. |
 
-Static PNG, JPEG, and GIF pixels decode through a worker-local SDL_image surface.
-Kitty compressed RGB/RGBA uses conventional zlib through Odin's `vendor:zlib`
-binding. `uncompress2` writes into the exact reserved raw-pixel extent; success
-requires a valid checksum, exact decoded size, and complete input consumption.
-RGB expands backward into RGBA within the same attachment buffer. Zlib owns and
-releases its internal native workspace within each call; no second pixel buffer
-is allocated. Cancellation is checked before and after decompression and during
-RGB/RGBA normalization, not within the single decompression call.
-Animated GIF uses the SDL_image streaming decoder as its sole production pixel source.
-The allocation-free Euclid GIF walk remains authoritative for dimensions, frame count,
-encoded delays, normalized durations, loop metadata, admission limits, and exact output
-sizes; decoder-reported durations are ignored. Each composited surface is copied into
-its caller-owned RGBA8 frame and destroyed immediately, and every decoder closes within
-the worker call. Cancellation or failure leaves partial bytes unpublished because the
-display commits only a completely prepared result.
+### Decode And Validation
 
-The native animation decoder boundary is format-generic even though current bounded
-admission is GIF-specific. APNG, animated WebP, AVIF, or other formats can use that
-ownership model after gaining their own authoritative bounded preflight policy.
+- SDL_image supplies static image and animated GIF pixels; Kitty compressed RGB/RGBA
+  uses zlib with checksum, exact-size, and complete-input validation.
+- Euclid's GIF preflight owns admission, dimensions, frame timing, and loop metadata.
+  Additional animation formats need their own bounded preflight before admission.
+- Workers decode into attachment-owned CPU storage and release native decoder
+  resources before returning. Cancelled or failed results are never partially published.
 
-Sixel redraw replacement is also transactional at texture publication. A prepared
-candidate retains its replacement position while the GPU upload is pending; only the
-successful upload callback retires the older resident Sixel at that position. Queue
-delay or upload failure therefore preserves the previously visible texture instead of
-presenting a blank replacement frame.
+### Publication And Replacement
 
-A Terminal generation binds one parser and attachment store to the reusable display
-service. Replacement unbinds that generation and joins accepted preparation before
-unloading its display-owned textures, removing residency accounting, and clearing the
-borrowed parser and store pointers. CPU pixel buffers and animation timelines remain
-attachment-store owned; the display service only borrows an exact-generation payload
-while creating or updating its SDL_GPU texture. Synchronized output can hold both grid
-and attachment changes until one display commit.
-
-Kitty mutations retain stream order even when a frame requires worker preparation: a
-later mutation cannot pass an earlier unfinished one. Protocol identities map to current
-internal attachment generations, so replacement and deletion cannot accidentally target
-reused storage. Marking a retained mutation ready is therefore distinct from publishing
-a texture: mutation readiness preserves protocol order, while texture residency commits
-only after generation revalidation and successful upload. Failed playback upload leaves
-the prior frame and timeline state committed. Replies return to the producer that issued
-the Kitty command.
+- The display owns GPU textures and borrows only exact-generation attachment payloads.
+  Generation replacement joins preparation before releasing textures or borrowed state.
+- Sixel replacement and animation uploads commit only after successful upload.
+  Delay or failure preserves the previous visible texture and committed playback state.
+- Kitty mutations preserve stream order across asynchronous preparation. Revalidate
+  attachment generations before publication; readiness alone is not texture residency.
+  Replies return to the issuing producer.
+- Synchronized output can hold grid and attachment changes for one display commit.
 
 ## Geometry And Container Policy
 
@@ -870,84 +818,54 @@ remain display concerns.
 
 ## EuclidRepl And Tick Streams
 
-`EuclidRepl.install_session_helpers!` installs closures into the fresh session module.
-Those closures retain the generation-local `EuclidReplRuntime` and the lifetime-stable,
-borrowed Odin state pointer. There is no process-global registry of user-session state.
+Session helpers retain the generation-local `EuclidReplRuntime` and a borrowed,
+lifetime-stable Odin state pointer, not a process-global session registry.
 
-`show_exercise!(text)` and `hide_exercise!()` control the optional plain-text board
-header. Showing or replacing instructions does not reset Terminal or construction.
-The Julia wrapper validates nonblank UTF-8 text up to 32 KiB, then submits a typed
-Julia-egress update; the display copies accepted bytes into one fixed application-owned
-buffer before returning the transport envelope. The header has its own close control,
-and close uses the same display-side dismissal operation as `hide_exercise!()`. The
-animation-control eye hides and reveals the header with the other animation controls
-without discarding its text or disclosure state. The display measures the preview
-against current board and text geometry, shows disclosure only on actual wrapped
-overflow, and limits expanded content to one-third of the board height with its own
-scroll state. The UI interaction router gives visible header presses and wheel input
-priority over world tools and Terminal scrollback.
+### Exercise Header
 
-EuclidRepl animated jobs advance through Terminal's native animation callback, inside
-the ordinary bounded scene-command capture. The display commits those commands before
-constraint solving and frame preparation. Independent `Ticks` callbacks do not advance
-drawing jobs: they run outside capture and must not mutate display-owned tool state.
-
-Basic point, line, circle, filled-sector, pen, compass, completed-form, and
-transform jobs can use native explicit-time modifiers beneath existing EuclidRepl
-helpers. Terminal queue activation, FIFO progression, elapsed progress, and finalize
-policy remain Julia/session-owned; each native modifier is copied into a bounded tick
-batch and published only after display-thread validation.
-Animation pause also pauses drawing-job progress.
+- `show_exercise!(text)` and `hide_exercise!()` control plain-text board instructions
+  without resetting Terminal or the construction. Julia validates text; the display
+  owns the accepted copy.
+- Close dismisses the header. The animation-control eye only hides it temporarily,
+  preserving text and disclosure state.
+- Long text expands into a bounded, independently scrollable area. Header input
+  takes priority over underlying tools and Terminal scrollback.
 
 ```julia
 show_exercise!("On a given finite straight line to construct an equilateral triangle.")
 hide_exercise!()
 ```
 
+### Drawing Jobs
+
+- Jobs advance inside Terminal's native animation callback and scene-command capture.
+  The display validates and commits results before constraint solving and rendering.
+- Julia owns queue order, phase timing, activation, and finalization; shared native
+  helpers perform drawing and tool mechanics. Animation pause also pauses job progress.
+- Independent `Ticks` callbacks run outside capture: they neither advance drawing jobs
+  nor have permission to mutate display-owned tools.
+
 ### Interactive Exercise Browser
 
-Run `choose_exercise()` in Terminal to browse and load instructions. It opens only
-when requested; selecting Terminal does not automatically open a menu.
+Run `choose_exercise()` in Terminal to browse exercises by readable catalogue names
+and load instructions without copying identifiers.
 
 ```julia
 choose_exercise()
 ```
 
-The browser uses Julia's standard `REPL.TerminalMenus.RadioMenu` and `request`.
-Select **Built-in exercises**, then browse the actual catalogue by readable names:
-**Euclid's Elements → Book I → Propositions → Proposition I → Load: Construct an
-equilateral triangle**. No UUIDs or references need to be copied or typed.
+The browser delegates menu behavior to Julia's `REPL.TerminalMenus`; Euclid adapts
+the viewport to the Terminal pane rather than adding another input system.
 
-- Use Up/Down, Home/End, or Page Up/Page Down to move; Enter selects.
-- **Back** returns to the parent and preserves its page and selection.
-- **More catalogue entries** and **More exercises** fetch bounded 16-row windows;
-  previous-page actions return to earlier results.
-- Empty branches say **No exercises here** and still offer Back and Cancel.
-- **Cancel**, q, or Ctrl-C returns to the ordinary REPL without loading anything.
-- Loading shows the existing instruction header without changing the selected
-  animation, drawing, variables, or retained Terminal output.
+- Loading updates only the instruction header, preserving the current construction
+  and REPL state. Cancelling loads nothing.
+- One evaluation-scoped input lease covers navigation and content queries. It unwinds
+  on completion, interruption, or session retirement; stale queued input must not leak
+  into a later prompt.
 
-One evaluation-scoped interactive lease covers the browser, including content
-queries between menus. Julia's `request` owns keyboard handling and cursor-mode
-restoration. A narrow `ConfiguredMenu` viewport adapter delegates selection to
-`RadioMenu`, clips labels to the current pane width, and adjusts visible rows at the
-next key/redraw after a resize. It introduces no input stack or graphical browser.
-Failure, interruption, navigation, and session retirement unwind the lease.
-
-The display routes ordinary encoded key/text bytes through the existing bounded
-`Terminal_Interactive_Input` envelopes, identified by evaluation request and Terminal
-generation. The native Julia owner forwards acquired/released notifications and
-installs accepted pane geometry and capabilities through rooted bridge callbacks.
-Unsent bytes remain queued under pressure and are discarded when their input owner
-changes; they never become text in a later prompt. Geometry/capability snapshots are
-retried until Julia acknowledges the exact accepted values.
-
-The real-input
-[`exercise-menu-acceptance` scenario](../../../tools/scenarios/exercises/exercise-menu-acceptance.jsonl)
-navigates to Proposition I, loads exact instructions, verifies attempt preservation,
-resizes and cancels, then types into the restored REPL. The
-[`lifecycle scenario`](../../../tools/scenarios/exercises/exercise-menu-lifecycle-acceptance.jsonl)
-checks back navigation, Ctrl-C, and leaving Terminal while a menu awaits input.
+The [menu acceptance](../../../tools/scenarios/exercises/exercise-menu-acceptance.jsonl)
+and [lifecycle acceptance](../../../tools/scenarios/exercises/exercise-menu-lifecycle-acceptance.jsonl)
+cover loading, resize, cancellation, and return to the REPL.
 
 ### Programmatic Exercise Queries
 
@@ -1024,71 +942,35 @@ not portable between machines.
 
 ### Drawing Helpers
 
-`point!` returns a `BridgeShapeEntityResult` with the point's packed entity index.
-Like line and circle handles, this handle can be passed directly to `hide!` after
-drawing completes: `p = point!([0.5,0.5,0])`, then `hide!(p)`.
+#### Queue And Motion
 
-Actions now run FIFO, with at most one active job and 32 outstanding actions
-(`ACTION_QUEUE_CAPACITY`, active plus pending). The fixed pending slots belong to
-the Terminal generation, are reused after completion, and release their payload
-references on reset. Point-motion batches have at most 16 distinct targets
-(`TRANSFORM_POINT_CAPACITY`), bounding retained inputs and per-tick command counts.
-Constructor admission reserves native identities using the existing transactional
-constructors; these hosts remain hidden until their drawing action runs. Full or
-invalid submissions raise an error without replacing earlier work.
+- Actions run FIFO, one active job at a time. Bounded admission rejects full or invalid
+  submissions without replacing earlier work.
+- Constructors reserve typed identities immediately but keep geometry hidden and
+  undrawn until its action runs. Later commands can reference those results.
+- Inputs are copied; targets are revalidated and motion starts sampled at activation,
+  after earlier actions. Queued translations therefore compose.
+- Execution failure blocks later work until reset. Jobs and managed geometry belong
+  to one Terminal generation and never carry into the next session.
 
-Terminal circles and filled sectors reserve an empty native sweep while retaining
-the requested signed sweep in their queued payload. Both interpolation samples
-therefore start undrawn; the first visible draw tick cannot blend backward from
-the completed circle into its initial arc.
-Trochoids (including all named rolling-circle helpers), Cycloids, parabolas, and
-hyperbolas likewise reserve their frontier at `parameter_start`, retaining the
-requested final `draw_parameter` in the queued payload for drawing and completion.
+#### Visibility And Progress
 
-Submitted vectors and styles are copied. Motion targets are revalidated and their
-starts sampled from the immutable native query at activation, after earlier actions.
-When an idle queue receives work, its first captured tick is an admission boundary
-only: activation waits for the following tick's fresh snapshot. The display may
-have captured the first tick before Terminal evaluation reserved its entities.
-Same-evaluation motion and hide commands accept identities from successful queued
-construction reservations; they still revalidate against the snapshot at activation.
-Point translation and rotation no longer accept redundant `start_positions`.
-Two queued translations compose instead of both starting from the submission state.
-`hide!` and `show!` queue visibility changes for a managed host. `clear!` queues hiding
-the managed hosts admitted before that command, preserving later admissions; cleared
-hosts remain managed and can be shown again during the same Terminal session. These
-helpers affect Terminal-managed geometry, not every application shape, and do not
-interrupt construction. Closing the Terminal session resets its managed-host registry;
-the existing animation-generation lifecycle retires that session's shapes.
-Large ordered clears use the native 256-command capacity per captured tick and retain
-the active action until all copied hosts have been processed.
-The legacy finish-now `stop!()` helper has been removed; use the ordinary animation
-pause/resume controls to inspect progress without changing order.
+- Pass constructor results directly to `hide!` or `show!`:
+  `p = point!([0.5,0.5,0]); hide!(p)`.
+- `clear!` queues hiding the Terminal-managed hosts admitted before it, not later
+  admissions or unrelated application shapes. Cleared hosts can be shown again.
+- Use animation pause/resume to inspect progress without changing queue order.
+- Wait for `status().drained` or `status().failed`, then check failure. `active` alone
+  is insufficient because it can be false between actions.
 
-`status()` preserves active-job fields and adds `pending_count`, `completed_count`,
-`failed`, and `drained`. Wait with `while !status().drained && !status().failed;
-sleep(0.01); end`, then check `failed`. `active` alone can be false between actions:
-the successor starts on a later captured tick, never in its predecessor's final batch.
-An execution exception blocks later work until owner-controlled reset.
-
-**Publication limitation:** completion counts and `drained` report successful Julia
-scene-command capture, not acknowledgement of display publication. The existing
-native tick protocol provides no publication acknowledgement to this queue. If Odin
-rejects a captured batch, native diagnostics/evidence report the rejection, but Julia
-may already have counted that action as completed and may proceed to its successor.
-The queue does not strengthen that existing publication guarantee.
-
-Closing a session
-resets managed geometry and stops tick admission before actors become quiescent. A new
-Terminal generation always receives a fresh runtime; drawing jobs never cross generations.
+**Publication limitation:** `drained` and completion counts mean successful Julia
+scene-command capture, not display acknowledgement. Odin can still reject a batch;
+use native diagnostics or semantic evidence to verify publication.
 
 ## Terminal Shape Constructors And Motion
 
-The Terminal exposes the existing typed bridge results rather than wrapping them in a
-generic shape handle. Successful constructors reserve their host and defining entities,
-return that typed result immediately, and queue the full tool choreography. The result
-can be referenced by later commands in the same evaluation; execution still validates
-it against the activation-time native snapshot.
+Constructors return typed bridge results immediately and queue tool choreography.
+Later commands can use those results; execution revalidates them at activation.
 
 | Constructor family | Terminal helpers | Result and defining identities |
 | --- | --- | --- |
@@ -1100,31 +982,19 @@ it against the activation-time native snapshot.
 | Rolling-circle families | `trochoid!`, `ellipse!`, `cardioid!`, `limacon!`, `convex_limacon!`, `dimpled_limacon!`, `epitrochoid!`, `hypotrochoid!`, `hypocycloid!`, `deltoid!`, `astroid!`, `five_hypocycloid!`, `eleven_half_hypocycloid!`, `nephroid!`, `three_dimple_epitrochoid!`, `five_point_hypotrochoid!` | Trochoid result with one analytic host |
 | Conics | `parabola!`, `hyperbola!` | Conic result with one host; hyperbola branch selection is immutable |
 
-`label!` accepts at most 256 UTF-8 bytes and rejects NUL. Polygon input must be an
-ordered, non-self-intersecting XY outline with three to five distinct vertices at one
-z coordinate. Lens and lune centers share a z coordinate, and their radii must create
-exactly two circle intersections. A lune is directional: it constructs the first
-circle minus the second. These fill-plane restrictions do not constrain later
-defining-point motion.
+### Constructor Choices
 
-Curve constructors retain their native analytic parameterizations and directed finite
-frontiers. Completion commits the exact requested frontier even if a frame skips the
-end of the drawing phase. `cycloid!` requires enough rail length for its rolling travel.
-`trochoid!` selects `mode=:external` or `:internal`; named roulette helpers choose the
-corresponding radius ratios and closure interval. Parabolas require positive focal
-distance. Hyperbolas use one shared host and frontier; `branches=:both` (default),
-`:positive`, or `:negative` selects authored ink without splitting the paired tool.
-Invalid domains and geometries fail before a constructor reserves native identities.
+- Polygons start as ordered, non-self-intersecting XY outlines at one z coordinate.
+  Lens/lune circles share a plane and intersect twice; a lune is the first circle
+  minus the second. These initial fill restrictions do not forbid later point motion.
+- Curves preserve directed parameter domains and finish at the requested frontier.
+  Cycloids need sufficient rail length; parabolas need positive focal distance.
+- `trochoid!` accepts `mode=:external` or `:internal`; named helpers select radius
+  ratios and closure intervals. Hyperbola `branches=:both`, `:positive`, or `:negative`
+  selects ink without splitting the paired apparatus.
+- Invalid geometry is rejected before native identities are reserved.
 
-`polygon_vertex_ids(shape)` returns a `Vector{UInt64}` in construction order.
-`line_endpoint_ids(shape)` returns the line endpoints, and
-`circle_region_center_ids(shape)` returns the two region centers. These IDs can be
-passed to the queued point-batch functions. Moving one polygon vertex deforms the
-polygon; moving all vertices together preserves its native point dependencies and
-moves the polygon as a whole. Batch starts are sampled at activation, so successive
-queued edits compose.
-
-Geometry results share a world-space transformation API:
+### Whole-Shape Motion
 
 ```julia
 translate!(shape, displacement; duration=2.5)
@@ -1135,58 +1005,47 @@ rotate!(shape, axis_start, axis_end, angle; duration=2.5)
 reflect!(shape, line_start, line_end; duration=2.5)
 ```
 
-Each helper queues an animation and returns the original typed shape. Axis helpers
-require an explicit pivot. Axes, pivots, and displacements use world coordinates,
-not the shape's current local frame; motion is not clamped to `[0,1]`. Positive
-angles follow the right-hand rule in radians, including negative and multi-turn
-rotations. Compose operations by queueing them in the desired order; there is no
-compound-rotation or local-axis mode.
+- Helpers queue motion and return the original typed shape. Use world coordinates,
+  explicit pivots, and right-hand-rule angles in radians; motion is not board-clamped.
+  Queue operations in the desired order.
+- Starts are sampled after preceding actions. Whole-shape motion preserves defining
+  dependencies and analytic parameters while updating positions and plane orientation.
+  Odin evaluates explicit-time position/orientation requests and validates their
+  combined final plane before publication. Labels and standalone instruments are
+  not targets.
+- `reflect!` animates a planar reflection as a directed `+pi` half-turn about a line
+  in the target plane, not a general 3D mirror. Reversing the line reverses the
+  intermediate lift, not the endpoint; parts may pass below the board.
 
-Starts are sampled at activation after preceding actions finish. Each frame is
-evaluated from that sampled state, not by accumulating small frame deltas.
-Point-defined shapes move their defining points together. Analytic shapes move
-their defining positions and native plane orientation without changing radii,
-intrinsic planar rotation parameters, directed frontiers, or hyperbola branches.
-Labels and standalone instruments are not targets of these unified helpers.
+### Defining-Point Edits
 
-`reflect!` is a planar reflection animated by one right-handed `+pi` rotation about
-the directed line `line_start` to `line_end`. The line must lie in the target plane
-at activation. Reversing the endpoints reverses the intermediate lift direction
-but not the reflected endpoint. A shape straddling the line can pass both above
-and below the drawing surface. This is not a general 3D mirror-plane operation.
+Obtain IDs with `polygon_vertex_ids`, `line_endpoint_ids`, or
+`circle_region_center_ids`, then queue point-batch motion:
 
-Explicit point-batch edits remain available as
-`translate_points!(ids, displacement; duration)`,
-`rotate_points!(ids, axis_start, axis_end, angle; duration)`, and
-`reflect2d_points!(ids, line_start, line_end; duration)`, with at most 16 distinct
-targets and activation-time starts. Point-batch reflection uses the same directed
-rigid half-turn, not a separately chosen lift for each point.
-These edits do not automatically rotate a dependent analytic plane. Independent
-rail-endpoint and circle-region-center edits must remain compatible with that
-shape's current plane; whole-shape rotations update positions and orientation
-together.
+```julia
+translate_points!(ids, displacement; duration)
+rotate_points!(ids, axis_start, axis_end, angle; duration)
+reflect2d_points!(ids, line_start, line_end; duration)
+```
 
-The bounded real-Terminal acceptance scenarios cover the
+- Polygon IDs follow construction order. Moving one vertex deforms the shape;
+  coordinated motion moves it as a whole. Successive edits compose at activation.
+- Point-batch reflection uses the same rigid half-turn. Point edits do not rotate a
+  dependent analytic plane: keep rail endpoints and region centers compatible with it,
+  or use whole-shape motion to update positions and orientation together.
+
+### Acceptance Coverage
+
+Real-Terminal scenarios cover
 [base constructors](../../../tools/scenarios/geometry/terminal-shapes-basic-acceptance.jsonl),
 [roulette inventory](../../../tools/scenarios/geometry/terminal-shapes-roulette-acceptance.jsonl),
 [defining-point and analytic motion](../../../tools/scenarios/geometry/terminal-shapes-motion-acceptance.jsonl),
 and [conics and branch selection](../../../tools/scenarios/geometry/terminal-shapes-conics-acceptance.jsonl).
-Input is chunked to fit ordinary frame admission, and returned markers are split in
-source so input echo cannot satisfy an output wait. Native geometry checks follow a
-committed animation tick, not queue-capture completion alone. Allocation baselines
-measure quiet frame reuse after constructor, tool, and Terminal-input admission.
-
-The default diagonal draw has a
-[line acceptance scenario](../../../tools/scenarios/terminal/terminal-line-acceptance.jsonl).
-It verifies animation pause freezes job progress and captures the completed line before
-checking allocation safety and orderly shutdown.
-The [queue acceptance](../../../tools/scenarios/terminal/terminal-queue-acceptance.jsonl)
-checks construction order, tool retirement, pause, copied inputs, successive motion,
-ordered hide/clear, and capture. Its constructors use one-second full tool
-sequences to keep the run within bounded evidence retention; native inspection
-uses the session's `EuclidRepl.OdinJuliaBridge` binding. The
-[capacity/lifecycle acceptance](../../../tools/scenarios/terminal/terminal-queue-lifecycle-acceptance.jsonl)
-checks exact admission capacity, rejection, FIFO drain, reload, and teardown.
+The [line](../../../tools/scenarios/terminal/terminal-line-acceptance.jsonl),
+[queue](../../../tools/scenarios/terminal/terminal-queue-acceptance.jsonl), and
+[lifecycle](../../../tools/scenarios/terminal/terminal-queue-lifecycle-acceptance.jsonl)
+scenarios cover pause, ordered operations, capacity rejection, and teardown.
+Geometry checks require committed native evidence, not queue completion alone.
 
 ## Backpressure And Memory Ownership
 

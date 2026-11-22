@@ -123,28 +123,16 @@ The [Architecture Guide Map](#architecture-guide-map) provides the next step for
 subsystem. For dependency ownership and normative code rules, see
 [Coding Standards](CodingStandards.md).
 
-The user-data database schema is version 2 and is constructed transactionally only for
-empty databases. Existing databases must match the current schema identity; unsupported
-versions are rejected rather than migrated. General collection and placement tables
-use 16-byte UUID identities and foreign-key enforcement. Settings, collection, and
-user-exercise mutations share the existing worker-only transaction queue and one
-durability status in Settings. User exercises use generated stable UUIDs, bounded text,
-and permanently reserved aliases after rename or deletion. Julia authoring and browsing
-requests cross the typed egress into the display owner, then use that joined worker lane;
-they never access SQLite directly. Built-in and user references remain explicitly
-namespaced, and loading either source copies instructions into the same display-owned
-header buffer so later record edits or deletion cannot change the visible snapshot.
-Collection notes are keyed by both collection and placement UUID in SQLite. Their
-bounded UTF-8 working text lives in the active animation generation; asynchronous save
-barriers keep that generation alive through reset, reload, destructive edits, and
-shutdown. In reading mode the native presentation owner parses notes as a separate
-LaTeX body and assembles it with animation content into one Dynview snapshot. The latest
-producer source is retained independently, so note-only publication and note changes do
-not require Julia to resend content or borrow display-owned collection state.
-Reference-only `\href{euclid:exercise/...}{label}` links retain bounded target metadata
-beside ordinary semantic label inlines. Dynview derives pointer and accessibility
-actions from measured, clipped layout geometry and routes activation through the shared
-exercise-link lifecycle used by Terminal OSC 8.
+Settings, collections, notes, and user exercises share a worker-owned SQLite
+transaction queue and one durability status in Settings. Julia requests pass through
+the display owner; Julia never accesses SQLite directly. Loaded exercise text is a
+display-owned snapshot, independent of later record edits.
+
+Collection notes belong to individual placements. Save barriers preserve their
+animation-generation storage until pending writes finish. The native presentation
+owner combines notes with retained animation content, so note edits do not require
+Julia to republish. Dynview and Terminal exercise links use the same activation
+lifecycle. See [SQLite Storage](Sqlite3.md) for schema and persistence details.
 
 Runtime queries, bindings, and row decoding have two discoverable homes:
 content reading in `src/persistence/content/` and user data in
@@ -157,47 +145,17 @@ the content-writing tool remains independent. There is no root persistence facad
 ### SDL callback scheduling and live resizing
 
 The desktop entry in [`src/app/desktop.odin`](../../../src/app/desktop.odin)
-uses `SetMainReady` for the Odin-owned desktop process entry and an SDL-main
-trampoline whose only call is `EnterAppMainCallbacks`. A runner-local entry with
-a valid argv prefix carries the owner to `AppInit`, avoiding mutable globals.
-The process already parsed its arguments; SDL's `RunApp` argument conversion is
-not needed (and Windows would replace a caller-supplied argv).
-SDL owns event pumping, iteration scheduling,
-the Windows/macOS native live-resize timers, and final global SDL shutdown.
-There is no application resize timer, second renderer, or nested polling loop.
-Help and argument validation still complete before entering SDL.
+uses SDL callbacks for events, frame scheduling, live resizing, and shutdown.
+Event callbacks queue input; only the display owner changes visible state or
+native resources.
 
-The app's stable callback owner retains its Odin context and
-[`Window_Session`](../../../src/view/view.odin). The existing process allocation,
-logging, and database envelopes enclose the entire blocking desktop runner.
-Consequently their borrowed settings and collection inputs remain valid through
-`AppQuit` and SDL shutdown, and debug allocation reporting runs after cleanup.
+Startup advances through asset, Julia, and display initialization without blocking
+the event loop. Resizing uses the normal frame pipeline and preserves animation,
+simulation, pause, and FPS policies. Render targets are replaced transactionally;
+temporary presentation loss does not stop owner updates.
 
-`AppInit` admits native resources and submits asset preparation. Ordinary iterations
-then advance asset, Julia initialization, content initialization, and display-resource
-admission phases. Startup worker results and request identities have session lifetime;
-close during startup joins admitted work before releasing that storage.
-
-`AppEvent` copies relevant events into a fixed synchronized inbox, including transient
-text/IME bytes. It may run off-thread and never mutates visible state or enters Julia.
-The display owner drains lifecycle signals before pacing, retaining ordinary input
-until an accepted frame. Queue overflow is an explicit process failure. `AppQuit`
-closes inbox admission before releasing resources; its storage remains alive until
-the callback runner returns so concurrent late events cannot access freed memory.
-
-Each nonrecursive `AppIterate` admits current logical/drawable extents and a complete
-scene-target pair before layout and encoding, then runs the ordinary frame pipeline.
-Resizing continues normal animation and fixed-step work, respecting pause controls.
-SDL's callback-rate hint and a nonblocking deadline preserve the FPS preference without
-sleeping in callbacks; size-change redraws can bypass the deadline. Minimized or
-temporarily unavailable presentation continues owner updates at a bounded cadence
-without captures or false frame-presented evidence. GIF resize cancellation remains
-with the existing capture owner.
-
-Target replacement remains transactional and conservatively waits for GPU idle before
-retiring the old pair. Failed allocation/fencing preserves last-good resources and
-fails explicitly; swapchain unavailability is recoverable. SDL's deferred texture-release
-guarantee is not being used to waive outstanding capture/upload ownership.
+The callback session remains alive through shutdown, joining outstanding work before
+releasing its resources.
 See [native resize acceptance](TestingStrategy.md#native-live-resize-acceptance)
 for the platform-specific verification boundary.
 
@@ -316,6 +274,23 @@ while Odin evaluates the marker and expands it into ordinary scene commands befo
 whole-batch validation and commit. The marker is callback-owned and has no
 independent clock or persistent motion slot. Direct bridge scene writes remain
 available and mixed direct/modifier batches keep callback order.
+Travel, point/arc highlights, connected strokes, extensions, and reflected-angle
+markers use the same boundary. Julia retains content/Terminal queue policy; Odin
+owns their sampled apparatus and geometry. Explicit labels and regions continue
+to use the native reveal contracts rather than a second modifier-owned lifecycle.
+Cycloid and Trochoid samples reuse canonical native curve geometry for rail/ring
+poses and tracer contact. Complete guide samples commit endpoints and scalar
+configuration atomically; analytic curve orientation is not overwritten.
+Parabola and Hyperbola samples move their configured native apparatus and exact
+frontier together, preserving intrinsic branch selection and paired tracer ink.
+Curve initialization/reset placement also uses native mechanics, admitted only
+during the existing quiesced Julia-owner lifecycle handoff.
+Julia still owns named-variant construction, directed completion policy, and
+instrument retirement.
+Terminal rigid transforms submit activation-time defining points and XYZW orientation
+to native evaluators. Their outputs participate in the same final-plane validation
+as direct writes; signed rotations retain the authored path rather than shortest-path
+interpolation. Terminal point, line, and arc finalizers use native completion requests.
 
 Start at [`src/bridge/model/`](../../../src/bridge/model/),
 [`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin), and
