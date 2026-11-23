@@ -1,7 +1,9 @@
 package terminalservice
 
+import transport "../../../bridge/transport"
+
 import bridgemodel "../../../bridge/model"
-import bridge "../../../bridge"
+import bridge "../../../bridge/host"
 import core "../../../core"
 import protocol "../../../core/protocol"
 import termhist "../../../terminal/history"
@@ -62,7 +64,7 @@ terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     termhist.termhist_insert_text(term.history, "α")
     terminal_highlight_service_update(state, {}, 0)
     terminal_highlight_service_update(state, {}, 1)
-    envelope, received := bridge.consumer_mailbox_try_recv(
+    envelope, received := transport.consumer_mailbox_try_recv(
         &state.julia_runtime_service.julia_inbox)
     testing.expect(t, received && envelope != nil)
     request, typed := envelope^.(protocol.Highlight_Requested)
@@ -74,7 +76,7 @@ terminal_service_test_highlight_transport_publication :: proc(t: ^testing.T) {
     testing.expect_value(t, bridge.send_terminal_highlight_result(
         state.julia_runtime_service, {request.identity, request.source, runs[:]}),
         bridgemodel.Communication_Send_Outcome.Sent)
-    bridge.consumer_mailbox_release(&state.julia_runtime_service.julia_inbox, envelope)
+    transport.consumer_mailbox_release(&state.julia_runtime_service.julia_inbox, envelope)
     testing.expect_value(t, terminal_service_test_dispatch_egress(t, state), 1)
     testing.expect_value(t, terminalview.terminal_live_highlight_runs(term)[0].weight,
         protocol.Highlight_Weight.Bold)
@@ -97,20 +99,20 @@ terminal_service_highlight_retries_drain_pressure :: proc(t: ^testing.T) {
     term.julia_session_ready = true
     inbox := &state.julia_runtime_service.julia_inbox
     _ = bridge.send_terminal_ingress(state.julia_runtime_service, protocol.Tick_Pulse{})
-    blocked, _ := bridge.consumer_mailbox_try_recv(inbox)
+    blocked, _ := transport.consumer_mailbox_try_recv(inbox)
     testing.expect(t, termhist.termhist_insert_text(term.history, "abc"))
     terminal_highlight_service_update(state, {}, 0)
     terminal_highlight_service_update(state, {}, 1)
     testing.expect_value(t, term.highlighting.failure_count, u64(0))
     testing.expect_value(t, term.highlighting.live.phase,
         type_of(term.highlighting.live.phase).Scheduled)
-    bridge.consumer_mailbox_release(inbox, blocked)
+    transport.consumer_mailbox_release(inbox, blocked)
     terminal_highlight_service_update(state, {}, 2)
-    message, ready := bridge.consumer_mailbox_try_recv(inbox)
+    message, ready := transport.consumer_mailbox_try_recv(inbox)
     testing.expect(t, ready)
     request := message^.(protocol.Highlight_Requested)
     testing.expect_value(t, request.source, "abc")
-    bridge.consumer_mailbox_release(inbox, message)
+    transport.consumer_mailbox_release(inbox, message)
 }
 
 // Accepted evidence retains the request identity and complete UTF-8 coverage counters.
@@ -153,7 +155,7 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
         },
     }
     terminal_highlight_service_update(state, prepared, 1)
-    envelope, received := bridge.consumer_mailbox_try_recv(
+    envelope, received := transport.consumer_mailbox_try_recv(
         &state.julia_runtime_service.julia_inbox)
     testing.expect(t, received && envelope != nil)
     request, typed := envelope^.(protocol.Highlight_Requested)
@@ -161,9 +163,9 @@ terminal_service_test_highlight_history_during_evaluation :: proc(t: ^testing.T)
     failure := bridgemodel.Julia_Host_Egress(protocol.Highlight_Failed{
         request.identity, .Mailbox_Full})
     testing.expect(t, terminal_service_dispatch_egress(state, &failure))
-    bridge.consumer_mailbox_release(&state.julia_runtime_service.julia_inbox, envelope)
+    transport.consumer_mailbox_release(&state.julia_runtime_service.julia_inbox, envelope)
     terminal_highlight_service_update(state, prepared, 2)
-    _, duplicate := bridge.consumer_mailbox_try_recv(
+    _, duplicate := transport.consumer_mailbox_try_recv(
         &state.julia_runtime_service.julia_inbox)
     testing.expect(t, !duplicate)
     testing.expect(t, term.awaiting_eval)

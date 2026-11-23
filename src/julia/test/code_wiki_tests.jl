@@ -66,6 +66,12 @@ end
     @test package.symbols[4].signature ==
         "QUERY :: `SELECT count(*) FROM records\nWHERE value MATCH ?1`"
 
+    empty_package = parse_odin_doc(
+        "package composition\n\n\tfullpath:\n\t\t/tmp/composition\n" *
+        "\tfiles:\n\t\tlink.odin\n", "src/composition")
+    @test isempty(empty_package.symbols)
+    @test isempty(empty_package.doc_markdown)
+
     @test_throws ErrorException parse_odin_doc(
         "package broken\n\t\torphan :: proc()", "src/broken")
 end

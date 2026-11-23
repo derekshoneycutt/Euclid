@@ -2,7 +2,7 @@ package terminalservice
 
 import viewterminalmodel "../model"
 import bridgemodel "../../../bridge/model"
-import bridge "../../../bridge"
+import bridge "../../../bridge/host"
 import core "../../../core"
 import protocol "../../../core/protocol"
 import simulationmodel "../../simulation/model"

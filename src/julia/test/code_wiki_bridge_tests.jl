@@ -90,6 +90,16 @@ end
     vector_call = bridge_test_call(parameter_type="NTuple{3,Cfloat}")
     @test length(CodeWiki.pair_bridge_records(
         [vector_export], [vector_call])) == 1
+    @test length(CodeWiki.pair_bridge_records(
+        [bridge_test_export(parameter_type="scene.Vector3")], [vector_call])) == 1
+    @test length(CodeWiki.pair_bridge_records(
+        [bridge_test_export(parameter_type="host.Animation_Value_Abi_Identity")],
+        [identity_call])) == 1
+    @test length(CodeWiki.pair_bridge_records(
+        [bridge_test_export(parameter_type="^exercise.Exercise_Query_Input")],
+        [bridge_test_call(parameter_type="Ref{ExerciseQueryInputABI}")])) == 1
+    @test_throws ErrorException CodeWiki.pair_bridge_records(
+        [bridge_test_export(parameter_type="other.Vector3")], [vector_call])
     @test isempty(CodeWiki.pair_bridge_records([exported], BridgeJuliaCall[], ["ping"]))
     @test_throws ErrorException CodeWiki.pair_bridge_records(
         [exported], BridgeJuliaCall[], ["unknown"])

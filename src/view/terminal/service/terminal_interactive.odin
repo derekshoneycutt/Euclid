@@ -2,7 +2,7 @@ package terminalservice
 
 import core "../../../core"
 import protocol "../../../core/protocol"
-import julia "../../../bridge"
+import julia "../../../bridge/host"
 import input "../../input"
 import terminalview ".."
 import "core:log"

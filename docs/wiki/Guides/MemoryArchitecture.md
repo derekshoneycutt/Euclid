@@ -125,7 +125,7 @@ generation arena. Its owner and generation contract MUST remain explicit, and
 all borrowers and derived aliases MUST be detached before the shared reset.
 The allocator API is [`animation_memory_allocator`](../../../src/core/animation/memory.odin);
 its shared borrowers are coordinated in
-[`animation_storage.odin`](../../../src/bridge/animation_storage.odin).
+[`animation_storage.odin`](../../../src/bridge/animation/storage.odin).
 
 `context.temp_allocator` MUST be used only when data cannot escape its
 operation/frame reset, never for generation-lived state. Frame scratch SHOULD NOT
@@ -486,13 +486,13 @@ Exact quotas and byte sizes belong to the linked models and implementations.
 | Application composition | One heap-allocated `Euclid_General_State` root with same-lifetime fixed children, including input, focus, projection, surface, shape world, and particles | Stop/join dependent services, then release the root once | [Core state](../../../src/core/core.odin), [runtime initialization](../../../src/view/runtime_session.odin), [shutdown](../../../src/view/shutdown.odin) |
 | Shape world and particles | Canonical world and bounded particle state are inline in the application root; existing pointers address stable root fields | Logical scene resets reuse capacity; the root is released after simulation workers stop | [Shape System](ShapeSystem.md), [Particle System](../../../src/particles/), [runtime initialization](../../../src/view/runtime_session.odin) |
 | Display input and semantic focus | Fixed input history and semantic-focus state are inline in the application root and borrowed by display UI paths | Reuse through the display session; root release invalidates both after the loop ends | [Input runtime](../../../src/view/input/runtime.odin), [UI model](../../../src/view/ui/model/model.odin) |
-| Animation-generation data | Shared `Animation_Memory` arena, borrowed by values, documents, and production Terminal state | Detach borrowers, reset once, publish new generation | [Animation storage](../../../src/bridge/animation_storage.odin), [Terminal lifecycle](../../../src/view/terminal/lifecycle.odin) |
-| Interface/catalogue materialization | Per-interface registry arena and stable interface slots | Retire or roll back interface generation; destroy at shutdown | [Bridge bootstrap](../../../src/bridge/bootstrap.odin) |
+| Animation-generation data | Shared `Animation_Memory` arena, borrowed by values, documents, and production Terminal state | Detach borrowers, reset once, publish new generation | [Animation storage](../../../src/bridge/animation/storage.odin), [Terminal lifecycle](../../../src/view/terminal/lifecycle.odin) |
+| Interface/catalogue materialization | Per-interface registry arena and stable interface slots | Retire or roll back interface generation; destroy at shutdown | [Bridge bootstrap](../../../src/bridge/host/bootstrap.odin) |
 | Content/search | Dedicated service TLSF storage plus separately owned active/staged content arenas | Transactional generation replacement; stop worker before service release | [Content service](../../../src/view/content/service.odin), [content model](../../../src/core/content/model.odin) |
-| Bridge transport | One plain growing Odin arena per one-way inbox, embedded in the service | Pause admission, exhaust accepted messages, reset arena, reopen; stop/join before destruction | [Consumer mailboxes](../../../src/bridge/consumer_mailbox.odin), [mailbox model](../../../src/bridge/model/mailbox.odin) |
-| Retained presentation source | Fixed owner-local records for producer retries, display startup content, and two display parse/replacement slots | Replace pending records locally; active parse source remains valid through task join | [Runtime service](../../../src/bridge/runtime_service.odin), [presentation runtime](../../../src/view/presentation/presentation_runtime.odin) |
-| Tick and lifecycle work | Service-owned reusable slots, pointer-free query snapshots, staged writes and scene commands | Completion accepted or rejected before slot reuse | [Runtime model](../../../src/bridge/model/runtime.odin), [runtime service](../../../src/bridge/runtime_service.odin) |
-| View snapshots | Per-slot growing arena and bounded payload builders | Only a free slot can reset; publication consumers must finish first | [Snapshot model](../../../src/bridge/model/model.odin), [runtime service](../../../src/bridge/runtime_service.odin) |
+| Bridge transport | One plain growing Odin arena per one-way inbox, embedded in the service | Pause admission, exhaust accepted messages, reset arena, reopen; stop/join before destruction | [Consumer mailboxes](../../../src/bridge/transport/consumer_mailbox.odin), [mailbox model](../../../src/bridge/model/mailbox.odin) |
+| Retained presentation source | Fixed owner-local records for producer retries, display startup content, and two display parse/replacement slots | Replace pending records locally; active parse source remains valid through task join | [Egress](../../../src/bridge/host/egress.odin), [presentation runtime](../../../src/view/presentation/presentation_runtime.odin) |
+| Tick and lifecycle work | Service-owned reusable slots, pointer-free query snapshots, staged writes and scene commands | Completion accepted or rejected before slot reuse | [Runtime model](../../../src/bridge/model/runtime.odin), [tick slots](../../../src/bridge/host/tick_slots.odin) |
+| View snapshots | Per-slot growing arena and bounded payload builders | Only a free slot can reset; publication consumers must finish first | [Snapshot model](../../../src/bridge/model/model.odin), [snapshot storage](../../../src/bridge/host/view_snapshot_storage.odin) |
 | Dynview derived cache | Dedicated cache arena and persistent shaping workspaces | Rebuild under exclusive worker access, then joined display use | [Simulation executor](../../../src/view/simulation/simulation_executor.odin), [compiler](../../../src/dynview/compile/compile.odin) |
 | Task scheduler | Fixed virtual backing, mutex-wrapped TLSF, retained workers/queues/slots | Join task results and fences; stop pool before backing release | [Task pool](../../../src/taskpool/taskpool.odin) |
 | Fonts | Cache-owned metadata TLSF for canonical glyphs, optional-raster records, and visible-ink samples; separate static preparation arena and display-owned atlas resources | Join preparation; copy/publish accepted data; release generation metadata on retirement and destroy cache storage after all consumers stop | [Font Rasterization](FontRasterization.md), [font cache](../../../src/view/font/font.odin) |
@@ -500,7 +500,7 @@ Exact quotas and byte sizes belong to the linked models and implementations.
 | User-data persistence | App-owned store, sequentially owned SQLite connection/statements, operation-scoped replay snapshots | Join save work before payload reuse or connection/store close; reclaim scratch at its operation boundary | [User-data model](../../../src/persistence/userdata/model.odin), [save coordinator](../../../src/view/preferences/settings_save.odin) |
 | Terminal graphics and shell | Display-lifetime service owners, generation-bound attachments, joined jobs, native process resources | Unbind/close generation consumers before reset; stop services before pool destruction | [Graphics service](../../../src/view/terminal/service/terminal_graphics_service.odin), [shell service](../../../src/view/terminal/service/shell_service.odin) |
 | Renderer and capture | Fixed CPU staging, SDL GPU resources, framebuffer owner, capture-owned GIF arena, native encoder, and output transaction | Reuse staged pixels within a capture; close/abort native work before resetting storage; retain published path until capture policy copies it | [Draw runtime](../../../src/view/native/sdl_draw_runtime.odin), [capture backend](../../../src/view/capture/backend/sdl_gif_capture.odin), [GIF encoder](../../../src/view/native/sdl_gif_encoder.odin) |
-| Julia runtime | Ordinary Julia GC heap, rooted runtime host and active/candidate generations | Reachability and GC, plus explicit host shutdown; not Odin arena reset | [Julia host bridge](../../../src/bridge/runtime_service.odin), [Julia section](#julia-heap-and-rooting-windows) |
+| Julia runtime | Ordinary Julia GC heap, rooted runtime host and active/candidate generations | Reachability and GC, plus explicit host shutdown; not Odin arena reset | [Julia host bridge](../../../src/bridge/host/runtime_service.odin), [Julia section](#julia-heap-and-rooting-windows) |
 
 ## Shared Animation Memory
 
@@ -525,10 +525,10 @@ Generation replacement is an ordered operation:
 1. Reset the shared arena once.
 1. Publish the new nonzero generation to the stores and initialize new borrowers.
 
-[`animation_storage_begin_generation`](../../../src/bridge/animation_storage.odin)
+[`animation_storage_begin_generation`](../../../src/bridge/animation/storage.odin)
 coordinates the shared stores; it is not by itself a universal shutdown routine
 for every consumer. Lifecycle coordination also lives in
-[animation transitions](../../../src/bridge/animations.odin) and the
+[animation transitions](../../../src/bridge/host/animation_lifecycle.odin) and the
 [presentation runtime](../../../src/view/presentation/presentation_runtime.odin).
 
 An old pointer is invalid after reset even if the arena retains the same backing
@@ -552,7 +552,7 @@ No rolling motion state, allocation domain, retained pointer, or native clock is
 
 ### Consumer-owned messages
 
-The [native mailboxes](../../../src/bridge/consumer_mailbox.odin) give each
+The [native mailboxes](../../../src/bridge/transport/consumer_mailbox.odin) give each
 consumer its own arena-backed message storage.
 
 - **Copy at publication.** Envelopes and nested bytes are copied into the inbox.
@@ -569,7 +569,7 @@ consumer its own arena-backed message storage.
 - **Join before destruction.** Close admission, preserve accepted work, wake waiters,
   stop publishers, and join Julia and native parse borrowers before freeing storage.
 
-The [typed copy dispatch](../../../src/bridge/mailbox_copy.odin) defines what is copied.
+The [typed copy dispatch](../../../src/bridge/transport/mailbox_copy.odin) defines what is copied.
 Queue limits and synchronization mechanics belong in the implementation.
 
 ### A copy can establish the next lifetime
@@ -614,7 +614,7 @@ View snapshot slots have their own arena-backed builders and sealed payloads.
 Their arena resets only after the slot is free, not whenever an animation arena
 resets. The consumer-facing payload is native-owned and does not require retained
 Julia heap pointers. See the [bridge models](../../../src/bridge/model/) and
-[slot preparation/publication](../../../src/bridge/runtime_service.odin).
+[slot preparation/publication](../../../src/bridge/host/view_snapshot_storage.odin).
 
 ## Derived Caches And Native Resources
 
@@ -747,7 +747,7 @@ internal runtime/GC threads or that Julia execution is free of collection pauses
 
 ### The captured window is a rooting window
 
-In [runtime service](../../../src/bridge/runtime_service.odin), a worker-lifetime
+In [runtime service](../../../src/bridge/host/runtime_service.odin), a worker-lifetime
 GC frame roots the Julia runtime host. The frame is installed before host creation
 and restored during finalization. The Julia host's object graph retains its active
 runtime generation and actor state.
@@ -755,7 +755,7 @@ runtime generation and actor state.
 Per-call frames separately root boxed arguments and temporary values during
 Terminal ingress, animation ticks, and lifecycle calls. Reload candidates have a
 local root through validation and commit or rollback in
-[animation lifecycle code](../../../src/bridge/animations.odin).
+[animation lifecycle code](../../../src/bridge/host/animation_reload.odin).
 
 These native frames use the Julia embedding GC-stack ABI through
 [Julia bindings](../../../libs/julia/bindings/). They implement the rooting
@@ -773,7 +773,7 @@ Preservation does not transfer ownership or authorize native retention after the
 protected operation.
 
 Rooting is not GC suspension. There is a narrow exception-reporting path in
-[bootstrap](../../../src/bridge/bootstrap.odin) that temporarily disables GC and
+[bootstrap](../../../src/bridge/host/bootstrap.odin) that temporarily disables GC and
 restores its previous state; startup/root validation and reload rollback also
 contain explicit full collections. Those exceptional operations should not be
 mistaken for a per-frame GC-off policy.
@@ -792,7 +792,7 @@ and preserve `Ref{T}` storage while the bridge copies bytes:
 1. The native generation reset invalidates native stored values; Julia values
    already copied out remain subject to their own ordinary Julia lifetimes.
 
-The [native exports](../../../src/bridge/abi-animations.odin) never retain the
+The [native exports](../../../src/bridge/abi/host_animations.odin) never retain the
 Julia source/destination pointer. This is not a general serializer for arbitrary
 Julia object graphs, and it does not redirect Julia allocations into Odin.
 `isbits` is a representation constraint, not proof that a raw address encoded in
@@ -830,7 +830,7 @@ owner thread; restoring that context does not create a new scratch lifetime.
 | Owner | Reclamation boundary | Preservation contract |
 | --- | --- | --- |
 | [Display frame](../../../src/view/frame.odin) | Frame completion | Frame consumers must finish before the reset. |
-| [Julia host](../../../src/bridge/runtime_service.odin) | Host-loop iteration | Native callbacks use the host context; no scratch may escape to later Julia work or messages. |
+| [Julia host](../../../src/bridge/host/runtime_service.odin) | Host-loop iteration | Native callbacks use the host context; no scratch may escape to later Julia work or messages. |
 | [Task invocation](../../../src/taskpool/taskpool.odin) | Procedure return, before completion publication | Rewind only task allocations; preserve scratch already owned by an owner thread helping the pool. |
 | [Catalogue SQLite owner](../../../src/view/content/worker.odin) | Startup admission and every completed request, including controls and failures | Database statements and sealed generations must not retain request scratch. |
 

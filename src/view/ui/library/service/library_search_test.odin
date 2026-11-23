@@ -1,7 +1,9 @@
 package libraryservice
 
+import bridge_animation "../../../../bridge/animation"
+
 import bridgemodel "../../../../bridge/model"
-import bridge "../../../../bridge"
+import bridge "../../../../bridge/host"
 import evidence_session "../../../../evidence/session"
 import evidence_trace "../../../../evidence/trace"
 import files "../../../../files"
@@ -364,18 +366,24 @@ library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
        return
     }
     defer viewcontent.content_service_destroy_owned(service)
+    library_search_assert_packaged_fixtures(t, service)
+}
 
+// Materialize the worker generation and validate every packaged search fixture.
+library_search_assert_packaged_fixtures :: proc(
+    t: ^testing.T, service: ^viewcontent.Content_Service) {
     registry_state := new(core.Euclid_General_State, context.allocator)
     defer free(registry_state, context.allocator)
     defer bridge.destroy_julia_interface_resources(registry_state)
     registry := &registry_state^.julia_interface_slots[0]
     registry_state^.julia_interface = registry
-     generation := viewcontent.content_service_generation(service)
-     testing.expect(t, generation != nil)
-     if generation == nil {
-       return
+    generation := viewcontent.content_service_generation(service)
+    testing.expect(t, generation != nil)
+    if generation == nil {
+        return
     }
-     testing.expect(t, bridge.content_generation_materialize(registry, generation))
+    testing.expect(t,
+        bridge_animation.content_generation_materialize(registry, generation))
 
     for fixture, index in LIBRARY_SEARCH_QUALITY_FIXTURES {
         library_search_quality_fixture_matches(

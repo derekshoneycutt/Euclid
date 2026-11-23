@@ -46,7 +46,7 @@ Choose a path based on what you need to understand:
 | --- | --- |
 | Understand one ordinary display frame | [`src/view/frame.odin`](../../../src/view/frame.odin), then [`src/view/view.odin`](../../../src/view/view.odin) |
 | Trace process startup or shutdown | [`src/main.odin`](../../../src/main.odin), [`src/app/`](../../../src/app/), [`src/view/window_session.odin`](../../../src/view/window_session.odin) |
-| Follow a Julia request across the language boundary | [`JuliaThreadArchitecture.md`](JuliaThreadArchitecture.md), [`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin) |
+| Follow a Julia request across the language boundary | [`JuliaThreadArchitecture.md`](JuliaThreadArchitecture.md), [`src/bridge/host/runtime_service.odin`](../../../src/bridge/host/runtime_service.odin) |
 | Find a UI control or panel | [`UiSystem.md`](UiSystem.md), [`src/view/ui/`](../../../src/view/ui/) |
 | Change geometry, particles, text, or persistent data | Use the [guide map](#architecture-guide-map) to find that subsystem's entry point |
 | Change style, animation content, localization, or tests | [`CodingStandards.md`](CodingStandards.md), [`AnimationsStyle.md`](AnimationsStyle.md), [`Localization.md`](Localization.md), [`TestingStrategy.md`](TestingStrategy.md) |
@@ -68,7 +68,7 @@ tables group code by the architectural question a contributor is likely to ask.
 | Process and app setup | Arguments, startup composition, resolved settings, user-store lifetime | [`src/main.odin`](../../../src/main.odin), [`src/app/`](../../../src/app/) |
 | Application composition | Whole-app state and run settings; its stable heap root contains same-lifetime fixed children but does not own every reachable model | [`src/core/core.odin`](../../../src/core/core.odin), [`src/view/runtime_session.odin`](../../../src/view/runtime_session.odin) |
 | Display coordinator | Frame order, UI preparation, simulation, presentation, drawing | [`src/view/`](../../../src/view/) |
-| Julia host and bridge | Julia lifetime, typed transport, ABI exports, request/result routing | [`src/bridge/`](../../../src/bridge/), [`src/julia/host/`](../../../src/julia/host/) |
+| Julia host and bridge | Julia lifetime, typed transport, ABI exports, request/result routing | [`src/bridge/host/`](../../../src/bridge/host/), [`src/julia/host/`](../../../src/julia/host/) |
 | Native backend | SDL3 window, input, GPU, audio, and platform-affine work | [`src/view/native/`](../../../src/view/native/) |
 
 ### Reusable models and runtime systems
@@ -262,7 +262,18 @@ ownership, messaging, evaluation, rendering, and lifecycle.
 
 ## Odin-Julia Bridge: How the Boundary Works
 
-The bridge is a closed typed contract, not a generic callback queue. Small requests and
+The bridge is a closed typed contract, not a generic callback queue. Its Odin packages
+separate the executable C adapters in [`abi/`](../../../src/bridge/abi/), the Julia
+owner in [`host/`](../../../src/bridge/host/), bounded mailbox mechanics in
+[`transport/`](../../../src/bridge/transport/), animation registry and generation
+storage in [`animation/`](../../../src/bridge/animation/), exercise boundary
+operations in [`exercise/`](../../../src/bridge/exercise/), and captured scene
+transactions in [`scene/`](../../../src/bridge/scene/). The root bridge package
+links the ABI adapters into the application and harness; consumers otherwise import
+the owning package directly. Presentation classification and semantic replay live
+under [`view/presentation/`](../../../src/view/presentation/).
+
+Small requests and
 results use consumer-owned bounded native mailboxes; animation work and other long-lived
 payloads use checked slots or immutable snapshots. Odin validates and publishes
 results to the owner of visible state. Keep Odin exports, Julia wrappers, message
@@ -293,7 +304,7 @@ as direct writes; signed rotations retain the authored path rather than shortest
 interpolation. Terminal point, line, and arc finalizers use native completion requests.
 
 Start at [`src/bridge/model/`](../../../src/bridge/model/),
-[`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin), and
+[`src/bridge/host/runtime_service.odin`](../../../src/bridge/host/runtime_service.odin), and
 [`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl). Follow
 [Julia Thread Architecture](JuliaThreadArchitecture.md) for the transport and
 publication patterns.

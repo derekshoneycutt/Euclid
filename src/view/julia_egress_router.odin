@@ -1,7 +1,7 @@
 package view
 
 import bridgemodel "../bridge/model"
-import bridge "../bridge"
+import bridge "../bridge/host"
 import core "../core"
 import exerciseheader "../core/exercise_header"
 import viewpresentation "presentation"

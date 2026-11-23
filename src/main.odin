@@ -1,11 +1,15 @@
 package main
 
 import app "app"
+import bridge "bridge"
 import evidence_allocation "evidence/allocation"
 
 import "core:fmt"
 import "core:log"
 import "core:os"
+
+// Link the bridge's exported ABI into the application process.
+_ :: bridge
 
 // Run with allocation evidence enabled for debug process builds.
 run_debug_application :: proc() -> int {

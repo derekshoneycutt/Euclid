@@ -1,6 +1,8 @@
 package exercise_link
 
-import bridge "../../bridge"
+import bridge_exercise "../../bridge/exercise"
+
+import bridge "../../bridge/host"
 import bridgemodel "../../bridge/model"
 import core "../../core"
 import contentdata "../../core/content"
@@ -69,8 +71,8 @@ terminal_exercise_link_queue_resolution :: proc(
         return 0, false
     }
     token: u64
-    accepted := bridge.enqueue_exercise_query(state, query, false, &token) ==
-        bridge.BRIDGE_STATUS_OK
+    accepted := bridge_exercise.enqueue_exercise_query(state, query, false, &token) ==
+        bridgemodel.BRIDGE_STATUS_OK
     return token, accepted
 }
 
@@ -95,8 +97,8 @@ terminal_exercise_link_queue_user :: proc(
         copy(task.reference[:], target_identity[:target.identity_byte_count])
     }
     token: u64
-    accepted := bridge.enqueue_user_exercise_operation(state, task, false, &token) ==
-        bridge.BRIDGE_STATUS_OK
+    accepted := bridge_exercise.enqueue_user_exercise_operation(
+        state, task, false, &token) == bridgemodel.BRIDGE_STATUS_OK
     return token, accepted
 }
 
@@ -228,8 +230,8 @@ terminal_exercise_link_queue_read :: proc(
         return false
     }
     token: u64
-    if bridge.enqueue_exercise_query(state, query, true, &token) !=
-        bridge.BRIDGE_STATUS_OK {
+    if bridge_exercise.enqueue_exercise_query(state, query, true, &token) !=
+        bridgemodel.BRIDGE_STATUS_OK {
         return false
     }
     link^.token = token
@@ -254,8 +256,8 @@ terminal_exercise_link_queue_user_read :: proc(
         identity = identity,
     }
     token: u64
-    if bridge.enqueue_user_exercise_operation(state, task, true, &token) !=
-        bridge.BRIDGE_STATUS_OK {
+    if bridge_exercise.enqueue_user_exercise_operation(state, task, true, &token) !=
+        bridgemodel.BRIDGE_STATUS_OK {
         return false
     }
     link^.token = token
@@ -366,9 +368,9 @@ exercise_link_cancel :: proc(
     }
     if link^.phase == .Resolving || link^.phase == .Reading {
         if link^.user_namespace {
-            bridge.cancel_user_exercise_operation(state, link^.token)
+            bridge_exercise.cancel_user_exercise_operation(state, link^.token)
         } else {
-            bridge.cancel_exercise_query(state, link^.token)
+            bridge_exercise.cancel_exercise_query(state, link^.token)
         }
     }
     _ = bridgemodel.exercise_header_request_next(

@@ -1,6 +1,7 @@
 package main
 
-import bridge "../bridge"
+import bridge "../bridge/host"
+import bridge_exports "../bridge"
 import core "../core"
 import evidence_session "../evidence/session"
 import files "../files"
@@ -14,6 +15,9 @@ import "core:thread"
 import "core:time"
 import viewsimulation "../view/simulation"
 import simulationmodel "../view/simulation/model"
+
+// Link the same exported ABI used by the desktop application.
+_ :: bridge_exports
 
 Harness_Options :: struct {
     asset_root: string,

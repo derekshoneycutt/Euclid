@@ -3,7 +3,8 @@ package viewpresentation
 import bridgemodel "../../bridge/model"
 import dynviewmodel "../../dynview/model"
 import presentation_model "../../bridge/presentation"
-import bridge "../../bridge"
+import presentation_source "source"
+import bridge "../../bridge/host"
 import core "../../core"
 import dyncore "../../dynview/core"
 import dynparse "../../dynview/parse"
@@ -26,7 +27,7 @@ Presentation_Operation :: struct {
     handle: taskpool.Task_Handle,
     key: dyncore.Dynview_Document_Key,
     parse_source: string,
-    mode: bridge.Presentation_Source_Mode,
+    mode: presentation_source.Presentation_Source_Mode,
     result: ^dyncore.Dynview_Parse_Result,
     store_generation: u64,
     submitted: bool,
@@ -69,7 +70,7 @@ Presentation_Effects_Frame :: struct {
 Presentation_Parse_Request :: struct {
     source: string,
     key: dyncore.Dynview_Document_Key,
-    mode: bridge.Presentation_Source_Mode,
+    mode: presentation_source.Presentation_Source_Mode,
     valid: bool,
 }
 
@@ -164,8 +165,8 @@ destroy_presentation_runtime :: proc(runtime: ^Presentation_Runtime) {
 presentation_parse_key :: proc(
     content: presentation_model.Presented_Text,
     generation: u64, document_body := false) -> Presentation_Parse_Request {
-    source := bridge.presentation_literal_source(content)
-    mode := bridge.presentation_source_mode(content.mime, source)
+    source := presentation_source.presentation_literal_source(content)
+    mode := presentation_source.presentation_source_mode(content.mime, source)
     if document_body && mode == .Math {
         mode = .Document
     }
@@ -337,7 +338,7 @@ presentation_start_pending :: proc(
         presentation_release_content(runtime, message)
         return
     }
-    source := bridge.presentation_literal_source(content.content)
+    source := presentation_source.presentation_literal_source(content.content)
     parse := presentation_parse_key(
         content.content, state^.dynview_documents.generation)
     request: bridge.Presentation_Snapshot_Request = {
@@ -471,7 +472,7 @@ presentation_commit_joined :: proc(
     operation := &runtime^.active
     request: bridge.Presentation_Snapshot_Request = {
         content = content,
-        source = bridge.presentation_literal_source(content.content),
+        source = presentation_source.presentation_literal_source(content.content),
         mode = operation^.mode,
     }
     handle, commit := dyncore.document_store_commit(

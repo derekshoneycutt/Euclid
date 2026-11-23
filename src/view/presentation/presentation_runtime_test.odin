@@ -1,10 +1,12 @@
 package viewpresentation
 
+import bridge_animation "../../bridge/animation"
+
 import bridgemodel "../../bridge/model"
 import dynviewmodel "../../dynview/model"
 import animation_model "../../core/animation"
 import presentation_model "../../bridge/presentation"
-import bridge "../../bridge"
+import bridge "../../bridge/host"
 import core "../../core"
 import taskpool "../../taskpool"
 import runtime "base:runtime"
@@ -36,10 +38,10 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
     state^.simulation_executor = new(core.Simulation_Executor, context.allocator)
     state^.julia_interface^.current_animation =
         &state^.julia_interface^.null_animation
-    testing.expect(t, bridge.animation_storage_init(
+    testing.expect(t, bridge_animation.animation_storage_init(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents))
-    testing.expect_value(t, bridge.animation_storage_begin_generation(
+    testing.expect_value(t, bridge_animation.animation_storage_begin_generation(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents, 3), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, taskpool.task_pool_init(
@@ -73,7 +75,7 @@ presentation_test_fixture_destroy :: proc(
     free(state^.simulation_executor)
     bridge.view_snapshot_slots_destroy(service)
     bridge.destroy_julia_runtime_mailboxes(service)
-    bridge.animation_storage_destroy(
+    bridge_animation.animation_storage_destroy(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents)
     free(state^.julia_interface)

@@ -1,5 +1,7 @@
 package view
 
+import bridge_animation "../bridge/animation"
+
 import capturemodel "capture/model"
 
 import bridgemodel "../bridge/model"
@@ -17,7 +19,7 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import files "../files"
 import shapes "../shapes"
-import julia "../bridge"
+import julia "../bridge/host"
 import taskpool "../taskpool"
 import fmt "core:fmt"
 import log "core:log"
@@ -179,7 +181,7 @@ session_materialize_content :: proc(
     content_service: ^viewcontent.Content_Service) -> bool {
     state^.content_service = content_service
     generation := viewcontent.content_service_generation(content_service)
-    if generation == nil || !julia.content_generation_materialize(
+    if generation == nil || !bridge_animation.content_generation_materialize(
         state^.julia_interface, generation) {
         return false
     }
@@ -671,7 +673,7 @@ initiate_animations_state :: proc(
     if state == nil {
         return nil
     }
-    if !julia.animation_storage_init(
+    if !bridge_animation.animation_storage_init(
         &state^.animation_memory,
         &state^.animation_values,
         &state^.dynview_documents) {

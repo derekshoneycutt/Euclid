@@ -359,6 +359,8 @@ const ViewSubstratePaths = [
     "src/view/font",
     "src/view/input",
     "src/view/content",
+    "src/view/presentation/importer",
+    "src/view/presentation/source",
     "src/view/world/model",
     "src/view/world/projection",
     "src/view/ui/model",
@@ -384,6 +386,8 @@ function euclid_architecture_settings()
                 ".",
                 "src/bridge/model",
                 "src/bridge/presentation",
+                "src/bridge/transport",
+                "src/bridge/animation",
                 "src/core/animation",
                 "src/core/color",
                 "src/core/content",
@@ -1468,7 +1472,7 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "bridge-interface-registry-growing-arena",
-                "src/bridge/bootstrap.odin",
+                "src/bridge/animation/registry.odin",
                 "ensure_julia_interface_instance_registry_arena",
                 :arena,
                 "One interface-generation arena is bulk-reset on reuse or rollback and destroyed at service teardown.";
@@ -1478,7 +1482,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "bridge-catalog-snapshot-registry-nodes",
-                "src/bridge/animations.odin",
+                "src/bridge/animation/catalog.odin",
                 "content_generation_allocate_nodes",
                 :unknown,
                 "Generation-local registry nodes and copied catalogue strings use the interface arena, which is bulk-reset on rollback and destroyed at interface teardown.";
@@ -1693,7 +1697,7 @@ AnalysisSettings(
             # Bridge Animations Allocations ; these use a dedicated arena
             ReviewedAllocationPolicy(
                 "bridge-animation-lookup-arena",
-                "src/bridge/animations.odin",
+                "src/bridge/animation/catalog.odin",
                 "animation_lookup_allocate",
                 :unknown,
                 "A dedicated arena is used to allocate lookup information.";
@@ -1704,7 +1708,7 @@ AnalysisSettings(
             # Communication links own one bounded TLSF pool and reclaim transferred data.
             ReviewedAllocationPolicy(
                 "bridge-runtime-service-bootstrap",
-                "src/bridge/runtime_service.odin",
+                "src/bridge/host/runtime_service.odin",
                 "create_julia_runtime_service_with_worker",
                 :custom,
                 "The service object is allocated with the caller-supplied bootstrap allocator, retained by the service, and freed only after worker shutdown and service-owned storage teardown.";
@@ -2853,7 +2857,7 @@ AnalysisSettings(
             ReviewedDiagnosticPolicy(
                 "bridge-standard-julia-callback-wrapper",
                 "ODIN-UNREACHABLE-PROCEDURE",
-                "src/bridge/animations.odin",
+                "src/bridge/host/animations.odin",
                 "call_julia_callback1",
                 "Intentional standard Julia-caller shape retained to clarify the typed callback convention."),
             ReviewedDiagnosticPolicy(
@@ -2873,83 +2877,83 @@ AnalysisSettings(
         CallRootEntryPoint(
             "odin-bridge:invoke_with_exception_diagnostics", :julia,
             "invoke_with_exception_diagnostics",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/bootstrap.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:init_euclid_scripts", :julia, "init_euclid_scripts",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/bootstrap.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:invoke_generation_harness_scenario", :julia,
             "invoke_generation_harness_scenario",
-            "src/bridge/animations.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/animation_selection.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:is_euclid_runtime_host", :julia,
             "is_euclid_runtime_host",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:global_euclid_loop", :julia, "global_euclid_loop",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/bootstrap.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_start_session", :julia,
             "terminal_host_start_session",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_startup_banner", :julia,
             "terminal_host_startup_banner",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_close_session", :julia,
             "terminal_host_close_session",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_ingest_evaluation", :julia,
             "terminal_host_ingest_evaluation",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_pump", :julia, "terminal_host_pump",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_shutdown", :julia, "terminal_host_shutdown",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_evaluation", :julia,
             "terminal_host_take_evaluation",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_ingest_completion_preview", :julia,
             "terminal_host_ingest_completion_preview",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_ingest_completion_candidates", :julia,
             "terminal_host_ingest_completion_candidates",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_completion", :julia,
             "terminal_host_take_completion",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_ingest_highlight", :julia,
             "terminal_host_ingest_highlight",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_highlight", :julia,
             "terminal_host_take_highlight",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_session_lifecycle", :julia,
             "terminal_host_take_session_lifecycle",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_ingest_tick_stream_configuration", :julia,
             "terminal_host_ingest_tick_stream_configuration",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_ingest_tick_pulse", :julia,
             "terminal_host_ingest_tick_pulse",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_take_tick_stream", :julia,
             "terminal_host_take_tick_stream",
-            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "analysis-extension:sdl-extension_api_version", :julia,
             "extension_api_version", "tools/sdl_boundary_analysis.jl",

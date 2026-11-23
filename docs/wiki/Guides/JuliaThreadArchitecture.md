@@ -354,7 +354,7 @@ packs values into the immutable tick snapshot, and Julia writes are staged for
 validation and commit. See [`memory.odin`](../../../src/core/animation/memory.odin),
 [`value_store.odin`](../../../src/core/animation/value_store.odin),
 [`document_store.odin`](../../../src/dynview/core/document_store.odin), and the shared
-orchestration in [`animation_storage.odin`](../../../src/bridge/animation_storage.odin).
+orchestration in [`animation_storage.odin`](../../../src/bridge/animation/storage.odin).
 
 ### Julia GC roots have a defined window
 
@@ -377,17 +377,17 @@ the exact period native code relies on them:
 This is a bounded rooting window, not a global pause of Julia GC: ordinary Julia
 collection remains part of Julia execution. When investigating a stale Julia handle,
 start with the worker-lifetime frame and teardown in
-[`runtime_service.odin`](../../../src/bridge/runtime_service.odin), then inspect
+[`runtime_service.odin`](../../../src/bridge/host/runtime_service.odin), then inspect
 per-call roots and reload staging in
-[`animations.odin`](../../../src/bridge/animations.odin) and
-[`bootstrap.odin`](../../../src/bridge/bootstrap.odin). Julia-side byte preservation is
+[`animation_reload.odin`](../../../src/bridge/host/animation_reload.odin) and
+[`bootstrap.odin`](../../../src/bridge/host/bootstrap.odin). Julia-side byte preservation is
 visible in [`presentation.jl`](../../../src/julia/bridge/presentation.jl).
 
 The bridge links, tick slots, lifecycle slot, and view snapshot slots have their own
 bounded storage and lifetimes; they do not allocate from the shared animation arena.
 Their definitions and ownership transitions are in
 [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin) and the
-transport helpers in [`consumer_mailbox.odin`](../../../src/bridge/consumer_mailbox.odin).
+transport helpers in [`consumer_mailbox.odin`](../../../src/bridge/transport/consumer_mailbox.odin).
 
 ## Follow The Main Workflows
 
@@ -475,14 +475,15 @@ This is why an old `Exit` and a replacement `Enter` can each see the correct
 generation-specific value during a lifecycle transition.
 
 Follow
-[`content_specification.odin`](../../../src/bridge/content_specification.odin) and
+[`content_specification.odin`](../../../src/bridge/host/content_specification.odin) and
 [`content_specification.jl`](../../../src/julia/bridge/content_specification.jl).
 The callback-scoping contract is also used by [Localization And Editions](Localization.md)
 and the [Architecture Summary](ArchitectureSummary.md).
 
-Start at [`animations.odin`](../../../src/bridge/animations.odin) for request
+Start at [`tick_slots.odin`](../../../src/bridge/host/tick_slots.odin) for request
 submission, validation, and fixed-step publication; then follow
-[`scene_commands.odin`](../../../src/bridge/scene_commands.odin) for transactional
+[`scene_validation.odin`](../../../src/bridge/scene/scene_validation.odin) and
+[`scene_application.odin`](../../../src/bridge/scene/scene_application.odin) for transactional
 mutation and [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl)
 for Julia policy. The query and command data structures are in
 [`src/bridge/model/model.odin`](../../../src/bridge/model/model.odin).
@@ -504,7 +505,7 @@ loading or candidate activation fails, it retires the candidate and restores the
 active generation. This is intentionally a narrow synchronous barrier; it is not the
 ordinary communication model for ticks, Terminal requests, or presentation updates.
 Follow [`runtime_session.odin`](../../../src/view/runtime_session.odin),
-[`bootstrap.odin`](../../../src/bridge/bootstrap.odin), and
+[`bootstrap.odin`](../../../src/bridge/host/bootstrap.odin), and
 [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl).
 
 ### Presentation: a replaceable value, not an actor conversation
@@ -521,29 +522,29 @@ the active slot until native parsing joins, and publishes only a complete
 current-generation snapshot. Producer retries and startup/lifecycle-deferred content
 also use owner-local fixed records rather than retaining mailbox batches.
 Begin at [`presentation.jl`](../../../src/julia/bridge/presentation.jl),
-[`abi-presentation.odin`](../../../src/bridge/abi-presentation.odin), and
+[`abi-presentation.odin`](../../../src/bridge/abi/host_presentation.odin), and
 [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin);
-continue into [`dynview_native_tex.odin`](../../../src/bridge/dynview_native_tex.odin)
+continue into [`dynview_native_tex.odin`](../../../src/view/presentation/importer/native_tex.odin)
 and [`src/dynview/`](../../../src/dynview/).
 
 ## Code Map
 
 | Question | Start here | Continue into |
 | --- | --- | --- |
-| How are Julia requests and events transported? | [`consumer_mailbox.odin`](../../../src/bridge/consumer_mailbox.odin), [`mailbox_copy.odin`](../../../src/bridge/mailbox_copy.odin) | [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin), [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) |
-| Where is request dispatch and owner-thread enforcement? | [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) | [`runtime_host.jl`](../../../src/julia/runtime_host.jl), [`src/julia/host/`](../../../src/julia/host/) |
-| How is the Julia runtime initialized and stopped? | [`bootstrap.odin`](../../../src/bridge/bootstrap.odin) | [`src/julia/sysimage_core.jl`](../../../src/julia/sysimage_core.jl), [`src/julia/host/`](../../../src/julia/host/) |
+| How are Julia requests and events transported? | [`consumer_mailbox.odin`](../../../src/bridge/transport/consumer_mailbox.odin), [`mailbox_copy.odin`](../../../src/bridge/transport/mailbox_copy.odin) | [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin), [`runtime_service.odin`](../../../src/bridge/host/runtime_service.odin) |
+| Where is request dispatch and owner-thread enforcement? | [`runtime_service.odin`](../../../src/bridge/host/runtime_service.odin) | [`runtime_host.jl`](../../../src/julia/runtime_host.jl), [`src/julia/host/`](../../../src/julia/host/) |
+| How is the Julia runtime initialized and stopped? | [`bootstrap.odin`](../../../src/bridge/host/bootstrap.odin) | [`src/julia/sysimage_core.jl`](../../../src/julia/sysimage_core.jl), [`src/julia/host/`](../../../src/julia/host/) |
 | Where is actor creation and pump policy? | [`host.jl`](../../../src/julia/host.jl) | [`src/julia/policy/`](../../../src/julia/policy/) |
 | How is Terminal work submitted and committed? | [`terminal_service.odin`](../../../src/view/terminal/service/terminal_service.odin) | [`src/core/protocol/`](../../../src/core/protocol/), [`src/julia/policy/`](../../../src/julia/policy/) |
-| How are animation requests and batches handled? | [`animations.odin`](../../../src/bridge/animations.odin), [`scene_commands.odin`](../../../src/bridge/scene_commands.odin) | [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl), [`animation_protocol.jl`](../../../src/julia/policy/animation_protocol.jl) |
-| How is presentation content published? | [`abi-presentation.odin`](../../../src/bridge/abi-presentation.odin) | [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin), [`src/dynview/`](../../../src/dynview/) |
+| How are animation requests and batches handled? | [`tick_slots.odin`](../../../src/bridge/host/tick_slots.odin), [`scene_validation.odin`](../../../src/bridge/scene/scene_validation.odin), [`scene_application.odin`](../../../src/bridge/scene/scene_application.odin) | [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl), [`animation_protocol.jl`](../../../src/julia/policy/animation_protocol.jl) |
+| How is presentation content published? | [`abi-presentation.odin`](../../../src/bridge/abi/host_presentation.odin) | [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin), [`src/dynview/`](../../../src/dynview/) |
 | Where are bridge payload types defined? | [`src/bridge/model/`](../../../src/bridge/model/) | [`src/core/protocol/`](../../../src/core/protocol/) |
-| Where are focused tests? | [`consumer_mailbox_test.odin`](../../../src/bridge/consumer_mailbox_test.odin), [`mailbox_protocol_test.odin`](../../../src/bridge/mailbox_protocol_test.odin) | [`animations_test.odin`](../../../src/bridge/animations_test.odin), [`src/julia/test/`](../../../src/julia/test/) |
+| Where are focused tests? | [`consumer_mailbox_test.odin`](../../../src/bridge/transport/consumer_mailbox_test.odin), [`mailbox_protocol_test.odin`](../../../src/bridge/host/mailbox_protocol_test.odin) | [`animations_test.odin`](../../../src/bridge/host/animations_test.odin), [`src/julia/test/`](../../../src/julia/test/) |
 
 The display frame coordinator that interleaves egress routing, presentation, fixed
 steps, and drawing is [`view.odin`](../../../src/view/view.odin) and
 [`frame.odin`](../../../src/view/frame.odin). The dedicated Julia thread and runtime
-service are implemented in [`runtime_service.odin`](../../../src/bridge/runtime_service.odin).
+service are implemented in [`runtime_service.odin`](../../../src/bridge/host/runtime_service.odin).
 
 ## Failure, Lifecycle, And Verification
 
@@ -562,8 +563,8 @@ retires animation and Terminal actors in dependency order, Julia performs its ow
 teardown, and only after the completion does the display join the thread and destroy
 mailboxes and owned storage. Admission closes and wakes waiters only after the shutdown
 request can be consumed and its completion published. Startup and shutdown details are in
-[`bootstrap.odin`](../../../src/bridge/bootstrap.odin) and
-[`runtime_service.odin`](../../../src/bridge/runtime_service.odin).
+[`bootstrap.odin`](../../../src/bridge/host/bootstrap.odin) and
+[`runtime_service.odin`](../../../src/bridge/host/runtime_service.odin).
 
 ### Current boundaries and tradeoffs
 
@@ -602,9 +603,9 @@ policy:
 ### Verification
 
 The bridge and actor behavior have Odin and Julia test coverage. For a focused entry,
-start with [`consumer_mailbox_test.odin`](../../../src/bridge/consumer_mailbox_test.odin),
-[`mailbox_protocol_test.odin`](../../../src/bridge/mailbox_protocol_test.odin),
-[`animations_test.odin`](../../../src/bridge/animations_test.odin), and
+start with [`consumer_mailbox_test.odin`](../../../src/bridge/transport/consumer_mailbox_test.odin),
+[`mailbox_protocol_test.odin`](../../../src/bridge/host/mailbox_protocol_test.odin),
+[`animations_test.odin`](../../../src/bridge/host/animations_test.odin), and
 [`src/julia/test/animation_actor_tests.jl`](../../../src/julia/test/animation_actor_tests.jl);
 Terminal, runtime-host, and publication tests are grouped under
 [`src/julia/test/`](../../../src/julia/test/) and their owning Odin packages.

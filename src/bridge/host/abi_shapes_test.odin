@@ -1,0 +1,1099 @@
+package julia_host
+
+import bridge_scene "../scene"
+
+import bridgemodel "../model"
+import geometry "../../core/geometry"
+import particlemodel "../../particles/model"
+import shapemodel "../../shapes/model"
+import evidence_trace "../../evidence/trace"
+import testing "core:testing"
+import core "../../core"
+import particles "../../particles"
+import shapes "../../shapes"
+import projection "../../view/world/projection"
+import worldmodel "../../view/world/model"
+import viewtext "../../view/ui/text"
+import test_helpers "../../test_helpers"
+
+// Build one bridge state with its canonical world in root-owned storage.
+bridge_shape_test_state :: proc() -> ^core.Euclid_General_State {
+    state := new(core.Euclid_General_State, context.allocator)
+    state.saved_context = context
+    return state
+}
+
+// Return standard visible-test construction values.
+bridge_shape_test_input :: proc(
+    position: geometry.Vector3) -> bridge_scene.Bridge_Positioned_Shape_Input {
+    return {
+        position = position,
+        style = {
+            color = {10, 20, 30, 255},
+            brush_size = 4,
+        },
+    }
+}
+
+// Verify copied label coverage remains weighted and attached at its world height.
+@(test)
+bridge_label_departure_samples_follow_projected_ink :: proc(t: ^testing.T) {
+    anchor: geometry.Vector3 = {0.4, 0.6, 0.3}
+    scale: worldmodel.Iso_Scale = {
+        scale = 800,
+        half_scale = 100,
+        quarter_scale = 50,
+    }
+    anchor_screen := projection.iso_to_cartesian(anchor, scale)
+    ink: [2]viewtext.Ui_Text_Ink_Sample = {
+        {
+            position = {anchor_screen.x + 10, anchor_screen.y - 10},
+            coverage = 128,
+        },
+        {
+            position = {anchor_screen.x + 20, anchor_screen.y - 20},
+            coverage = 255,
+        },
+    }
+    output: [2]particles.Departure_Material_Sample
+
+    count := bridge_scene.bridge_resample_label_ink(ink[:], anchor, scale, output[:])
+
+    testing.expect_value(t, count, 2)
+    test_helpers.expect_close(t, output[0].position.x, f32(0.55),
+        "first shaped ink x follows inverse projection")
+    test_helpers.expect_close(t, output[0].position.y, f32(0.65),
+        "first shaped ink y follows inverse projection")
+    test_helpers.expect_close(t, output[1].position.x, f32(0.7),
+        "second shaped ink x follows inverse projection")
+    test_helpers.expect_close(t, output[1].position.y, f32(0.7),
+        "second shaped ink y follows inverse projection")
+    testing.expect_value(t, output[0].position.z, f32(0.3))
+    testing.expect_value(t, output[1].position.z, f32(0.3))
+    testing.expect_value(t, output[0].coverage, u8(128))
+    testing.expect_value(t, output[1].coverage, u8(255))
+}
+
+// Verify constructors return packed identities that resolve to direct world components.
+@(test)
+bridge_shape_abi_round_trips_packed_line_handles :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    result := bridge_scene.shape_create_line(state, {1, 2, 3}, {4, 5, 6},
+        bridge_shape_test_input({}).style)
+
+    testing.expect_value(t, result.status, i32(bridgemodel.BRIDGE_STATUS_OK))
+    shape := shapemodel.shape_entity_unpack(result.shape)
+    first := shapemodel.shape_entity_unpack(result.first)
+    second := shapemodel.shape_entity_unpack(result.second)
+    testing.expect(t, shapemodel.shape_registry_resolves(&world.registry, shape))
+    geometry, found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, shape)
+    testing.expect(t, found)
+    testing.expect_value(t, geometry.payload.line.first, first)
+    testing.expect_value(t, geometry.payload.line.second, second)
+}
+
+// Verify arc queries return complete geometry and remain isolated by snapshots.
+@(test)
+bridge_shape_abi_queries_arc_geometry_snapshot :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    created := bridge_scene.shape_create_arc(state, {1, 2, 3}, {4, 0.5, -1.5},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t, created.status, i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{4, 0.5, -1.5})
+    snapshot := new(bridgemodel.Animation_Query_Snapshot, context.allocator)
+    defer free(snapshot)
+    bridge_scene.capture_animation_query_snapshot(state, snapshot)
+    state.animation_query_snapshot_target = snapshot
+    defer {state.animation_query_snapshot_target = nil}
+
+    testing.expect_value(t, bridge_scene.shape_set_arc(state, created.shape, {2, 1, 3}),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{4, 0.5, -1.5})
+    state.animation_query_snapshot_target = nil
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{2, 1, 3})
+}
+
+// Verify the generic ABI preserves semantic operation and direct center identities.
+@(test)
+bridge_shape_abi_creates_circle_region :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    result := bridge_scene.shape_create_circle_region(state, {0, 0, 0}, {1, 0, 0},
+        {i32(shapemodel.Shape_Circle_Region_Operation.Difference), 1, 1},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t, result.status, i32(bridgemodel.BRIDGE_STATUS_OK))
+    shape := shapemodel.shape_entity_unpack(result.shape)
+    first := shapemodel.shape_entity_unpack(result.first_center)
+    second := shapemodel.shape_entity_unpack(result.second_center)
+    geometry, found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, shape)
+    testing.expect(t, found)
+    testing.expect_value(t, geometry.payload.circle_region.value.operation,
+        shapemodel.Shape_Circle_Region_Operation.Difference)
+    testing.expect(t, shapemodel.shape_registry_resolves(&world.registry, first))
+    testing.expect(t, shapemodel.shape_registry_resolves(&world.registry, second))
+    testing.expect_value(t, bridge_scene.shape_get_view(state, result.shape).kind,
+        i32(shapemodel.Shape_Geometry_Kind.Circle_Region))
+}
+
+// Verify label and region reveal intents start at their committed tick endpoint.
+@(test)
+bridge_animation_reveals_are_transactional_and_independent :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    label := bridge_scene.shape_create_label(state, cstring("A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    region := bridge_scene.shape_create_circle_region(state, {0.3, 0.5, 0}, {0.7, 0.5, 0},
+        {i32(shapemodel.Shape_Circle_Region_Operation.Intersection), 0.4, 0.4},
+        bridge_shape_test_input({}).style)
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.25
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, label.entity, 1.5),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, bridge_scene.shape_reveal_region(state, region.shape, 0.5),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, batch.command_count, 2)
+    state^.animation_query_snapshot_target = nil
+    bridge_scene.end_scene_command_batch(state)
+
+    testing.expect_value(t, state^.particle_system.formation.reveal_count, 0)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    formation := &state^.particle_system.formation
+    testing.expect_value(t, formation.accepted_progress, 0.25)
+    testing.expect_value(t, formation.reveal_count, 2)
+    label_slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, label.entity, 4)
+    region_slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Region, region.shape, 4)
+    testing.expect_value(t, formation.reveals[label_slot].start_progress, 0.25)
+    testing.expect_value(t, formation.reveals[label_slot].duration, 1.5)
+    testing.expect_value(t, formation.reveals[region_slot].start_progress, 0.25)
+    testing.expect_value(t, formation.reveals[region_slot].duration, 0.5)
+}
+
+// Verify zero duration retires an existing interval at the accepted tick endpoint.
+@(test)
+bridge_animation_reveal_zero_duration_completes_immediately :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    label := bridge_scene.shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    particles.formation_reset_generation(&state^.particle_system, 4)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 4, 0))
+    testing.expect(t, particles.formation_start_reveal(
+        &state^.particle_system, {
+            kind = .Label,
+            owner_entity = label.entity,
+            animation_generation = 4,
+            progress = 0,
+            duration = 1,
+            seed = 1,
+        }))
+    batch: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, label.entity, 0),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0.5)
+    testing.expect_value(t, state^.particle_system.formation.reveal_count, 0)
+}
+
+// Verify invalid durations use the ordinary bridge argument status.
+@(test)
+bridge_animation_reveal_rejects_invalid_duration :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, 1, -1),
+        i32(bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT))
+}
+
+// Verify stale generation-qualified targets reject the whole reveal transaction.
+@(test)
+bridge_animation_reveal_preflight_rejects_stale_owner :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    world := &state^.shape_world
+    testing.expect_value(t, shapemodel.shape_world_freeze_baseline(world),
+        shapemodel.Shape_World_Status.Ok)
+    stale := bridge_scene.shape_create_label(state, cstring("stale"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    testing.expect_value(t, shapemodel.shape_world_rewind_animation(world),
+        shapemodel.Shape_World_Status.Ok)
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    batch: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 2
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, stale.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0)
+}
+
+// Verify record-capacity preflight rejects new owners without advancing progress.
+@(test)
+bridge_animation_reveal_preflight_rejects_full_capacity :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    current := bridge_scene.shape_create_label(state, cstring("current"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    bridge_test_fill_reveal_slots(t, state, 2)
+    batch: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 2
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, current.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0)
+    testing.expect_value(t, state^.particle_system.formation.reveal_count,
+        particlemodel.MAX_FORMATION_REVEALS)
+}
+
+// Verify superseded transient reveals need no extra slot at full capacity.
+@(test)
+bridge_animation_reveal_supersession_fits_full_capacity :: proc(t: ^testing.T) {
+    state := bridge_reveal_test_state_create()
+    defer bridge_reveal_test_state_destroy(state)
+    current := bridge_scene.shape_create_label(state, cstring("current"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    snapshot := bridge_reveal_test_snapshot(state)
+    defer free(snapshot)
+    bridge_test_fill_reveal_slots(t, state, 2)
+    batch: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 2
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.5
+    state^.animation_query_snapshot_target = snapshot
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, current.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, bridge_scene.shape_reveal_label(state, current.entity, 0),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    state^.animation_query_snapshot_target = nil
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, state^.particle_system.formation.accepted_progress, 0.5)
+    testing.expect_value(t, state^.particle_system.formation.reveal_count,
+        particlemodel.MAX_FORMATION_REVEALS)
+    testing.expect(t, particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, current.entity, 2) < 0)
+}
+
+// Build a reveal-ready state with its test Julia interface owned by the state fixture.
+bridge_reveal_test_state_create :: proc() -> ^core.Euclid_General_State {
+    state := bridge_shape_test_state()
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    state^.julia_interface^.current_animation = &state^.julia_interface^.null_animation
+    return state
+}
+
+// Release both allocations made by bridge_reveal_test_state_create.
+bridge_reveal_test_state_destroy :: proc(state: ^core.Euclid_General_State) {
+    free(state^.julia_interface, context.allocator)
+    free(state)
+}
+
+// Capture a query snapshot for the current animation test fixture.
+bridge_reveal_test_snapshot :: proc(
+    state: ^core.Euclid_General_State) -> ^bridgemodel.Animation_Query_Snapshot {
+    snapshot := new(bridgemodel.Animation_Query_Snapshot, context.allocator)
+    bridge_scene.capture_animation_query_snapshot(state, snapshot)
+    return snapshot
+}
+
+// Fill all native reveal records with live owners for capacity preflight tests.
+bridge_test_fill_reveal_slots :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State, generation: u64) {
+    particles.formation_reset_generation(&state^.particle_system, generation)
+    for index in 0..<particlemodel.MAX_FORMATION_REVEALS {
+        testing.expect(t, particles.formation_start_reveal(
+            &state^.particle_system, {
+                kind = .Label,
+                owner_entity = u64(index + 1),
+                animation_generation = generation,
+                progress = 0,
+                duration = 2,
+                seed = u64(index),
+            }))
+    }
+}
+
+// Verify hiding a reveal owner cancels its record and generation-linked fragments.
+@(test)
+bridge_hiding_label_retires_formation_assignments :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    label := bridge_scene.shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    particles.formation_reset_generation(&state^.particle_system, 5)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 0))
+    testing.expect(t, particles.formation_start_reveal(
+        &state^.particle_system, {
+            kind = .Label,
+            owner_entity = label.entity,
+            animation_generation = 5,
+            progress = 0,
+            duration = 1,
+            seed = 7,
+        }))
+    reveal_slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, label.entity, 5)
+    reveal_generation :=
+        state^.particle_system.formation.reveals[reveal_slot].slot_generation
+    _, added := particles.formation_add_particle(&state^.particle_system, {
+        reveal_slot = i32(reveal_slot),
+        reveal_generation = reveal_generation,
+    })
+    testing.expect(t, added)
+
+    testing.expect_value(t, bridge_scene.shape_set_visible(state, label.entity, 0),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, state^.particle_system.formation.reveal_count, 0)
+    testing.expect_value(t, state^.particle_system.formation.particle_count, 0)
+}
+
+// Verify missing glyph preparation is observable but never delays a label hide.
+@(test)
+bridge_label_hide_reports_missing_departure_material :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 16
+    state^.iso_scale = {
+        scale = 800,
+        half_scale = 400,
+        quarter_scale = 200,
+    }
+    label := bridge_scene.shape_create_label(state, cstring("A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    testing.expect_value(t, bridge_scene.shape_set_visible(state, label.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+
+    testing.expect_value(t, bridge_scene.shape_set_visible(state, label.entity, 0),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+
+    testing.expect_value(t, state^.particle_system.departure_capture_failures, u64(1))
+    testing.expect_value(t,
+        bridge_scene.shape_get_view(state, label.entity).visible, u8(0))
+    for alive in state^.particle_system.low_particles.alive[:16] {
+        testing.expect(t, !alive)
+    }
+}
+
+// Verify a clear before any shape forms still reports the live dust it kicked.
+@(test)
+bridge_clear_departures_reports_kicked_dust_without_formed_shapes :: proc(
+    t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 4
+    state^.particle_system.low_particles.alive[2] = true
+
+    testing.expect(t, bridge_scene.emit_shape_world_clear_departures(state))
+
+    state^.particle_system.low_particles.alive[2] = false
+    testing.expect(t, !bridge_scene.emit_shape_world_clear_departures(state))
+}
+
+// Verify bulk clear captures labels before retirement and reports missing ink.
+@(test)
+bridge_clear_departures_reports_unprepared_label :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 16
+    state^.iso_scale = {
+        scale = 800,
+        half_scale = 400,
+        quarter_scale = 200,
+    }
+    label := bridge_scene.shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    state^.shape_world.render_styles.values[0].visible = true
+
+    emitted := bridge_scene.emit_shape_world_clear_departures(state)
+
+    testing.expect(t, !emitted)
+    testing.expect_value(t, state^.particle_system.departure_capture_failures, u64(1))
+    testing.expect_value(t,
+        bridge_scene.shape_get_view(state, label.entity).visible, u8(1))
+    for alive in state^.particle_system.low_particles.alive[:16] {
+        testing.expect(t, !alive)
+    }
+}
+
+// Verify stale packed arc identities cannot query a reused animation slot.
+@(test)
+bridge_shape_abi_rejects_stale_arc_generation :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
+        world), shapemodel.Shape_World_Status.Ok)
+    stale := bridge_scene.shape_create_arc(
+        state, {}, {1, 0, 1}, bridge_shape_test_input({}).style)
+    testing.expect_value(t, shapemodel.shape_world_rewind_animation(
+        world), shapemodel.Shape_World_Status.Ok)
+    current := bridge_scene.shape_create_arc(
+        state, {}, {2, 0, 2}, bridge_shape_test_input({}).style)
+
+    testing.expect(t, stale.shape != current.shape)
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, stale.shape).status,
+        i32(bridgemodel.BRIDGE_STATUS_NOT_FOUND))
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, current.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{2, 0, 2})
+}
+
+// Verify a captured complete arc mutation becomes visible only at batch commit.
+@(test)
+bridge_shape_arc_mutation_is_atomic_at_scene_commit :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    created := bridge_scene.shape_create_arc(
+        state, {}, {1, 0, 1}, bridge_shape_test_input({}).style)
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    testing.expect_value(t, bridge_scene.shape_set_arc(state, created.shape, {3, -1, -2}),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{1, 0, 1})
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, bridge_scene.shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{3, -1, -2})
+    kind, _ := bridge_scene.scene_command_evidence(&batch.commands[0])
+    testing.expect_value(t, kind, evidence_trace.Kind.Arc_Geometry_Committed)
+}
+
+// Verify null-terminated UTF-8 source is copied exactly and malformed bytes fail atomically.
+@(test)
+bridge_shape_abi_copies_cstring_unicode_labels :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    before := world.registry.entity_count
+    result := bridge_scene.shape_create_label(state, cstring("∠A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({1, 2, 0}))
+    testing.expect_value(t, result.status, i32(bridgemodel.BRIDGE_STATUS_OK))
+    entity := shapemodel.shape_entity_unpack(result.entity)
+    label, found := shapemodel.shape_component_get(&world.labels, &world.registry, entity)
+    testing.expect(t, found)
+    stored, source_found := shapemodel.shape_label_source(&world.label_store, label^)
+    testing.expect(t, source_found)
+    testing.expect_value(t, stored, "∠A′")
+
+    malformed: [2]u8 = {0xff, 0}
+    rejected := bridge_scene.shape_create_label(state, cstring(&malformed[0]),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({}))
+    testing.expect_value(t, rejected.status, i32(bridgemodel.BRIDGE_STATUS_INVALID_UTF8))
+    testing.expect_value(t, world.registry.entity_count, before + 1)
+}
+
+// Verify stale packed handles cannot resolve or mutate a reused animation slot.
+@(test)
+bridge_shape_abi_rejects_stale_generation :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
+        world), shapemodel.Shape_World_Status.Ok)
+    stale := bridge_scene.shape_create_point(state, bridge_shape_test_input({1, 0, 0}))
+    testing.expect_value(t, shapemodel.shape_world_rewind_animation(
+        world), shapemodel.Shape_World_Status.Ok)
+    current := bridge_scene.shape_create_point(state, bridge_shape_test_input({2, 0, 0}))
+
+    testing.expect(t, stale.entity != current.entity)
+    testing.expect_value(t, bridge_scene.shape_set_position(
+        state, stale.entity, {9, 0, 0}), i32(bridgemodel.BRIDGE_STATUS_NOT_FOUND))
+    testing.expect_value(t, bridge_scene.shape_get_view(state, stale.entity).status,
+        i32(bridgemodel.BRIDGE_STATUS_NOT_FOUND))
+    testing.expect_value(t, bridge_scene.shape_get_view(state, current.entity).position,
+        geometry.Vector3{2, 0, 0})
+}
+
+// Verify a deferred hide emits dust on display-thread commit before visibility clears.
+@(test)
+bridge_shape_hide_emits_world_geometry_dust :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    particles := &state^.particle_system
+    particles^.use_max_dust_particles = 128
+    line := bridge_scene.shape_create_line(state, {0, 0, 0}, {1, 0, 0},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t,
+        bridge_scene.shape_set_visible(state, line.shape, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    testing.expect_value(t,
+        bridge_scene.shape_set_visible(state, line.shape, 0),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, !particles^.low_particles.alive[0])
+    testing.expect_value(t,
+        bridge_scene.shape_get_view(state, line.shape).visible, u8(1))
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+
+    testing.expect(t, particles^.low_particles.alive[0])
+    view := bridge_scene.shape_get_view(state, line.shape)
+    testing.expect_value(t, view.visible, u8(0))
+}
+
+// Verify a newly visible floor label queues one text-spanning dust contact.
+@(test)
+bridge_shape_reveal_queues_label_dust_contact :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    particles := &state^.particle_system
+    particles^.use_max_dust_particles = 16
+    state^.iso_scale.scale = 800
+    label := bridge_scene.shape_create_label(state, cstring("∠A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain),
+        bridge_shape_test_input({0.5, 0.5, 0}))
+
+    testing.expect_value(t, bridge_scene.shape_set_visible(state, label.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, particles^.dust_tool_contact_count, 1)
+    testing.expect_value(t, particles^.dust_tool_contacts[0].source,
+        particlemodel.Dust_Tool_Contact_Source.Label)
+
+    testing.expect_value(t, bridge_scene.shape_set_visible(state, label.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, particles^.dust_tool_contact_count, 1)
+
+    elevated_label := bridge_scene.shape_create_label(state, cstring("above"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain),
+        bridge_shape_test_input({0.5, 0.5, 0.2}))
+    testing.expect_value(t,
+        bridge_scene.shape_set_visible(state, elevated_label.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, particles^.dust_tool_contact_count, 1)
+}
+
+// Verify one batch kick does not immediately age dust emitted by an earlier hide.
+@(test)
+bridge_shape_batch_coalesces_hide_dust_kick :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    particles := &state^.particle_system
+    particles^.use_max_dust_particles = 256
+    particles^.low_particles.alive[0] = true
+    particles^.low_particles.life[0] = 10
+    first := bridge_scene.shape_create_line(state, {0, 0, 0}, {1, 0, 0},
+        bridge_shape_test_input({}).style)
+    second := bridge_scene.shape_create_line(state, {0, 1, 0}, {1, 1, 0},
+        bridge_shape_test_input({}).style)
+    _ = bridge_scene.shape_set_visible(state, first.shape, 1)
+    _ = bridge_scene.shape_set_visible(state, second.shape, 1)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    _ = bridge_scene.shape_set_visible(state, first.shape, 0)
+    _ = bridge_scene.shape_set_visible(state, second.shape, 0)
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+
+    testing.expect(t, particles^.low_particles.age[0] > 0)
+    testing.expect(t, particles^.low_particles.alive[1])
+    testing.expect_value(t, particles^.low_particles.age[1], f32(0))
+}
+
+// Verify worker queries remain isolated from later canonical component mutation.
+@(test)
+bridge_shape_abi_reads_query_snapshot :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    created := bridge_scene.shape_create_label(state, cstring("β"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({1, 2, 3}))
+    snapshot := new(bridgemodel.Animation_Query_Snapshot, context.allocator)
+    defer free(snapshot)
+    bridge_scene.capture_animation_query_snapshot(state, snapshot)
+    state.animation_query_snapshot_target = snapshot
+    defer {state.animation_query_snapshot_target = nil}
+    _ = bridge_scene.shape_set_position(state, created.entity, {8, 9, 10})
+
+    view := bridge_scene.shape_get_view(state, created.entity)
+    testing.expect_value(t, view.position, geometry.Vector3{1, 2, 3})
+}
+
+// Verify the constraint ABI stores direct packed endpoint targets.
+@(test)
+bridge_constraint_abi_creates_direct_distance_target :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    first := bridge_scene.shape_create_point(state, bridge_shape_test_input({1, 0, 0}))
+    second := bridge_scene.shape_create_point(state, bridge_shape_test_input({3, 0, 0}))
+
+    status := bridge_scene.create_distance_constraint(state, {
+        first = first.entity,
+        second = second.entity,
+        length = 2,
+        movement = 0,
+        enabled = 1,
+    })
+
+    testing.expect_value(t, status, i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, world.constraints.count, u16(1))
+    constraint := &world.constraints.values[0]
+    testing.expect_value(t, constraint^.kind, shapemodel.Shape_Constraint_Kind.Distance)
+    testing.expect_value(t, constraint^.payload.distance.first,
+        shapemodel.shape_entity_unpack(first.entity))
+    testing.expect_value(t, constraint^.payload.distance.second,
+        shapemodel.shape_entity_unpack(second.entity))
+}
+
+// Verify a captured tool unlock mutates its direct constraint only at commit.
+@(test)
+bridge_tool_unlock_is_deferred_until_scene_commit :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface)
+    animation := &state^.julia_interface^.null_animation
+    state^.julia_interface^.current_animation = animation
+    state^.world_pen, _ = shapes.world_create_pen(world, {
+        joint1 = {1, 0, 0},
+        joint2 = {2, 0, 0},
+        length = 1,
+    })
+    constraint := &world.constraints.values[state^.world_pen.joint1_lock_constraint]
+    constraint^.enabled = true
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.unlock_pen_joint1(state)
+    bridge_scene.end_scene_command_batch(state)
+
+    testing.expect(t, constraint^.enabled)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect(t, !constraint^.enabled)
+}
+
+// Assert one compound contact carries the expected previous and current legs.
+expect_compass_filled_sweep :: proc(t: ^testing.T,
+    contact: ^particlemodel.Dust_Tool_Contact) {
+    testing.expect(t, contact^.has_sweep)
+    testing.expect_value(t, contact^.source,
+        particlemodel.Dust_Tool_Contact_Source.Compass_Filled_Sweep)
+    testing.expect_value(t, contact^.previous_segment_first,
+        geometry.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, contact^.previous_segment_second,
+        geometry.Vector3{0.4, 0.2, 0})
+    testing.expect_value(t, contact^.segment_first, geometry.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, contact^.segment_second, geometry.Vector3{0.45, 0.2, 0})
+}
+
+// Verify committed compass moves retain ordered previous and current leg geometry.
+@(test)
+bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    particle_system := &state^.particle_system
+    state^.world_compass, _ = shapes.world_create_compass(world, {
+        joint1 = {0.1, 0.2, 0},
+        pivot = {0.25, 0.3, 0.01},
+        joint2 = {0.4, 0.2, 0},
+        limb_length = 0.2,
+    })
+
+    bridge_scene.move_compass_joint1(state, {0.15, 0.2, 0}, true)
+    bridge_scene.move_compass_joint2(state, {0.45, 0.2, 0}, true)
+    bridge_scene.move_compass_joint1(state, {0.15, 0.2, 0.1}, true)
+    bridge_scene.move_compass_joint2(state, {0.5, 0.2, 0}, true)
+
+    testing.expect_value(t, particle_system^.dust_tool_contact_count, 3)
+    first := &particle_system^.dust_tool_contacts[0]
+    second := &particle_system^.dust_tool_contacts[1]
+    third := &particle_system^.dust_tool_contacts[2]
+    testing.expect_value(t, first^.endpoint, geometry.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, second^.endpoint, geometry.Vector3{0.45, 0.2, 0})
+    testing.expect(t, !first^.has_sweep)
+    testing.expect_value(t, first^.source,
+        particlemodel.Dust_Tool_Contact_Source.Point)
+    expect_compass_filled_sweep(t, second)
+    testing.expect_value(t, third^.endpoint, geometry.Vector3{0.5, 0.2, 0})
+    testing.expect(t, !third^.has_sweep)
+    testing.expect_value(t, third^.source,
+        particlemodel.Dust_Tool_Contact_Source.Point)
+    particles.coalesce_dust_tool_contacts(particle_system)
+
+    testing.expect_value(t, particle_system^.dust_tool_contact_count, 3)
+    testing.expect_value(t, particle_system^.dust_tool_contact_coalesced_count, u64(0))
+}
+
+// Verify queue-capacity preflight rejects a complete scene batch before mutation.
+@(test)
+bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    world := &state^.shape_world
+    particle_system := &state^.particle_system
+    particle_system^.dust_tool_contact_count = particlemodel.DUST_TOOL_CONTACT_CAP
+    state^.world_pen, _ = shapes.world_create_pen(world, {
+        joint1 = {0.1, 0.2, 0},
+        joint2 = {0.2, 0.2, 0},
+        length = 0.1,
+    })
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.move_pen_joint1(state, {0.8, 0.7, 0})
+    bridge_scene.end_scene_command_batch(state)
+    before := bridge_scene.get_pen_joint1_position(state)
+
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, bridge_scene.get_pen_joint1_position(state), before)
+    testing.expect_value(t, particle_system^.dust_tool_contact_count,
+        particlemodel.DUST_TOOL_CONTACT_CAP)
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.move_pen_joint1(state, {0.8, 0.7, 0.1})
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, bridge_scene.get_pen_joint1_position(state),
+        geometry.Vector3{0.8, 0.7, 0.1})
+    testing.expect_value(t, particle_system^.dust_tool_contact_count,
+        particlemodel.DUST_TOOL_CONTACT_CAP)
+}
+
+// Verify native circle markers publish to one real arc host.
+@(test)
+bridge_native_circle_modifier_commits :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    service := new(Julia_Runtime_Service, context.allocator)
+    defer free(service)
+    service^.animation_generation = 4
+    service^.animation_last_committed_sequence = 0
+    service^.animation_progress = 0
+    state^.julia_runtime_service = service
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+
+    state^.world_compass, _ = shapes.world_create_compass(&state^.shape_world, {
+        joint1 = {0, 0, 0},
+        joint2 = {0.12, 0, 0},
+        limb_length = 0.2,
+    })
+    arc := bridge_scene.shape_create_arc(state, {0, 0, 0},
+        {
+            radius = 0.12,
+            start_theta = 0,
+            sweep_theta = 1,
+        },
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t, arc.status, i32(bridgemodel.BRIDGE_STATUS_OK))
+    batch: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.25
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(9),
+            entity = arc.shape,
+            second_entity = 2,
+            third_entity = 3,
+            elapsed = 0.5,
+            duration = 1,
+            start = {0, 0, 0},
+            second = {0.12, 0, 0},
+            angle = f32(1),
+            radius = 0.12,
+            brush = 0.1,
+        }),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    geometry, found := shapemodel.shape_component_get(
+        &state^.shape_world.arcs, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(arc.shape))
+    testing.expect(t, found)
+    testing.expect_value(t, geometry.sweep_theta, f32(0.5))
+}
+
+// Verify native modifier request layout matches the 144-byte Julia ABI.
+@(test)
+bridge_native_modifier_request_layout :: proc(t: ^testing.T) {
+    testing.expect_value(t, size_of(Bridge_Native_Modifier_Request), 144)
+}
+
+// Verify native modifier markers expand once and publish through a real scene batch.
+@(test)
+bridge_native_modifier_transaction_and_mixed_order :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+
+    point := bridge_scene.shape_create_point(state, bridge_shape_test_input({0, 0, 0}))
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_generation = 4
+    batch.tick_sequence = 1
+    batch.animation_progress = 0.25
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(0),
+        }),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(1),
+            entity = point.entity,
+            elapsed = 0.25,
+            duration = 1,
+            start = {1, 2, 3},
+            displacement = {4, 4, 4},
+        }),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect_value(t, bridge_scene.shape_set_position(state, point.entity,
+        geometry.Vector3{9, 9, 9}), i32(bridgemodel.BRIDGE_STATUS_OK))
+    bridge_scene.end_scene_command_batch(state)
+
+    testing.expect_value(t, batch.command_count, 3)
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    position, found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(point.entity))
+    testing.expect(t, found)
+    testing.expect_value(t, position.position,
+        geometry.Vector3{9, 9, 9})
+
+    expect_native_modifier_replay_rejected(
+        t, state, batch, point.entity, position.position)
+}
+
+// Reject replay of a committed tick while preserving its canonical point position.
+expect_native_modifier_replay_rejected :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    batch: bridge_scene.Scene_Command_Batch, entity: u64,
+    before_position: geometry.Vector3) {
+    replay: bridge_scene.Scene_Command_Batch
+    replay = batch
+    replay.animation = nil
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &replay))
+    replay_position, replay_found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(entity))
+    testing.expect(t, replay_found)
+    testing.expect_value(t, replay_position.position, before_position)
+}
+
+// Verify malformed modifiers and capture overflow reject without canonical mutation.
+@(test)
+bridge_native_modifier_malformed_and_overflow :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+
+    batch: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    batch.animation_progress = 0
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(1),
+            entity = 0,
+            elapsed = 0,
+            duration = 1,
+        }),
+        i32(bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT))
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
+
+    overflow: bridge_scene.Scene_Command_Batch
+    bridge_scene.begin_scene_command_batch(state, &overflow)
+    overflow.animation_progress = 0
+    for _ in 0..<bridge_scene.SCENE_COMMAND_BATCH_CAPACITY {
+        command, captured := bridge_scene.append_scene_command(
+            state, .Notify_Animation_Cycle_Boundary)
+        testing.expect(t, captured)
+        testing.expect(t, command != nil)
+    }
+    testing.expect_value(t, apply_native_modifier(state,
+        Bridge_Native_Modifier_Request{
+            kind = i32(0),
+        }),
+        i32(bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY))
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &overflow))
+}
+
+// Verify accepted batches replace drawing activity and rejected batches clear it.
+@(test)
+bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: bridge_scene.Scene_Command_Batch
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.emit_trailing_particle(state, {0.25, 0.5, 0}, {10, 20, 30, 255})
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, bridge_scene.scene_command_batch_has_drawing_activity(&batch))
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect(t, state^.chalk_audio.drawing_active)
+
+    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.end_scene_command_batch(state)
+    testing.expect(t, !bridge_scene.scene_command_batch_has_drawing_activity(&batch))
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect(t, !state^.chalk_audio.drawing_active)
+
+    state^.chalk_audio.drawing_active = true
+    batch.overflowed = true
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
+    testing.expect(t, !state^.chalk_audio.drawing_active)
+}
+// Verify an unformed hide departs nothing and partial ink thins departure samples.
+@(test)
+bridge_interrupted_formation_hide_scales_departure :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 128
+    line := bridge_scene.shape_create_line(state, {0, 0, 0}, {1, 0, 0},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t,
+        bridge_scene.shape_set_visible(state, line.shape, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    particles.formation_reset_generation(&state^.particle_system, 5)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 0))
+    testing.expect(t, particles.formation_start_reveal(&state^.particle_system, {
+        kind = .Region,
+        owner_entity = line.shape,
+        animation_generation = 5,
+        progress = 0,
+        duration = 1,
+        seed = 3,
+    }))
+
+    testing.expect_value(t,
+        bridge_scene.shape_set_visible(state, line.shape, 0),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    testing.expect(t, !state^.particle_system.low_particles.alive[0])
+    testing.expect_value(t, state^.particle_system.departure_capture_failures, u64(0))
+
+    samples: [10]particles.Departure_Material_Sample
+    for index in 0..<len(samples) {
+        samples[index].coverage = u8(index)
+    }
+    testing.expect_value(t, bridge_scene.bridge_thin_departure_samples(samples[:], 1), 10)
+    testing.expect_value(t,
+        bridge_scene.bridge_thin_departure_samples(samples[:], 0.25), 3)
+    testing.expect_value(t, samples[1].coverage, u8(3))
+    testing.expect_value(t, samples[2].coverage, u8(6))
+    testing.expect_value(t, bridge_scene.bridge_thin_departure_samples(samples[:], 0), 0)
+}
+
+// Verify label formation adds no dust contact beyond its single show transition.
+@(test)
+bridge_label_formation_adds_no_dust_contact :: proc(t: ^testing.T) {
+    state := bridge_shape_test_state()
+    defer free(state)
+    state^.particle_system.use_max_dust_particles = 16
+    state^.iso_scale.scale = 800
+    label := bridge_scene.shape_create_label(state, cstring("A"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain),
+        bridge_shape_test_input({0.5, 0.5, 0}))
+    testing.expect_value(t, bridge_scene.shape_set_visible(state, label.entity, 1),
+        i32(bridgemodel.BRIDGE_STATUS_OK))
+    particles.formation_reset_generation(&state^.particle_system, 5)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 0))
+    testing.expect(t, particles.formation_start_reveal(&state^.particle_system, {
+        kind = .Label,
+        owner_entity = label.entity,
+        animation_generation = 5,
+        progress = 0,
+        duration = 1,
+        seed = 3,
+    }))
+    slot := particles.formation_find_reveal(
+        &state^.particle_system.formation, .Label, label.entity, 5)
+    ink: [2]particlemodel.Formation_Label_Ink_Sample = {
+        {
+            offset = {0, -4},
+            coverage = 255,
+        },
+        {
+            offset = {3, -4},
+            coverage = 255,
+        },
+    }
+    testing.expect(t, particles.formation_store_label_targets(
+        &state^.particle_system, slot, {
+            font_size = 16,
+            signature = 1,
+        }, ink[:]) > 0)
+    testing.expect(t, particles.formation_advance_progress(
+        &state^.particle_system, 5, 1))
+    testing.expect_value(t, state^.particle_system.dust_tool_contact_count, 1)
+}

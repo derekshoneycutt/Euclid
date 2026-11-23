@@ -1,8 +1,10 @@
 package terminalservice
 
+import transport "../../../bridge/transport"
+
 import core "../../../core"
 import protocol "../../../core/protocol"
-import bridge "../../../bridge"
+import bridge "../../../bridge/host"
 import input "../../input"
 import terminalview ".."
 import testing "core:testing"
@@ -31,7 +33,7 @@ terminal_interactive_test_routes_and_releases_input :: proc(t: ^testing.T) {
     terminal_service_interactive_input(state, &runtime, {
         events = events[:],
     })
-    message, available := bridge.consumer_mailbox_try_recv(
+    message, available := transport.consumer_mailbox_try_recv(
         &state.julia_runtime_service.julia_inbox)
     testing.expect(t, available)
     request, typed := message^.(protocol.Terminal_Interactive_Input)
@@ -39,7 +41,7 @@ terminal_interactive_test_routes_and_releases_input :: proc(t: ^testing.T) {
     testing.expect_value(t, request.request_id, protocol.Request_Id(19))
     testing.expect_value(t, request.animation_generation, u64(7))
     testing.expect_value(t, string(request.bytes[:request.byte_count]), "\e[B\r")
-    bridge.consumer_mailbox_release(
+    transport.consumer_mailbox_release(
         &state.julia_runtime_service.julia_inbox, message)
     testing.expect_value(t, runtime.byte_queue_count, 0)
     testing.expect_value(t, runtime.owner.kind, input.Input_Owner_Kind.Julia_Interactive)
@@ -71,20 +73,20 @@ terminal_interactive_test_retains_input_under_pressure :: proc(t: ^testing.T) {
     testing.expect_value(t, runtime.byte_queue_count, 1)
     testing.expect_value(t, runtime.byte_delivery_rejection_count, u64(1))
     for {
-        message, available := bridge.consumer_mailbox_try_recv(
+        message, available := transport.consumer_mailbox_try_recv(
             &state.julia_runtime_service.julia_inbox)
         if !available {
             break
         }
-        bridge.consumer_mailbox_release(
+        transport.consumer_mailbox_release(
             &state.julia_runtime_service.julia_inbox, message)
     }
     terminal_service_deliver_interactive_input(state, &runtime)
     testing.expect_value(t, runtime.byte_queue_count, 0)
-    message, available := bridge.consumer_mailbox_try_recv(
+    message, available := transport.consumer_mailbox_try_recv(
         &state.julia_runtime_service.julia_inbox)
     testing.expect(t, available)
-    bridge.consumer_mailbox_release(
+    transport.consumer_mailbox_release(
         &state.julia_runtime_service.julia_inbox, message)
 }
 
@@ -105,7 +107,7 @@ terminal_interactive_test_publishes_environment :: proc(t: ^testing.T) {
     }
     terminal_service_publish_interactive_environment(state)
     for index in 0..<2 {
-        message, available := bridge.consumer_mailbox_try_recv(
+        message, available := transport.consumer_mailbox_try_recv(
             &state.julia_runtime_service.julia_inbox)
         testing.expect(t, available)
         if index == 0 {
@@ -119,13 +121,13 @@ terminal_interactive_test_publishes_environment :: proc(t: ^testing.T) {
             testing.expect_value(t,
                 request.capabilities, terminalview.TERMINAL_CAPABILITIES)
         }
-        bridge.consumer_mailbox_release(
+        transport.consumer_mailbox_release(
             &state.julia_runtime_service.julia_inbox, message)
     }
     state.terminal.julia_geometry_generation = 3
     state.terminal.julia_capabilities_observed = true
     terminal_service_publish_interactive_environment(state)
-    _, available := bridge.consumer_mailbox_try_recv(
+    _, available := transport.consumer_mailbox_try_recv(
         &state.julia_runtime_service.julia_inbox)
     testing.expect(t, !available)
 }

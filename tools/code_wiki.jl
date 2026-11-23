@@ -213,6 +213,10 @@ function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{Strin
             current_file = strip(line[8:end])
             push!(package.source_files, current_file)
             index += 1
+        elseif line == "\tfullpath:"
+            index += 2
+        elseif line == "\tfiles:"
+            break
         elseif consume_odin_package_doc_line!(package, line, current_file)
             index += 1
         elseif startswith(line, "\t\t") && !startswith(line, "\t\t\t")
@@ -223,10 +227,6 @@ function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{Strin
                 package.stable_id, package.display_name, package.source_root,
                 current_file, declaration, comments))
             index = next_index
-        elseif line == "\tfullpath:"
-            index += 2
-        elseif line == "\tfiles:"
-            break
         elseif isempty(line)
             index += 1
         else

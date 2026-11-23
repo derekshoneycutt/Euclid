@@ -1,5 +1,7 @@
 package view
 
+import bridge_scene "../bridge/scene"
+
 import geometry "../core/geometry"
 import bridgemodel "../bridge/model"
 import dynviewmodel "../dynview/model"
@@ -12,7 +14,7 @@ import math "core:math"
 import os "core:os"
 import strings "core:strings"
 import testing "core:testing"
-import app_bridge "../bridge"
+import app_bridge "../bridge/host"
 import app_core "../core"
 import app_dyncompile "../dynview/compile"
 import dyncore "../dynview/core"
@@ -355,22 +357,22 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
     state^.julia_interface^.current_animation = animation
     first := scene_command_test_entity(world, {})
     second := scene_command_test_entity(world, {})
-    batch: app_bridge.Scene_Command_Batch = {
+    batch: bridge_scene.Scene_Command_Batch = {
         animation = animation,
     }
 
     state^.scene_command_batch_target = &batch
-    first_command, first_captured := app_bridge.capture_shape_command(
+    first_command, first_captured := bridge_scene.capture_shape_command(
         state, .Set_Shape_Position, shapemodel.shape_entity_pack(first))
     first_command^.position = {1, 2, 3}
     testing.expect(t, first_captured)
-    second_command, second_captured := app_bridge.capture_shape_command(
+    second_command, second_captured := bridge_scene.capture_shape_command(
         state, .Set_Shape_Position, shapemodel.shape_entity_pack(second))
     second_command^.position = {4, 5, 6}
     testing.expect(t, second_captured)
     state^.scene_command_batch_target = nil
 
-    testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
+    testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
     transform_0, ok_0 := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, first)
     transform_1, ok_1 := shapemodel.shape_component_get(
@@ -392,16 +394,16 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     entity := scene_command_test_entity(world, {9, 9, 9})
-    batch: app_bridge.Scene_Command_Batch = {
+    batch: bridge_scene.Scene_Command_Batch = {
         animation = animation,
         command_count = 2,
     }
-    batch.commands[0] = app_bridge.Scene_Command{
+    batch.commands[0] = bridge_scene.Scene_Command{
         kind = .Set_Shape_Position,
         entity = shapemodel.shape_entity_pack(entity),
         position = {1, 2, 3},
     }
-    batch.commands[1] = app_bridge.Scene_Command{
+    batch.commands[1] = bridge_scene.Scene_Command{
         kind = .Set_Shape_Position,
         entity = shapemodel.shape_entity_pack({
             slot = 2,
@@ -410,7 +412,7 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
         position = {4, 5, 6},
     }
 
-    testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, entity)
     testing.expect(t, found && transform^.position == geometry.Vector3{9, 9, 9})
@@ -430,15 +432,15 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
 
-    overflowed: app_bridge.Scene_Command_Batch = {
+    overflowed: bridge_scene.Scene_Command_Batch = {
         animation = current,
         overflowed = true,
     }
-    stale_batch: app_bridge.Scene_Command_Batch = {
+    stale_batch: bridge_scene.Scene_Command_Batch = {
         animation = stale,
     }
-    testing.expect(t, !app_bridge.validate_scene_command_batch(state, &overflowed))
-    testing.expect(t, !app_bridge.validate_scene_command_batch(state, &stale_batch))
+    testing.expect(t, !bridge_scene.validate_scene_command_batch(state, &overflowed))
+    testing.expect(t, !bridge_scene.validate_scene_command_batch(state, &stale_batch))
 }
 
 //   Verify the tick-reject reason classifies stale generation and stale sequence.
@@ -493,20 +495,20 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     entity := scene_command_test_entity(world, {9, 9, 9})
-    batch: app_bridge.Scene_Command_Batch = {
+    batch: bridge_scene.Scene_Command_Batch = {
         animation = animation,
         command_count = 2,
     }
-    batch.commands[0] = app_bridge.Scene_Command{
+    batch.commands[0] = bridge_scene.Scene_Command{
         kind = .Set_Shape_Position,
         entity = shapemodel.shape_entity_pack(entity),
         position = {1, 2, 3},
     }
-    batch.commands[1] = app_bridge.Scene_Command{
+    batch.commands[1] = bridge_scene.Scene_Command{
         kind = .Set_Tool_Lock,
     }
 
-    testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
+    testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, entity)
     testing.expect(t, found && transform^.position == geometry.Vector3{9, 9, 9})
@@ -525,9 +527,9 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
             position = {1, 2, 3},
         })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
-    snapshot := new(app_bridge.Animation_Query_Snapshot, context.allocator)
+    snapshot := new(bridge_scene.Animation_Query_Snapshot, context.allocator)
     defer free(snapshot, context.allocator)
-    app_bridge.capture_animation_query_snapshot(state, snapshot)
+    bridge_scene.capture_animation_query_snapshot(state, snapshot)
 
     transform, found := shapemodel.shape_component_get_mut(
         &world^.transforms, &world^.registry, state^.world_pen.joint1)
@@ -535,7 +537,7 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
     transform^.position = {4, 5, 6}
     state^.animation_query_snapshot_target = snapshot
     testing.expect(
-        t, app_bridge.get_pen_joint1_position(state) == geometry.Vector3{1, 2, 3})
+        t, bridge_scene.get_pen_joint1_position(state) == geometry.Vector3{1, 2, 3})
     state^.animation_query_snapshot_target = nil
 }
 

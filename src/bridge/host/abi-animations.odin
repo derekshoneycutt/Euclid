@@ -1,0 +1,436 @@
+package julia_host
+
+import bridge_animation "../animation"
+
+import bridge_scene "../scene"
+
+import bridge_events "../events"
+
+import bridgemodel "../model"
+
+import animation_model "../../core/animation"
+import modifier "../../animation"
+
+import julialib "../../../libs/julia/bindings"
+import "../../core"
+
+// Carry one animation key and deterministic schema identity across the C ABI.
+Animation_Value_Abi_Identity :: struct {
+    key: u64,
+    schema_low: u64,
+    schema_high: u64,
+}
+
+// Return the copied path length and native catalogue node kind.
+Animation_Implementation_Path_Metadata :: struct {
+    byte_count: i32,
+    node_kind: i32,
+}
+
+//   Convert a canonical animation-value result to its stable bridge status.
+animation_value_bridge_status :: proc "contextless" (
+    status: animation_model.Animation_Value_Status) -> i32 {
+    switch status {
+    case .Ok:
+        return bridgemodel.BRIDGE_STATUS_OK
+    case .Invalid_Argument:
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    case .Illegal_State:
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    case .Not_Found:
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    case .Schema_Mismatch:
+        return bridgemodel.BRIDGE_STATUS_SCHEMA_MISMATCH
+    case .Out_Of_Capacity, .Allocation_Failed:
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+}
+
+//   Build the canonical identity for the host's active animation generation.
+animation_value_identity :: proc "contextless" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity) ->
+        animation_model.Animation_Value_Identity {
+    return {
+        generation = state^.animation_values.generation,
+        key = identity_abi.key,
+        schema_low = identity_abi.schema_low,
+        schema_high = identity_abi.schema_high,
+    }
+}
+
+//   Copy one Julia-owned opaque value into canonical animation storage.
+//
+// Parameters:
+//   - state: Live host state in a synchronous animation lifecycle callback.
+//   - identity: Nonzero key and deterministic 128-bit Julia schema identity.
+//   - source: Julia-owned bytes valid only for this call.
+//   - byte_count: Exact positive payload size.
+//
+// Returns:
+//   - Stable `BRIDGE_STATUS_*`; the source pointer is never retained.
+set_animation_value :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity,
+    source: ^u8,
+    byte_count: i32) -> i32 {
+    if state == nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    if source == nil || byte_count <= 0 ||
+        byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    identity := animation_value_identity(state, identity_abi)
+    source_bytes := cast([^]u8)source
+    payload := source_bytes[:int(byte_count)]
+    if state^.scene_command_batch_target != nil {
+        if state^.animation_query_snapshot_target == nil {
+            return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+        }
+        return animation_value_bridge_status(
+            animation_model.animation_value_pending_append(
+                &state^.scene_command_batch_target^.animation_value_writes,
+                identity,
+                payload))
+    }
+    if state^.animation_query_snapshot_target != nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return animation_value_bridge_status(animation_model.animation_value_store_set(
+        &state^.animation_values, identity, payload))
+}
+
+//   Copy one canonical opaque value into Julia-owned destination storage.
+//
+// Parameters:
+//   - state: Live host state in a synchronous animation lifecycle callback.
+//   - identity: Existing key and exact bound 128-bit schema identity.
+//   - destination: Julia-owned bytes valid only for this call.
+//   - byte_count: Exact positive destination size.
+//
+// Returns:
+//   - Stable `BRIDGE_STATUS_*`; destination changes only on success.
+get_animation_query_value :: proc(
+    state: ^core.Euclid_General_State,
+    identity: animation_model.Animation_Value_Identity,
+    payload: []u8) -> i32 {
+    if state^.scene_command_batch_target == nil ||
+        !state^.animation_query_snapshot_target^.animation_values_valid {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    status := animation_model.animation_value_pending_copy(
+        &state^.scene_command_batch_target^.animation_value_writes,
+        identity,
+        payload)
+    if status != .Not_Found {
+        return animation_value_bridge_status(status)
+    }
+    return animation_value_bridge_status(animation_model.animation_value_snapshot_copy(
+        &state^.animation_query_snapshot_target^.animation_values,
+        identity,
+        payload))
+}
+
+//   Copy one opaque value from the active query snapshot and staged writes.
+get_animation_value :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity,
+    destination: ^u8,
+    byte_count: i32) -> i32 {
+    if state == nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if destination == nil || byte_count <= 0 ||
+        byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    identity := animation_value_identity(state, identity_abi)
+    destination_bytes := cast([^]u8)destination
+    payload := destination_bytes[:int(byte_count)]
+    if state^.animation_query_snapshot_target != nil {
+        return get_animation_query_value(state, identity, payload)
+    }
+    if state^.scene_command_batch_target != nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return animation_value_bridge_status(animation_model.animation_value_store_copy(
+        &state^.animation_values, identity, payload))
+}
+
+//   Register the Julia entry that defines null/default animation behavior.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
+set_null_animations :: proc "c" (
+    state: ^core.Euclid_General_State,
+    entry: ^julialib.jl_value_t) {
+
+    state^.julia_interface^.null_animation.entry = entry
+}
+
+// Copy a generation-local implementation path and report its required byte count.
+copy_animation_implementation_path :: proc "c" (
+    state: ^core.Euclid_General_State,
+    stable_id: cstring,
+    destination: ^u8,
+    destination_capacity: i32,
+    metadata: ^Animation_Implementation_Path_Metadata) -> i32 {
+
+    if state == nil || state^.julia_interface == nil || stable_id == nil ||
+        destination_capacity < 0 || metadata == nil {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    metadata^ = {}
+    parsed_stable_id, parsed_ok := bridge_animation.parse_animation_stable_id(
+        stable_id, stable_id)
+    if !parsed_ok {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    node := find_animation_by_stable_id(state, parsed_stable_id)
+    if node == nil {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    return copy_animation_node_implementation_path(
+        node, destination, destination_capacity, metadata)
+}
+
+// Copy one resolved node's path while reporting its kind and required capacity.
+copy_animation_node_implementation_path :: proc(
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface, destination: ^u8,
+    destination_capacity: i32, metadata: ^Animation_Implementation_Path_Metadata) -> i32 {
+    metadata^.node_kind = i32(node^.node_kind)
+    if node^.node_kind == .Terminal {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    path_byte_count := i32(len(node^.implementation_path))
+    if path_byte_count <= 0 {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    metadata^.byte_count = path_byte_count
+    if destination == nil || destination_capacity < path_byte_count {
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    destination_bytes := cast([^]u8)destination
+    copy(destination_bytes[:path_byte_count],
+        transmute([]u8)node^.implementation_path)
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+//   Mark that an animation cycle boundary occurred so host-side systems can consume it once.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+notify_animation_cycle_boundary :: proc "c" (state: ^core.Euclid_General_State) {
+    _, captured := bridge_scene.append_scene_command(
+        state, .Notify_Animation_Cycle_Boundary)
+    if captured {
+        return
+    }
+    context = state^.saved_context
+    bridge_events.notify_animation_cycle_boundary_local(state)
+}
+
+// Resolve one ABI kind to a native modifier kind for transaction capture.
+native_modifier_kind_from_abi :: proc(kind: i32) -> (modifier.Modifier_Kind, bool) {
+    switch kind {
+    case 0:
+        return .Identity, true
+    case 1:
+        return .Set_Point_Position, true
+    case 2:
+        return .Pen_Descend, true
+    case 3:
+        return .Pen_Rise, true
+    case 4:
+        return .Pen_Pose, true
+    case 5:
+        return .Compass_Descend, true
+    case 6:
+        return .Compass_Rise, true
+    case 7:
+        return .Draw_Point, true
+    case 8:
+        return .Draw_Line, true
+    case 9:
+        return .Draw_Circle, true
+    case 10:
+        return .Draw_Filled_Circle, true
+    case 11:
+        return .Complete_Point, true
+    case 12:
+        return .Complete_Line, true
+    case 13:
+        return .Complete_Circle, true
+    case 14:
+        return .Translate_Point, true
+    case 15:
+        return .Rotate_Point, true
+    case 16:
+        return .Reflect_Point_Xy_Above, true
+    case 17:
+        return .Reflect_Point_Xy_Below, true
+    case 18:
+        return .Pen_Tilt, true
+    case 19:
+        return .Pen_Cone, true
+    case 20:
+        return .Pen_Drag, true
+    case 21:
+        return .Pen_Transfer, true
+    case 22:
+        return .Compass_Transfer, true
+    case 23:
+        return .Compass_Highlight, true
+    case 24:
+        return .Line_Segment, true
+    case 25:
+        return .Reflect_Angle_Marker, true
+    case 26:
+        return .Pen_Highlight_Point, true
+    case 27:
+        return .Pen_Stroke, true
+    case 28:
+        return .Extend_Line, true
+    case 29:
+        return .Two_Segment_Stroke, true
+    case 30:
+        return .Cycloid_Place, true
+    case 31:
+        return .Cycloid_Descend, true
+    case 32:
+        return .Cycloid_Draw, true
+    case 33:
+        return .Cycloid_Rise, true
+    case 34:
+        return .Trochoid_Place, true
+    case 35:
+        return .Trochoid_Descend, true
+    case 36:
+        return .Trochoid_Draw, true
+    case 37:
+        return .Trochoid_Rise, true
+    case 38:
+        return .Parabola_Place, true
+    case 39:
+        return .Parabola_Descend, true
+    case 40:
+        return .Parabola_Draw, true
+    case 41:
+        return .Parabola_Rise, true
+    case 42:
+        return .Hyperbola_Place, true
+    case 43:
+        return .Hyperbola_Descend, true
+    case 44:
+        return .Hyperbola_Draw, true
+    case 45:
+        return .Hyperbola_Rise, true
+    case 46:
+        return .Rotate_Shape_Orientation, true
+    case:
+        return .Identity, false
+    }
+}
+
+// Capture native motion; curve setup alone may use the quiesced lifecycle handoff.
+apply_native_modifier :: proc "c" (
+    state: ^core.Euclid_General_State,
+    request_abi: Bridge_Native_Modifier_Request) -> i32 {
+    if state == nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    modifier_kind, kind_valid :=
+        native_modifier_kind_from_abi(request_abi.kind)
+    if !kind_valid {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    request := native_modifier_request_from_abi(request_abi, modifier_kind)
+    command, captured := bridge_scene.append_scene_command(state, .Apply_Native_Modifier)
+    if !captured {
+        return bridge_scene.apply_native_lifecycle_placement(state, request)
+    }
+    if command == nil {
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    command^.entity = request_abi.entity
+    command^.modifier = request
+    if !modifier.modifier_request_valid(request) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Copy ABI fields into the native request without changing capture or validation order.
+native_modifier_request_from_abi :: proc(
+    request_abi: Bridge_Native_Modifier_Request,
+    kind: modifier.Modifier_Kind) -> modifier.Modifier_Request {
+    return {
+        kind = kind,
+        entity = request_abi.entity,
+        second_entity = request_abi.second_entity,
+        third_entity = request_abi.third_entity,
+        elapsed = request_abi.elapsed,
+        duration = request_abi.duration,
+        start_position = {
+            request_abi.start[0],
+            request_abi.start[1],
+            request_abi.start[2],
+        },
+        second_position = {
+            request_abi.second[0],
+            request_abi.second[1],
+            request_abi.second[2],
+        },
+        third_position = {
+            request_abi.third[0],
+            request_abi.third[1],
+            request_abi.third[2],
+        },
+        displacement = {
+            request_abi.displacement[0],
+            request_abi.displacement[1],
+            request_abi.displacement[2],
+        },
+        axis_a = {
+            request_abi.axis_a[0],
+            request_abi.axis_a[1],
+            request_abi.axis_a[2],
+        },
+        axis_b = {
+            request_abi.axis_b[0],
+            request_abi.axis_b[1],
+            request_abi.axis_b[2],
+        },
+        angle = request_abi.angle,
+        radius = request_abi.radius,
+        brush = request_abi.brush,
+        color_packed = request_abi.color_packed,
+        scalar = request_abi.scalar,
+        integer = int(request_abi.integer),
+        flag = request_abi.flag != 0,
+    }
+}
+
+//   Return the bridge ABI version expected by Julia-side integration code.
+//
+// Returns:
+//   - Bridge integer value for the requested capability, index, or status code.
+get_bridge_version :: proc "c" () -> i32 {
+    return BRIDGE_VERSION
+}
+
+//   Return bridge feature flags that advertise optional ABI capabilities.
+//
+// Returns:
+//   - Bridge integer value for the requested capability, index, or status code.
+get_bridge_feature_flags :: proc "c" () -> i32 {
+    return BRIDGE_FEATURE_FLAGS
+}

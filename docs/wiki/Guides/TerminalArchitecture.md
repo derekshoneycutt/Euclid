@@ -913,6 +913,8 @@ buffer record during polling. Admission copies source bytes before returning;
 polling copies completed rows and text into Julia-owned destinations. Julia roots
 each backing value for the native call and returns an internal `ExerciseQueryReply`
 containing metadata, rows, and owned text. Neither side retains borrowed pointers.
+The native boundary operations live in [`bridge/exercise/`](../../../src/bridge/exercise/);
+display admission and persistence remain with their respective owners.
 
 The display correlates replies with request, content-index, animation, and header
 intent identities. Hide, newer show/load, navigation/reset, and content replacement

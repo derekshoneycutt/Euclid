@@ -1,4 +1,6 @@
 package view
+
+import bridge_animation "../bridge/animation"
 import "core:log"
 
 import bridgemodel "../bridge/model"
@@ -6,7 +8,7 @@ import font "font"
 import terminalview "terminal"
 import core "../core"
 import animation_model "../core/animation"
-import julia "../bridge"
+import julia "../bridge/host"
 import evidence_session "../evidence/session"
 import runtime "base:runtime"
 import fmt "core:fmt"
@@ -128,7 +130,7 @@ free_animations_state :: proc(state: ^core.Euclid_General_State) {
     viewmodel.ui_membership_destroy(&state.ui_runtime.membership)
     viewmodel.ui_semantic_focus_destroy(&state^.semantic_focus)
     collections.destroy(&state^.preferences_runtime.collections_state)
-    julia.animation_storage_destroy(
+    bridge_animation.animation_storage_destroy(
         &state^.animation_memory,
         &state^.animation_values,
         &state^.dynview_documents)

@@ -1,8 +1,10 @@
 package view
 
+import transport "../bridge/transport"
+
 import bridgemodel "../bridge/model"
 import presentation_model "../bridge/presentation"
-import julia "../bridge"
+import julia "../bridge/host"
 import core "../core"
 import geometry "../core/geometry"
 import capture "../evidence/capture"
@@ -934,7 +936,7 @@ scenario_expect_view_content_request :: proc(
     t: ^testing.T, service: ^bridgemodel.Julia_Runtime_Service,
     animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     identity: evidence_trace.Identity) {
-    message, received := julia.consumer_mailbox_try_recv(&service^.julia_inbox)
+    message, received := transport.consumer_mailbox_try_recv(&service^.julia_inbox)
     testing.expect(t, received)
     request, request_ok := message^.(bridgemodel.Scenario_View_Content_Requested)
     testing.expect(t, request_ok)
@@ -944,7 +946,7 @@ scenario_expect_view_content_request :: proc(
     testing.expect_value(t, request.animation_generation, u64(9))
     testing.expect_value(t, request.animation, animation)
     testing.expect_value(t, request.origin, identity)
-    julia.consumer_mailbox_release(&service^.julia_inbox, message)
+    transport.consumer_mailbox_release(&service^.julia_inbox, message)
     testing.expect_value(t, service.julia_inbox.outstanding, 0)
 }
 

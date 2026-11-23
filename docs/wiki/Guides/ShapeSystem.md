@@ -216,8 +216,8 @@ shape mutations. Constructors are not implicitly part of that asynchronous proto
 
 Odin and Julia bridge records must remain layout- and meaning-compatible. When changing
 this boundary, trace both exports and wrappers, dispatch, validation, and ABI tests. Start
-with [`scene_commands.odin`](../../../src/bridge/scene_commands.odin),
-[`abi-shapes.odin`](../../../src/bridge/abi-shapes.odin), and
+with [`scene_commands.odin`](../../../src/bridge/scene/scene_commands.odin),
+[`abi-shapes.odin`](../../../src/bridge/abi/shapes.odin), and
 [`src/julia/bridge/`](../../../src/julia/bridge/).
 
 ## Prepared Drawing
@@ -282,7 +282,7 @@ lifecycle rather than arbitrary entity deletion.
 
 For the concrete ordering, inspect
 [`runtime_session.odin`](../../../src/view/runtime_session.odin),
-[`animations.odin`](../../../src/bridge/animations.odin), and
+[`animation_lifecycle.odin`](../../../src/bridge/host/animation_lifecycle.odin), and
 `shape_world_rewind_animation` in
 [`shapes.odin`](../../../src/shapes/model/shapes.odin).
 
@@ -299,10 +299,10 @@ then commit it or reject it without partial mutation.
 | Entity validity, component membership, or world lifetime | [`src/shapes/model/`](../../../src/shapes/model/) |
 | Constructors or constraints | [`world_constructors.odin`](../../../src/shapes/world_constructors.odin), [`world_constraints.odin`](../../../src/shapes/world_constraints.odin) |
 | Curve parameters or sampling | [`src/shapes/curve/`](../../../src/shapes/curve/) |
-| Julia-facing reads and mutations | [`scene_commands.odin`](../../../src/bridge/scene_commands.odin), [`src/julia/bridge/`](../../../src/julia/bridge/) |
+| Julia-facing reads and mutations | [`scene_commands.odin`](../../../src/bridge/scene/scene_commands.odin), [`src/julia/bridge/`](../../../src/julia/bridge/) |
 | Frame interpolation or draw packets | [`world_render.odin`](../../../src/shapes/world_render.odin), [`draw_cache.odin`](../../../src/shapes/draw_cache.odin) |
 | Worker scheduling or display consumption | [`simulation_executor.odin`](../../../src/view/simulation/simulation_executor.odin), [`geometry.odin`](../../../src/view/world/geometry.odin) |
-| Animation switch and suffix retirement | [`runtime_session.odin`](../../../src/view/runtime_session.odin), [`animations.odin`](../../../src/bridge/animations.odin) |
+| Animation switch and suffix retirement | [`runtime_session.odin`](../../../src/view/runtime_session.odin), [`animation_lifecycle.odin`](../../../src/bridge/host/animation_lifecycle.odin) |
 
 Useful tests include
 [`shapes_test.odin`](../../../src/shapes/model/shapes_test.odin) for identity and
@@ -310,6 +310,6 @@ component behavior, [`world_constructors_test.odin`](../../../src/shapes/world_c
 for construction boundaries, [`world_constraints_test.odin`](../../../src/shapes/world_constraints_test.odin)
 for solving, [`world_render_test.odin`](../../../src/shapes/world_render_test.odin) for
 interpolation and packet preparation, and
-[`animations_test.odin`](../../../src/bridge/animations_test.odin) for retirement
+[`animations_test.odin`](../../../src/bridge/host/animations_test.odin) for retirement
 ordering. The code and tests are the detailed specification; this guide is a route into
 them.

@@ -692,7 +692,7 @@ compilation.
 | `src/julia/latex/facade.jl` | Canonical document representation and priming | `TeXDocument`, `tex_str`, `prime_latex!` |
 | `src/dynview/parse/` | Classification, bounded parsing, normalization, semantic lowering | document/math grammars and semantic builders |
 | `src/dynview/core/document_store.odin` | Generation-scoped exact-source interning | immutable document handles and diagnostics |
-| `src/bridge/dynview_native_tex.odin` | Native semantic replay into snapshot staging | transactional span rewriting and record import |
+| `src/view/presentation/importer/native_tex.odin` | Native semantic replay into snapshot staging | transactional span rewriting and record import |
 
 ### Include And Dependency Direction
 
@@ -735,7 +735,7 @@ flowchart LR
 | --- | --- | --- |
 | Tokenization, parsing, and normalization | `src/dynview/parse/` | Preserves frozen recovery behavior or rejects atomically |
 | Semantic reuse | `src/dynview/core/document_store.odin` | Bounded exact-source interning and stable negative caching |
-| Snapshot staging | `src/bridge/dynview_native_tex.odin` | Rebases pointer-free document ranges and publishes no partial fragment |
+| Snapshot staging | `src/view/presentation/importer/native_tex.odin` | Rebases pointer-free document ranges and publishes no partial fragment |
 | Shaping, layout, and derived caches | `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/compile/` | Publishes exact literal source when semantic content cannot be rebuilt |
 | User-visible copy/failure contract | Canonical MIME presentation | Uses the exact selected bytes |
 

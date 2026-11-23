@@ -1,7 +1,7 @@
 package view
 
 import core "../core"
-import julia "../bridge"
+import julia "../bridge/host"
 import viewcontent "content"
 import native "native"
 import startup "startup"

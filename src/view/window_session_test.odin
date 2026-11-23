@@ -1,8 +1,10 @@
 package view
 
+import transport "../bridge/transport"
+
 import testing "core:testing"
 import thread "core:thread"
-import julia "../bridge"
+import julia "../bridge/host"
 import bridgemodel "../bridge/model"
 
 // Verify empty partial startup can be destroyed repeatedly without manufacturing a runtime failure.
@@ -22,7 +24,7 @@ window_session_empty_cleanup_preserves_result :: proc(t: ^testing.T) {
 window_startup_test_worker :: proc(worker: ^thread.Thread) {
     service := cast(^bridgemodel.Julia_Runtime_Service)worker.data
     for {
-        message, available := julia.consumer_mailbox_try_recv(&service^.julia_inbox)
+        message, available := transport.consumer_mailbox_try_recv(&service^.julia_inbox)
         if !available {
             thread.yield()
             continue
@@ -30,7 +32,7 @@ window_startup_test_worker :: proc(worker: ^thread.Thread) {
         request, shutdown := message^.(bridgemodel.Runtime_Shutdown_Requested)
         assert(shutdown)
         request_id := request.request_id
-        julia.consumer_mailbox_release(&service^.julia_inbox, message)
+        transport.consumer_mailbox_release(&service^.julia_inbox, message)
         outcome := julia.send_typed_julia_completion(service, {
             protocol = .Runtime_Shutdown,
             request_kind = .Shutdown,

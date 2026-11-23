@@ -1,7 +1,7 @@
 package viewpresentation
 
 import animation_model "../../core/animation"
-import bridge "../../bridge"
+import bridge "../../bridge/host"
 import bridgemodel "../../bridge/model"
 import presentation_model "../../bridge/presentation"
 import dynviewmodel "../../dynview/model"

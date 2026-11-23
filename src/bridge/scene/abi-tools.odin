@@ -1,0 +1,970 @@
+package bridge_scene
+
+import bridgemodel "../model"
+
+import shapemodel "../../shapes/model"
+
+import "../../core"
+import "../../particles"
+
+// Hold one resolved permanent Cycloid tool line.
+Bridge_Cycloid_Tool_Line :: struct {
+    first: Vector3,
+    second: Vector3,
+}
+
+// Resolve one tool transform from the active immutable snapshot or canonical world.
+tool_position :: proc(
+    state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity) -> (Vector3, bool) {
+    snapshot := active_animation_query_snapshot(state)
+    if snapshot != nil {
+        transform, found := shapemodel.shape_component_get(
+            &snapshot^.shapes.transforms, &snapshot^.shapes.registry, entity)
+        if found {
+            return transform^.position, true
+        }
+        return {}, false
+    }
+    transform, found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
+    if !found {
+        return {}, false
+    }
+    return transform^.position, true
+}
+
+// Convert one bridge guide description into canonical tool state.
+bridge_trochoid_tool_value :: proc(
+    geometry: shapemodel.Bridge_Trochoid_Tool_Geometry) ->
+        shapemodel.Shape_Trochoid_Tool {
+    if geometry.mode < 0 ||
+        geometry.mode > i32(shapemodel.Shape_Trochoid_Mode.Internal) {
+        return {}
+    }
+    return {
+        mode = shapemodel.Shape_Trochoid_Mode(geometry.mode),
+        fixed_radius = geometry.fixed_radius,
+        rolling_radius = geometry.rolling_radius,
+        parameter = geometry.parameter,
+        rotation = geometry.rotation,
+        orientation_phase = geometry.orientation_phase,
+    }
+}
+
+// Convert one bridge description into canonical literal-line guide state.
+bridge_cycloid_tool_value :: proc(
+    geometry: shapemodel.Bridge_Cycloid_Tool_Geometry) ->
+        shapemodel.Shape_Cycloid_Tool {
+    return {
+        rolling_radius = geometry.rolling_radius,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        parameter = geometry.parameter,
+        orientation_phase = geometry.orientation_phase,
+    }
+}
+
+// Resolve the permanent Cycloid tool's endpoint positions from one query source.
+bridge_cycloid_tool_line :: proc(source: ^Bridge_Shape_Query_Source,
+    state: ^core.Euclid_General_State) -> (Bridge_Cycloid_Tool_Line, bool) {
+    first, first_ok := shapemodel.shape_component_get(source^.transforms,
+        source^.registry, state^.world_cycloid_tool.first)
+    second, second_ok := shapemodel.shape_component_get(source^.transforms,
+        source^.registry, state^.world_cycloid_tool.second)
+    if !first_ok || !second_ok {
+        return {}, false
+    }
+    return {first.position, second.position}, true
+}
+
+// Enable drawing for the process-global literal-line Cycloid guide.
+show_cycloid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape), 1)
+}
+
+// Disable drawing for the process-global literal-line Cycloid guide.
+hide_cycloid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape), 0)
+}
+
+// Atomically move both literal endpoints of the process-global Cycloid guide.
+set_cycloid_tool_line :: proc "c" (state: ^core.Euclid_General_State,
+    first, second: Vector3) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.cycloid_tools,
+        source.registry, state^.world_cycloid_tool.shape)
+    if !found || !shapemodel.shape_cycloid_line_is_valid(first, second,
+        current.rolling_radius, current.parameter_start, current.parameter_finish) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Cycloid_Tool_Line)
+    if command != nil {
+        command^.entity = packed
+        command^.position = first
+        command^.second_position = second
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    first_transform, first_ok := shapemodel.shape_component_get_mut(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        state^.world_cycloid_tool.first)
+    second_transform, second_ok := shapemodel.shape_component_get_mut(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        state^.world_cycloid_tool.second)
+    if !first_ok || !second_ok {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    first_transform.position = first
+    second_transform.position = second
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Atomically configure the process-global Cycloid guide's scalar state.
+set_cycloid_tool_geometry :: proc "c" (state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Cycloid_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value := bridge_cycloid_tool_value(geometry)
+    source, available := bridge_shape_query_source(state)
+    if !available || !shapemodel.shape_cycloid_tool_is_valid(value) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    line, line_ok := bridge_cycloid_tool_line(&source, state)
+    if !line_ok || !shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+        value.rolling_radius, value.parameter_start, value.parameter_finish) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Cycloid_Tool)
+    if command != nil {
+        command^.entity = packed
+        command^.cycloid_tool = value
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    current, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world.cycloid_tools, &state^.shape_world.registry,
+        state^.world_cycloid_tool.shape)
+    if !found {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    current^ = value
+    bridge_cycloid_tool_preserve_previous(current, previous)
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Preserve the Cycloid guide's last display interpolation sample across scalar updates.
+bridge_cycloid_tool_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Cycloid_Tool, previous: shapemodel.Shape_Cycloid_Tool) {
+    current.previous_rolling_radius = previous.previous_rolling_radius
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_parameter = previous.previous_parameter
+    current.previous_orientation_phase = previous.previous_orientation_phase
+}
+
+// Change only the process-global Cycloid guide's rolling parameter.
+set_cycloid_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.cycloid_tools,
+        source.registry, state^.world_cycloid_tool.shape)
+    if !found || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Cycloid_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    mutable, has_value := shapemodel.shape_component_get_mut(
+        &state^.shape_world.cycloid_tools, &state^.shape_world.registry,
+        state^.world_cycloid_tool.shape)
+    if !has_value {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    mutable.parameter = parameter
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Enable drawing for the process-global two-ring trochoid guide.
+show_trochoid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), 1)
+}
+
+// Disable drawing for the process-global two-ring trochoid guide.
+hide_trochoid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), 0)
+}
+
+// Move the process-global guide's fixed center and constant elevation.
+set_trochoid_tool_position :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3) -> i32 {
+    context = state^.saved_context
+    return shape_set_position(state,
+        shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), position)
+}
+
+// Restore the previous interpolation sample after replacing tool values.
+bridge_trochoid_tool_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Trochoid_Tool,
+    previous: shapemodel.Shape_Trochoid_Tool) {
+    current^.previous_fixed_radius = previous.previous_fixed_radius
+    current^.previous_rolling_radius = previous.previous_rolling_radius
+    current^.previous_parameter = previous.previous_parameter
+    current^.previous_rotation = previous.previous_rotation
+    current^.previous_orientation_phase = previous.previous_orientation_phase
+}
+
+// Atomically configure the process-global guide's complete analytic state.
+set_trochoid_tool_geometry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Trochoid_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value := bridge_trochoid_tool_value(geometry)
+    if !shapemodel.shape_trochoid_tool_is_valid(value) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Trochoid_Tool)
+    if command != nil {
+        command^.entity = packed
+        command^.trochoid_tool = value
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state^.shape_world.trochoid_tools, &state^.shape_world.registry, entity)
+    if !has_value {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    style, has_style := shapemodel.shape_component_get(
+        &state^.shape_world.render_styles, &state^.shape_world.registry, entity)
+    if !has_style || current.mode != value.mode && style.visible {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    previous := current^
+    current^ = value
+    bridge_trochoid_tool_preserve_previous(current, previous)
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Change only the process-global guide's rolling parameter.
+set_trochoid_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    if !shapemodel.shape_scalar_is_finite(parameter) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Trochoid_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state^.shape_world.trochoid_tools, &state^.shape_world.registry, entity)
+    if !has_value {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current.parameter = parameter
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Resolve the direct snap constraint owned by one canonical tool joint.
+tool_lock_constraint :: proc(
+    state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity) -> (^shapemodel.Shape_Constraint, bool) {
+    index: u16
+    switch entity {
+    case state^.world_pen.joint1:
+        index = state^.world_pen.joint1_lock_constraint
+    case state^.world_pen.joint2:
+        index = state^.world_pen.joint2_lock_constraint
+    case state^.world_compass.joint1:
+        index = state^.world_compass.joint1_lock_constraint
+    case state^.world_compass.joint2:
+        index = state^.world_compass.joint2_lock_constraint
+    case:
+        return nil, false
+    }
+    if index >= state^.shape_world.constraints.count {
+        return nil, false
+    }
+    constraint := &state^.shape_world.constraints.values[index]
+    if constraint^.kind != .Snap_Point ||
+        constraint^.payload.snap_point.point != entity {
+        return nil, false
+    }
+    return constraint, true
+}
+
+// Move one canonical tool joint and emit owner-side floor contact effects.
+set_tool_position :: proc(
+    state: ^core.Euclid_General_State, entity: shapemodel.Shape_Entity,
+    position: Vector3, sweep: bool) {
+    command, captured := append_scene_command(state, .Set_Tool_Position)
+    if command != nil {
+        command^.entity = shapemodel.shape_entity_pack(entity)
+        command^.position = position
+        command^.flag = sweep
+    }
+    if captured {
+        return
+    }
+    previous_first, previous_first_found := tool_position(
+        state, state^.world_compass.joint1)
+    previous_second, previous_second_found := tool_position(
+        state, state^.world_compass.joint2)
+    transform, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
+    if !found {
+        return
+    }
+    transform^.position = position
+    if sweep && entity == state^.world_compass.joint2 &&
+        previous_first_found && previous_second_found {
+        current_first, current_first_found := tool_position(
+            state, state^.world_compass.joint1)
+        current_second, current_second_found := tool_position(
+            state, state^.world_compass.joint2)
+        if current_first_found && current_second_found {
+            queue_compass_filled_dust_contact(state, previous_first,
+                previous_second, current_first, current_second)
+            return
+        }
+    }
+    queue_tool_dust_contact(state, position)
+}
+
+// Enable or disable one canonical tool joint's direct snap constraint.
+set_tool_lock :: proc(
+    state: ^core.Euclid_General_State, entity: shapemodel.Shape_Entity,
+    position: Vector3, enabled, sweep: bool) {
+    command, captured := append_scene_command(state, .Set_Tool_Lock)
+    if command != nil {
+        command^.entity = shapemodel.shape_entity_pack(entity)
+        command^.position = position
+        command^.flag = enabled
+        command^.integer = int(sweep)
+    }
+    if captured {
+        return
+    }
+    constraint, found := tool_lock_constraint(state, entity)
+    if !found {
+        return
+    }
+    if enabled {
+        set_tool_position(state, entity, position, sweep)
+        constraint^.payload.snap_point.position = position
+    }
+    constraint^.enabled = enabled
+}
+
+//   Enable drawing for the pen host point.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+show_pen :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    _ = shape_set_visible(state, shapemodel.shape_entity_pack(state^.world_pen.shape), 1)
+}
+
+//   Disable drawing for the pen host point.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    _ = shape_set_visible(state, shapemodel.shape_entity_pack(state^.world_pen.shape), 0)
+}
+
+//   Set pen active marker index and active highlight color.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - active: Active child marker index.
+//   - color: RGBA highlight color payload in bridge format.
+set_pen_active :: proc "c" (
+    state: ^core.Euclid_General_State, active_abi: i32, color: Bridge_Color) {
+
+    context = state^.saved_context
+    if active_abi < 0 || active_abi > i32(max(u16)) {
+        return
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_pen.shape)
+    _ = shape_set_active_color(state, packed, color)
+    _ = shape_set_active_feature(state, packed, u16(active_abi))
+}
+
+//   Clear pen active marker state.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+clear_pen_active :: proc "c" (
+    state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    _ = shape_set_active_feature(
+        state, shapemodel.shape_entity_pack(state^.world_pen.shape), max(u16))
+}
+
+//   Move pen joint1 and enable its lock constraint at the same position.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint1 and its lock restriction.
+lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: Vector3) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_pen.joint1, pos, true, false)
+}
+
+//   Disable the lock constraint for pen joint1.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+unlock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_pen.joint1, {}, false, false)
+}
+
+//   Move pen joint1 without changing lock constraint state.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint1.
+move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: Vector3) {
+    context = state^.saved_context
+    set_tool_position(state, state^.world_pen.joint1, pos, false)
+}
+
+//   Read pen joint1 position.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//
+// Returns:
+//   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
+get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> Vector3 {
+    context = state^.saved_context
+    position, found := tool_position(state, state^.world_pen.joint1)
+    if found {
+        return position
+    }
+    return {0, 0, 0}
+}
+
+//   Move pen joint2 and enable its lock constraint at the same position.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint2 and its lock restriction.
+lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: Vector3) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_pen.joint2, pos, true, false)
+}
+
+//   Disable the lock constraint for pen joint2.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+unlock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_pen.joint2, {}, false, false)
+}
+
+//   Move pen joint2 without changing lock constraint state.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint2.
+move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: Vector3) {
+    context = state^.saved_context
+    set_tool_position(state, state^.world_pen.joint2, pos, false)
+}
+
+//   Read pen joint2 position.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//
+// Returns:
+//   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
+get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> Vector3 {
+    context = state^.saved_context
+    position, found := tool_position(state, state^.world_pen.joint2)
+    if found {
+        return position
+    }
+    return {0, 0, 0}
+}
+
+//   Enable drawing for the compass host point.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+show_compass :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    _ = shape_set_visible(
+        state, shapemodel.shape_entity_pack(state^.world_compass.shape), 1)
+}
+
+//   Disable drawing for the compass host point.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    _ = shape_set_visible(
+        state, shapemodel.shape_entity_pack(state^.world_compass.shape), 0)
+}
+
+//   Set compass active marker index and active highlight color.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - active: Active child marker index.
+//   - color: RGBA highlight color payload in bridge format.
+set_compass_active :: proc "c" (
+    state: ^core.Euclid_General_State, active_abi: i32, color: Bridge_Color) {
+
+    context = state^.saved_context
+    if active_abi < 0 || active_abi > i32(max(u16)) {
+        return
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_compass.shape)
+    _ = shape_set_active_color(state, packed, color)
+    _ = shape_set_active_feature(state, packed, u16(active_abi))
+}
+
+//   Clear compass active marker state.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+clear_compass_active :: proc "c" (
+    state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    _ = shape_set_active_feature(
+        state, shapemodel.shape_entity_pack(state^.world_compass.shape), max(u16))
+}
+
+//   Move compass joint1, optionally emit sweep dust, and enable its lock constraint.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint1 and its lock restriction.
+//   - sweep: When true, emit sweep dust for floor-contact motion.
+lock_compass_joint1 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: Vector3, sweep: bool) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_compass.joint1, pos, true, sweep)
+}
+
+//   Disable the lock constraint for compass joint1.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+unlock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_compass.joint1, {}, false, false)
+}
+
+//   Move compass joint1 and optionally emit sweep dust.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint1.
+//   - sweep: When true, emit sweep dust for floor-contact motion.
+move_compass_joint1 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: Vector3, sweep: bool) {
+    context = state^.saved_context
+    set_tool_position(state, state^.world_compass.joint1, pos, sweep)
+}
+
+//   Read compass joint1 position.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//
+// Returns:
+//   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
+get_compass_joint1_position :: proc "c" (
+    state: ^core.Euclid_General_State) -> Vector3 {
+    context = state^.saved_context
+    position, found := tool_position(state, state^.world_compass.joint1)
+    if found {
+        return position
+    }
+    return {0, 0, 0}
+}
+
+//   Move compass joint2, optionally emit sweep dust, and enable its lock constraint.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint2 and its lock restriction.
+//   - sweep: When true, emit sweep dust for floor-contact motion.
+lock_compass_joint2 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: Vector3, sweep: bool) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_compass.joint2, pos, true, sweep)
+}
+
+//   Disable the lock constraint for compass joint2.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+unlock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
+    context = state^.saved_context
+    set_tool_lock(state, state^.world_compass.joint2, {}, false, false)
+}
+
+//   Move compass joint2 and optionally emit sweep dust.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Target world-space position for joint2.
+//   - sweep: When true, emit sweep dust for floor-contact motion.
+move_compass_joint2 :: proc "c" (
+    state: ^core.Euclid_General_State, pos: Vector3, sweep: bool) {
+    context = state^.saved_context
+    set_tool_position(state, state^.world_compass.joint2, pos, sweep)
+}
+
+//   Read compass joint2 position.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//
+// Returns:
+//   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
+get_compass_joint2_position :: proc "c" (
+    state: ^core.Euclid_General_State) -> Vector3 {
+    context = state^.saved_context
+    position, found := tool_position(state, state^.world_compass.joint2)
+    if found {
+        return position
+    }
+    return {0, 0, 0}
+}
+
+// Show the permanent parabola instrument without treating it as curve ink.
+show_parabola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_parabola_tool), 1)
+}
+
+// Hide the permanent parabola instrument without emitting construction dust.
+hide_parabola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_parabola_tool), 0)
+}
+
+// Move the permanent parabola instrument's vertex while retaining its guide parameters.
+set_parabola_tool_position :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3) -> i32 {
+    context = state^.saved_context
+    return shape_set_position(state,
+        shapemodel.shape_entity_pack(state^.world_parabola_tool), position)
+}
+
+// Configure the parabola instrument without validating against its old position.
+set_parabola_tool_geometry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Parabola_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value: shapemodel.Shape_Parabola_Tool = {
+        focal_distance = geometry.focal_distance,
+        link_length = geometry.link_length,
+        rotation = geometry.rotation,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        parameter = geometry.parameter,
+    }
+    if !shapemodel.shape_parabola_tool_is_valid(value) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    command, captured := append_scene_command(state, .Set_Parabola_Tool_Geometry)
+    if command != nil {
+        command^.entity = packed
+        command^.parabola_tool = value
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    current, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    if !found {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    value.active = previous.active
+    current^ = value
+    current.previous_focal_distance = previous.previous_focal_distance
+    current.previous_link_length = previous.previous_link_length
+    current.previous_rotation = previous.previous_rotation
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_parameter = previous.previous_parameter
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Move the parabola instrument parameter along its configured directed domain.
+set_parabola_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.parabola_tools,
+        source.registry, state^.world_parabola_tool)
+    if !found || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    command, captured := append_scene_command(state, .Set_Parabola_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    mutable, present := shapemodel.shape_component_get_mut(
+        &state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    if !present {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    mutable.parameter = parameter
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Toggle the integrated parabola nib highlight using authored ink-color policy.
+set_parabola_tool_active :: proc "c" (
+    state: ^core.Euclid_General_State, active: i32, color: Bridge_Color) -> i32 {
+    context = state^.saved_context
+    if active != 0 && active != 1 {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_parabola_tool)
+    command, captured := append_scene_command(state, .Set_Parabola_Tool_Active)
+    if command != nil {
+        command^.entity = packed
+        command^.flag = active != 0
+        command^.color = color
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    tool, has_tool := shapemodel.shape_component_get_mut(
+        &state^.shape_world.parabola_tools,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state^.shape_world.render_styles,
+        &state^.shape_world.registry, state^.world_parabola_tool)
+    if !has_tool || !has_style {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    tool.active = active != 0
+    style.active_color = color
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Show the permanent hyperbola instrument without treating it as curve ink.
+show_hyperbola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_hyperbola_tool), 1)
+}
+
+// Hide the permanent hyperbola instrument without emitting construction dust.
+hide_hyperbola_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_hyperbola_tool), 0)
+}
+
+// Move the permanent hyperbola instrument's center.
+set_hyperbola_tool_position :: proc "c" (
+    state: ^core.Euclid_General_State, position: Vector3) -> i32 {
+    context = state^.saved_context
+    return shape_set_position(state,
+        shapemodel.shape_entity_pack(state^.world_hyperbola_tool), position)
+}
+
+// Configure the hyperbola instrument independently from its previous center.
+set_hyperbola_tool_geometry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Hyperbola_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value: shapemodel.Shape_Hyperbola_Tool = {
+        active_branches = .None,
+        semimajor = geometry.semimajor,
+        semiminor = geometry.semiminor,
+        rotation = geometry.rotation,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        parameter = geometry.parameter,
+        rail_half_length = geometry.rail_half_length,
+    }
+    if !shapemodel.shape_hyperbola_tool_is_valid(value) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    command, captured := append_scene_command(state, .Set_Hyperbola_Tool_Geometry)
+    if command != nil {
+        command^.entity = packed
+        command^.hyperbola_tool = value
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    current, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    if !found {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    value.active_branches = previous.active_branches
+    current^ = value
+    current.previous_semimajor = previous.previous_semimajor
+    current.previous_semiminor = previous.previous_semiminor
+    current.previous_rotation = previous.previous_rotation
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_parameter = previous.previous_parameter
+    current.previous_rail_half_length = previous.previous_rail_half_length
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Move the hyperbola instrument parameter along its configured finite domain.
+set_hyperbola_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.hyperbola_tools,
+        source.registry, state^.world_hyperbola_tool)
+    if !found || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    command, captured := append_scene_command(state, .Set_Hyperbola_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    mutable, present := shapemodel.shape_component_get_mut(
+        &state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    if !present {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    mutable.parameter = parameter
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Select hyperbola nib contacts without changing either carriage's movement.
+set_hyperbola_tool_active :: proc "c" (
+    state: ^core.Euclid_General_State, active: i32, color: Bridge_Color,
+    branches: shapemodel.Hyperbola_Branches = .Both) -> i32 {
+    context = state^.saved_context
+    if (active != 0 && active != 1) ||
+        !shapemodel.hyperbola_branches_are_valid(branches) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_hyperbola_tool)
+    command, captured := append_scene_command(state, .Set_Hyperbola_Tool_Active)
+    if command != nil {
+        command^.entity = packed
+        command^.flag = active != 0
+        command^.integer = int(branches)
+        command^.color = color
+    }
+    if captured {
+        return bridgemodel.BRIDGE_STATUS_OK
+    }
+    tool, has_tool := shapemodel.shape_component_get_mut(
+        &state^.shape_world.hyperbola_tools,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state^.shape_world.render_styles,
+        &state^.shape_world.registry, state^.world_hyperbola_tool)
+    if !has_tool || !has_style {
+        return bridgemodel.BRIDGE_STATUS_NOT_FOUND
+    }
+    tool.active_branches = .None
+    if active != 0 {
+        tool.active_branches = branches
+    }
+    style.active_color = color
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+//   Emit trailing particles at a position using bridge color data.
+//
+// Parameters:
+//   - state: Global runtime state passed from the host application.
+//   - pos: Particle emission position.
+//   - color: RGBA color payload in bridge format.
+emit_trailing_particle :: proc "c" (
+    state: ^core.Euclid_General_State, pos: Vector3, color: Bridge_Color) {
+
+    if capture_particle_command(state, .Emit_Trailing_Particle, pos, color) {
+        return
+    }
+    context = state^.saved_context
+    particles.emit_trail_particles(
+        &state^.particle_system, state^.current_delta_time, {pos, color})
+}
