@@ -115,3 +115,53 @@ modifier_rotation_sample :: proc(t: ^testing.T) {
     testing.expect(t, math.abs(output.outputs[0].position.y -
         0.70710678) < 1e-5)
 }
+
+// Verify highlight phase transitions and same-sample apparatus retirement.
+modifier_terminal_highlight_sequences :: proc(t: ^testing.T) {
+    output: Modifier_Output_Buffer
+    pen: Modifier_Request = {
+        kind = .Pen_Highlight,
+        second_entity = 1,
+        duration = 1,
+        start_position = {0, 0, 0},
+        second_position = {1, 0, 0},
+        radius = 0.35,
+        angle = f32(math.PI / 3),
+        color_packed = 0xff00ff00,
+    }
+    testing.expect_value(t, evaluate_modifier(pen, &output), Modifier_Status.Ok)
+    testing.expect_value(t, output.outputs[0].position,
+        geometry.Vector3{0, 0, 1.4})
+    pen.elapsed = 1
+    testing.expect_value(t, evaluate_modifier(pen, &output), Modifier_Status.Ok)
+    testing.expect_value(t, output.outputs[0].position,
+        geometry.Vector3{0, 0, 1.4})
+    testing.expect_value(t, output.outputs[output.count - 1].kind,
+        Modifier_Output_Kind.Set_Tool_Visible)
+    testing.expect_value(t, output.outputs[output.count - 1].flag, false)
+
+    compass: Modifier_Request = {
+        kind = .Compass_Highlight_Sequence,
+        entity = 2,
+        second_entity = 3,
+        duration = 1,
+        start_position = {0, 0, 0},
+        second_position = {1, 0, 0},
+        angle = f32(math.PI / 2),
+        radius = 1,
+        color_packed = 0xff00ff00,
+    }
+    compass.elapsed = 0.65
+    testing.expect_value(t,
+        evaluate_modifier(compass, &output), Modifier_Status.Ok)
+    testing.expect(t, math.abs(output.outputs[1].position.x -
+        0.70710678) < 1e-5)
+    testing.expect(t, math.abs(output.outputs[1].position.y -
+        0.70710678) < 1e-5)
+    compass.elapsed = 1
+    testing.expect_value(t,
+        evaluate_modifier(compass, &output), Modifier_Status.Ok)
+    testing.expect_value(t, output.outputs[output.count - 1].kind,
+        Modifier_Output_Kind.Set_Tool_Visible)
+    testing.expect_value(t, output.outputs[output.count - 1].flag, false)
+}

@@ -61,7 +61,9 @@ mailbox_copy_ingress :: proc(
          bridgemodel.Runtime_Shutdown_Requested, protocol.Terminal_Session_Started,
          protocol.Terminal_Session_Closed, protocol.Terminal_Interactive_Input,
          protocol.Terminal_Geometry_Accepted, protocol.Terminal_Capabilities_Accepted,
-         protocol.Tick_Stream_Configuration_Acknowledged, protocol.Tick_Pulse:
+         protocol.Tick_Stream_Configuration_Acknowledged, protocol.Tick_Pulse,
+         bridgemodel.Active_Operation_Progress_Ready,
+         bridgemodel.Active_Operation_Outcome_Ready:
         return
     }
 }
@@ -91,7 +93,8 @@ mailbox_copy_egress :: proc(
          protocol.Terminal_Input_Acquired, protocol.Terminal_Input_Released,
          protocol.Terminal_Geometry_Observed, protocol.Terminal_Capabilities_Observed,
          protocol.Terminal_Session_Stopped, protocol.Tick_Stream_Configure_Requested,
-         protocol.Tick_Stream_Stop_Requested:
+         protocol.Tick_Stream_Stop_Requested,
+         bridgemodel.Active_Operation_Outcome_Acknowledged:
         return
     }
 }

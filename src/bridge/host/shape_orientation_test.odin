@@ -85,7 +85,7 @@ bridge_native_plane_transactions_validate_proposed_outputs :: proc(t: ^testing.T
     plane.entity = region.shape
     plane.scalar = 1
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     capture_native_plane_test_request(t, state, rotation)
     capture_native_plane_test_request(t, state, plane)
     bridge_scene.end_scene_command_batch(state)
@@ -94,7 +94,7 @@ bridge_native_plane_transactions_validate_proposed_outputs :: proc(t: ^testing.T
     testing.expect(t, math.abs(position.z + 1) < 0.000001)
     orientation := bridge_scene.shape_get_orientation(state, region.shape).orientation
     plane.angle = 0
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     capture_native_plane_test_request(t, state, plane)
     bridge_scene.end_scene_command_batch(state)
     testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
@@ -127,7 +127,7 @@ bridge_native_orientation_obeys_direct_order_and_identity :: proc(t: ^testing.T)
         scalar = 1,
     }
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     capture_native_plane_test_request(t, state, request)
     testing.expect_value(t,
         bridge_scene.shape_set_orientation(state, arc.shape, {0, 0, 0, 1}),
@@ -138,7 +138,7 @@ bridge_native_orientation_obeys_direct_order_and_identity :: proc(t: ^testing.T)
         bridge_scene.shape_get_orientation(state, arc.shape).orientation,
         [4]f32{0, 0, 0, 1})
     request.entity = 1
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     _ = bridge_scene.shape_set_position(state, arc.shape, {0.5, 0.5, 0})
     capture_native_plane_test_request(t, state, request)
     bridge_scene.end_scene_command_batch(state)
@@ -179,7 +179,7 @@ bridge_shape_orientation_transactions_validate_final_plane :: proc(t: ^testing.T
     testing.expect_value(t, bridge_scene.shape_set_orientation(state, region.shape,
         {0, sine, 0, sine}), i32(bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT))
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     _ = bridge_scene.shape_set_position(state, region.second_center, {0, 0, -1})
     _ = bridge_scene.shape_set_orientation(state, region.shape, {0, sine, 0, sine})
     bridge_scene.end_scene_command_batch(state)
@@ -199,7 +199,7 @@ bridge_shape_orientation_transactions_validate_final_plane :: proc(t: ^testing.T
 bridge_shape_orientation_assert_invalid_plane_rollback :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State,
     batch: ^bridge_scene.Scene_Command_Batch, first_center, second_center: u64) {
-    bridge_scene.begin_scene_command_batch(state, batch)
+    bridge_scene.begin_native_scene_command_batch(state, batch)
     _ = bridge_scene.shape_set_position(state, first_center, {0, 1, 0})
     _ = bridge_scene.shape_set_position(state, second_center, {1, 0, 0})
     bridge_scene.end_scene_command_batch(state)
@@ -226,7 +226,7 @@ bridge_cycloid_transactions_validate_final_metric :: proc(t: ^testing.T) {
     testing.expect_value(t, bridge_scene.shape_set_cycloid(state, cycloid.shape,
         {0.3, 0.1, 0, 0, 5, 5}), i32(bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT))
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     _ = bridge_scene.shape_set_cycloid(state, cycloid.shape, {0.3, 0.1, 0, 0, 5, 5})
     _ = bridge_scene.shape_set_position(state, cycloid.second, {2, 0, 0})
     bridge_scene.end_scene_command_batch(state)
@@ -234,7 +234,7 @@ bridge_cycloid_transactions_validate_final_metric :: proc(t: ^testing.T) {
     testing.expect_value(t,
         bridge_scene.shape_get_cycloid(state, cycloid.shape).geometry.rolling_radius,
         f32(0.3))
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     _ = bridge_scene.shape_set_position(state, cycloid.second, {1, 0, 0})
     _ = bridge_scene.shape_set_cycloid(state, cycloid.shape, {0.4, 0.1, 0, 0, 5, 5})
     bridge_scene.end_scene_command_batch(state)

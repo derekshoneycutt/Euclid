@@ -4,6 +4,14 @@ import curve "../shapes/curve"
 import shapemodel "../shapes/model"
 import geometry "../core/geometry"
 
+CONIC_SEQUENCE_DESCEND_SHARE :: 0.2
+CONIC_SEQUENCE_DRAW_SHARE :: 0.6
+
+Conic_Sequence_Samples :: struct {
+    count: int,
+    requests: [3]Modifier_Request,
+}
+
 // Keep one conic sample in callback-local storage, never across ticks.
 Conic_Sample :: struct {
     parameter: f32,
@@ -32,6 +40,27 @@ conic_request_valid :: proc(request: Modifier_Request) -> bool {
     if request.integer < 0 || request.integer > 2 {
         return false
     }
+    if request.kind == .Parabola_Sequence {
+        return request.duration > 0 && request.entity != 0 &&
+            shapemodel.shape_parabola_is_valid({
+                focal_distance = request.radius,
+                rotation = request.angle,
+                parameter_start = request.third_position.x,
+                parameter_finish = request.third_position.y,
+                draw_parameter = request.third_position.z,
+            })
+    }
+    if request.kind == .Hyperbola_Sequence {
+        return request.duration > 0 && request.entity != 0 &&
+            shapemodel.shape_hyperbola_is_valid({
+                semimajor = request.radius,
+                semiminor = request.displacement.x,
+                rotation = request.angle,
+                parameter_start = request.third_position.x,
+                parameter_finish = request.third_position.y,
+                draw_parameter = request.third_position.z,
+            })
+    }
     if request.kind == .Parabola_Draw {
         return request.entity != 0 && shapemodel.shape_parabola_is_valid({
             focal_distance = request.radius,
@@ -52,6 +81,93 @@ conic_request_valid :: proc(request: Modifier_Request) -> bool {
         })
     }
     return true
+}
+
+// Expand skipped conic phases in order, preserving an exact boundary sample.
+conic_sequence_samples :: proc(
+    template: Modifier_Request,
+    previous_elapsed, current_elapsed: f32) -> Conic_Sequence_Samples {
+    samples: Conic_Sequence_Samples
+    descend_end := template.duration * CONIC_SEQUENCE_DESCEND_SHARE
+    draw_end := template.duration *
+        (CONIC_SEQUENCE_DESCEND_SHARE + CONIC_SEQUENCE_DRAW_SHARE)
+    boundary_is_current := false
+    if previous_elapsed < descend_end && current_elapsed >= descend_end {
+        conic_sequence_append(&samples,
+            conic_sequence_phase_request(template, descend_end))
+        boundary_is_current = current_elapsed == descend_end
+    }
+    if previous_elapsed < draw_end && current_elapsed >= draw_end {
+        conic_sequence_append(&samples,
+            conic_sequence_phase_request(template, draw_end))
+        boundary_is_current = current_elapsed == draw_end
+    }
+    if !boundary_is_current {
+        conic_sequence_append(&samples,
+            conic_sequence_phase_request(template, current_elapsed))
+    }
+    return samples
+}
+
+// Resolve one full-duration clock value to the corresponding explicit-time phase.
+conic_sequence_phase_request :: proc(
+    template: Modifier_Request, elapsed: f32) -> Modifier_Request {
+    descend_end := template.duration * CONIC_SEQUENCE_DESCEND_SHARE
+    draw_end := template.duration *
+        (CONIC_SEQUENCE_DESCEND_SHARE + CONIC_SEQUENCE_DRAW_SHARE)
+    phase := template
+    phase.kind = conic_sequence_kind(template.kind, false, false)
+    phase.duration = descend_end
+    phase.elapsed = min(elapsed, descend_end)
+    if elapsed > descend_end && elapsed <= draw_end {
+        phase.kind = conic_sequence_kind(template.kind, true, false)
+        phase.duration = template.duration * CONIC_SEQUENCE_DRAW_SHARE
+        phase.elapsed = elapsed - descend_end
+        phase.third_position.z = template.third_position.z
+    } else if elapsed > draw_end {
+        phase.kind = conic_sequence_kind(template.kind, false, true)
+        phase.duration = template.duration *
+            (1 - CONIC_SEQUENCE_DESCEND_SHARE - CONIC_SEQUENCE_DRAW_SHARE)
+        phase.elapsed = elapsed - draw_end
+        phase.third_position.x = template.third_position.z
+    }
+    return phase
+}
+
+// Select one conic phase kind while preserving its apparatus family.
+conic_sequence_kind :: proc(
+    kind: Modifier_Kind, drawing, rising: bool) -> Modifier_Kind {
+    if kind == .Parabola_Sequence {
+        if drawing {
+            return .Parabola_Draw
+        }
+        if rising {
+            return .Parabola_Rise
+        }
+        return .Parabola_Descend
+    }
+    if drawing {
+        return .Hyperbola_Draw
+    }
+    if rising {
+        return .Hyperbola_Rise
+    }
+    return .Hyperbola_Descend
+}
+
+// Append one bounded explicit-time phase request.
+conic_sequence_append :: proc(
+    samples: ^Conic_Sequence_Samples, request: Modifier_Request) {
+    assert(samples != nil && samples^.count < len(samples^.requests))
+    samples^.requests[samples^.count] = request
+    samples^.count += 1
+}
+
+// Evaluate one full-duration sequence at the caller-provided elapsed time.
+evaluate_conic_sequence_sample :: proc(
+    request: Modifier_Request, output: ^Modifier_Output_Buffer) -> Modifier_Status {
+    phase := conic_sequence_phase_request(request, request.elapsed)
+    return evaluate_modifier(phase, output)
 }
 
 // Resolve explicit phase time without retaining a native clock or apparatus state.

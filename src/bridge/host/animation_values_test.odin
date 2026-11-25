@@ -10,6 +10,7 @@ import geometry "../../core/geometry"
 import shapemodel "../../shapes/model"
 
 import animation_model "../../core/animation"
+import particles "../../particles"
 
 import "../../core"
 
@@ -329,12 +330,38 @@ animation_value_stale_tick_does_not_commit_typed_write :: proc(t: ^testing.T) {
     testing.expect_value(t, destination[0], u8(1))
 }
 
-//   Verify a current scene batch commits without reserving presentation storage.
+// Prepare one completed tick with a recorded authored interval.
+prepare_manual_animation_tick_slot :: proc(
+    service: ^Julia_Runtime_Service,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface) ->
+        ^bridgemodel.Animation_Tick_Slot {
+    slot := &service^.animation_tick_slots[0]
+    slot^.state = .Accepted
+    slot^.generation = service^.animation_generation
+    slot^.sequence = 1
+    slot^.animation = animation
+    slot^.effective_progress = 0.25
+    slot^.scene_batch.animation = animation
+    slot^.scene_batch.animation_generation = service^.animation_generation
+    slot^.scene_batch.tick_sequence = 1
+    slot^.scene_batch.animation_progress = slot^.effective_progress
+    slot^.formation_intervals[0] = {
+        step = 1,
+        generation = service^.animation_generation,
+        authored_seconds = 0.25,
+    }
+    slot^.formation_interval_count = 1
+    service^.animation_tick_pending = true
+    return slot
+}
+
+// Verify a current scene batch commits without reserving presentation storage.
 @(test)
 animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     state := animation_value_test_state_create()
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
+    particles.formation_reset_generation(&state^.particle_system, 7)
     interface: bridgemodel.Euclid_Julia_Interface
     service := new(Julia_Runtime_Service, context.allocator)
     service^.bootstrap_allocator = context.allocator
@@ -347,17 +374,7 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     interface.current_animation = animation
     interface.selected_animation = animation
     service.animation_generation = 7
-    slot := &service.animation_tick_slots[0]
-    slot.state = .Accepted
-    slot.generation = 7
-    slot.sequence = 1
-    slot.animation = animation
-    slot.scene_batch.animation = animation
-    slot.effective_progress = 0.25
-    slot.scene_batch.animation_generation = 7
-    slot.scene_batch.tick_sequence = 1
-    slot.scene_batch.animation_progress = slot.effective_progress
-    service.animation_tick_pending = true
+    slot := prepare_manual_animation_tick_slot(service, animation)
 
     testing.expect(t, publish_available_animation_tick(state))
     testing.expect_value(t, service.animation_last_committed_sequence, u64(1))

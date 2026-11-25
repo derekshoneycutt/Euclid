@@ -43,12 +43,19 @@ end
 """Advance a closing session to its single correlated quiescence result."""
 function advance_session_lifecycle!(runtime::HostRuntime)::Nothing
     session = runtime.session
+    if session.phase === HostSessionQuiescent
+        EuclidRepl.discard_active_operation_outcomes!(
+            session.euclid_repl_runtime, runtime.state_ptr)
+        return nothing
+    end
     session.phase === HostSessionClosing || return nothing
     if session.evaluator_state.active_request === nothing
         EuclidActorRuntime.stop!(runtime.actors, session.evaluator)
     end
     session_actors_stopped(runtime, session) || return nothing
     session_outgoing_pending(runtime) && return nothing
+    EuclidRepl.discard_active_operation_outcomes!(
+        session.euclid_repl_runtime, runtime.state_ptr) || return nothing
     EuclidReplEvaluation.close_interactive_terminal!(
         session.evaluator_state.runtime.terminal)
     session.phase = HostSessionQuiescent
@@ -101,9 +108,11 @@ function start_session_for_host(
     previous.phase === HostSessionQuiescent || return false
     generation > previous.generation || return false
     runtime.session = create_host_session!(
-        runtime.actors, runtime.state_ptr,
-        generation, runtime.completion_function, runtime.highlight_function,
-        runtime.interpolation_function, runtime.completion_mailbox_capacity)
+        runtime.actors, runtime.state_ptr, generation,
+        HostSessionConfiguration(
+            runtime.completion_function, runtime.highlight_function,
+            runtime.interpolation_function, runtime.completion_mailbox_capacity,
+            runtime.active_operation_request_ids))
     EuclidActorRuntime.emit!(
         runtime.actors, JuliaSessionStarted(generation))
     return true
@@ -268,6 +277,9 @@ function advance_host_shutdown!(runtime::HostRuntime)::Nothing
         runtime.evaluator_state.active_request === nothing &&
             EuclidActorRuntime.stop!(runtime.actors, runtime.evaluator)
         if session_actors_stopped(runtime, runtime.session)
+            EuclidRepl.discard_active_operation_outcomes!(
+                runtime.session.euclid_repl_runtime, runtime.state_ptr) ||
+                return nothing
             stop_persistent_host_roots!(runtime)
             runtime.shutdown_phase = HostStoppingRoots
         end

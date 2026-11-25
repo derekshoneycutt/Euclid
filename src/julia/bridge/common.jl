@@ -379,7 +379,7 @@ const SHAPE_KIND_PARABOLA = Int32(9)
 const SHAPE_KIND_HYPERBOLA = Int32(10)
 const SHAPE_KIND_POLYGON = Int32(13)
 
-const BRIDGE_VERSION = Int32(16)
+const BRIDGE_VERSION = Int32(21)
 
 const HYPERBOLA_POSITIVE = Int32(1)
 const HYPERBOLA_NEGATIVE = Int32(2)
@@ -394,6 +394,12 @@ const BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION = Int32(1 << 10)
 const BRIDGE_FEATURE_SETTLING_FORMATION = Int32(1 << 11)
 const BRIDGE_FEATURE_CONICS = Int32(1 << 12)
 const BRIDGE_FEATURE_NATIVE_MODIFIERS = Int32(1 << 13)
+const BRIDGE_FEATURE_ACTIVE_OPERATIONS = Int32(1 << 14)
+const BRIDGE_FEATURE_ACTIVE_GROUP_TRANSFORMS = Int32(1 << 15)
+const BRIDGE_FEATURE_ACTIVE_POLYGON_TRACES = Int32(1 << 16)
+const BRIDGE_FEATURE_NATIVE_ROLLING_OPERATIONS = Int32(1 << 17)
+const BRIDGE_FEATURE_NATIVE_CONIC_OPERATIONS = Int32(1 << 18)
+const POLYGON_TRACE_VERTEX_CAPACITY = 5
 
 """C-compatible native explicit-time modifier request."""
 struct BridgeNativeModifierRequest
@@ -416,6 +422,35 @@ struct BridgeNativeModifierRequest
     scalar::Cfloat
     integer::Int32
     flag::Bool
+end
+
+"""One activation-time point in a native bounded group transform."""
+struct BridgeActiveGroupTransformTarget
+    entity::UInt64
+    start::NTuple{3,Cfloat}
+end
+
+"""C-compatible bounded activation snapshot for one rigid group transform."""
+struct BridgeActiveGroupTransformRequest
+    modifier::BridgeNativeModifierRequest
+    target_count::Int32
+    targets::NTuple{16,BridgeActiveGroupTransformTarget}
+    orientation_entity::UInt64
+    orientation::NTuple{4,Cfloat}
+    oriented::Bool
+end
+
+"""One activation-time vertex in a native bounded polygon trace."""
+struct BridgeActivePolygonTraceTarget
+    entity::UInt64
+    start::NTuple{3,Cfloat}
+end
+
+"""C-compatible ordered vertex snapshot for one native polygon trace."""
+struct BridgeActivePolygonTraceRequest
+    modifier::BridgeNativeModifierRequest
+    vertex_count::Int32
+    vertices::NTuple{5,BridgeActivePolygonTraceTarget}
 end
 
 """Construct a native modifier request with zeroed optional payload fields."""

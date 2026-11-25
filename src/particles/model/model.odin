@@ -10,6 +10,7 @@ MAX_LOW_PARTICLES :: 65536
 MAX_PARTICLES :: 2048
 MAX_FORMATION_PARTICLES :: 16384
 MAX_FORMATION_REVEALS :: 256
+FORMATION_TIME_INTERVAL_CAPACITY :: 256
 // Quantized view-depth bins for the per-frame formation draw-order counting sort.
 FORMATION_DEPTH_BUCKETS :: 1024
 MAX_DEPARTURE_MATERIAL_SAMPLES :: 900
@@ -297,6 +298,23 @@ Formation_State :: struct {
     next_reveal_generation: u64,
     animation_generation: u64,
     accepted_progress: f64,
+    native_time_intervals: [FORMATION_TIME_INTERVAL_CAPACITY]Formation_Time_Interval,
+    native_time_interval_count: int,
+}
+
+// Formation_Time_Interval identifies authored time belonging to one display step.
+Formation_Time_Interval :: struct {
+    step: u64,
+    generation: u64,
+    authored_seconds: f64,
+}
+
+// Formation_Time_Status describes bounded native interval admission.
+Formation_Time_Status :: enum {
+    Accepted,
+    Already_Accepted,
+    Invalid,
+    Full,
 }
 
 // Own bounded dust, tool-trail, and formation storage and deterministic random state.

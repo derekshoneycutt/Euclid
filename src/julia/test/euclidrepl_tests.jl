@@ -41,11 +41,281 @@ const REPL_TEST_KINDS = Dict{UInt64,Int32}()
 const REPL_TEST_ORIENTATIONS = Dict{UInt64,NTuple{4,Float32}}()
 const REPL_TEST_HIDDEN = UInt64[]
 const REPL_TEST_SHOWN = UInt64[]
-const REPL_TEST_REVEALED = UInt64[]
 const REPL_TEST_FRONTIERS = Dict{UInt64,Float32}()
 const REPL_TEST_ARCS = Tuple{Bool,Float32,Float32,Float32}[]
 const REPL_TEST_CURVE_DOMAINS = Tuple{Float32,Float32,Float32}[]
 const REPL_TEST_NATIVE_REQUESTS = OdinJuliaBridge.BridgeNativeModifierRequest[]
+const REPL_TEST_ACTIVE_SUBMISSIONS =
+    Tuple{UInt64,OdinJuliaBridge.BridgeNativeModifierRequest}[]
+const REPL_TEST_GROUP_SUBMISSIONS =
+    Tuple{UInt64,OdinJuliaBridge.BridgeActiveGroupTransformRequest}[]
+const REPL_TEST_POLYGON_SUBMISSIONS =
+    Tuple{UInt64,OdinJuliaBridge.BridgeActivePolygonTraceRequest}[]
+
+"""Record construction submissions made by the null-state native fixture."""
+function OdinJuliaBridge.submit_active_modifier!(
+    state::Ptr{Cvoid}, request_id::UInt64,
+    request::OdinJuliaBridge.BridgeNativeModifierRequest)::Int32
+    state == C_NULL || error("active submission fixture requires a null state")
+    push!(REPL_TEST_ACTIVE_SUBMISSIONS, (request_id, request))
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record bounded group-transform submissions made by the null-state fixture."""
+function OdinJuliaBridge.submit_active_group_transform!(
+    state::Ptr{Cvoid}, request_id::UInt64,
+    request::OdinJuliaBridge.BridgeActiveGroupTransformRequest)::Int32
+    state == C_NULL || error("group submission fixture requires a null state")
+    push!(REPL_TEST_GROUP_SUBMISSIONS, (request_id, request))
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Record bounded polygon submissions made by the null-state fixture."""
+function OdinJuliaBridge.submit_active_polygon_trace!(
+    state::Ptr{Cvoid}, request_id::UInt64,
+    request::OdinJuliaBridge.BridgeActivePolygonTraceRequest)::Int32
+    state == C_NULL || error("polygon submission fixture requires a null state")
+    push!(REPL_TEST_POLYGON_SUBMISSIONS, (request_id, request))
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+"""Acknowledge test outcomes without entering the native display mailbox."""
+function OdinJuliaBridge.acknowledge_active_operation_outcome!(
+    state::Ptr{Cvoid},
+    ::OdinJuliaBridge.NativeActiveOperationOutcome)::Bool
+    state == C_NULL || error("outcome fixture requires a null state")
+    return true
+end
+
+@testset "active operation outcomes belong to the Terminal runtime" begin
+    @test isbitstype(OdinJuliaBridge.NativeActiveOperationOutcome)
+    @test sizeof(OdinJuliaBridge.NativeActiveOperationOutcome) == 48
+    @test isbitstype(OdinJuliaBridge.NativeActiveOperationProgress)
+    @test sizeof(OdinJuliaBridge.NativeActiveOperationProgress) == 48
+    @test isbitstype(OdinJuliaBridge.NativeActiveOperationOutcomeIdentity)
+    @test sizeof(OdinJuliaBridge.NativeActiveOperationOutcomeIdentity) == 40
+    runtime = EuclidRepl.create_runtime()
+    outcome = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(901), UInt64(2), UInt64(3), UInt64(4), UInt64(5),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    conflicting = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(901), UInt64(2), UInt64(3), UInt64(4), UInt64(5),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_REJECTED)
+    @test !EuclidRepl.ingest_active_operation_outcome!(runtime, conflicting)
+    @test_throws ErrorException EuclidRepl.take_active_operation_outcome!(
+        runtime, _ -> error("receipt transport unavailable"))
+    @test runtime.active_operation_outcome_count == 1
+    retained = EuclidRepl.take_active_operation_outcome!(runtime, _ -> nothing)
+    @test retained == outcome
+    @test EuclidRepl.take_active_operation_outcome!(runtime, _ -> nothing) === nothing
+    reused = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(901), UInt64(2), UInt64(3), UInt64(4), UInt64(6),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, reused)
+    @test EuclidRepl.take_active_operation_outcome!(runtime, _ -> nothing) == reused
+    stale = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(901), UInt64(1), UInt64(3), UInt64(4), UInt64(6),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_CANCELLED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, stale)
+    @test EuclidRepl.take_active_operation_outcome!(runtime, _ -> nothing) == stale
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    @test !EuclidRepl.discard_active_operation_outcomes!(runtime, _ -> false)
+    @test runtime.active_operation_outcome_count == 1
+    @test EuclidRepl.discard_active_operation_outcomes!(runtime, _ -> true)
+    @test runtime.active_operation_outcome_count == 0
+    stale_result = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(902), UInt64(1), UInt64(3), UInt64(4), UInt64(7),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_CANCELLED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, stale_result)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    @test !EuclidRepl.discard_stale_active_operation_outcomes!(
+        runtime, UInt64(2), _ -> false)
+    @test EuclidRepl.discard_stale_active_operation_outcomes!(
+        runtime, UInt64(2), _ -> true)
+    @test runtime.active_operation_outcome_count == 1
+    @test EuclidRepl.take_active_operation_outcome!(runtime, _ -> nothing) == outcome
+
+    for request_id in UInt64(1):UInt64(EuclidRepl.ACTIVE_OPERATION_OUTCOME_CAPACITY)
+        queued = OdinJuliaBridge.NativeActiveOperationOutcome(
+            request_id, UInt64(2), UInt64(3), UInt64(4), request_id,
+            OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+        @test EuclidRepl.ingest_active_operation_outcome!(runtime, queued)
+    end
+    overflow = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(100), UInt64(2), UInt64(3), UInt64(4), UInt64(100),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+    @test !EuclidRepl.ingest_active_operation_outcome!(runtime, overflow)
+    @test EuclidRepl.take_active_operation_outcome!(
+        runtime, _ -> nothing).request_id == UInt64(1)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, overflow)
+end
+
+@testset "native construction jobs submit once and await commit" begin
+    empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
+    payload = EuclidRepl.PointPayload(
+        UInt64(9001), Float32[0.2, 0.3, 0],
+        OdinJuliaBridge._shape_color(:steelblue), 5f0)
+    job = EuclidRepl.ReplDrawJob(:point, 2f0, 0f0, payload)
+    job.activated = true
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
+
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test isempty(REPL_TEST_ACTIVE_SUBMISSIONS)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+    @test job.native_submitted
+    @test job.elapsed == 0f0
+    request_id, request = only(REPL_TEST_ACTIVE_SUBMISSIONS)
+    @test request_id == job.native_request_id
+    @test request.kind == OdinJuliaBridge.NATIVE_MODIFIER_CONSTRUCT_POINT
+    @test request.entity == payload.point_id
+    @test request.duration == job.duration
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+    @test job.elapsed == 0f0
+
+    progress = OdinJuliaBridge.NativeActiveOperationProgress(
+        job.native_request_id, UInt64(2), UInt64(3), UInt64(4), 0.75, 2.0)
+    @test EuclidRepl.ingest_active_operation_progress!(runtime, progress)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).elapsed == 0.75f0
+    queued = EuclidRepl.ReplDrawJob(
+        :hide, eps(Float32), 0f0,
+        EuclidRepl.visibility_payload(UInt64[], false))
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, queued)
+    outcome = OdinJuliaBridge.NativeActiveOperationOutcome(
+        job.native_request_id, UInt64(2), UInt64(3), UInt64(4), UInt64(1),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    status = EuclidRepl.status(runtime, TEST_STATE_PTR)
+    @test !status.active
+    @test status.completed_count == 1
+    @test status.pending_count == 1
+    @test !queued.activated
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    status = EuclidRepl.status(runtime, TEST_STATE_PTR)
+    @test status.completed_count == 2
+    @test status.drained
+end
+
+@testset "native construction rejection blocks FIFO successors" begin
+    empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
+    payload = EuclidRepl.PointPayload(
+        UInt64(9002), Float32[0.2, 0.3, 0],
+        OdinJuliaBridge._shape_color(:steelblue), 5f0)
+    job = EuclidRepl.ReplDrawJob(:point, 2f0, 0f0, payload)
+    runtime.session.active_job = job
+    job.native_request_id = UInt64(77)
+    job.native_session_generation = UInt64(2)
+    job.native_runtime_generation = UInt64(3)
+    job.native_animation_generation = UInt64(4)
+    job.native_submitted = true
+    queued = EuclidRepl.ReplDrawJob(
+        :hide, 1f0, 0f0, EuclidRepl.visibility_payload(UInt64[], false))
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, queued)
+    rejected = OdinJuliaBridge.NativeActiveOperationOutcome(
+        UInt64(77), UInt64(2), UInt64(3), UInt64(4), UInt64(1),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_REJECTED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, rejected)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    status = EuclidRepl.status(runtime, TEST_STATE_PTR)
+    @test status.failed
+    @test status.pending_count == 1
+    @test status.active
+    @test isempty(REPL_TEST_ACTIVE_SUBMISSIONS)
+end
+
+@testset "Terminal highlights submit native full-sequence operations once" begin
+    empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
+    EuclidRepl.highlight_pen!(
+        runtime, TEST_STATE_PTR, Float32[0.1, 0.2, 0], Float32[0.8, 0.2, 0];
+        duration=2f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+    pen_job = runtime.session.active_job
+    _, pen = only(REPL_TEST_ACTIVE_SUBMISSIONS)
+    @test pen_job.native_submitted
+    @test pen.kind == OdinJuliaBridge.NATIVE_MODIFIER_PEN_HIGHLIGHT_SEQUENCE
+    @test pen.duration == 2f0
+    @test pen.start == (0.1f0, 0.2f0, 0f0)
+    @test pen.second == (0.8f0, 0.2f0, 0f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+
+    empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
+    EuclidRepl.highlight_compass!(
+        runtime, TEST_STATE_PTR, Float32[0.4, 0.5, 0],
+        Float32[0.8, 0.5, 0], pi / 2, 0.4; filled=true, duration=1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+    _, compass = only(REPL_TEST_ACTIVE_SUBMISSIONS)
+    @test compass.kind ==
+        OdinJuliaBridge.NATIVE_MODIFIER_COMPASS_HIGHLIGHT_SEQUENCE
+    @test compass.flag
+    @test compass.radius == 0.4f0
+end
+
+@testset "native operation identities survive Terminal session recreation" begin
+    ids = EuclidRepl.create_operation_request_ids()
+    first = EuclidRepl.create_runtime(ids; session_generation=UInt64(1))
+    second = EuclidRepl.create_runtime(ids; session_generation=UInt64(2))
+    @test EuclidRepl.next_operation_request_id!(first.operation_request_ids) == 1
+    @test EuclidRepl.next_operation_request_id!(second.operation_request_ids) == 2
+    @test_throws ErrorException EuclidRepl.next_operation_request_id!(
+        EuclidRepl.ReplOperationRequestIds(typemax(UInt64)))
+end
+
+@testset "built-in Terminal ticks use their animation as runtime identity" begin
+    runtime = EuclidRepl.create_runtime(; session_generation=UInt64(8))
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(8), UInt64(0), UInt64(3))
+    @test runtime.session_generation == UInt64(8)
+    @test runtime.runtime_generation == UInt64(3)
+    @test runtime.animation_generation == UInt64(3)
+end
+
+@testset "active operation progress is generation-qualified" begin
+    runtime = EuclidRepl.create_runtime()
+    payload = EuclidRepl.PointPayload(
+        UInt64(1), Float32[0, 0, 0], :steelblue, 5f0)
+    job = EuclidRepl.ReplDrawJob(:point, 2f0, 0f0, payload)
+    job.native_request_id = UInt64(41)
+    job.native_session_generation = UInt64(2)
+    job.native_runtime_generation = UInt64(3)
+    job.native_animation_generation = UInt64(4)
+    job.native_submitted = true
+    runtime.session.active_job = job
+    progress = OdinJuliaBridge.NativeActiveOperationProgress(
+        UInt64(41), UInt64(2), UInt64(3), UInt64(4), 0.75, 2.0)
+
+    @test EuclidRepl.ingest_active_operation_progress!(runtime, progress)
+    @test job.elapsed == 0.75f0
+    @test job.native_elapsed == 0.75f0
+    stale = OdinJuliaBridge.NativeActiveOperationProgress(
+        UInt64(41), UInt64(2), UInt64(3), UInt64(5), 1.0, 2.0)
+    @test EuclidRepl.ingest_active_operation_progress!(runtime, stale)
+    @test job.elapsed == 0.75f0
+    malformed = OdinJuliaBridge.NativeActiveOperationProgress(
+        UInt64(41), UInt64(2), UInt64(3), UInt64(4), 3.0, 2.0)
+    @test !EuclidRepl.ingest_active_operation_progress!(runtime, malformed)
+end
 
 """Record typed native rigid requests and use the independent Julia oracle in fixtures."""
 function OdinJuliaBridge.apply_native_modifier_request(
@@ -227,13 +497,6 @@ function OdinJuliaBridge.hide_point(state::Ptr{Cvoid}, id::UInt64)
     state == C_NULL || return OdinJuliaBridge.hide_point(state, Int(id))
     haskey(REPL_TEST_POSITIONS, id) || return OdinJuliaBridge.BRIDGE_STATUS_INVALID_INDEX
     push!(REPL_TEST_HIDDEN, id)
-    return OdinJuliaBridge.BRIDGE_STATUS_OK
-end
-
-"""Record one reveal request made by a polygon phase test."""
-function record_test_region_reveal!(
-    _state::Ptr{Cvoid}, id::UInt64, _duration::Real)
-    push!(REPL_TEST_REVEALED, id)
     return OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
@@ -601,8 +864,9 @@ end
     EuclidRepl.track_managed_host!(runtime.session, UInt64(800))
     EuclidRepl.rotate_z!(runtime, TEST_STATE_PTR, shape, Float32(pi / 2);
         pivot=Float32[0.5, -0.5, 2], duration=1f0)
-    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
-    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    payload = runtime.session.active_job.payload
+    EuclidRepl.activate_payload!(TEST_STATE_PTR, payload)
+    EuclidRepl.render_payload!(TEST_STATE_PTR, 0.5f0, 1f0, payload)
     moved = Tuple(REPL_TEST_POSITIONS[id] for id in ids)
     initial_distances = (1f0, 2f0, sqrt(5f0))
     measured = (
@@ -610,30 +874,211 @@ end
         sqrt(sum(abs2(moved[1][index] - moved[3][index]) for index in 1:3)),
         sqrt(sum(abs2(moved[2][index] - moved[3][index]) for index in 1:3)))
     @test collect(measured) ≈ collect(initial_distances) atol=1f-5
-    active = EuclidRepl.status(runtime, TEST_STATE_PTR)
     expected = EuclidRepl.rotated_xy_position(collect(initial[2]),
-        Float32[0.5, -0.5, 2], Float32(pi / 2) * active.elapsed)
+        Float32[0.5, -0.5, 2], Float32(pi / 2) * 0.5f0)
     @test collect(moved[2]) ≈ expected atol=1f-5
-    @test active.active
-    for _ in 1:3
-        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
-    end
-    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+    EuclidRepl.render_payload!(TEST_STATE_PTR, 1f0, 1f0, payload)
+    @test collect(REPL_TEST_POSITIONS[802]) ≈ Float32[0, 0, 0] atol=1f-5
 end
 
-@testset "EuclidRepl polygon reveal survives skipped phase frames" begin
-    empty!(REPL_TEST_REVEALED)
+@testset "EuclidRepl polygon trace submits ordered native targets once" begin
+    empty!(REPL_TEST_POLYGON_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
+    REPL_TEST_KINDS[950] = OdinJuliaBridge.SHAPE_KIND_POLYGON
+    for (id, position) in zip(UInt64[951, 952, 953],
+            ((0f0, 0f0, 0f0), (1f0, 0f0, 0f0), (0f0, 1f0, 0f0)))
+        REPL_TEST_POSITIONS[id] = position
+    end
     payload = EuclidRepl.PolygonPayload(
         950, UInt64[951, 952, 953],
         [Float32[0, 0, 0], Float32[1, 0, 0], Float32[0, 1, 0]],
-        :steelblue, false)
-    EuclidRepl.start_polygon_reveal_if_due!(
-        TEST_STATE_PTR, 0.95f0, 1f0, payload, record_test_region_reveal!)
-    @test payload.reveal_started
-    @test REPL_TEST_REVEALED == UInt64[950]
-    EuclidRepl.start_polygon_reveal_if_due!(
-        TEST_STATE_PTR, 0.99f0, 1f0, payload, record_test_region_reveal!)
-    @test REPL_TEST_REVEALED == UInt64[950]
+        OdinJuliaBridge.BridgeColor(0x40, 0x63, 0xd8, 0xff))
+    job = EuclidRepl.ReplDrawJob(:polygon, 2f0, 0f0, payload)
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
+    frames = Tuple{Int,Float32}[]
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, queue_fixture_job(3, frames))
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_POLYGON_SUBMISSIONS) == 1
+    request_id, request = only(REPL_TEST_POLYGON_SUBMISSIONS)
+    @test request_id == job.native_request_id
+    @test job.native_submitted
+    @test request.modifier.kind == OdinJuliaBridge.NATIVE_ACTIVE_POLYGON_TRACE
+    @test request.modifier.entity == UInt64(950)
+    @test request.modifier.duration == 2f0
+    @test request.modifier.color_packed == UInt32(0xffd86340)
+    @test request.vertex_count == 3
+    @test [vertex.entity for vertex in request.vertices[1:3]] ==
+        UInt64[951, 952, 953]
+    @test request.vertices[1].start == (0f0, 0f0, 0f0)
+    @test request.vertices[2].start == (1f0, 0f0, 0f0)
+    @test request.vertices[3].start == (0f0, 1f0, 0f0)
+    @test request.vertices[4].entity == 0
+    @test runtime.session.pending_count == 1
+    @test runtime.session.active_job === job
+end
+
+"""Submit one already-activated rolling fixture through the ordinary Terminal job path."""
+function record_active_rolling_request!(payload, kind::Symbol)
+    empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(runtime, UInt64(2), UInt64(3), UInt64(4))
+    job = EuclidRepl.ReplDrawJob(kind, 2f0, 0f0, payload)
+    job.activated = true
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+    @test job.native_submitted
+    @test job.elapsed == 0f0
+    return only(REPL_TEST_ACTIVE_SUBMISSIONS)[2]
+end
+
+@testset "EuclidRepl rolling families submit full native sequences once" begin
+    color = OdinJuliaBridge.BridgeColor(0x10, 0x20, 0x30, 0xff)
+    cycloids = (
+        EuclidRepl.CycloidPayload(960, (UInt64(961), UInt64(962)),
+            Float32[0.2, 0.3, 0], Float32[0.8, 0.3, 0],
+            0.05f0, 0.05f0, 0.2f0, 1f0, -1f0, 0.25f0, color, 0.01f0),
+        EuclidRepl.CycloidPayload(963, (UInt64(964), UInt64(965)),
+            Float32[0.2, 0.3, 0], Float32[0.8, 0.3, 0],
+            0.05f0, 0.02f0, 0.2f0, 1f0, -1f0, 0.25f0, color, 0.01f0),
+        EuclidRepl.CycloidPayload(966, (UInt64(967), UInt64(968)),
+            Float32[0.2, 0.3, 0], Float32[0.8, 0.3, 0],
+            0.05f0, 0.08f0, 0.2f0, 1f0, -1f0, 0.25f0, color, 0.01f0))
+    for payload in cycloids
+        request = record_active_rolling_request!(payload, :cycloid)
+        @test request.kind == OdinJuliaBridge.NATIVE_MODIFIER_CYCLOID_SEQUENCE
+        @test request.entity == payload.host_id
+        @test request.second_entity == payload.endpoint_ids[1]
+        @test request.third_entity == payload.endpoint_ids[2]
+        @test request.duration == 2f0
+        @test request.start == Tuple(payload.first)
+        @test request.second == Tuple(payload.second)
+        @test request.third == (1f0, -1f0, 0.25f0)
+        @test request.displacement == (payload.tracer_distance, 0.2f0, 0f0)
+        @test request.color_packed == UInt32(0xff302010)
+    end
+
+    trochoids = (
+        EuclidRepl.TrochoidPayload(970, Float32[0.5, 0.5, 0],
+            Int32(0), 0.2f0, 0.05f0, 0.08f0, 0.3f0, 0.4f0,
+            2f0, -2f0, -0.5f0, color, 0.01f0),
+        EuclidRepl.TrochoidPayload(971, Float32[0.5, 0.5, 0],
+            Int32(1), 0.2f0, 0.05f0, 0.08f0, 0.3f0, 0.4f0,
+            2f0, -2f0, -0.5f0, color, 0.01f0))
+    for payload in trochoids
+        request = record_active_rolling_request!(payload, :trochoid)
+        @test request.kind == OdinJuliaBridge.NATIVE_MODIFIER_TROCHOID_SEQUENCE
+        @test request.entity == payload.host_id
+        @test request.duration == 2f0
+        @test request.start == Tuple(payload.center)
+        @test request.third == (2f0, -2f0, -0.5f0)
+        @test request.displacement ==
+            (payload.fixed_radius, payload.tracer_distance, payload.tracer_phase)
+        @test request.integer == payload.mode
+        @test request.angle == payload.rotation
+        @test request.color_packed == UInt32(0xff302010)
+    end
+
+    conics = (
+        (EuclidRepl.ParabolaPayload(975, Float32[0.4, 0.5, 0],
+            0.08f0, 0.6f0, -1f0, 1f0, 0.5f0, 0.2f0, color, 0.01f0),
+            :parabola),
+        (EuclidRepl.HyperbolaPayload(976, Float32[0.4, 0.5, 0],
+            0.12f0, 0.08f0, 0.6f0, 1f0, -1f0, 0.5f0, 0.3f0,
+            :negative, color, 0.01f0), :hyperbola))
+    for (payload, kind) in conics
+        request = record_active_rolling_request!(payload, kind)
+        expected_kind = kind == :parabola ?
+            OdinJuliaBridge.NATIVE_MODIFIER_PARABOLA_SEQUENCE :
+            OdinJuliaBridge.NATIVE_MODIFIER_HYPERBOLA_SEQUENCE
+        @test request.kind == expected_kind
+        @test request.entity == payload.host_id
+        @test request.duration == 2f0
+        @test request.start == Tuple(
+            kind == :parabola ? payload.vertex : payload.center)
+        @test request.third ==
+            (payload.parameter_start, payload.parameter_finish, payload.draw_parameter)
+        @test request.angle == payload.rotation
+        @test request.radius == (
+            kind == :parabola ? payload.focal_distance : payload.semimajor)
+        @test request.color_packed == UInt32(0xff302010)
+        @test payload isa EuclidRepl.ParabolaPayload ||
+            request.integer == OdinJuliaBridge.HYPERBOLA_NEGATIVE
+    end
+end
+
+@testset "rolling native outcomes gate mixed Terminal FIFO work" begin
+    empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+    runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(runtime, UInt64(2), UInt64(3), UInt64(4))
+    payload = EuclidRepl.TrochoidPayload(980, Float32[0.5, 0.5, 0],
+        Int32(0), 0.2f0, 0.05f0, 0.08f0, 0.3f0, 0.4f0,
+        2f0, -2f0, -0.5f0, OdinJuliaBridge.BridgeColor(0x10, 0x20, 0x30, 0xff),
+        0.01f0)
+    job = EuclidRepl.ReplDrawJob(:trochoid, 2f0, 0f0, payload)
+    job.activated = true
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
+    queued = EuclidRepl.ReplDrawJob(
+        :hide, 1f0, 0f0, EuclidRepl.visibility_payload(UInt64[], false))
+    EuclidRepl.start_job!(runtime, TEST_STATE_PTR, queued)
+
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_ACTIVE_SUBMISSIONS) == 1
+    @test !queued.activated
+    progress = OdinJuliaBridge.NativeActiveOperationProgress(
+        job.native_request_id, UInt64(2), UInt64(3), UInt64(4), 0.75, 2.0)
+    @test EuclidRepl.ingest_active_operation_progress!(runtime, progress)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).elapsed == 0.75f0
+
+    outcome = OdinJuliaBridge.NativeActiveOperationOutcome(
+        job.native_request_id, UInt64(2), UInt64(3), UInt64(4), UInt64(1),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 1
+    @test !queued.activated
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test queued.activated
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+end
+
+@testset "rolling native rejection and cancellation block FIFO successors" begin
+    for terminal_state in (
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_REJECTED,
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_CANCELLED)
+        empty!(REPL_TEST_ACTIVE_SUBMISSIONS)
+        runtime = EuclidRepl.create_runtime()
+        EuclidRepl.set_active_operation_context!(
+            runtime, UInt64(2), UInt64(3), UInt64(4))
+        payload = EuclidRepl.CycloidPayload(981, (UInt64(982), UInt64(983)),
+            Float32[0.2, 0.3, 0], Float32[0.8, 0.3, 0],
+            0.05f0, 0.05f0, 0.2f0, 1f0, -1f0, 0.25f0,
+            OdinJuliaBridge.BridgeColor(0x10, 0x20, 0x30, 0xff), 0.01f0)
+        job = EuclidRepl.ReplDrawJob(:cycloid, 2f0, 0f0, payload)
+        job.activated = true
+        EuclidRepl.start_job!(runtime, TEST_STATE_PTR, job)
+        queued = EuclidRepl.ReplDrawJob(
+            :hide, 1f0, 0f0, EuclidRepl.visibility_payload(UInt64[], false))
+        EuclidRepl.start_job!(runtime, TEST_STATE_PTR, queued)
+        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+        outcome = OdinJuliaBridge.NativeActiveOperationOutcome(
+            job.native_request_id, UInt64(2), UInt64(3), UInt64(4), UInt64(1),
+            terminal_state)
+        @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+        @test EuclidRepl.status(runtime, TEST_STATE_PTR).failed
+        @test !queued.activated
+    end
 end
 
 @testset "EuclidRepl curve completion commits exact frontiers" begin
@@ -871,7 +1316,10 @@ end
 end
 
 @testset "EuclidRepl activation-time motion and immutable submission" begin
+    empty!(REPL_TEST_GROUP_SUBMISSIONS)
     runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
     REPL_TEST_POSITIONS[7] = (0.1f0, 0.2f0, 0f0)
     ids = UInt64[7]
     displacement = [0.2f0, 0f0, 0f0]
@@ -883,22 +1331,34 @@ end
     returned[1] = 99
     displacement[1] = 99f0
     EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
     @test REPL_TEST_POSITIONS[7] == (0.1f0, 0.2f0, 0f0)
-    for (step, expected) in enumerate([0.15f0, 0.2f0, 0.25f0, 0.3f0])
-        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
-        @test isapprox(REPL_TEST_POSITIONS[7][1], expected; atol=1f-6)
-    end
-    @test !EuclidRepl.status(runtime, TEST_STATE_PTR).drained
-    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
-    @test isapprox(REPL_TEST_POSITIONS[7][1], 0.5f0; atol=1f-6)
-    @test EuclidRepl.status(runtime, TEST_STATE_PTR).drained
+    request_id, request = only(REPL_TEST_GROUP_SUBMISSIONS)
+    @test request.target_count == 1
+    @test request.targets[1].entity == 7
+    @test request.targets[1].start == (0.1f0, 0.2f0, 0f0)
+    @test request.modifier.displacement == (0.2f0, 0f0, 0f0)
+    queued_job = runtime.session.pending[runtime.session.pending_head]
+    @test queued_job.payload.point_ids == UInt64[7]
+    @test queued_job.payload.spec.displacement == Float32[0.2, 0, 0]
+    progress = OdinJuliaBridge.NativeActiveOperationProgress(
+        request_id, UInt64(2), UInt64(3), UInt64(4), 0.5, 1.0)
+    @test EuclidRepl.ingest_active_operation_progress!(runtime, progress)
+    outcome = OdinJuliaBridge.NativeActiveOperationOutcome(
+        request_id, UInt64(2), UInt64(3), UInt64(4), UInt64(1),
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED)
+    @test EuclidRepl.ingest_active_operation_outcome!(runtime, outcome)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 0.25f0)
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 1
+    @test runtime.session.pending_count == 1
+    @test REPL_TEST_POSITIONS[7] == (0.1f0, 0.2f0, 0f0)
     @test_throws ArgumentError EuclidRepl.translate_points!(
         runtime, TEST_STATE_PTR, [99], [1, 0, 0])
     @test_throws ArgumentError EuclidRepl.validated_point_ids(fill(7, 17))
     @test_throws ArgumentError EuclidRepl.validated_point_ids([7, 7])
     @test_throws ArgumentError EuclidRepl.rotate_points!(
         runtime, TEST_STATE_PTR, [7], [0, 0, 0], [0, 0, 1], Inf)
-    @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 2
+    @test EuclidRepl.status(runtime, TEST_STATE_PTR).completed_count == 1
 end
 
 @testset "EuclidRepl failure blocks successors and reset releases payloads" begin

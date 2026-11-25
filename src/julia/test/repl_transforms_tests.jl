@@ -16,6 +16,8 @@ end
 """Prepare one managed typed result with distinct, coplanar defining positions."""
 function transform_test_fixture(shape)
     runtime = EuclidRepl.create_runtime()
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
     definition = EuclidRepl.shape_motion_definition(shape)
     REPL_TEST_KINDS[definition.host] = first(definition.kinds)
     for (index, id) in pairs(definition.ids)
@@ -36,11 +38,27 @@ function transform_test_oracle(point, first, second, angle)
         axis .* dot(axis, relative) .* (1 - cos(angle))
 end
 
-"""Advance a bounded test queue, including the first immutable-snapshot boundary."""
+"""Exercise the retained Julia transform oracle across queued activation boundaries."""
 function drain_transform_test!(runtime)
     for _ in 1:20
-        EuclidRepl.status(runtime, TEST_STATE_PTR).drained && return
-        EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 10f0)
+        session = runtime.session
+        if session.active_job === nothing
+            session.pending_count == 0 && return
+            session.active_job = session.pending[session.pending_head]
+            session.pending[session.pending_head] = nothing
+            session.pending_head = mod1(
+                session.pending_head + 1, EuclidRepl.ACTION_QUEUE_CAPACITY)
+            session.pending_count -= 1
+        end
+        job = session.active_job
+        if !job.activated
+            EuclidRepl.activate_payload!(TEST_STATE_PTR, job.payload)
+            job.activated = true
+        end
+        EuclidRepl.render_payload!(
+            TEST_STATE_PTR, job.duration, job.duration, job.payload)
+        session.completed_count += 1
+        session.active_job = nothing
     end
     error("transformation test queue did not drain")
 end
@@ -62,6 +80,34 @@ end
     @test point.elapsed == plane.elapsed == 0.125f0
     @test point.angle == plane.angle == Float32(-4pi)
     @test (plane.displacement..., plane.scalar) == payload.start_orientation
+end
+
+@testset "Rigid transforms submit one bounded native group recipe" begin
+    empty!(REPL_TEST_GROUP_SUBMISSIONS)
+    shape = OdinJuliaBridge.BridgeShapeCircle(0, 899)
+    runtime, definition = transform_test_fixture(shape)
+    EuclidRepl.set_active_operation_context!(
+        runtime, UInt64(2), UInt64(3), UInt64(4))
+    EuclidRepl.rotate_z!(
+        runtime, TEST_STATE_PTR, shape, -1.25f0;
+        pivot=Float32[0.1, 0.2, 0], duration=2f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+
+    job = runtime.session.active_job
+    request_id, request = only(REPL_TEST_GROUP_SUBMISSIONS)
+    @test job.native_submitted
+    @test request_id == job.native_request_id
+    @test request.target_count == 1
+    @test request.targets[1].entity == only(definition.ids)
+    @test request.targets[1].start == Tuple(REPL_TEST_POSITIONS[only(definition.ids)])
+    @test request.modifier.kind == OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_POINT
+    @test request.modifier.angle == -1.25f0
+    @test request.oriented
+    @test request.orientation_entity == definition.host
+    @test request.orientation == (0f0, 0f0, 0f0, 1f0)
+    EuclidRepl.run_active_job_frame!(runtime, TEST_STATE_PTR, 1f0)
+    @test length(REPL_TEST_GROUP_SUBMISSIONS) == 1
 end
 
 @testset "Unified typed world transformations" begin
@@ -111,7 +157,9 @@ end
         starts = [collect(REPL_TEST_POSITIONS[id]) for id in ids]
         @test EuclidRepl.translate!(
             runtime, TEST_STATE_PTR, shape, [2, -3, 4]; duration=1) === shape
-        drain_transform_test!(runtime)
+        payload = runtime.session.active_job.payload
+        EuclidRepl.activate_payload!(TEST_STATE_PTR, payload)
+        EuclidRepl.render_payload!(TEST_STATE_PTR, 1f0, 1f0, payload)
         for (id, start) in zip(ids, starts)
             @test collect(REPL_TEST_POSITIONS[id]) ≈ start + [2, -3, 4]
         end

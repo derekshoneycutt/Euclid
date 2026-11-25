@@ -97,6 +97,17 @@ const NATIVE_MODIFIER_HYPERBOLA_DESCEND = Int32(43)
 const NATIVE_MODIFIER_HYPERBOLA_DRAW = Int32(44)
 const NATIVE_MODIFIER_HYPERBOLA_RISE = Int32(45)
 const NATIVE_MODIFIER_ROTATE_SHAPE_ORIENTATION = Int32(46)
+const NATIVE_MODIFIER_CONSTRUCT_POINT = Int32(47)
+const NATIVE_MODIFIER_CONSTRUCT_LINE = Int32(48)
+const NATIVE_MODIFIER_CONSTRUCT_CIRCLE = Int32(49)
+const NATIVE_MODIFIER_CONSTRUCT_FILLED_CIRCLE = Int32(50)
+const NATIVE_MODIFIER_PEN_HIGHLIGHT_SEQUENCE = Int32(51)
+const NATIVE_MODIFIER_COMPASS_HIGHLIGHT_SEQUENCE = Int32(52)
+const NATIVE_ACTIVE_POLYGON_TRACE = Int32(53)
+const NATIVE_MODIFIER_CYCLOID_SEQUENCE = Int32(54)
+const NATIVE_MODIFIER_TROCHOID_SEQUENCE = Int32(55)
+const NATIVE_MODIFIER_PARABOLA_SEQUENCE = Int32(56)
+const NATIVE_MODIFIER_HYPERBOLA_SEQUENCE = Int32(57)
 
 """Capture one native explicit-time identity modifier in the current scene batch."""
 function apply_native_identity(
@@ -133,6 +144,87 @@ function apply_native_modifier_request(
     return @ccall apply_native_modifier(
         state_ptr::Ptr{Cvoid},
         request::BridgeNativeModifierRequest)::Int32
+end
+
+@enum NativeActiveOperationOutcomeState::UInt8 begin
+    NATIVE_OPERATION_OUTCOME_PENDING = 0
+    NATIVE_OPERATION_OUTCOME_COMMITTED = 1
+    NATIVE_OPERATION_OUTCOME_REJECTED = 2
+    NATIVE_OPERATION_OUTCOME_CANCELLED = 3
+end
+
+"""One completed active operation correlated to its owning generations."""
+struct NativeActiveOperationOutcome
+    request_id::UInt64
+    session_generation::UInt64
+    runtime_generation::UInt64
+    animation_generation::UInt64
+    outcome_generation::UInt64
+    state::NativeActiveOperationOutcomeState
+end
+
+"""One accepted native elapsed-time sample correlated to its owning generations."""
+struct NativeActiveOperationProgress
+    request_id::UInt64
+    session_generation::UInt64
+    runtime_generation::UInt64
+    animation_generation::UInt64
+    elapsed::Float64
+    duration::Float64
+end
+
+"""C-compatible identity for acknowledging one retained native outcome."""
+struct NativeActiveOperationOutcomeIdentity
+    request_id::UInt64
+    session_generation::UInt64
+    runtime_generation::UInt64
+    animation_generation::UInt64
+    outcome_generation::UInt64
+end
+"""Capture one caller-correlated native modifier operation in the current batch."""
+function submit_active_modifier!(
+    state_ptr::Ptr{Cvoid}, request_id::UInt64,
+    request::BridgeNativeModifierRequest)::Int32
+    request_id > 0 || throw(ArgumentError("request_id must be nonzero"))
+    return @ccall submit_active_modifier(
+        state_ptr::Ptr{Cvoid}, request_id::UInt64,
+        request::BridgeNativeModifierRequest)::Int32
+end
+
+"""Capture one bounded group transform and activation-time starts in the Julia batch."""
+function submit_active_group_transform!(
+    state_ptr::Ptr{Cvoid}, request_id::UInt64,
+    request::BridgeActiveGroupTransformRequest)::Int32
+    request_id > 0 || throw(ArgumentError("request_id must be nonzero"))
+    return @ccall submit_active_group_transform(
+        state_ptr::Ptr{Cvoid}, request_id::UInt64,
+        Ref(request)::Ref{BridgeActiveGroupTransformRequest})::Int32
+end
+
+"""Capture one bounded polygon trace in callback order within the Julia batch."""
+function submit_active_polygon_trace!(
+    state_ptr::Ptr{Cvoid}, request_id::UInt64,
+    request::BridgeActivePolygonTraceRequest)::Int32
+    request_id > 0 || throw(ArgumentError("request_id must be nonzero"))
+    return @ccall submit_active_polygon_trace(
+        state_ptr::Ptr{Cvoid}, request_id::UInt64,
+        Ref(request)::Ref{BridgeActivePolygonTraceRequest})::Int32
+end
+
+"""Publish one receipt; return `false` only while the display mailbox is full."""
+function acknowledge_active_operation_outcome!(
+    state_ptr::Ptr{Cvoid}, outcome::NativeActiveOperationOutcome)::Bool
+    identity = NativeActiveOperationOutcomeIdentity(
+        outcome.request_id, outcome.session_generation,
+        outcome.runtime_generation, outcome.animation_generation,
+        outcome.outcome_generation)
+    status = @ccall acknowledge_active_operation_outcome(
+        state_ptr::Ptr{Cvoid},
+        identity::NativeActiveOperationOutcomeIdentity)::Int32
+    status == BRIDGE_STATUS_OK && return true
+    status == BRIDGE_STATUS_OUT_OF_CAPACITY && return false
+    throw(ErrorException(
+        "native operation outcome acknowledgment failed with status $status"))
 end
 
 """Build a native modifier request from one explicit typed field set."""

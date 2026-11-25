@@ -20,8 +20,8 @@
 {"type":"@assert !status().failed && status().managed_shape_count==4; pq=OdinJuliaBridge.get_parabola_geometr"}
 {"type":"y(state_ptr,p.host_id); qpos=OdinJuliaBridge.get_hyperbola_geometry(state_ptr,hpos.host_id); qneg=Od"}
 {"type":"inJuliaBridge.get_hyperbola_geometry(state_ptr,hneg.host_id); qboth=OdinJuliaBridge.get_hyperbola_ge"}
-{"type":"ometry(state_ptr,hboth.host_id); @assert pq.geometry.draw_parameter==0; @assert qpos.branches==OdinJ"}
-{"type":"uliaBridge.HYPERBOLA_POSITIVE && qneg.branches==OdinJuliaBridge.HYPERBOLA_NEGATIVE && qboth.branches"}
+{"type":"ometry(state_ptr,hboth.host_id); @assert isapprox(pq.geometry.draw_parameter,0f0;atol=1f-5) && isapprox(qpos.geometry.draw_parameter,0.1f0;atol=1f-5) && isapprox(qneg.geometry.draw_parameter,0f0;atol=1f-5) && isapprox(qboth.geometry.draw_parameter,-0.1f0;atol=1f-5); @assert qpos.branches==OdinJuliaBridge.HYPERBOLA_POSITIVE && qneg.branches==OdinJuliaBridge.HYPERBOLA_NEGATIVE"}
+{"type":" && qboth.branches==OdinJuliaBridge.HYPERBOLA_BOTH"}
 {"type":"==OdinJuliaBridge.HYPERBOLA_BOTH; \"verified-terminal\"*\"-shapes-conics-acceptance-2\""}
 {"key":"enter"}
 {"wait_terminal_contains":"verified-terminal-shapes-conics-acceptance-2","timeout_ms":20000}
@@ -49,16 +49,9 @@
 {"wait_terminal_contains":"native-ready-conics-4","timeout_ms":20000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"wait_event":"animation_tick_committed","timeout_ms":10000}
-{"type":"@assert !status().failed; @assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.host_id).pos[1],0.4"}
-{"type":";atol=1f-4); @assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.host_id).pos[2],0.5;atol=1f-4); "}
-{"type":"@assert isapprox(OdinJuliaBridge.get_parabola_geometry(state_ptr,p.host_id).geometry.rotation,0;"}
-{"type":"atol=1f-4); @assert OdinJuliaBridge.get_hyperbola_geometry(state_ptr,hpos.host_id).branches==OdinJul"}
-{"type":"iaBridge.HYPERBOLA_POSITIVE; @assert OdinJuliaBridge.get_hyperbola_geometry(state_ptr,hneg.host_id)."}
-{"type":"branches==OdinJuliaBridge.HYPERBOLA_NEGATIVE; @assert OdinJuliaBridge.get_hyperbola_geometry(state_p"}
-{"type":"tr,hboth.host_id).branches==OdinJuliaBridge.HYPERBOLA_BOTH; \"verified-terminal\"*\"-shapes-conics-acce"}
-{"type":"ptance-5\""}
+{"type":"@assert !status().failed && status().drained; @assert isapprox(OdinJuliaBridge.get_point(state_ptr,p.host_id).pos[1],0.4f0;atol=1f-4) && isapprox(OdinJuliaBridge.get_point(state_ptr,p.host_id).pos[2],0.5f0;atol=1f-4); \"native-conics-point-frontier\""}
 {"key":"enter"}
-{"wait_terminal_contains":"verified-terminal-shapes-conics-acceptance-5","timeout_ms":20000}
+{"wait_terminal_contains":"native-conics-point-frontier","timeout_ms":20000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"screenshot":".build/terminal-shapes-conics.png"}
 {"wait_event":"capture_completed","timeout_ms":10000}

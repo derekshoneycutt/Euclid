@@ -28,6 +28,7 @@ import capturemodel "../view/capture/model"
 import inputmodel "../view/input"
 import historyruntime "../terminal/history/runtime"
 import exerciseheader "exercise_header"
+import operations "../operations"
 
 // Defines the core structures used in the Euclid application.
 // Euclid_General_State owns its same-lifetime runtime values directly.
@@ -156,6 +157,7 @@ Euclid_General_State :: struct {
     animation_memory: animation_model.Animation_Memory,
     animation_values: animation_model.Animation_Value_Store,
     dynview_documents: dynviewmodel.Dynview_Document_Store,
+    active_operations: operations.Active_Operation_Storage,
 }
 
 Euclid_Run_Settings :: struct {

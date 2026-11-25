@@ -106,6 +106,26 @@ was initialized.
 The [mental model](#the-mental-model) distinguishes allocation ownership from access
 permission; the [domain map](#memory-domain-map) identifies existing owners.
 
+The active-operation set is fixed storage embedded in the application root, not in
+the shared animation arena and not in per-operation allocations. The display owns
+its mutation; copied modifier payloads, entity claims, execution metadata, and
+independently retained outcomes reuse bounded slots. Releasing execution must preserve
+an undelivered outcome, and a candidate clock advances only after its scene commit.
+Animation-generation retirement occurs only after the lifecycle transaction commits,
+so a failed reload leaves the prior active records and claims intact. Outcome slots
+remain occupied after bounded Julia-inbox publication and are released only after the
+session-owned consumer publishes an exact-identity receipt that the display handles.
+The receipt also carries the outcome-slot generation, preventing a delayed duplicate
+from acknowledging a later reuse with otherwise identical request generations.
+When either mailbox is full or closed, the owning side retains its pending state.
+Accepted results are retained in a bounded queue owned by the Terminal session's
+`EuclidReplRuntime`; callers pass request identities explicitly and consume through
+the session's `take_active_operation_outcome!()` helper. A failed receipt publication
+leaves the result queued for retry. The API transfers copied scalar identity and state,
+never a pointer into native storage. Results tagged for an older Terminal generation
+are acknowledged and removed without entering the successor generation's queue;
+session close and application shutdown drain the remaining acknowledgments.
+
 ### Reusable Allocators
 
 Contributors SHOULD prefer an existing allocator when its lifetime matches the data
@@ -492,6 +512,7 @@ Exact quotas and byte sizes belong to the linked models and implementations.
 | Bridge transport | One plain growing Odin arena per one-way inbox, embedded in the service | Pause admission, exhaust accepted messages, reset arena, reopen; stop/join before destruction | [Consumer mailboxes](../../../src/bridge/transport/consumer_mailbox.odin), [mailbox model](../../../src/bridge/model/mailbox.odin) |
 | Retained presentation source | Fixed owner-local records for producer retries, display startup content, and two display parse/replacement slots | Replace pending records locally; active parse source remains valid through task join | [Egress](../../../src/bridge/host/egress.odin), [presentation runtime](../../../src/view/presentation/presentation_runtime.odin) |
 | Tick and lifecycle work | Service-owned reusable slots, pointer-free query snapshots, staged writes and scene commands | Completion accepted or rejected before slot reuse | [Runtime model](../../../src/bridge/model/runtime.odin), [tick slots](../../../src/bridge/host/tick_slots.odin) |
+| Native active operations | Fixed display-owned execution, claim, control, and outcome slots; progress and terminal results cross as copied generation-qualified values | Release execution claims after terminal commit/cancel; retain outcomes until Julia receipt acknowledgment | [Operation storage](../../../src/operations/operation_storage.odin), [active-operation transport](../../../src/bridge/host/active_operations.odin) |
 | View snapshots | Per-slot growing arena and bounded payload builders | Only a free slot can reset; publication consumers must finish first | [Snapshot model](../../../src/bridge/model/model.odin), [snapshot storage](../../../src/bridge/host/view_snapshot_storage.odin) |
 | Dynview derived cache | Dedicated cache arena and persistent shaping workspaces | Rebuild under exclusive worker access, then joined display use | [Simulation executor](../../../src/view/simulation/simulation_executor.odin), [compiler](../../../src/dynview/compile/compile.odin) |
 | Task scheduler | Fixed virtual backing, mutex-wrapped TLSF, retained workers/queues/slots | Join task results and fences; stop pool before backing release | [Task pool](../../../src/taskpool/taskpool.odin) |
@@ -546,7 +567,11 @@ particle storage. They do not grow a temporary list or retain sampled geometry.
 Rolling samples use that same fixed output count (at most nine outputs) and carry
 typed guide values in stack-local evaluation storage. Guide and curve components
 remain display-owned; publication preserves their previous interpolation samples.
-No rolling motion state, allocation domain, retained pointer, or native clock is added.
+Conic sequence samples similarly expand into at most seven fixed outputs per phase,
+including paired selected-branch contacts, using stack-local modifier values and
+bounded scene batches. The generic active-operation slot retains the copied sequence
+request and elapsed progress; neither family adds another sequence object, allocation
+domain, retained scratch alias, or family-specific clock.
 
 ## Transport And Publication Lifetimes
 

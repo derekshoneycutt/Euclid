@@ -41,6 +41,8 @@ Trail_Particle_Visual :: particlemodel.Trail_Particle_Visual
 Formation_Draw_Order :: particlemodel.Formation_Draw_Order
 FORMATION_DEPTH_BUCKETS :: particlemodel.FORMATION_DEPTH_BUCKETS
 Formation_State :: particlemodel.Formation_State
+Formation_Time_Interval :: particlemodel.Formation_Time_Interval
+Formation_Time_Status :: particlemodel.Formation_Time_Status
 Formation_Reveal_Record :: particlemodel.Formation_Reveal_Record
 Formation_Target_Kind :: particlemodel.Formation_Target_Kind
 Departure_Material_Sample :: particlemodel.Departure_Material_Sample
@@ -48,6 +50,7 @@ Polygon_Material_Sample :: particlemodel.Polygon_Material_Sample
 MAX_PARTICLES :: particlemodel.MAX_PARTICLES
 MAX_FORMATION_PARTICLES :: particlemodel.MAX_FORMATION_PARTICLES
 MAX_FORMATION_REVEALS :: particlemodel.MAX_FORMATION_REVEALS
+FORMATION_TIME_INTERVAL_CAPACITY :: particlemodel.FORMATION_TIME_INTERVAL_CAPACITY
 MAX_DEPARTURE_MATERIAL_SAMPLES :: particlemodel.MAX_DEPARTURE_MATERIAL_SAMPLES
 
 SPAWN_INTERVAL :: 0.012 // seconds
@@ -1843,6 +1846,7 @@ formation_reset_generation :: proc(ps: ^Particle_System, generation: u64) {
     state^.next_reveal_slot = 0
     state^.animation_generation = generation
     state^.accepted_progress = 0
+    state^.native_time_interval_count = 0
 }
 
 // Advance formation only to progress accepted with a committed animation batch.
@@ -1873,6 +1877,115 @@ formation_advance_progress :: proc(
     }
     formation_reclaim_unowned_particles(ps)
     return true
+}
+
+// Preflight one unique native fixed-step interval without changing accepted state.
+formation_native_interval_candidate :: proc(
+    ps: ^Particle_System, generation, step: u64,
+    authored_seconds: f64) -> (f64, Formation_Time_Status) {
+    if ps == nil || generation != ps^.formation.animation_generation ||
+        step == 0 || math.is_nan(authored_seconds) || math.is_inf(authored_seconds) ||
+        authored_seconds <= 0 {
+        return 0, .Invalid
+    }
+    state := &ps^.formation
+    for interval in state^.native_time_intervals[:state^.native_time_interval_count] {
+        if interval.step == step && interval.generation == generation {
+            if interval.authored_seconds != authored_seconds {
+                return 0, .Invalid
+            }
+            return state^.accepted_progress, .Already_Accepted
+        }
+    }
+    if state^.native_time_interval_count >= len(state^.native_time_intervals) {
+        return 0, .Full
+    }
+    return state^.accepted_progress + authored_seconds, .Accepted
+}
+
+// Accept native elapsed time once per display interval after the owning batch preflights.
+formation_accept_native_interval :: proc(
+    ps: ^Particle_System, generation, step: u64,
+    authored_seconds: f64) -> Formation_Time_Status {
+    progress, status := formation_native_interval_candidate(
+        ps, generation, step, authored_seconds)
+    if status != .Accepted {
+        return status
+    }
+    if !formation_advance_progress(ps, generation, progress) {
+        return .Invalid
+    }
+    interval := &ps^.formation.native_time_intervals[
+        ps^.formation.native_time_interval_count]
+    interval^ = {step, generation, authored_seconds}
+    ps^.formation.native_time_interval_count += 1
+    return .Accepted
+}
+
+// Reconcile submitted Julia intervals against native time already accepted for those steps.
+formation_reconcile_julia_intervals :: proc(
+    ps: ^Particle_System, generation: u64,
+    intervals: []Formation_Time_Interval) -> (f64, bool) {
+    if ps == nil || generation != ps^.formation.animation_generation ||
+        len(intervals) > FORMATION_TIME_INTERVAL_CAPACITY {
+        return 0, false
+    }
+    uncovered := f64(0)
+    for index in 0..<len(intervals) {
+        interval := intervals[index]
+        if interval.generation != generation || interval.step == 0 ||
+            math.is_nan(interval.authored_seconds) ||
+            math.is_inf(interval.authored_seconds) || interval.authored_seconds < 0 {
+            return 0, false
+        }
+        for earlier in 0..<index {
+            if intervals[earlier].step == interval.step {
+                return 0, false
+            }
+        }
+        overlap := formation_native_time_for_step(
+            &ps^.formation, generation, interval.step)
+        uncovered += max(0, interval.authored_seconds - overlap)
+    }
+    progress := ps^.formation.accepted_progress + uncovered
+    return progress, !math.is_nan(progress) && !math.is_inf(progress)
+}
+
+// Retire native coverage only after its matching delayed Julia interval is resolved.
+formation_retire_native_intervals :: proc(
+    ps: ^Particle_System, generation: u64,
+    intervals: []Formation_Time_Interval) {
+    if ps == nil {
+        return
+    }
+    state := &ps^.formation
+    write_index := 0
+    for read_index in 0..<state^.native_time_interval_count {
+        native := state^.native_time_intervals[read_index]
+        retire := false
+        for interval in intervals {
+            if native.step == interval.step && native.generation == interval.generation {
+                retire = true
+                break
+            }
+        }
+        if !retire {
+            state^.native_time_intervals[write_index] = native
+            write_index += 1
+        }
+    }
+    state^.native_time_interval_count = write_index
+}
+
+// Find accepted native authored time that overlaps one Julia fixed-step interval.
+formation_native_time_for_step :: proc(
+    state: ^Formation_State, generation, step: u64) -> f64 {
+    for interval in state^.native_time_intervals[:state^.native_time_interval_count] {
+        if interval.step == step && interval.generation == generation {
+            return interval.authored_seconds
+        }
+    }
+    return 0
 }
 
 // Replace one owner's reveal interval or record its immediate completion.

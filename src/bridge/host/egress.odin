@@ -3,6 +3,7 @@ package julia_host
 import transport "../transport"
 import bridgemodel "../model"
 import presentation_model "../presentation"
+import operations "../../operations"
 import "../../core"
 import evidence_session "../../evidence/session"
 import "core:log"
@@ -14,6 +15,103 @@ try_receive_julia_egress :: proc(
         return nil, false
     }
     return transport.consumer_mailbox_try_recv(&service^.display_inbox)
+}
+
+// Publish retained outcomes nonblockingly; full or closed mailboxes preserve slots.
+pump_active_operation_outcomes :: proc(
+    state: ^core.Euclid_General_State) -> bridgemodel.Communication_Send_Outcome {
+    if state == nil || state^.julia_runtime_service == nil ||
+        !state^.active_operations.initialized {
+        return .Channel_Closed
+    }
+    service := state^.julia_runtime_service
+    storage := &state^.active_operations
+    for slot, index in storage^.outcome_slots {
+        if !slot.occupied || slot.state == .None || slot.delivered {
+            continue
+        }
+        handle: operations.Active_Operation_Outcome_Handle = {
+            index = u16(index),
+            generation = slot.generation,
+        }
+        outcome, status := operations.active_operation_read_outcome(storage, handle)
+        if status != .Ok {
+            return .Channel_Closed
+        }
+        message: bridgemodel.Active_Operation_Outcome_Ready = {
+            request_id = outcome.request_id,
+            session_generation = outcome.session_generation,
+            runtime_generation = outcome.runtime_generation,
+            animation_generation = outcome.animation_generation,
+            outcome_generation = outcome.handle.generation,
+            state = u8(outcome.state),
+        }
+        published := transport.consumer_mailbox_publish(
+            &service^.julia_inbox, bridgemodel.Julia_Host_Ingress(message))
+        if published != .Sent {
+            return published
+        }
+        assert(operations.active_operation_mark_outcome_sent(storage, handle) == .Ok)
+    }
+    return .Sent
+}
+
+// Publish the latest committed elapsed sample for each live native operation.
+pump_active_operation_progress :: proc(
+    state: ^core.Euclid_General_State) -> bridgemodel.Communication_Send_Outcome {
+    if state == nil || state^.julia_runtime_service == nil ||
+        !state^.active_operations.initialized {
+        return .Channel_Closed
+    }
+    service := state^.julia_runtime_service
+    for slot, index in state^.active_operations.execution_slots {
+        if slot.state != .Live || !slot.progress_dirty {
+            continue
+        }
+        control := state^.active_operations.control_slots[slot.control_index]
+        message: bridgemodel.Active_Operation_Progress_Ready = {
+            request_id = control.request_id,
+            session_generation = control.session_generation,
+            runtime_generation = control.runtime_generation,
+            animation_generation = control.animation_generation,
+            elapsed = slot.elapsed,
+            duration = slot.duration,
+        }
+        published := transport.consumer_mailbox_publish(
+            &service^.julia_inbox, bridgemodel.Julia_Host_Ingress(message))
+        if published != .Sent {
+            return published
+        }
+        state^.active_operations.execution_slots[index].progress_dirty = false
+    }
+    return .Sent
+}
+
+// Publish a Julia receipt without mutating display-owned operation storage.
+publish_active_operation_outcome_acknowledgment :: proc(
+    state: ^core.Euclid_General_State,
+    identity: operations.Active_Operation_Outcome_Identity) -> i32 {
+    if state == nil || state^.julia_runtime_service == nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if identity.request_id == 0 || identity.session_generation == 0 ||
+        identity.runtime_generation == 0 ||
+        identity.animation_generation == 0 || identity.outcome_generation == 0 {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    receipt: bridgemodel.Active_Operation_Outcome_Acknowledged = {
+        identity = identity,
+    }
+    service := state^.julia_runtime_service
+    published := transport.consumer_mailbox_publish(
+        &service^.display_inbox, bridgemodel.Julia_Host_Egress(receipt))
+    #partial switch published {
+    case .Sent:
+        return bridgemodel.BRIDGE_STATUS_OK
+    case .Queue_Full, .Storage_Full:
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
 }
 
 // End one transient display-owner borrow and recycle exhausted local batch storage.

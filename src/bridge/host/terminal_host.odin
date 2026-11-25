@@ -54,6 +54,70 @@ julia_terminal_ingest_evaluation :: proc(
     return julialib.jl_unbox_bool(result) != 0
 }
 
+// Hand one correlated native operation result to the Julia owner without blocking.
+julia_terminal_ingest_active_operation_outcome :: proc(
+    host: ^Julia_Runtime_Host,
+    outcome: bridgemodel.Active_Operation_Outcome_Ready) -> bool {
+    gc_stack := julialib.jl_get_pgcstack()
+    outcome_copy := outcome
+    if host == nil || host^.runtime == nil ||
+        host^.active_operation_outcome_ingest == nil ||
+        host^.active_operation_outcome_type == nil || gc_stack == nil {
+        return false
+    }
+    frame: Julia_Terminal_Request_Gc_Frame = {
+        encoded_root_count = 2 << 2,
+        previous = gc_stack^,
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    defer gc_stack^ = frame.previous
+    frame.roots[0] = host^.runtime
+    frame.roots[1] = julialib.jl_new_bits(
+        host^.active_operation_outcome_type, &outcome_copy)
+    if frame.roots[1] == nil {
+        return false
+    }
+    result := julialib.jl_call(
+        host^.active_operation_outcome_ingest, &frame.roots[0], 2)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_ingest_active_operation_outcome")
+        return false
+    }
+    return julialib.jl_unbox_bool(result) != 0
+}
+
+// Hand one generation-qualified native progress sample to the Julia owner.
+julia_terminal_ingest_active_operation_progress :: proc(
+    host: ^Julia_Runtime_Host,
+    progress: bridgemodel.Active_Operation_Progress_Ready) -> bool {
+    gc_stack := julialib.jl_get_pgcstack()
+    progress_copy := progress
+    if host == nil || host^.runtime == nil ||
+        host^.active_operation_progress_ingest == nil ||
+        host^.active_operation_progress_type == nil || gc_stack == nil {
+        return false
+    }
+    frame: Julia_Terminal_Request_Gc_Frame = {
+        encoded_root_count = 2 << 2,
+        previous = gc_stack^,
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    defer gc_stack^ = frame.previous
+    frame.roots[0] = host^.runtime
+    frame.roots[1] = julialib.jl_new_bits(
+        host^.active_operation_progress_type, &progress_copy)
+    if frame.roots[1] == nil {
+        return false
+    }
+    result := julialib.jl_call(
+        host^.active_operation_progress_ingest, &frame.roots[0], 2)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_ingest_active_operation_progress")
+        return false
+    }
+    return julialib.jl_unbox_bool(result) != 0
+}
+
 //   Register one borrowed completion source with the rooted Julia Terminal host.
 julia_terminal_ingest_completion :: proc(
     host: ^Julia_Runtime_Host, request: protocol.Completion_Requested) -> bool {
@@ -529,6 +593,10 @@ julia_terminal_dispatch_ingress :: proc(
             host, host^.terminal_close_session, payload.animation_generation)
     case protocol.Evaluation_Requested:
         return julia_terminal_ingest_evaluation(host, payload)
+    case bridgemodel.Active_Operation_Outcome_Ready:
+        return julia_terminal_ingest_active_operation_outcome(host, payload)
+    case bridgemodel.Active_Operation_Progress_Ready:
+        return julia_terminal_ingest_active_operation_progress(host, payload)
     case protocol.Terminal_Interactive_Input:
         return julia_terminal_ingest_interactive_input(host, payload)
     case protocol.Terminal_Geometry_Accepted:

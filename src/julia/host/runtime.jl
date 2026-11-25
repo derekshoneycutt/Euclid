@@ -34,6 +34,15 @@ mutable struct HostSessionRuntime
     euclid_repl_runtime::EuclidRepl.EuclidReplRuntime
 end
 
+"""Policies and persistent identity state used to construct one host session."""
+struct HostSessionConfiguration
+    completion_function::Any
+    highlight_function::Any
+    interpolation_function::Any
+    completion_mailbox_capacity::Int
+    operation_request_ids::EuclidRepl.ReplOperationRequestIds
+end
+
 """Combined application and active-session state owned by the Odin reactor thread."""
 mutable struct HostRuntime
     state_ptr::Ptr{Cvoid}
@@ -46,6 +55,7 @@ mutable struct HostRuntime
     terminal_controller::EuclidActorRuntime.ActorId
     hotkey_controller::EuclidActorRuntime.ActorId
     session::HostSessionRuntime
+    active_operation_request_ids::EuclidRepl.ReplOperationRequestIds
     completion_function::Any
     highlight_function::Any
     interpolation_function::Any
@@ -90,7 +100,10 @@ end
 
 """Create a fresh module with the standard imports expected by Julia user code."""
 function create_session_module(
-    generation::UInt64, state_ptr::Ptr{Cvoid})::Tuple{Module,EuclidRepl.EuclidReplRuntime}
+    generation::UInt64,
+    state_ptr::Ptr{Cvoid},
+    request_ids::EuclidRepl.ReplOperationRequestIds)::Tuple{
+        Module,EuclidRepl.EuclidReplRuntime}
     generation > 0 || throw(ArgumentError("session generation must be nonzero"))
     context_module = Module(
         Symbol("EuclidTerminalSession_$(generation)"), true, true)
@@ -101,7 +114,8 @@ function create_session_module(
     Core.eval(context_module, :(const Ticks = $ticks_module))
     Core.eval(context_module,
         :(const TerminalContainer = $terminal_container_module))
-    euclid_repl_runtime = EuclidRepl.create_runtime()
+    euclid_repl_runtime = EuclidRepl.create_runtime(
+        request_ids; session_generation=generation)
     EuclidRepl.install_session_helpers!(
         context_module, euclid_repl_runtime, state_ptr)
     return context_module, euclid_repl_runtime
@@ -140,18 +154,18 @@ end
 function create_host_session!(
     actors::EuclidActorRuntime.ActorRuntime, state_ptr::Ptr{Cvoid},
     generation::UInt64,
-    completion_function, highlight_function, interpolation_function,
-    completion_mailbox_capacity::Int)::HostSessionRuntime
+    configuration::HostSessionConfiguration)::HostSessionRuntime
     context_module, euclid_repl_runtime = create_session_module(
-        generation, state_ptr)
+        generation, state_ptr, configuration.operation_request_ids)
     completion_service, highlight_service = spawn_session_editor_services!(
-        actors, context_module, completion_function, highlight_function,
-        completion_mailbox_capacity)
+        actors, context_module, configuration.completion_function,
+        configuration.highlight_function,
+        configuration.completion_mailbox_capacity)
     evaluator_state = Evaluator(EuclidReplEvaluation.create_eval_runtime(
         context_module; session_generation=generation))
     evaluator = EuclidActorRuntime.spawn!(actors, evaluator_state)
     bound_interpolation = bind_session_interpolation(
-        interpolation_function, context_module)
+        configuration.interpolation_function, context_module)
     shell_interpolation_service = EuclidActorRuntime.spawn!(actors,
         ShellInterpolationService(
             bound_interpolation,
@@ -215,13 +229,17 @@ function create_host_runtime(
             [HotkeyBinding(ToggleTerminal, HotkeyT, UInt8(1), Int32(1))],
             terminal_controller))
     EuclidActorRuntime.send!(actors, hotkey_controller, RegisterHotkeys())
+    active_operation_request_ids = EuclidRepl.create_operation_request_ids()
+    session_configuration = HostSessionConfiguration(
+        completion_function, highlight_function, interpolation_function,
+        Int(completion_mailbox_capacity), active_operation_request_ids)
     session = create_host_session!(
-        actors, states, session_generation, completion_function, highlight_function,
-        interpolation_function, Int(completion_mailbox_capacity))
+        actors, states, session_generation, session_configuration)
     runtime = HostRuntime(
         states, actors, animation_supervisor, animation_supervisor_state,
         false, 0, UInt64(0),
         terminal_controller, hotkey_controller, session,
+        active_operation_request_ids,
         completion_function, highlight_function, interpolation_function,
         Int(completion_mailbox_capacity),
         logger, 0, false, HostShutdownRunning)

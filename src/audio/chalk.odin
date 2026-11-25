@@ -43,8 +43,78 @@ chalk_loop_segment :: proc(cursor, total, requested: u32) -> Chalk_Loop_Segment 
 set_drawing_activity :: proc "contextless" (
     runtime: ^Chalk_Audio_Runtime, active: bool) {
     if runtime != nil {
-        runtime^.drawing_active = active
+        runtime^.julia_drawing_active = active
+        update_drawing_activity(runtime)
     }
+}
+
+// Replace one native producer's activity without silencing other active sources.
+set_native_drawing_activity :: proc "contextless" (
+    runtime: ^Chalk_Audio_Runtime, identity: u64, active: bool) -> bool {
+    if !native_drawing_activity_can_set(runtime, identity, active) {
+        return false
+    }
+    for &source in runtime^.native_drawing_sources {
+        if source.identity == identity {
+            source.active = active
+            update_drawing_activity(runtime)
+            return true
+        }
+    }
+    if !active {
+        return true
+    }
+    free_index := -1
+    for &source, index in runtime^.native_drawing_sources {
+        if free_index < 0 && !source.active {
+            free_index = index
+        }
+    }
+    if free_index < 0 {
+        return false
+    }
+    runtime^.native_drawing_sources[free_index] = {identity, true}
+    update_drawing_activity(runtime)
+    return true
+}
+
+// Report whether a native source identity can be admitted without mutation.
+native_drawing_activity_can_set :: proc "contextless" (
+    runtime: ^Chalk_Audio_Runtime, identity: u64, active: bool) -> bool {
+    if runtime == nil || identity == 0 {
+        return false
+    }
+    if !active {
+        return true
+    }
+    for source in runtime^.native_drawing_sources {
+        if source.identity == identity || !source.active {
+            return true
+        }
+    }
+    return false
+}
+
+// Retire all native contributors during an owning lifecycle transition.
+clear_native_drawing_activity :: proc "contextless" (
+    runtime: ^Chalk_Audio_Runtime) {
+    if runtime == nil {
+        return
+    }
+    for &source in runtime^.native_drawing_sources {
+        source.active = false
+    }
+    update_drawing_activity(runtime)
+}
+
+// Derive the audible aggregate from the independent producer states.
+update_drawing_activity :: proc "contextless" (
+    runtime: ^Chalk_Audio_Runtime) {
+    native_active := false
+    for source in runtime^.native_drawing_sources {
+        native_active = native_active || source.active
+    }
+    runtime^.drawing_active = runtime^.julia_drawing_active || native_active
 }
 
 // Advance the display-independent envelope for the current audible policy.

@@ -80,6 +80,36 @@ function terminal_host_ingest_evaluation(
     return true
 end
 
+"""Retain one generation-correlated native operation outcome for animation policy."""
+function terminal_host_ingest_active_operation_outcome(
+    host::EuclidRuntimeHost,
+    outcome::OdinJuliaBridge.NativeActiveOperationOutcome)::Bool
+    if outcome.request_id == 0 || outcome.session_generation == 0 ||
+        outcome.runtime_generation == 0 ||
+        outcome.animation_generation == 0 ||
+        outcome.outcome_generation == 0 ||
+        outcome.state < OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED ||
+        outcome.state > OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_CANCELLED
+        return false
+    end
+    return EuclidRepl.ingest_active_operation_outcome!(
+        host.reactor.session.euclid_repl_runtime, outcome)
+end
+
+"""Deliver a validated native progress sample to the active Terminal session."""
+function terminal_host_ingest_active_operation_progress(
+    host::EuclidRuntimeHost,
+    progress::OdinJuliaBridge.NativeActiveOperationProgress)::Bool
+    if progress.request_id == 0 || progress.session_generation == 0 ||
+        progress.runtime_generation == 0 ||
+        progress.animation_generation == 0 ||
+        !isfinite(progress.elapsed) || !isfinite(progress.duration)
+        return false
+    end
+    return EuclidRepl.ingest_active_operation_progress!(
+        host.reactor.session.euclid_repl_runtime, progress)
+end
+
 """Deliver bounded bytes only to the matching live Terminal evaluation."""
 function terminal_host_ingest_interactive_input(
     host::EuclidRuntimeHost, request_id::UInt64, source::String,

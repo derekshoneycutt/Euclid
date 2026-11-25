@@ -15,6 +15,7 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, "terminal_host_close_session")
     host^.terminal_ingest_evaluation = julialib.jl_get_function(
         main_module, "terminal_host_ingest_evaluation")
+    bind_julia_active_operation_outcome_callback(host, main_module)
     bind_julia_terminal_interactive_callbacks(host, main_module)
     host^.terminal_ingest_completion_preview = julialib.jl_get_function(
         main_module, "terminal_host_ingest_completion_preview")
@@ -30,6 +31,33 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, "terminal_host_ingest_tick_stream_configuration")
     host^.terminal_ingest_tick_pulse = julialib.jl_get_function(
         main_module, "terminal_host_ingest_tick_pulse")
+    bind_julia_animation_lifecycle_callbacks(host, main_module)
+}
+
+// Bind the outcome callback and its payload type from their owning Julia module.
+bind_julia_active_operation_outcome_callback :: proc(
+    host: ^Julia_Runtime_Host, main_module: ^julialib.jl_module_t) {
+    host^.active_operation_outcome_ingest = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_active_operation_outcome")
+    host^.active_operation_progress_ingest = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_active_operation_progress")
+    bridge_module := julialib.jl_get_global(
+        main_module, julialib.jl_symbol("OdinJuliaBridge"))
+    if bridge_module == nil {
+        host^.active_operation_outcome_type = nil
+        host^.active_operation_progress_type = nil
+    } else {
+        bridge := cast(^julialib.jl_module_t)bridge_module
+        host^.active_operation_outcome_type = julialib.jl_get_global(
+            bridge, julialib.jl_symbol("NativeActiveOperationOutcome"))
+        host^.active_operation_progress_type = julialib.jl_get_global(
+            bridge, julialib.jl_symbol("NativeActiveOperationProgress"))
+    }
+}
+
+// Bind Julia lifecycle callbacks for native animation-owner requests.
+bind_julia_animation_lifecycle_callbacks :: proc(
+    host: ^Julia_Runtime_Host, main_module: ^julialib.jl_module_t) {
     host^.animation_tick = julialib.jl_get_function(
         main_module, "animation_host_tick")
     host^.animation_tick_payload_type = julialib.jl_get_global(
@@ -66,6 +94,10 @@ julia_terminal_callbacks_complete :: proc(host: ^Julia_Runtime_Host) -> bool {
         host^.terminal_start_session != nil &&
         host^.terminal_close_session != nil &&
         host^.terminal_ingest_evaluation != nil &&
+        host^.active_operation_outcome_ingest != nil &&
+        host^.active_operation_outcome_type != nil &&
+        host^.active_operation_progress_ingest != nil &&
+        host^.active_operation_progress_type != nil &&
         host^.terminal_ingest_interactive_input != nil &&
         host^.terminal_ingest_geometry != nil &&
         host^.terminal_ingest_capabilities != nil &&
@@ -103,6 +135,10 @@ report_missing_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) {
         " start=", host^.terminal_start_session != nil,
         " close=", host^.terminal_close_session != nil,
         " ingest=", host^.terminal_ingest_evaluation != nil,
+        " active_operation_outcome=",
+        host^.active_operation_outcome_type != nil,
+        " active_operation_progress=",
+        host^.active_operation_progress_type != nil,
         " completion_preview=", host^.terminal_ingest_completion_preview != nil,
         " completion_candidates=", host^.terminal_ingest_completion_candidates != nil,
         " pump=", host^.terminal_pump != nil,

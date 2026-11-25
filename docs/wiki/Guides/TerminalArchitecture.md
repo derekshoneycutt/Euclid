@@ -840,8 +840,11 @@ hide_exercise!()
 
 - Jobs advance inside Terminal's native animation callback and scene-command capture.
   The display validates and commits results before constraint solving and rendering.
-- Julia owns queue order, phase timing, activation, and finalization; shared native
-  helpers perform drawing and tool mechanics. Animation pause also pauses job progress.
+- Julia owns queue order, activation, and finalization; shared native helpers perform
+  drawing and tool mechanics. Submitted point, line, and circle constructions advance
+  on fixed-step simulation, while other jobs advance in the Terminal animation callback.
+- Simulation pause stops submitted native construction progress. Animation-policy pause
+  stops callback-driven jobs but does not stop a native construction already submitted.
 - Independent `Ticks` callbacks run outside capture: they neither advance drawing jobs
   nor have permission to mutate display-owned tools.
 
@@ -954,6 +957,27 @@ not portable between machines.
   after earlier actions. Queued translations therefore compose.
 - Execution failure blocks later work until reset. Jobs and managed geometry belong
   to one Terminal generation and never carry into the next session.
+- Point, line, and circle constructors submit one native construction operation when
+  they reach the FIFO head. They wait for the matching generation-qualified committed
+  outcome; they do not resubmit on later ticks or finish at the requested duration.
+- Literal-rail Cycloid and rolling-circle jobs submit one native full-duration rolling
+  operation at the FIFO head. Native fixed-step samples preserve directed draw
+  frontiers, exact descent/draw/rise boundaries, and final apparatus state when a step
+  skips a phase boundary. Shared rolling guides and compass joints are claimed for the
+  operation's lifetime; the Terminal retires rolling tools after its matching outcome.
+- Parabola and Hyperbola jobs submit one native full-duration conic operation. Native
+  samples preserve the configured rotated apparatus, directed frontier, selected
+  Hyperbola branches and paired contacts, including exact phase endpoints when a fixed
+  step skips a boundary. The host becomes visible transactionally at the draw-phase
+  boundary and its frontier advances progressively. The shared conic apparatus and host
+  are claimed for the operation lifetime; Julia retires the tool after the matching
+  outcome.
+- Rigid transforms and pen/compass highlights also submit once at the FIFO head.
+  Transform activation captures up to 16 defining-point starts and optional analytic
+  orientation; every point and orientation write commits atomically. Highlight phase
+  transitions and exact apparatus retirement are evaluated by the native operation.
+- A rejected or cancelled native construction blocks queued successors. The native
+  final sample retires its pen or compass before publishing success.
 
 #### Visibility And Progress
 
@@ -961,13 +985,26 @@ not portable between machines.
   `p = point!([0.5,0.5,0]); hide!(p)`.
 - `clear!` queues hiding the Terminal-managed hosts admitted before it, not later
   admissions or unrelated application shapes. Cleared hosts can be shown again.
-- Use animation pause/resume to inspect progress without changing queue order.
+- Pause the fixed-step simulation to inspect submitted native construction progress
+  without changing queue order. Animation-policy pause does not stop native progress.
+- Rolling operations use the same fixed-step pause, generation-qualified completion,
+  and FIFO blocking rules; later Terminal work cannot start before their outcome.
+- Submitted rigid transforms and highlights follow the same fixed-step pause and
+  generation-qualified completion rules as native construction operations.
 - Wait for `status().drained` or `status().failed`, then check failure. `active` alone
   is insufficient because it can be false between actions.
+- For point, line, and circle jobs, `status().elapsed` is the latest accepted native
+  elapsed sample, and `completed_count` advances only after the committed outcome.
+- Rolling-job elapsed time likewise follows accepted native samples; completion waits
+  for the matching committed outcome before advancing the FIFO.
+- Conic-job elapsed time likewise follows accepted native samples; completion waits
+  for its committed outcome before advancing the FIFO.
 
-**Publication limitation:** `drained` and completion counts mean successful Julia
-scene-command capture, not display acknowledgement. Odin can still reject a batch;
-use native diagnostics or semantic evidence to verify publication.
+**Migration boundary:** point, line, circle, Cycloid, rolling-circle, Parabola, and
+Hyperbola completion means native commit. Unmigrated sampled motion, visibility, and
+bounded multi-batch clear retain capture-oriented completion until their own native
+handoff. Neither completion mode means particle settlement or a presented frame; use
+scenario evidence for those separate observations.
 
 ## Terminal Shape Constructors And Motion
 

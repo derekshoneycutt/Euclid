@@ -13,6 +13,7 @@ import terminalservice "../terminal/service"
 import viewevidence "../evidence"
 import capturemodel "../capture/model"
 import uilibrary "../ui/library"
+import animationmodel "../../core/animation"
 
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
 accumulate_and_update_systems :: proc(
@@ -75,6 +76,15 @@ run_deterministic_fixed_step :: proc(
     if !julia.animation_lifecycle_update_needed(state) ||
        uilibrary.library_collection_note_prepare_retirement(state) {
         julia.schedule_animation_tick(state, dt)
+    }
+    if !state^.ui_runtime.playback.construction_paused &&
+        !state^.ui_runtime.playback.animation_policy_paused {
+        rate := capturemodel.gif_capture_playback_rate(
+            state^.ui_runtime.playback.rate,
+            state^.gif_capture_status.gif_capture_phase,
+            state^.gif_capture_status.save_gif_requested)
+        operation_dt := dt * animationmodel.playback_rate_multiplier(rate)
+        julia.advance_active_operations(state, operation_dt)
     }
     run_parallel_simulation_step(state^.simulation_executor, dt)
     state^.fixed_step += 1

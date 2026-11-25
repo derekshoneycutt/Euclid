@@ -6,14 +6,19 @@ import evidence_profile "../../evidence/profile"
 import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
+import operations "../../operations"
 import julialib "../../../libs/julia/bindings"
 import userdata "../../persistence/userdata"
+import particlemodel "../../particles/model"
 
 import "core:encoding/uuid"
 import "core:mem"
 import "core:sync"
 import "core:thread"
 import "core:time"
+
+FORMATION_TIME_INTERVAL_CAPACITY :: particlemodel.FORMATION_TIME_INTERVAL_CAPACITY
+Formation_Time_Interval :: particlemodel.Formation_Time_Interval
 
 JULIA_INBOX_MESSAGE_CAPACITY :: 64
 DISPLAY_INBOX_MESSAGE_CAPACITY :: 64
@@ -64,6 +69,8 @@ Animation_Tick_Slot :: struct {
     accelerated: bool,
     show_completed: bool,
     effective_progress: f64,
+    formation_intervals: [FORMATION_TIME_INTERVAL_CAPACITY]Formation_Time_Interval,
+    formation_interval_count: int,
     submitted_at: time.Tick,
     query_snapshot: Animation_Query_Snapshot,
     scene_batch: Scene_Command_Batch,
@@ -168,6 +175,31 @@ Scenario_View_Content_Requested :: struct {
     animation: ^Euclid_Julia_Animation_Interface,
     mime: presentationmodel.Presentation_Mime,
     source: []u8,
+}
+
+// Active_Operation_Outcome_Ready owns one correlated terminal operation result.
+Active_Operation_Outcome_Ready :: struct {
+    request_id: u64,
+    session_generation: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    outcome_generation: u64,
+    state: u8,
+}
+
+// Active_Operation_Progress_Ready carries one immutable accepted-time observation.
+Active_Operation_Progress_Ready :: struct {
+    request_id: u64,
+    session_generation: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    elapsed: f64,
+    duration: f64,
+}
+
+// Active_Operation_Outcome_Acknowledged returns consumer receipt to display ownership.
+Active_Operation_Outcome_Acknowledged :: struct {
+    identity: operations.Active_Operation_Outcome_Identity,
 }
 
 Runtime_Shutdown_Requested :: struct { request_id: u64 }
@@ -337,6 +369,8 @@ Julia_Host_Ingress :: union {
     protocol.Terminal_Capabilities_Accepted,
     protocol.Tick_Stream_Configuration_Acknowledged,
     protocol.Tick_Pulse,
+    Active_Operation_Progress_Ready,
+    Active_Operation_Outcome_Ready,
 }
 
 // Julia_Host_Egress contains Julia-produced messages borrowed by the display owner.
@@ -351,6 +385,7 @@ Julia_Host_Egress :: union {
     Exercise_Header_Update,
     Exercise_Query_Intent,
     User_Exercise_Intent,
+    Active_Operation_Outcome_Acknowledged,
     protocol.Terminal_Output_Batch,
     protocol.Evaluation_Incomplete,
     protocol.Evaluation_Completed,
@@ -442,6 +477,10 @@ Julia_Runtime_Service :: struct {
     animation_accumulated_dt: f32,
     animation_accumulated_authored_dt: f32,
     animation_accumulated_accelerated: bool,
+    animation_accumulated_intervals:
+        [FORMATION_TIME_INTERVAL_CAPACITY]Formation_Time_Interval,
+    animation_accumulated_interval_count: int,
+    animation_time_backpressured: bool,
     animation_last_commit_accelerated: bool,
     animation_progress: f64,
     animation_ticks_submitted: u64,

@@ -114,6 +114,64 @@ expect_rolling_trochoid_sample :: proc(t: ^testing.T, request: Modifier_Request)
     testing.expect_value(t, output.outputs[6].scalar, parameter)
 }
 
+// Preserve all three rolling phases when one native step skips their boundaries.
+@(test)
+rolling_sequence_samples_preserve_skipped_phases_and_exact_frontier :: proc(
+    t: ^testing.T) {
+    cycloid := rolling_test_request(.Cycloid_Sequence)
+    cycloid.second_entity, cycloid.third_entity = 11, 12
+    cycloid.duration = 2
+    cycloid.third_position = {1, -1, 0.5}
+    testing.expect(t, modifier_request_valid(cycloid))
+    samples := rolling_sequence_samples(cycloid, 0, 0)
+    testing.expect_value(t, samples.count, 1)
+    testing.expect_value(t, samples.requests[0].kind, Modifier_Kind.Cycloid_Descend)
+    samples = rolling_sequence_samples(cycloid, 0, 2)
+    expect_cycloid_sequence_samples(t, samples)
+
+    trochoid := rolling_test_request(.Trochoid_Sequence)
+    trochoid.duration = 2
+    trochoid.integer = 1
+    testing.expect(t, modifier_request_valid(trochoid))
+    expect_trochoid_sequence_samples(t, trochoid)
+}
+
+// Check the ordered Cycloid phase endpoints and exact terminal frontier.
+expect_cycloid_sequence_samples :: proc(
+    t: ^testing.T, samples: Rolling_Sequence_Samples) {
+    testing.expect_value(t, samples.count, 3)
+    testing.expect_value(t, samples.requests[0].kind, Modifier_Kind.Cycloid_Descend)
+    testing.expect_value(t, samples.requests[0].elapsed, f32(0.4))
+    testing.expect_value(t, samples.requests[1].kind, Modifier_Kind.Cycloid_Draw)
+    testing.expect_value(t, samples.requests[1].elapsed, f32(1.2))
+    testing.expect_value(t, samples.requests[2].kind, Modifier_Kind.Cycloid_Rise)
+    testing.expect(t, math.abs(samples.requests[2].elapsed - f32(0.4)) < 1e-6)
+    output: Modifier_Output_Buffer
+    testing.expect_value(t, evaluate_modifier(
+        samples.requests[1], &output), Modifier_Status.Ok)
+    testing.expect_value(t, output.outputs[6].scalar, f32(0.5))
+}
+
+// Check Trochoid phase crossings and hold the exact draw endpoint before rise.
+expect_trochoid_sequence_samples :: proc(
+    t: ^testing.T, request: Modifier_Request) {
+    samples := rolling_sequence_samples(request, 0.3, 0.8)
+    testing.expect_value(t, samples.count, 2)
+    testing.expect_value(t, samples.requests[0].kind, Modifier_Kind.Trochoid_Descend)
+    testing.expect_value(t, samples.requests[1].kind, Modifier_Kind.Trochoid_Draw)
+    samples = rolling_sequence_samples(request, 0.8, 2)
+    testing.expect_value(t, samples.count, 2)
+    testing.expect_value(t, samples.requests[0].kind, Modifier_Kind.Trochoid_Draw)
+    testing.expect_value(t, samples.requests[0].elapsed, f32(1.2))
+    testing.expect_value(t, samples.requests[1].kind, Modifier_Kind.Trochoid_Rise)
+    testing.expect(t, math.abs(samples.requests[1].elapsed - f32(0.4)) < 1e-6)
+    samples = rolling_sequence_samples(request, 0.8, 1.6)
+    testing.expect_value(t, samples.count, 1)
+    testing.expect_value(t, samples.requests[0].kind, Modifier_Kind.Trochoid_Draw)
+    testing.expect_value(t, samples.requests[0].elapsed, f32(1.2))
+    testing.expect_value(t, samples.requests[0].duration, f32(1.2))
+}
+
 // Verify height, visibility, contact, and bounded output contracts at phase boundaries.
 @(test)
 rolling_phase_outputs_are_bounded_and_visibility_is_caller_owned :: proc(t: ^testing.T) {

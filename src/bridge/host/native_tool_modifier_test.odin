@@ -91,8 +91,21 @@ native_compound_abi_kinds_are_closed :: proc(t: ^testing.T) {
         testing.expect(t, valid)
         testing.expect_value(t, actual, kind)
     }
-    _, valid := native_modifier_kind_from_abi(47)
-    testing.expect(t, !valid)
+    kind, valid := native_modifier_kind_from_abi(51)
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, modifier.Modifier_Kind.Pen_Highlight)
+    kind, valid = native_modifier_kind_from_abi(54)
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, modifier.Modifier_Kind.Cycloid_Sequence)
+    kind, valid = native_modifier_kind_from_abi(55)
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, modifier.Modifier_Kind.Trochoid_Sequence)
+    kind, valid = native_modifier_kind_from_abi(56)
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, modifier.Modifier_Kind.Parabola_Sequence)
+    kind, valid = native_modifier_kind_from_abi(57)
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, modifier.Modifier_Kind.Hyperbola_Sequence)
 }
 
 // Preserve caller-owned visibility during pen travel instead of implicitly showing it.
@@ -395,7 +408,7 @@ native_tool_batch_rejects_contact_overflow_before_descent :: proc(t: ^testing.T)
     state^.julia_interface^.current_animation =
         &state^.julia_interface^.null_animation
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     testing.expect_value(t, apply_native_modifier(state, {
         kind = 2,
         entity = 0,

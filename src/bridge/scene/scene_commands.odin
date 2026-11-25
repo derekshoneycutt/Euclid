@@ -2,6 +2,8 @@ package bridge_scene
 
 import bridgemodel "../model"
 import animation_model "../../core/animation"
+import operations "../../operations"
+import modifier "../../animation"
 import "../../core"
 import evidence_trace "../../evidence/trace"
 
@@ -18,6 +20,8 @@ Command_Cycloid_Line :: struct {
 
 SCENE_COMMAND_BATCH_CAPACITY :: bridgemodel.SCENE_COMMAND_BATCH_CAPACITY
 
+REQUESTS_CAPACITY :: operations.ACTIVE_OPERATION_GROUP_TARGET_CAPACITY + 1
+
 //   Per-kind validator shape: report whether one command is valid against state.
 Scene_Command_Validator :: #type proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool
@@ -28,6 +32,7 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Position = validate_command_shape_transform,
     .Set_Shape_Orientation = validate_command_shape_orientation,
     .Apply_Native_Modifier = validate_native_modifier_marker,
+    .Submit_Active_Operation = nil,
     .Set_Shape_Color = validate_command_shape_style,
     .Set_Shape_Active_Color = validate_command_shape_style,
     .Set_Shape_Brush = validate_command_shape_style,
@@ -72,6 +77,7 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Position = apply_set_shape_position,
     .Set_Shape_Orientation = apply_set_shape_orientation,
     .Apply_Native_Modifier = nil,
+    .Submit_Active_Operation = nil,
     .Set_Shape_Color = apply_set_shape_color,
     .Set_Shape_Active_Color = apply_set_shape_active_color,
     .Set_Shape_Brush = apply_set_shape_brush,
@@ -110,6 +116,7 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Shape_Position = .Point_Position_Committed,
     .Set_Shape_Orientation = .Shape_Orientation_Committed,
     .Apply_Native_Modifier = .Unknown,
+    .Submit_Active_Operation = .Unknown,
     .Set_Shape_Color = .Point_Style_Committed,
     .Set_Shape_Active_Color = .Point_Style_Committed,
     .Set_Shape_Brush = .Point_Style_Committed,
@@ -201,10 +208,100 @@ begin_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
 
     batch^ = Scene_Command_Batch{
+        producer = .Julia,
         animation = state^.julia_interface^.current_animation,
     }
     state^.scene_command_batch_target = batch
 }
+
+// Attach one display-owned native producer without borrowing Julia callback identity.
+begin_native_scene_command_batch :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch,
+    producer_identity: u64 = 1) {
+    batch^ = Scene_Command_Batch{
+        producer = .Native,
+        animation_generation = state^.particle_system.formation.animation_generation,
+        tick_sequence = state^.fixed_step + 1,
+        animation_progress = state^.particle_system.formation.accepted_progress,
+        producer_identity = producer_identity,
+    }
+    state^.scene_command_batch_target = batch
+}
+
+// Capture an operation marker and its initial sample at one ordered batch position.
+capture_active_operation_submission :: proc(
+    state: ^core.Euclid_General_State,
+    submission: operations.Active_Operation_Submission_Request) -> bool {
+    batch := state^.scene_command_batch_target
+    requests: [REQUESTS_CAPACITY]modifier.Modifier_Request
+    request_count: int
+    if !active_operation_initial_sample_requests(submission, &requests, &request_count) {
+        return false
+    }
+    if batch == nil || batch^.producer != .Julia ||
+        batch^.active_operation_submission_count >=
+            operations.ACTIVE_OPERATION_SUBMISSIONS_PER_BATCH ||
+        batch^.command_count + 1 + request_count > len(batch^.commands) {
+        if batch != nil {
+            batch^.overflowed = true
+        }
+        return false
+    }
+    marker, _ := append_scene_command(state, .Submit_Active_Operation)
+    if marker == nil {
+        return false
+    }
+    index := batch^.active_operation_submission_count
+    batch^.active_operation_submissions[index].request = submission
+    batch^.active_operation_submission_count += 1
+    marker^.integer = index
+    for request in requests[:request_count] {
+        sample, _ := append_scene_command(state, .Apply_Native_Modifier)
+        assert(sample != nil)
+        sample^.modifier = request
+    }
+    return true
+}
+
+// Expand one copied activation snapshot into its ordered time-zero requests.
+active_operation_initial_sample_requests :: proc(
+    submission: operations.Active_Operation_Submission_Request,
+    requests: ^[REQUESTS_CAPACITY]modifier.Modifier_Request,
+    request_count: ^int) -> bool {
+    initial := submission.modifier_request
+    initial.elapsed = 0
+    if submission.group_transform.count > 0 {
+        return operations.active_operation_group_sample_requests(
+            submission.group_transform, initial, 0, requests, request_count)
+    }
+    if requests == nil || request_count == nil {
+        return false
+    }
+    if initial.kind == .Cycloid_Sequence ||
+        initial.kind == .Trochoid_Sequence {
+        samples := modifier.rolling_sequence_samples(initial, 0, 0)
+        if samples.count <= 0 || samples.count > REQUESTS_CAPACITY {
+            return false
+        }
+        copy(requests[:], samples.requests[:samples.count])
+        request_count^ = samples.count
+        return true
+    }
+    if initial.kind == .Parabola_Sequence ||
+        initial.kind == .Hyperbola_Sequence {
+        samples := modifier.conic_sequence_samples(initial, 0, 0)
+        if samples.count <= 0 || samples.count > REQUESTS_CAPACITY {
+            return false
+        }
+        copy(requests[:], samples.requests[:samples.count])
+        request_count^ = samples.count
+        return true
+    }
+    requests[0] = initial
+    request_count^ = 1
+    return true
+}
+
 
 //   Detach the worker batch after callback capture without mutating canonical scene state.
 end_scene_command_batch :: proc(state: ^core.Euclid_General_State) {
@@ -259,4 +356,3 @@ capture_particle_command :: proc "contextless" (
     }
     return captured
 }
-

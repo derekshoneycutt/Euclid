@@ -6,6 +6,7 @@ import core "../core"
 import exerciseheader "../core/exercise_header"
 import viewpresentation "presentation"
 import terminalservice "terminal/service"
+import operations "../operations"
 import "core:log"
 
 // Route one non-event Julia envelope to its display-owned subsystem.
@@ -21,26 +22,47 @@ julia_egress_router_dispatch :: proc(
     if julia_egress_router_dispatch_exercise_operation(runtime.state, message) {
         return
     }
+    if receipt, is_receipt := message^.(
+        bridgemodel.Active_Operation_Outcome_Acknowledged); is_receipt {
+        julia_egress_router_acknowledge_active_operation(
+            runtime^.state, receipt.identity)
+        return
+    }
     if update, is_update := message^.(bridgemodel.Exercise_Header_Update);
         is_update {
-        state := runtime^.state
-        if state^.terminal.initialized &&
-            state^.julia_runtime_service != nil &&
-            update.request_id > state^.exercise_header.last_request_id &&
-            state^.julia_runtime_service^.animation_generation ==
-                update.animation_generation {
-            state^.exercise_header.last_request_id = update.request_id
-            if update.visible {
-                if !exerciseheader.show(&state^.exercise_header, update.text) {
-                    log.error("exercise_header_update_rejected_after_admission")
-                }
-            } else {
-                exerciseheader.hide(&state^.exercise_header)
-            }
-        }
+        julia_egress_router_apply_exercise_header_update(runtime^.state, update)
         return
     }
     _ = terminalservice.terminal_service_dispatch_egress(runtime^.state, message)
+}
+
+// Release only the outcome named by an exact Julia consumer receipt.
+julia_egress_router_acknowledge_active_operation :: proc(
+    state: ^core.Euclid_General_State,
+    identity: operations.Active_Operation_Outcome_Identity) {
+    status := bridge.active_operation_acknowledge_outcome(state, identity)
+    if status != bridgemodel.BRIDGE_STATUS_OK {
+        log.error("active_operation_outcome_acknowledgment_rejected")
+    }
+}
+
+// Apply a header update only when its Terminal and animation generations remain live.
+julia_egress_router_apply_exercise_header_update :: proc(
+    state: ^core.Euclid_General_State,
+    update: bridgemodel.Exercise_Header_Update) {
+    if state^.terminal.initialized && state^.julia_runtime_service != nil &&
+        update.request_id > state^.exercise_header.last_request_id &&
+        state^.julia_runtime_service^.animation_generation ==
+            update.animation_generation {
+        state^.exercise_header.last_request_id = update.request_id
+        if update.visible {
+            if !exerciseheader.show(&state^.exercise_header, update.text) {
+                log.error("exercise_header_update_rejected_after_admission")
+            }
+        } else {
+            exerciseheader.hide(&state^.exercise_header)
+        }
+    }
 }
 
 // Route built-in and user exercise work through their respective display owners.

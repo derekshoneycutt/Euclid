@@ -8,7 +8,8 @@ Key behavior:
 - bounded FIFO actions run to natural completion without replacement,
 - drawn geometry persists until Terminal session reset/restart.
 
-`status().drained` reports successful command capture, not native publication.
+`status().drained` waits for committed native completion for point, line, and
+circle jobs; other jobs retain capture-oriented completion during migration.
 Use ordinary animation pause/resume; the former finish-now `stop!` is removed.
 Use `show_exercise!` and `hide_exercise!` to control the persistent plain-text
 instruction header without resetting the Terminal session.
@@ -48,12 +49,32 @@ export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
     translate_points!, rotate_points!, rotate_points_x!, rotate_points_y!,
     rotate_points_z!, reflect2d_points!, reflect2d_points_x_axis!,
     reflect2d_points_y_axis!, reflect2d_points_diag_pos!, reflect2d_points_diag_neg!,
-    ACTION_QUEUE_CAPACITY, TRANSFORM_POINT_CAPACITY, clear!, status
+    ACTION_QUEUE_CAPACITY, ACTIVE_OPERATION_OUTCOME_CAPACITY,
+    TRANSFORM_POINT_CAPACITY, clear!, ingest_active_operation_outcome!,
+    status, take_active_operation_outcome!
 
 const ACTION_QUEUE_CAPACITY = 32
 const TRANSFORM_POINT_CAPACITY = 16
+const ACTIVE_OPERATION_OUTCOME_CAPACITY = 16
 """Native scene-command ceiling from bridge/model/model.odin for ordered clears."""
 const CLEAR_COMMAND_CAPACITY = 256
+
+"""Persistent native operation request identities shared across Terminal sessions."""
+mutable struct ReplOperationRequestIds
+    next::UInt64
+end
+
+"""Create a request identity source that survives generation-local REPL resets."""
+create_operation_request_ids() = ReplOperationRequestIds(UInt64(1))
+
+"""Reserve one nonzero request identity without wrapping into retained results."""
+function next_operation_request_id!(ids::ReplOperationRequestIds)::UInt64
+    ids.next > 0 && ids.next < typemax(UInt64) ||
+        error("native operation request identity space is exhausted")
+    request_id = ids.next
+    ids.next += UInt64(1)
+    return request_id
+end
 
 const DEFAULT_POINT_DURATION = 5.5f0
 const DEFAULT_LINE_DURATION = 7.5f0
@@ -128,12 +149,11 @@ struct RegionPayload <: ReplDrawPayload
     reveal_duration::Float32
 end
 
-mutable struct PolygonPayload <: ReplDrawPayload
+struct PolygonPayload <: ReplDrawPayload
     host_id::UInt64
     vertex_ids::Vector{UInt64}
     vertices::Vector{Vector{Float32}}
     color
-    reveal_started::Bool
 end
 
 struct CycloidPayload <: ReplDrawPayload
@@ -257,11 +277,20 @@ mutable struct ReplDrawJob
     elapsed::Float32
     payload::ReplDrawPayload
     activated::Bool
+    native_request_id::UInt64
+    native_session_generation::UInt64
+    native_runtime_generation::UInt64
+    native_animation_generation::UInt64
+    native_elapsed::Float32
+    native_submitted::Bool
+    native_outcome_state::NativeActiveOperationOutcomeState
 end
 
 """Construct an unactivated action without allocating per-tick state."""
 ReplDrawJob(kind, duration, elapsed, payload) =
-    ReplDrawJob(kind, duration, elapsed, payload, false)
+    ReplDrawJob(kind, duration, elapsed, payload, false,
+        0, 0, 0, 0, 0f0, false,
+        OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_PENDING)
 
 """Generation-owned fixed FIFO slots and persistent managed geometry identities."""
 mutable struct ReplDrawSession
@@ -278,14 +307,219 @@ end
 """Generation-local EuclidRepl state owned by one Terminal session."""
 mutable struct EuclidReplRuntime
     session::ReplDrawSession
+    active_operation_outcomes::Vector{NativeActiveOperationOutcome}
+    active_operation_outcome_head::Int
+    active_operation_outcome_count::Int
+    operation_request_ids::ReplOperationRequestIds
+    session_generation::UInt64
+    runtime_generation::UInt64
+    animation_generation::UInt64
 end
 
 """Create empty EuclidRepl state for one Terminal session generation."""
-function create_runtime()
+function create_runtime(
+    request_ids::ReplOperationRequestIds=create_operation_request_ids();
+    session_generation::UInt64=UInt64(0))
     slots = Vector{Union{Nothing,ReplDrawJob}}(undef, ACTION_QUEUE_CAPACITY)
     fill!(slots, nothing)
+    outcomes = Vector{NativeActiveOperationOutcome}(
+        undef, ACTIVE_OPERATION_OUTCOME_CAPACITY)
     return EuclidReplRuntime(ReplDrawSession(
-        nothing, UInt64[], slots, 1, 0, 0, false, false))
+        nothing, UInt64[], slots, 1, 0, 0, false, false),
+        outcomes, 1, 0, request_ids, session_generation, 0, 0)
+end
+
+"""Refresh identities; built-in Terminal ticks use their animation generation as runtime identity."""
+function set_active_operation_context!(
+    runtime::EuclidReplRuntime, session_generation::UInt64,
+    runtime_generation::UInt64, animation_generation::UInt64)::Nothing
+    runtime.session_generation = session_generation
+    runtime.runtime_generation =
+        runtime_generation == 0 ? animation_generation : runtime_generation
+    runtime.animation_generation = animation_generation
+    return nothing
+end
+
+"""Retain one correlated operation outcome in the owning Terminal session."""
+function ingest_active_operation_outcome!(
+    runtime::EuclidReplRuntime, outcome::NativeActiveOperationOutcome)::Bool
+    for offset in 0:(runtime.active_operation_outcome_count - 1)
+        index = mod1(runtime.active_operation_outcome_head + offset,
+            ACTIVE_OPERATION_OUTCOME_CAPACITY)
+        retained = runtime.active_operation_outcomes[index]
+        if retained.request_id == outcome.request_id &&
+            retained.session_generation == outcome.session_generation &&
+            retained.runtime_generation == outcome.runtime_generation &&
+            retained.animation_generation == outcome.animation_generation &&
+            retained.outcome_generation == outcome.outcome_generation
+            retained.state == outcome.state || return false
+            record_active_job_outcome!(runtime, outcome)
+            return true
+        end
+    end
+    runtime.active_operation_outcome_count < ACTIVE_OPERATION_OUTCOME_CAPACITY ||
+        return false
+    index = mod1(
+        runtime.active_operation_outcome_head +
+            runtime.active_operation_outcome_count,
+        ACTIVE_OPERATION_OUTCOME_CAPACITY)
+    runtime.active_operation_outcomes[index] = outcome
+    runtime.active_operation_outcome_count += 1
+    record_active_job_outcome!(runtime, outcome)
+    return true
+end
+
+"""Record a result only when its operation and all owner generations match."""
+function record_active_job_outcome!(
+    runtime::EuclidReplRuntime, outcome::NativeActiveOperationOutcome)::Nothing
+    job = runtime.session.active_job
+    job === nothing && return nothing
+    if job.native_submitted &&
+        job.native_request_id == outcome.request_id &&
+        job.native_session_generation == outcome.session_generation &&
+        job.native_runtime_generation == outcome.runtime_generation &&
+        job.native_animation_generation == outcome.animation_generation
+        job.native_outcome_state = outcome.state
+    end
+    return nothing
+end
+
+"""Update only the active job matching one generation-qualified native sample."""
+function ingest_active_operation_progress!(
+    runtime::EuclidReplRuntime,
+    progress::NativeActiveOperationProgress)::Bool
+    active_operation_progress_valid(progress) || return false
+    job = runtime.session.active_job
+    job === nothing && return true
+    active_operation_progress_matches(job, progress) || return true
+    progress.duration == Float64(job.duration) || return false
+    sample = Float32(progress.elapsed)
+    if sample >= job.native_elapsed
+        job.native_elapsed = sample
+        job.elapsed = sample
+    end
+    return true
+end
+
+"""Validate identity and timing fields before routing native progress."""
+function active_operation_progress_valid(
+    progress::NativeActiveOperationProgress)::Bool
+    return progress.request_id > 0 &&
+        progress.session_generation > 0 &&
+        progress.runtime_generation > 0 &&
+        progress.animation_generation > 0 &&
+        isfinite(progress.elapsed) && isfinite(progress.duration) &&
+        progress.elapsed >= 0 && progress.duration > 0 &&
+        progress.elapsed <= progress.duration
+end
+
+"""Match a native progress sample to the job that owns its full identity."""
+function active_operation_progress_matches(
+    job::ReplDrawJob, progress::NativeActiveOperationProgress)::Bool
+    return job.native_submitted &&
+        job.native_request_id == progress.request_id &&
+        job.native_session_generation == progress.session_generation &&
+        job.native_runtime_generation == progress.runtime_generation &&
+        job.native_animation_generation == progress.animation_generation
+end
+
+"""Take the oldest result after the display owner admits its correlated receipt."""
+function take_active_operation_outcome!(
+    runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid})::Union{Nothing,NativeActiveOperationOutcome}
+    return take_active_operation_outcome!(
+        runtime, outcome ->
+            OdinJuliaBridge.acknowledge_active_operation_outcome!(
+                state_ptr, outcome))
+end
+
+"""Retire one queued result only after its receipt publisher succeeds."""
+function take_active_operation_outcome!(
+    runtime::EuclidReplRuntime,
+    acknowledge::Function)::Union{Nothing,NativeActiveOperationOutcome}
+    runtime.active_operation_outcome_count == 0 && return nothing
+    index = runtime.active_operation_outcome_head
+    outcome = runtime.active_operation_outcomes[index]
+    acknowledge(outcome) === false &&
+        throw(ErrorException("native operation outcome receipt mailbox is full"))
+    record_active_job_outcome!(runtime, outcome)
+    remove_active_operation_outcome!(runtime)
+    return outcome
+end
+
+"""Acknowledge every queued result before its Terminal session is retired."""
+function discard_active_operation_outcomes!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})::Bool
+    return discard_active_operation_outcomes!(
+        runtime, outcome ->
+            OdinJuliaBridge.acknowledge_active_operation_outcome!(
+                state_ptr, outcome))
+end
+
+"""Retire queued results until receipt publication reaches backpressure."""
+function discard_active_operation_outcomes!(
+    runtime::EuclidReplRuntime, acknowledge::Function)::Bool
+    while runtime.active_operation_outcome_count > 0
+        outcome = runtime.active_operation_outcomes[
+            runtime.active_operation_outcome_head]
+        acknowledge(outcome) === false && return false
+        remove_active_operation_outcome!(runtime)
+    end
+    return true
+end
+
+"""Acknowledge stale-session results while preserving the live session's FIFO."""
+function discard_stale_active_operation_outcomes!(
+    runtime::EuclidReplRuntime, session_generation::UInt64,
+    state_ptr::Ptr{Cvoid})::Bool
+    return discard_stale_active_operation_outcomes!(
+        runtime, session_generation, outcome ->
+            OdinJuliaBridge.acknowledge_active_operation_outcome!(
+                state_ptr, outcome))
+end
+
+"""Remove only mismatched session results, stopping safely at receipt backpressure."""
+function discard_stale_active_operation_outcomes!(
+    runtime::EuclidReplRuntime, session_generation::UInt64,
+    acknowledge::Function)::Bool
+    offset = 0
+    while offset < runtime.active_operation_outcome_count
+        index = mod1(
+            runtime.active_operation_outcome_head + offset,
+            ACTIVE_OPERATION_OUTCOME_CAPACITY)
+        outcome = runtime.active_operation_outcomes[index]
+        if outcome.session_generation == session_generation
+            offset += 1
+            continue
+        end
+        acknowledge(outcome) === false && return false
+        remove_active_operation_outcome_at!(runtime, offset)
+    end
+    return true
+end
+
+"""Remove the current queue head after its receipt is safely published."""
+function remove_active_operation_outcome!(runtime::EuclidReplRuntime)::Nothing
+    runtime.active_operation_outcome_head =
+        mod1(runtime.active_operation_outcome_head + 1,
+            ACTIVE_OPERATION_OUTCOME_CAPACITY)
+    runtime.active_operation_outcome_count -= 1
+    return nothing
+end
+
+"""Remove one queue offset while retaining FIFO order for later outcomes."""
+function remove_active_operation_outcome_at!(
+    runtime::EuclidReplRuntime, offset::Int)::Nothing
+    for shift in offset:(runtime.active_operation_outcome_count - 2)
+        destination = mod1(
+            runtime.active_operation_outcome_head + shift,
+            ACTIVE_OPERATION_OUTCOME_CAPACITY)
+        source = mod1(destination + 1, ACTIVE_OPERATION_OUTCOME_CAPACITY)
+        runtime.active_operation_outcomes[destination] =
+            runtime.active_operation_outcomes[source]
+    end
+    runtime.active_operation_outcome_count -= 1
+    return nothing
 end
 
 """Install shared bindings for one generation's fresh Terminal module."""
@@ -657,6 +891,18 @@ function install_session_helpers!(
     install_exercise_header_helpers!(context_module)
     install_exercise_query_helpers!(context_module)
     install_user_exercise_helpers!(context_module)
+    install_active_operation_outcome_helpers!(context_module)
+    return nothing
+end
+
+"""Install the session-scoped active-operation result consumer."""
+function install_active_operation_outcome_helpers!(context_module::Module)::Nothing
+    Core.eval(context_module, quote
+        """Take and acknowledge the oldest native operation result, if present."""
+        take_active_operation_outcome!() =
+            EuclidRepl.take_active_operation_outcome!(
+                EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
+    end)
     return nothing
 end
 
@@ -1128,12 +1374,6 @@ function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::RegionPayload)
         "region completion")
 end
 
-"""Finalize a polygon after edge tracing and its filled-region reveal."""
-function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::PolygonPayload)
-    checked_terminal_status(OdinJuliaBridge.show_point(state_ptr, payload.host_id),
-        "polygon completion")
-end
-
 """Commit a Cycloid's exact frontier even when a tick skipped its last draw frame."""
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::CycloidPayload)
     checked_terminal_status(OdinJuliaBridge.set_cycloid_frontier(
@@ -1237,57 +1477,6 @@ render_payload!(_state::Ptr{Cvoid}, _elapsed::Real, _duration::Real,
 """Wait for the region reveal started when this action was activated."""
 render_payload!(_state::Ptr{Cvoid}, _elapsed::Real, _duration::Real,
     _payload::RegionPayload) = nothing
-
-"""Start the polygon fill reveal once elapsed time reaches its phase."""
-function start_polygon_reveal_if_due!(
-    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real,
-    payload::PolygonPayload, reveal_region)
-    reveal_start = duration * 0.7f0
-    if elapsed >= reveal_start && !payload.reveal_started
-        reveal_duration = duration * 0.15f0
-        result = reveal_region(
-            state_ptr, payload.host_id, reveal_duration)
-        checked_terminal_status(result, "polygon reveal")
-        payload.reveal_started = true
-    end
-    return nothing
-end
-
-"""Trace polygon edges, reveal its fill, and raise the pen."""
-function render_payload!(
-    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::PolygonPayload)
-    descend = duration * 0.15f0
-    draw = duration * 0.55f0
-    reveal = duration * 0.15f0
-    rise_start = descend + draw + reveal
-    start_polygon_reveal_if_due!(
-        state_ptr, elapsed, duration, payload, OdinJuliaBridge.reveal_region!)
-    if elapsed < descend
-        first = payload.vertices[1]
-        EuclidAnimations.animate_pen_descend(state_ptr, elapsed, descend,
-            HIGHLIGHT_TOOL_TOP_Z, first[1], first[2])
-    elseif elapsed < descend + draw
-        render_polygon_edges!(state_ptr, elapsed - descend, draw, payload)
-    elseif elapsed >= rise_start
-        last = payload.vertices[1]
-        EuclidAnimations.animate_pen_rise(state_ptr, elapsed - rise_start,
-            duration - rise_start, HIGHLIGHT_TOOL_TOP_Z, last[1], last[2])
-    end
-end
-
-"""Render the active edge of a polygon's ordered pen path."""
-function render_polygon_edges!(
-    state_ptr::Ptr{Cvoid}, elapsed::Real, duration::Real, payload::PolygonPayload)
-    edge_count = length(payload.vertices)
-    edge_duration = duration / edge_count
-    edge = min(floor(Int, elapsed / edge_duration) + 1, edge_count)
-    edge_elapsed = elapsed - (edge - 1) * edge_duration
-    start = payload.vertices[edge]
-    finish = payload.vertices[mod1(edge + 1, edge_count)]
-    azimuth = atan(finish[2] - start[2], finish[1] - start[1])
-    EuclidAnimations.animate_pen_drag(state_ptr, edge_elapsed, edge_duration,
-        start, finish, π / 3f0, azimuth, payload.color)
-end
 
 """Animate one literal-rail Cycloid through descent, frontier, and tool retirement."""
 function render_payload!(
@@ -1755,6 +1944,7 @@ function run_active_job_frame!(
     dt::Real)
 
     session = ensure_session!(runtime)
+    resolve_native_job_outcome!(runtime, state_ptr, session)
     session.failed && return nothing
     if session.awaiting_snapshot
         session.awaiting_snapshot = false
@@ -1772,7 +1962,7 @@ function run_active_job_frame!(
 
     succeeded = false
     try
-        execute_job_frame!(state_ptr, session, job, dt)
+        execute_job_frame!(runtime, state_ptr, session, job, dt)
         succeeded = true
     finally
         if !succeeded
@@ -1781,12 +1971,288 @@ function run_active_job_frame!(
     end
 end
 
-"""Advance one action; completion means capture succeeded, not native publication."""
+"""Resolve the active native job only after its correlated receipt is acknowledged."""
+function resolve_native_job_outcome!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    session::ReplDrawSession)::Nothing
+    job = session.active_job
+    job === nothing && return nothing
+    state = job.native_outcome_state
+    if state == OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_COMMITTED
+        acknowledge_active_job_outcomes!(runtime, state_ptr, job) || return nothing
+        job.payload isa Union{
+            CycloidPayload,TrochoidPayload,ParabolaPayload,HyperbolaPayload} &&
+            retire_job_tool!(state_ptr, job)
+        job.elapsed = job.duration
+        job.native_elapsed = job.duration
+        session.completed_count += 1
+        session.active_job = nothing
+        session.awaiting_snapshot = true
+    elseif state == OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_REJECTED ||
+        state == OdinJuliaBridge.NATIVE_OPERATION_OUTCOME_CANCELLED
+        acknowledge_active_job_outcomes!(runtime, state_ptr, job) || return nothing
+        job.payload isa Union{
+            CycloidPayload,TrochoidPayload,ParabolaPayload,HyperbolaPayload} &&
+            retire_job_tool!(state_ptr, job)
+        session.failed = true
+    end
+    return nothing
+end
+
+"""Build the native pen recipe for one reserved point."""
+function native_construction_request(
+    job::ReplDrawJob, payload::PointPayload)
+    return OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_CONSTRUCT_POINT;
+        entity=payload.point_id, duration=job.duration,
+        start_position=payload.pos, radius=EuclidAnimations.PenLength,
+        brush=payload.brush, color=payload.color)
+end
+
+"""Build the native pen recipe for one reserved line."""
+function native_construction_request(
+    job::ReplDrawJob, payload::LinePayload)
+    return OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_CONSTRUCT_LINE;
+        entity=payload.host_id, second_entity=payload.start_id,
+        third_entity=payload.end_id, duration=job.duration,
+        start_position=payload.start_pos, second_position=payload.end_pos,
+        radius=EuclidAnimations.PenLength, brush=payload.brush,
+        color=payload.color)
+end
+
+"""Build the native compass recipe for one reserved circle or sector."""
+function native_construction_request(
+    job::ReplDrawJob, payload::CirclePayload)
+    kind = payload.filled ?
+        OdinJuliaBridge.NATIVE_MODIFIER_CONSTRUCT_FILLED_CIRCLE :
+        OdinJuliaBridge.NATIVE_MODIFIER_CONSTRUCT_CIRCLE
+    return OdinJuliaBridge.native_modifier_request(
+        kind; entity=payload.host_id, second_entity=2, third_entity=3,
+        duration=job.duration, start_position=payload.center,
+        second_position=payload.start_pos, angle=payload.sweep_theta,
+        radius=payload.radius, brush=payload.brush, color=payload.color,
+        flag=payload.filled)
+end
+
+"""Build one bounded group-transform submission from activation-time starts."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::TransformPayload) =
+        native_group_transform_request(payload, job.duration)
+
+"""Build the native full-duration pen highlight recipe."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::PenHighlightPayload) =
+        OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PEN_HIGHLIGHT_SEQUENCE;
+            entity=0, second_entity=1, duration=job.duration,
+            start_position=payload.start_pos, second_position=payload.end_pos,
+            radius=EuclidAnimations.PenLength,
+            angle=EuclidAnimations.PenDrawLineAngle, color=payload.color)
+
+"""Build the native full-duration compass highlight recipe."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::CompassHighlightPayload) =
+        OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_COMPASS_HIGHLIGHT_SEQUENCE;
+            entity=2, second_entity=3, duration=job.duration,
+            start_position=payload.center, second_position=payload.start_pos,
+            angle=payload.angle_theta, radius=payload.radius,
+            color=payload.color, flag=payload.filled)
+
+"""Build one bounded native full-duration request for a Cycloid job."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::CycloidPayload) =
+        OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_CYCLOID_SEQUENCE;
+            entity=payload.host_id, second_entity=payload.endpoint_ids[1],
+            third_entity=payload.endpoint_ids[2], duration=job.duration,
+            start_position=payload.first, second_position=payload.second,
+            third_position=(payload.parameter_start, payload.parameter_finish,
+                payload.draw_parameter),
+            displacement=(payload.tracer_distance, payload.tracer_phase, 0f0),
+            radius=payload.rolling_radius, scalar=CURVE_TOOL_TOP_Z,
+            brush=payload.brush, color=payload.color)
+
+"""Build one bounded native full-duration request for a Trochoid job."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::TrochoidPayload) =
+        OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_TROCHOID_SEQUENCE;
+            entity=payload.host_id, duration=job.duration,
+            start_position=payload.center,
+            third_position=(payload.parameter_start, payload.parameter_finish,
+                payload.draw_parameter),
+            displacement=(payload.fixed_radius, payload.tracer_distance,
+                payload.tracer_phase),
+            angle=payload.rotation, radius=payload.rolling_radius,
+            scalar=CURVE_TOOL_TOP_Z, integer=payload.mode,
+            brush=payload.brush, color=payload.color)
+
+"""Build one bounded native full-duration request for a Parabola job."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::ParabolaPayload) =
+        OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_PARABOLA_SEQUENCE;
+            entity=payload.host_id, duration=job.duration,
+            start_position=payload.vertex,
+            third_position=(payload.parameter_start, payload.parameter_finish,
+                payload.draw_parameter),
+            angle=payload.rotation, radius=payload.focal_distance,
+            scalar=CURVE_TOOL_TOP_Z, brush=payload.brush,
+            color=payload.color)
+
+"""Build one bounded native full-duration request for a Hyperbola job."""
+native_active_operation_request(
+    job::ReplDrawJob, payload::HyperbolaPayload) =
+        OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_HYPERBOLA_SEQUENCE;
+            entity=payload.host_id, duration=job.duration,
+            start_position=payload.center,
+            third_position=(payload.parameter_start, payload.parameter_finish,
+                payload.draw_parameter),
+            displacement=(payload.semiminor, 0f0, 0f0),
+            angle=payload.rotation, radius=payload.semimajor,
+            scalar=CURVE_TOOL_TOP_Z,
+            integer=OdinJuliaBridge.hyperbola_branches(payload.branches),
+            brush=payload.brush, color=payload.color)
+
+"""Capture one construction submission and retain its full matching identity."""
+function submit_native_construction_job!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
+    runtime.session_generation > 0 && runtime.runtime_generation > 0 &&
+        runtime.animation_generation > 0 ||
+        error("native construction has no active generation context")
+    request_id = next_operation_request_id!(runtime.operation_request_ids)
+    request = native_construction_request(job, job.payload)
+    status = OdinJuliaBridge.submit_active_modifier!(
+        state_ptr, request_id, request)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("native construction submission failed with status $status")
+    job.native_request_id = request_id
+    job.native_session_generation = runtime.session_generation
+    job.native_runtime_generation = runtime.runtime_generation
+    job.native_animation_generation = runtime.animation_generation
+    job.native_elapsed = 0f0
+    job.native_submitted = true
+    return nothing
+end
+
+"""Submit one native transform or highlight exactly once from the Terminal FIFO."""
+function submit_native_motion_job!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
+    runtime.session_generation > 0 && runtime.runtime_generation > 0 &&
+        runtime.animation_generation > 0 ||
+        error("native motion has no active generation context")
+    request_id = next_operation_request_id!(runtime.operation_request_ids)
+    request = native_active_operation_request(job, job.payload)
+    status = job.payload isa TransformPayload ?
+        OdinJuliaBridge.submit_active_group_transform!(
+            state_ptr, request_id, request) :
+        OdinJuliaBridge.submit_active_modifier!(state_ptr, request_id, request)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("native motion submission failed with status $status")
+    job.native_request_id = request_id
+    job.native_session_generation = runtime.session_generation
+    job.native_runtime_generation = runtime.runtime_generation
+    job.native_animation_generation = runtime.animation_generation
+    job.native_elapsed = 0f0
+    job.native_submitted = true
+    return nothing
+end
+
+"""Acknowledge and remove retained outcomes owned by one active REPL construction."""
+function acknowledge_active_job_outcomes!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    job::ReplDrawJob)::Bool
+    offset = 0
+    while offset < runtime.active_operation_outcome_count
+        index = mod1(runtime.active_operation_outcome_head + offset,
+            ACTIVE_OPERATION_OUTCOME_CAPACITY)
+        outcome = runtime.active_operation_outcomes[index]
+        if outcome.request_id != job.native_request_id ||
+            outcome.session_generation != job.native_session_generation ||
+            outcome.runtime_generation != job.native_runtime_generation ||
+            outcome.animation_generation != job.native_animation_generation
+            offset += 1
+            continue
+        end
+        acknowledged = OdinJuliaBridge.acknowledge_active_operation_outcome!(
+            state_ptr, outcome)
+        acknowledged || return false
+        remove_active_operation_outcome_at!(runtime, offset)
+    end
+    return true
+end
+
+"""Submit a migrated job using the appropriate native request adapter."""
+function submit_native_operation_job!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
+    if job.payload isa PolygonPayload
+        submit_native_polygon_trace_job!(runtime, state_ptr, job)
+    elseif job.payload isa Union{PointPayload,LinePayload,CirclePayload}
+        submit_native_construction_job!(runtime, state_ptr, job)
+    else
+        submit_native_motion_job!(runtime, state_ptr, job)
+    end
+end
+
+"""Build a fixed-size ABI request from the polygon's ordered reserved vertices."""
+function native_polygon_trace_request(job::ReplDrawJob, payload::PolygonPayload)
+    modifier = OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_ACTIVE_POLYGON_TRACE;
+        entity=payload.host_id, duration=job.duration,
+        radius=EuclidAnimations.PenLength, color=payload.color)
+    empty_position = (Cfloat(0), Cfloat(0), Cfloat(0))
+    vertices = ntuple(OdinJuliaBridge.POLYGON_TRACE_VERTEX_CAPACITY) do index
+        if index > length(payload.vertex_ids)
+            return OdinJuliaBridge.BridgeActivePolygonTraceTarget(UInt64(0),
+                empty_position)
+        end
+        position = payload.vertices[index]
+        OdinJuliaBridge.BridgeActivePolygonTraceTarget(
+            payload.vertex_ids[index],
+            (Cfloat(position[1]), Cfloat(position[2]), Cfloat(position[3])))
+    end
+    return OdinJuliaBridge.BridgeActivePolygonTraceRequest(
+        modifier, Int32(length(payload.vertex_ids)), vertices)
+end
+
+"""Submit one native polygon trace exactly once from the Terminal FIFO."""
+function submit_native_polygon_trace_job!(
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
+    runtime.session_generation > 0 && runtime.runtime_generation > 0 &&
+        runtime.animation_generation > 0 ||
+        error("native polygon trace has no active generation context")
+    request_id = next_operation_request_id!(runtime.operation_request_ids)
+    request = native_polygon_trace_request(job, job.payload)
+    status = OdinJuliaBridge.submit_active_polygon_trace!(
+        state_ptr, request_id, request)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        error("native polygon trace submission failed with status $status")
+    job.native_request_id = request_id
+    job.native_session_generation = runtime.session_generation
+    job.native_runtime_generation = runtime.runtime_generation
+    job.native_animation_generation = runtime.animation_generation
+    job.native_elapsed = 0f0
+    job.native_submitted = true
+    return nothing
+end
+
+"""Advance sampled actions normally; migrated constructions submit once and wait."""
 function execute_job_frame!(
-    state_ptr::Ptr{Cvoid}, session::ReplDrawSession, job::ReplDrawJob, dt::Real)
+    runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid},
+    session::ReplDrawSession, job::ReplDrawJob, dt::Real)
     if !job.activated
         activate_payload!(state_ptr, job.payload)
         job.activated = true
+    end
+    if job.payload isa Union{
+        PointPayload,LinePayload,CirclePayload,TransformPayload,
+        PenHighlightPayload,CompassHighlightPayload,PolygonPayload,
+        CycloidPayload,TrochoidPayload,ParabolaPayload,HyperbolaPayload}
+        job.native_submitted || submit_native_operation_job!(runtime, state_ptr, job)
+        return
     end
     job.elapsed = min(job.duration, job.elapsed + max(0f0, Float32(dt)))
     render_payload!(state_ptr, job.elapsed, job.duration, job.payload)
@@ -1999,7 +2465,7 @@ function show!(
     return nothing
 end
 
-"""Inspect FIFO capture progress; `drained` excludes failed or pending work, not native rejection."""
+"""Inspect FIFO progress; migrated constructors drain only after native commit."""
 function status(
     host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
 
@@ -2022,7 +2488,7 @@ function status(
     return ReplStatus(
         true,
         job.kind,
-        job.elapsed,
+        job.native_submitted ? job.native_elapsed : job.elapsed,
         job.duration,
         nothing,
         length(session.managed_host_ids),
@@ -2250,7 +2716,7 @@ function queue_polygon!(
     require_action_capacity(session)
     shape = checked_constructor_result(constructor(points, shape_color), String(kind))
     ids = polygon_vertex_ids(shape)
-    payload = PolygonPayload(shape.host_id, ids, points, shape_color, false)
+    payload = PolygonPayload(shape.host_id, ids, points, shape_color)
     start_job!(runtime, state_ptr, ReplDrawJob(:polygon, draw_duration, 0f0, payload))
     track_managed_host!(session, shape.host_id)
     return shape

@@ -86,9 +86,14 @@ and [`terminal-world-curves-acceptance`](../../../tools/scenarios/geometry/termi
 (vertical/oblique cycloids, ellipses, conics, departure and allocation baselines).
 The native basic path is covered by
 [`native-basic-acceptance`](../../../tools/scenarios/geometry/native-basic-acceptance.jsonl),
-which covers Terminal point/line/circle construction, allocation samples, capture,
-and shutdown with particle effects disabled. It does not establish intermediate
-tool-pose parity or allocation stability across repeated operations.
+which covers Terminal point/line/circle construction interleaved with hide/show and
+clear, allocation samples, capture, and shutdown with particle effects disabled. Its
+FIFO drain check observes committed native construction outcomes rather than Julia
+capture alone. Julia
+regressions additionally cover submit-once behavior, generation-qualified progress,
+terminal outcome handling, rejection blocking, and request-ID reuse across Terminal
+session recreation. It does not establish intermediate tool-pose parity or allocation
+stability across repeated operations.
 Native tool regression tests use real pen and compass hosts and snap constraints
 to check descent/rise visibility, the unlocked pen upper joint, fixed-length
 tilted/dragged poses, and active compass visibility on the first and second circles.
@@ -112,11 +117,13 @@ interpolation history, host-orientation preservation, and measured output bounds
 [`native-rolling-acceptance`](../../../tools/scenarios/geometry/native-rolling-acceptance.jsonl)
 samples queued oblique Cycloid and rotated Trochoid apparatus, then exercises all
 named Terminal variants, reset/reload interruption, captures, and orderly shutdown.
-Conic adapter tests run unchanged Parabola/Hyperbola content through typed native
-requests, including all three branch selections. Native publication tests cover
-rotated trails, reversed partial frontiers, inactive travel, linkage preservation,
-output bounds, drawing audio, and transactional rejection. Use the existing conic
-showcase/lifecycle and Terminal conic scenarios for rendered and shutdown evidence.
+Native conic tests cover exact skipped-phase endpoints, rotated and reversed
+frontiers, all Hyperbola branch selections, paired contacts, claims, final host
+visibility, and correlated completion. The catalogued
+[`terminal-shapes-conics-acceptance`](../../../tools/scenarios/geometry/terminal-shapes-conics-acceptance.jsonl)
+exercises the Terminal FIFO across Parabola and all three Hyperbola branch selections,
+then verifies final geometry and shutdown. Authored Parabola/Hyperbola content and its
+explicit-time helpers remain unchanged.
 Native tests assert rigid evaluation equivariance, orientation transport/lifetime,
 atomic final-plane validation, and split-triangle area/winding conservation.
 Julia tests compare every typed family against an independent Rodrigues oracle,
@@ -135,7 +142,7 @@ and supersession.
 | --- | --- |
 | Phase selection, queues, construction, cleanup | Policy; no native scheduler. |
 | Vector helpers, reflection-plane checks, returned drag positions | Pure calculations; native evaluators own writes. |
-| Exact full-sweep setup before compass rise, curve completion/retirement | Checked direct completion policy, not sampled motion. |
+| Exact full-sweep setup, authored curve phase policy, Terminal tool setup/retirement | Checked lifecycle policy; Terminal conic progress is native. |
 | Label/region reveals and visibility/clear batches | Existing native owner APIs, not a second modifier lifecycle. |
 
 Use them when a behavioral claim crosses ordinary application boundaries—for example,

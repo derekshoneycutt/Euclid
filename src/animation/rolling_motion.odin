@@ -4,6 +4,14 @@ import curve "../shapes/curve"
 import geometry "../core/geometry"
 import shapemodel "../shapes/model"
 
+ROLLING_SEQUENCE_DESCEND_SHARE :: 0.2
+ROLLING_SEQUENCE_DRAW_SHARE :: 0.6
+
+Rolling_Sequence_Samples :: struct {
+    count: int,
+    requests: [3]Modifier_Request,
+}
+
 // Retain one explicit-time rolling sample on the stack, never across callbacks.
 Rolling_Sample :: struct {
     parameter: f32,
@@ -79,6 +87,14 @@ rolling_request_valid :: proc(request: Modifier_Request) -> bool {
                 request.start_position, request.second_position, request.radius,
                 value.parameter_start, value.parameter_finish) &&
             (request.kind != .Cycloid_Draw || request.entity != 0)
+    case .Cycloid_Sequence:
+        value := rolling_cycloid_value(request)
+        return request.duration > 0 && request.entity != 0 &&
+            request.second_entity != 0 && request.third_entity != 0 &&
+            shapemodel.shape_cycloid_is_valid(value) &&
+            shapemodel.shape_cycloid_line_is_valid(
+                request.start_position, request.second_position, request.radius,
+                value.parameter_start, value.parameter_finish)
     case .Trochoid_Place, .Trochoid_Descend, .Trochoid_Draw, .Trochoid_Rise:
         return request.integer >= 0 && request.integer <= 1 &&
             shapemodel.shape_trochoid_tool_is_valid({
@@ -91,8 +107,101 @@ rolling_request_valid :: proc(request: Modifier_Request) -> bool {
             (request.kind != .Trochoid_Draw ||
                 (request.entity != 0 &&
                     shapemodel.shape_trochoid_is_valid(rolling_trochoid_value(request))))
+    case .Trochoid_Sequence:
+        return request.duration > 0 && request.entity != 0 &&
+            request.integer >= 0 && request.integer <= 1 &&
+            shapemodel.shape_trochoid_tool_is_valid({
+                mode = shapemodel.Shape_Trochoid_Mode(request.integer),
+                fixed_radius = request.displacement.x,
+                rolling_radius = request.radius,
+                parameter = request.third_position.x,
+                rotation = request.angle,
+            }) && request.displacement.y >= 0 &&
+            shapemodel.shape_trochoid_is_valid(rolling_trochoid_value(request))
     }
     return false
+}
+
+// Sample every phase boundary skipped by one accepted full-duration clock step.
+rolling_sequence_samples :: proc(
+    template: Modifier_Request,
+    previous_elapsed, current_elapsed: f32) -> Rolling_Sequence_Samples {
+    samples: Rolling_Sequence_Samples
+    descend_end := template.duration * ROLLING_SEQUENCE_DESCEND_SHARE
+    draw_end := template.duration *
+        (ROLLING_SEQUENCE_DESCEND_SHARE + ROLLING_SEQUENCE_DRAW_SHARE)
+    boundary_is_current := false
+    if previous_elapsed < descend_end && current_elapsed >= descend_end {
+        rolling_sequence_append(&samples,
+            rolling_sequence_phase_request(template, descend_end))
+        boundary_is_current = current_elapsed == descend_end
+    }
+    if previous_elapsed < draw_end && current_elapsed >= draw_end {
+        rolling_sequence_append(&samples,
+            rolling_sequence_phase_request(template, draw_end))
+        boundary_is_current = current_elapsed == draw_end
+    }
+    if !boundary_is_current {
+        rolling_sequence_append(&samples,
+            rolling_sequence_phase_request(template, current_elapsed))
+    }
+    return samples
+}
+
+// Resolve one full-duration clock value to its underlying explicit-time phase.
+rolling_sequence_phase_request :: proc(
+    template: Modifier_Request, elapsed: f32) -> Modifier_Request {
+    descend_end := template.duration * ROLLING_SEQUENCE_DESCEND_SHARE
+    draw_end := template.duration *
+        (ROLLING_SEQUENCE_DESCEND_SHARE + ROLLING_SEQUENCE_DRAW_SHARE)
+    phase := template
+    if template.kind == .Cycloid_Sequence {
+        phase.kind = .Cycloid_Descend
+    } else {
+        phase.kind = .Trochoid_Descend
+    }
+    phase.duration = descend_end
+    phase.elapsed = min(elapsed, descend_end)
+    if elapsed > descend_end && elapsed <= draw_end {
+        phase.kind = rolling_sequence_kind(template.kind, true)
+        phase.duration = template.duration * ROLLING_SEQUENCE_DRAW_SHARE
+        phase.elapsed = elapsed - descend_end
+    } else if elapsed > draw_end {
+        phase.kind = rolling_sequence_kind(template.kind, false)
+        phase.duration = template.duration *
+            (1 - ROLLING_SEQUENCE_DESCEND_SHARE - ROLLING_SEQUENCE_DRAW_SHARE)
+        phase.elapsed = elapsed - draw_end
+    }
+    return phase
+}
+
+// Select draw or rise while retaining the sequence family.
+rolling_sequence_kind :: proc(kind: Modifier_Kind, drawing: bool) -> Modifier_Kind {
+    if kind == .Cycloid_Sequence {
+        if drawing {
+            return .Cycloid_Draw
+        }
+        return .Cycloid_Rise
+    }
+    if drawing {
+        return .Trochoid_Draw
+    }
+    return .Trochoid_Rise
+}
+
+// Append one bounded phase request to the fixed sequence sample.
+rolling_sequence_append :: proc(
+    samples: ^Rolling_Sequence_Samples, request: Modifier_Request) {
+    assert(samples != nil && samples^.count < len(samples^.requests))
+    samples^.requests[samples^.count] = request
+    samples^.count += 1
+}
+
+// Evaluate one sequence request at its current phase for direct modifier callers.
+evaluate_rolling_sequence_sample :: proc(
+    request: Modifier_Request, output: ^Modifier_Output_Buffer) -> Modifier_Status {
+    phase := rolling_sequence_phase_request(request, request.elapsed)
+    return evaluate_modifier(phase, output)
 }
 
 // Emit both compass locks with sweep disabled for rolling-curve contact.

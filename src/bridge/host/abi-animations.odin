@@ -10,6 +10,8 @@ import bridgemodel "../model"
 
 import animation_model "../../core/animation"
 import modifier "../../animation"
+import operations "../../operations"
+import shapemodel "../../shapes/model"
 
 import julialib "../../../libs/julia/bindings"
 import "../../core"
@@ -334,6 +336,26 @@ native_modifier_kind_from_abi :: proc(kind: i32) -> (modifier.Modifier_Kind, boo
         return .Hyperbola_Rise, true
     case 46:
         return .Rotate_Shape_Orientation, true
+    case 47:
+        return .Construct_Point, true
+    case 48:
+        return .Construct_Line, true
+    case 49:
+        return .Construct_Circle, true
+    case 50:
+        return .Construct_Filled_Circle, true
+    case 51:
+        return .Pen_Highlight, true
+    case 52:
+        return .Compass_Highlight_Sequence, true
+    case 54:
+        return .Cycloid_Sequence, true
+    case 55:
+        return .Trochoid_Sequence, true
+    case 56:
+        return .Parabola_Sequence, true
+    case 57:
+        return .Hyperbola_Sequence, true
     case:
         return .Identity, false
     }
@@ -366,6 +388,389 @@ apply_native_modifier :: proc "c" (
         return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
     }
     return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Capture a copied operation request in callback order within the active Julia batch.
+submit_active_modifier :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: Bridge_Native_Modifier_Request) -> i32 {
+    if state == nil || state^.scene_command_batch_target == nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    submission: operations.Active_Operation_Submission_Request
+    status := prepare_active_modifier_submission(
+        state, request_id, request_abi, &submission)
+    if status != bridgemodel.BRIDGE_STATUS_OK {
+        return status
+    }
+    if !bridge_scene.capture_active_operation_submission(state, submission) {
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Capture one bounded group-transform operation in the current Julia batch.
+submit_active_group_transform :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: ^Bridge_Active_Group_Transform_Request) -> i32 {
+    if state == nil || request_abi == nil ||
+        state^.scene_command_batch_target == nil || request_id == 0 {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    submission: operations.Active_Operation_Submission_Request
+    status := prepare_active_group_transform_submission(
+        state, request_id, request_abi^, &submission)
+    if status != bridgemodel.BRIDGE_STATUS_OK {
+        return status
+    }
+    if !bridge_scene.capture_active_operation_submission(state, submission) {
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Capture one bounded polygon trace operation in callback order within the Julia batch.
+submit_active_polygon_trace :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: ^Bridge_Active_Polygon_Trace_Request) -> i32 {
+    if state == nil || request_abi == nil ||
+        state^.scene_command_batch_target == nil || request_id == 0 {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    submission: operations.Active_Operation_Submission_Request
+    status := prepare_active_polygon_trace_submission(
+        state, request_id, request_abi^, &submission)
+    if status != bridgemodel.BRIDGE_STATUS_OK {
+        return status
+    }
+    if !bridge_scene.capture_active_operation_submission(state, submission) {
+        return bridgemodel.BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Copy and validate all ordered polygon targets before batch capture.
+prepare_active_polygon_trace_submission :: proc(
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: Bridge_Active_Polygon_Trace_Request,
+    submission: ^operations.Active_Operation_Submission_Request) -> i32 {
+    batch := state^.scene_command_batch_target
+    if request_abi.modifier.kind != NATIVE_ACTIVE_POLYGON_TRACE_KIND ||
+        request_abi.vertex_count < 3 ||
+        request_abi.vertex_count > ACTIVE_POLYGON_TRACE_VERTEX_CAPACITY {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    submission^ = {
+        kind = operations.ACTIVE_OPERATION_KIND_POLYGON_TRACE,
+        request_id = request_id,
+        session_generation = batch^.session_generation,
+        runtime_generation =
+            bridge_scene.scene_batch_operation_runtime_generation(batch),
+        animation_generation = batch^.animation_generation,
+        modifier_request = native_modifier_request_from_abi(
+            request_abi.modifier, .Identity),
+        polygon_trace = active_operation_polygon_trace_from_abi(request_abi),
+    }
+    if !active_operation_add_polygon_trace_claims(state, submission) ||
+        !operations.active_operation_modifier_request_valid(
+            &state^.active_operations, submission^) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Copy the fixed ABI polygon vertices into operation-owned storage.
+active_operation_polygon_trace_from_abi :: proc(
+    request: Bridge_Active_Polygon_Trace_Request) ->
+        operations.Active_Operation_Polygon_Trace {
+    trace: operations.Active_Operation_Polygon_Trace = {
+        count = int(request.vertex_count),
+    }
+    for index in 0..<trace.count {
+        vertex := request.vertices[index]
+        trace.vertices[index] = {
+            entity = vertex.entity,
+            position = {vertex.start[0], vertex.start[1], vertex.start[2]},
+        }
+    }
+    return trace
+}
+
+// Claim the polygon host, ordered vertices, and pen joints for the trace lifetime.
+active_operation_add_polygon_trace_claims :: proc(
+    state: ^core.Euclid_General_State,
+    submission: ^operations.Active_Operation_Submission_Request) -> bool {
+    if !active_operation_add_request_claim(
+        submission, submission^.modifier_request.entity) {
+        return false
+    }
+    for vertex in submission^.polygon_trace.vertices[
+        :submission^.polygon_trace.count] {
+        if !active_operation_add_request_claim(submission, vertex.entity) {
+            return false
+        }
+    }
+    return active_operation_add_request_claim(submission,
+            shapemodel.shape_entity_pack(state^.world_pen.joint1)) &&
+        active_operation_add_request_claim(submission,
+            shapemodel.shape_entity_pack(state^.world_pen.joint2))
+}
+
+// Copy and validate all activation-time transform targets before batch capture.
+prepare_active_group_transform_submission :: proc(
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: Bridge_Active_Group_Transform_Request,
+    submission: ^operations.Active_Operation_Submission_Request) -> i32 {
+    batch := state^.scene_command_batch_target
+    modifier_kind, kind_valid := native_modifier_kind_from_abi(
+        request_abi.modifier.kind)
+    if !kind_valid || request_abi.target_count <= 0 ||
+        request_abi.target_count > operations.ACTIVE_OPERATION_GROUP_TARGET_CAPACITY {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    submission^ = {
+        kind = operations.ACTIVE_OPERATION_KIND_GROUP_TRANSFORM,
+        request_id = request_id,
+        session_generation = batch^.session_generation,
+        runtime_generation =
+            bridge_scene.scene_batch_operation_runtime_generation(batch),
+        animation_generation = batch^.animation_generation,
+        modifier_request = native_modifier_request_from_abi(
+            request_abi.modifier, modifier_kind),
+        group_transform = active_operation_group_transform_from_abi(request_abi),
+    }
+    if !active_operation_add_group_transform_claims(submission) ||
+        !operations.active_operation_modifier_request_valid(
+            &state^.active_operations, submission^) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Convert the fixed C snapshot into the native operation-owned group payload.
+active_operation_group_transform_from_abi :: proc(
+    request: Bridge_Active_Group_Transform_Request) ->
+        operations.Active_Operation_Group_Transform {
+    group: operations.Active_Operation_Group_Transform = {
+        count = int(request.target_count),
+        orientation_entity = request.orientation_entity,
+        oriented = request.oriented != 0,
+    }
+    for index in 0..<group.count {
+        target := request.targets[index]
+        group.targets[index] = {
+            entity = target.entity,
+            start_position = {
+                target.start[0], target.start[1], target.start[2],
+            },
+        }
+    }
+    for index in 0..<4 {
+        group.orientation[index] = request.orientation[index]
+    }
+    return group
+}
+
+// Claim every moved point and the optional analytic orientation host.
+active_operation_add_group_transform_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request) -> bool {
+    group := submission^.group_transform
+    for target in group.targets[:group.count] {
+        if !active_operation_add_request_claim(submission, target.entity) {
+            return false
+        }
+    }
+    return active_operation_add_request_claim(
+        submission, group.orientation_entity)
+}
+
+// Build and validate one copied modifier submission before capturing it in the batch.
+prepare_active_modifier_submission :: proc(
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: Bridge_Native_Modifier_Request,
+    submission: ^operations.Active_Operation_Submission_Request) -> i32 {
+    batch := state^.scene_command_batch_target
+    modifier_kind, kind_valid := native_modifier_kind_from_abi(request_abi.kind)
+    if !kind_valid {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    submission^ = {
+        kind = operations.ACTIVE_OPERATION_KIND_MODIFIER,
+        request_id = request_id,
+        session_generation = batch^.session_generation,
+        runtime_generation =
+            bridge_scene.scene_batch_operation_runtime_generation(batch),
+        animation_generation = batch^.animation_generation,
+        modifier_request = native_modifier_request_from_abi(request_abi, modifier_kind),
+    }
+    if !active_operation_add_modifier_claims(submission, modifier_kind) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if !active_operation_add_modifier_tool_claims(
+        submission, state, modifier_kind) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    if !operations.active_operation_modifier_request_valid(
+        &state^.active_operations, submission^) {
+        return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    return bridgemodel.BRIDGE_STATUS_OK
+}
+
+// Claim every specialized apparatus owned by a submitted native modifier.
+active_operation_add_modifier_tool_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State, kind: modifier.Modifier_Kind) -> bool {
+    if !active_operation_add_rolling_tool_claims(submission, state, kind) {
+        return false
+    }
+    if !active_operation_add_conic_tool_claims(submission, state, kind) {
+        return false
+    }
+    if !active_operation_add_highlight_tool_claims(submission, state, kind) {
+        return false
+    }
+    return active_operation_add_construction_tool_claims(
+        submission, state, kind)
+}
+
+// Claim the shared integrated conic apparatus for its active sequence lifetime.
+active_operation_add_conic_tool_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State, kind: modifier.Modifier_Kind) -> bool {
+    if kind == .Parabola_Sequence {
+        return active_operation_add_request_claim(
+            submission, shapemodel.shape_entity_pack(state^.world_parabola_tool))
+    }
+    if kind == .Hyperbola_Sequence {
+        return active_operation_add_request_claim(
+            submission, shapemodel.shape_entity_pack(state^.world_hyperbola_tool))
+    }
+    return true
+}
+
+// Claim modifier-owned entities while excluding circle tool sentinels.
+active_operation_add_modifier_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    modifier_kind: modifier.Modifier_Kind) -> bool {
+    if modifier_kind == .Pen_Highlight ||
+        modifier_kind == .Compass_Highlight_Sequence {
+        return true
+    }
+    if !active_operation_add_request_claim(
+        submission, submission^.modifier_request.entity) {
+        return false
+    }
+    if modifier_kind == .Construct_Circle ||
+        modifier_kind == .Construct_Filled_Circle {
+        return true
+    }
+    if modifier_kind == .Trochoid_Sequence {
+        return true
+    }
+    return active_operation_add_request_claim(
+        submission, submission^.modifier_request.second_entity) &&
+        active_operation_add_request_claim(
+            submission, submission^.modifier_request.third_entity)
+}
+
+// Claim shared rolling apparatus so concurrent operations cannot race its guide.
+active_operation_add_rolling_tool_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State, kind: modifier.Modifier_Kind) -> bool {
+    if kind == .Cycloid_Sequence {
+        guide := state^.world_cycloid_tool
+        return active_operation_add_request_claim(
+                submission, shapemodel.shape_entity_pack(guide.shape)) &&
+            active_operation_add_request_claim(
+                submission, shapemodel.shape_entity_pack(guide.first)) &&
+            active_operation_add_request_claim(
+                submission, shapemodel.shape_entity_pack(guide.second)) &&
+            active_operation_add_compass_joint_claims(submission, state)
+    }
+    if kind == .Trochoid_Sequence {
+        return active_operation_add_request_claim(
+                submission, shapemodel.shape_entity_pack(
+                    state^.world_trochoid_tool.shape)) &&
+            active_operation_add_compass_joint_claims(submission, state)
+    }
+    return true
+}
+
+// Claim both physical compass joints shared by rolling-curve recipes.
+active_operation_add_compass_joint_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State) -> bool {
+    return active_operation_add_request_claim(
+            submission, shapemodel.shape_entity_pack(state^.world_compass.joint1)) &&
+        active_operation_add_request_claim(
+            submission, shapemodel.shape_entity_pack(state^.world_compass.joint2))
+}
+
+// Claim physical joints for complete Terminal highlight sequences.
+active_operation_add_highlight_tool_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State,
+    kind: modifier.Modifier_Kind) -> bool {
+    if kind == .Pen_Highlight {
+        return active_operation_add_request_claim(submission,
+                shapemodel.shape_entity_pack(state^.world_pen.joint1)) &&
+            active_operation_add_request_claim(submission,
+                shapemodel.shape_entity_pack(state^.world_pen.joint2))
+    }
+    if kind == .Compass_Highlight_Sequence {
+        return active_operation_add_request_claim(submission,
+                shapemodel.shape_entity_pack(state^.world_compass.joint1)) &&
+            active_operation_add_request_claim(submission,
+                shapemodel.shape_entity_pack(state^.world_compass.joint2))
+    }
+    return true
+}
+
+// Claim the actual joints moved by a native construction recipe.
+active_operation_add_construction_tool_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State,
+    kind: modifier.Modifier_Kind) -> bool {
+    if modifier.construction_recipe_kind(kind) {
+        if kind == .Construct_Circle || kind == .Construct_Filled_Circle {
+            return active_operation_add_request_claim(submission,
+                    shapemodel.shape_entity_pack(state^.world_compass.joint1)) &&
+                active_operation_add_request_claim(submission,
+                    shapemodel.shape_entity_pack(state^.world_compass.joint2))
+        }
+        return active_operation_add_request_claim(submission,
+                shapemodel.shape_entity_pack(state^.world_pen.joint1)) &&
+            active_operation_add_request_claim(submission,
+                shapemodel.shape_entity_pack(state^.world_pen.joint2))
+    }
+    return true
+}
+
+// Add one deduplicated modifier entity to the fixed copied claim set.
+active_operation_add_request_claim :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    entity: u64) -> bool {
+    if entity == 0 {
+        return true
+    }
+    for existing in 0..<submission^.claim_count {
+        if submission^.claims[existing].identity == entity {
+            return true
+        }
+    }
+    if submission^.claim_count >= operations.ACTIVE_OPERATION_CLAIMS_PER_SLOT {
+        return false
+    }
+    submission^.claims[submission^.claim_count] = {
+        kind = operations.ACTIVE_OPERATION_CLAIM_ENTITY,
+        identity = entity,
+    }
+    submission^.claim_count += 1
+    return true
 }
 
 // Copy ABI fields into the native request without changing capture or validation order.

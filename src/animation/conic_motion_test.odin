@@ -148,3 +148,55 @@ conic_immediate_completion_uses_the_exact_requested_frontier :: proc(t: ^testing
     testing.expect_value(t, output.outputs[2].scalar, f32(-0.5))
     testing.expect_value(t, output.count, 7)
 }
+
+// Build one full-duration conic recipe with a directed, partial frontier.
+conic_sequence_test_request :: proc(kind: Modifier_Kind) -> Modifier_Request {
+    return {
+        kind = kind,
+        entity = 1,
+        duration = 1,
+        start_position = {0.4, 0.5, 0.1},
+        third_position = {1, -1, -0.5},
+        radius = 0.075,
+        displacement = {0.16, 0, 0},
+        angle = 0.6,
+        scalar = 1.2,
+    }
+}
+
+// Expand accelerated conic steps in phase order and retain exact boundary ink.
+@(test)
+conic_sequences_expand_skipped_phases_and_selected_tracer_contacts :: proc(
+    t: ^testing.T) {
+    for kind in ([?]Modifier_Kind{.Parabola_Sequence, .Hyperbola_Sequence}) {
+        for selection in 0..<3 {
+            request := conic_sequence_test_request(kind)
+            request.integer = selection
+            samples := conic_sequence_samples(request, 0, 1)
+            testing.expect_value(t, samples.count, 3)
+            testing.expect_value(t,
+                samples.requests[0].kind, conic_sequence_kind(kind, false, false))
+            testing.expect_value(t,
+                samples.requests[1].kind, conic_sequence_kind(kind, true, false))
+            testing.expect_value(t,
+                samples.requests[2].kind, conic_sequence_kind(kind, false, true))
+            output: Modifier_Output_Buffer
+            testing.expect_value(t, evaluate_modifier(samples.requests[1], &output),
+                Modifier_Status.Ok)
+            testing.expect_value(t, output.outputs[2].scalar, f32(-0.5))
+            expect_conic_trails(t, samples.requests[1], f32(-0.5), &output)
+        }
+    }
+}
+
+// Reject malformed full-duration domains before a native sequence is admitted.
+@(test)
+conic_sequences_reject_invalid_domain_and_duration :: proc(t: ^testing.T) {
+    request := conic_sequence_test_request(.Parabola_Sequence)
+    testing.expect(t, modifier_request_valid(request))
+    request.duration = 0
+    testing.expect(t, !modifier_request_valid(request))
+    request = conic_sequence_test_request(.Hyperbola_Sequence)
+    request.third_position.z = 2
+    testing.expect(t, !modifier_request_valid(request))
+}

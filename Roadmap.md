@@ -199,7 +199,7 @@ General features:
 - [X] Fast-forward option
 - [X] Authored completed forms
 - [X] PNG Saving
-- [ ] Dedicated Odin animation motion system
+- [X] Dedicated Odin animation motion system
 - [X] Sqlite backend
   - [X] Initial creation and access
   - [X] Full-text search tables

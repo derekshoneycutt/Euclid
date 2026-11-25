@@ -6,6 +6,7 @@ import shapemodel "../../shapes/model"
 import audio "../../audio"
 import animation_model "../../core/animation"
 import modifier "../../animation"
+import operations "../../operations"
 import "../../core"
 import "../../particles"
 
@@ -248,7 +249,7 @@ apply_animation_reveal :: proc(
             kind = formation_target_kind(command^.reveal.kind),
             owner_entity = command^.reveal.owner_entity,
             animation_generation = batch^.animation_generation,
-            progress = batch^.animation_progress,
+            progress = batch^.formation_progress,
             duration = command^.reveal.duration,
             seed = seed,
         })
@@ -301,25 +302,124 @@ commit_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
     if !validate_scene_command_batch(state, batch) {
-        audio.set_drawing_activity(&state^.chalk_audio, false)
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
-    if animation_model.animation_value_store_apply_pending(
-        &state^.animation_values,
-        state^.animation_values.generation,
-        &batch^.animation_value_writes) != .Ok {
-        audio.set_drawing_activity(&state^.chalk_audio, false)
+    if !scene_batch_reserve_active_operations(state, batch) {
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
+    }
+    return commit_scene_command_batch_effects(state, batch)
+}
+
+// Apply validated writes and publish their committed side effects.
+commit_scene_command_batch_effects :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    effect_progress, valid_progress := scene_command_batch_effect_progress(state, batch)
+    assert(valid_progress)
+    if batch^.producer == .Julia {
+        if animation_model.animation_value_store_apply_pending(
+            &state^.animation_values,
+            state^.animation_values.generation,
+            &batch^.animation_value_writes) != .Ok {
+            scene_batch_reject_active_operations(state, batch)
+            record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
+            return false
+        }
+    } else if batch^.native_interval_set {
+        status := particles.formation_accept_native_interval(
+            &state^.particle_system, batch^.animation_generation,
+            batch^.native_interval_step, batch^.native_interval_seconds)
+        assert(status == .Accepted || status == .Already_Accepted)
     }
     assert(particles.formation_advance_progress(
-        &state^.particle_system, batch^.animation_generation,
-        batch^.animation_progress))
+        &state^.particle_system, batch^.animation_generation, effect_progress))
 
+    batch^.formation_progress = effect_progress
+    batch^.formation_progress_set = true
     apply_scene_command_batch(state, batch)
+    drawing_active := scene_command_batch_has_drawing_activity(batch)
+    if batch^.producer == .Julia {
+        audio.set_drawing_activity(&state^.chalk_audio, drawing_active)
+    } else {
+        assert(audio.set_native_drawing_activity(
+            &state^.chalk_audio, batch^.producer_identity, drawing_active))
+    }
+    scene_batch_admit_active_operations(state, batch)
     record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
     return true
+}
+
+// Reserve every captured operation before publishing any scene side effect.
+scene_batch_reserve_active_operations :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    for index in 0..<batch^.command_count {
+        command := &batch^.commands[index]
+        if command^.kind != .Submit_Active_Operation {
+            continue
+        }
+        submission_index := command^.integer
+        captured := &batch^.active_operation_submissions[submission_index]
+        reservation, status := operations.active_operation_reserve_modifier(
+            &state^.active_operations, captured^.request)
+        if status != .Ok {
+            scene_batch_reject_active_operations(state, batch)
+            return false
+        }
+        captured^.reservation = reservation
+        captured^.reserved = true
+        claims := captured^.request.claims
+        if operations.active_operation_claims_conflict(
+            &state^.active_operations,
+            claims[:captured^.request.claim_count], reservation.execution) ||
+            !audio.native_drawing_activity_can_set(
+                &state^.chalk_audio, captured^.request.request_id, true) {
+            scene_batch_reject_active_operations(state, batch)
+            return false
+        }
+    }
+    return true
+}
+
+// Preserve correlated rejection results while releasing staged reservations.
+scene_batch_reject_active_operations :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
+    for index in 0..<batch^.active_operation_submission_count {
+        captured := &batch^.active_operation_submissions[index]
+        if !captured.reserved {
+            continue
+        }
+        _ = operations.active_operation_publish_outcome(
+            &state^.active_operations, captured.reservation.outcome, .Rejected)
+        _ = operations.active_operation_release_execution(
+            &state^.active_operations, captured.reservation.execution)
+        captured^.reserved = false
+    }
+}
+
+// Activate pre-reserved operations after their ordered time-zero samples commit.
+scene_batch_admit_active_operations :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) {
+    for index in 0..<batch^.active_operation_submission_count {
+        captured := &batch^.active_operation_submissions[index]
+        if !captured.reserved {
+            continue
+        }
+        request := captured^.request
+        reservation := captured^.reservation
+        assert(operations.active_operation_admit(
+            &state^.active_operations, reservation.execution) == .Ok)
+        if request.modifier_request.duration <= 0 {
+            assert(operations.active_operation_publish_outcome(
+                &state^.active_operations, reservation.outcome, .Committed) == .Ok)
+            assert(operations.active_operation_release_execution(
+                &state^.active_operations, reservation.execution) == .Ok)
+        } else {
+            assert(audio.set_native_drawing_activity(
+                &state^.chalk_audio, request.request_id, true))
+        }
+        captured^.reserved = false
+    }
 }
 
 // Apply commands in callback order after complete batch preflight succeeds.
@@ -349,7 +449,4 @@ apply_scene_command_batch :: proc(
         record_scene_command_evidence(state, command)
     }
     particles.formation_reclaim_unowned_particles(&state^.particle_system)
-    audio.set_drawing_activity(&state^.chalk_audio,
-        scene_command_batch_has_drawing_activity(batch))
 }
-

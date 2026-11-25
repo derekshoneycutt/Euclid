@@ -4,7 +4,6 @@ import bridge_scene "../scene"
 import bridgemodel "../model"
 import animationmodel "../../core/animation"
 import capturemodel "../../view/capture/model"
-import audio "../../audio"
 import particles "../../particles"
 import "../../core"
 import evidence_session "../../evidence/session"
@@ -16,7 +15,18 @@ import "core:time"
 // The cap prevents a delayed worker from replaying an unbounded simulation interval when
 // it next accepts a tick.
 coalesce_animation_tick :: proc(
-    service: ^Julia_Runtime_Service, dt, authored_dt: f32, accelerated: bool) {
+    service: ^Julia_Runtime_Service, dt, authored_dt: f32,
+    accelerated: bool, step: u64 = 1) {
+    retained_authored := min(
+        authored_dt,
+        max(0, MAX_ACCUMULATED_ANIMATION_DT -
+            service^.animation_accumulated_authored_dt))
+    if !append_animation_time_interval(
+        service, step, service^.animation_generation, f64(retained_authored)) {
+        service^.animation_time_backpressured = true
+        log.errorf("animation_time_interval_capacity_exhausted generation=%d step=%d",
+            service^.animation_generation, step)
+    }
     service^.animation_accumulated_dt = min(
         service^.animation_accumulated_dt + dt, MAX_ACCUMULATED_ANIMATION_DT)
     service.animation_accumulated_authored_dt = min(
@@ -25,6 +35,42 @@ coalesce_animation_tick :: proc(
     service.animation_accumulated_accelerated =
         service.animation_accumulated_accelerated || accelerated
     service^.animation_ticks_coalesced += 1
+}
+
+// Identify the current display step and the authored time admitted at its playback rate.
+animation_step_time_interval :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    authored_seconds: f64) -> particles.Formation_Time_Interval {
+    return {
+        step = state^.fixed_step + 1,
+        generation = service^.animation_generation,
+        authored_seconds = authored_seconds,
+    }
+}
+
+// Append bounded authored time, merging repeated requests for the same display step.
+append_animation_time_interval :: proc(
+    service: ^Julia_Runtime_Service, step, generation: u64,
+    authored_seconds: f64) -> bool {
+    if authored_seconds <= 0 {
+        return true
+    }
+    count := service^.animation_accumulated_interval_count
+    if count > 0 {
+        previous := &service^.animation_accumulated_intervals[count - 1]
+        if previous.step == step && previous.generation == generation {
+            previous.authored_seconds += authored_seconds
+            return true
+        }
+    }
+    if count >= len(service^.animation_accumulated_intervals) {
+        return false
+    }
+    service^.animation_accumulated_intervals[count] = {
+        step, generation, authored_seconds,
+    }
+    service^.animation_accumulated_interval_count += 1
+    return true
 }
 
 //   Submit one fully prepared animation tick slot and finalize request bookkeeping.
@@ -61,34 +107,75 @@ try_request_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) -
         return false
     }
     service := state^.julia_runtime_service
+    if service^.animation_time_backpressured {
+        return false
+    }
     rate := capturemodel.gif_capture_playback_rate(
         state.ui_runtime.playback.rate,
         state.gif_capture_status.gif_capture_phase,
         state.gif_capture_status.save_gif_requested)
     authored_dt := dt * animationmodel.playback_rate_multiplier(rate)
     if service^.animation_tick_pending {
-        coalesce_animation_tick(service, dt, authored_dt, rate != .Normal)
+        coalesce_animation_tick(
+            service, dt, authored_dt, rate != .Normal, state^.fixed_step + 1)
         return false
     }
     slot_index := reserve_animation_tick_slot(service)
     if slot_index < 0 {
-        service^.animation_ticks_dropped += 1
+        coalesce_animation_tick(
+            service, dt, authored_dt, rate != .Normal, state^.fixed_step + 1)
         return false
     }
+    slot, total_dt := prepare_animation_tick_slot(
+        state, slot_index, dt, authored_dt, rate != .Normal)
+    if slot == nil {
+        return false
+    }
+    return submit_animation_tick_slot(
+        service, slot, slot_index, total_dt)
+}
 
+// Move accumulated timing into a reserved immutable slot before transport submission.
+prepare_animation_tick_slot :: proc(
+    state: ^core.Euclid_General_State, slot_index: int,
+    dt, authored_dt: f32, accelerated: bool) -> (^Animation_Tick_Slot, f32) {
+    service := state^.julia_runtime_service
     total_dt := min(dt + service^.animation_accumulated_dt, MAX_ACCUMULATED_ANIMATION_DT)
     total_authored_dt := min(authored_dt + service.animation_accumulated_authored_dt,
         MAX_ACCUMULATED_ANIMATION_DT)
-    accelerated := rate != .Normal || service.animation_accumulated_accelerated
+    retained_current_authored := max(
+        0, total_authored_dt - service.animation_accumulated_authored_dt)
+    interval := animation_step_time_interval(
+        state, service, f64(retained_current_authored))
+    if !append_animation_time_interval(
+        service, interval.step, interval.generation, interval.authored_seconds) {
+        service^.animation_tick_slots[slot_index].state = .Free
+        service^.animation_time_backpressured = true
+        log.errorf("animation_time_interval_capacity_exhausted generation=%d step=%d",
+            service^.animation_generation, state^.fixed_step + 1)
+        return nil, 0
+    }
+    effective_accelerated := accelerated || service.animation_accumulated_accelerated
     service^.animation_accumulated_dt = 0
     service.animation_accumulated_authored_dt = 0
     service.animation_accumulated_accelerated = false
     service^.animation_tick_sequence += 1
     fill_animation_tick_slot(
         state, &service^.animation_tick_slots[slot_index],
-        total_dt, total_authored_dt, accelerated)
+        total_dt, total_authored_dt, effective_accelerated)
     slot := &service^.animation_tick_slots[slot_index]
-    return submit_animation_tick_slot(service, slot, slot_index, total_dt)
+    service^.animation_accumulated_interval_count = 0
+    return slot, total_dt
+}
+
+// Copy the precise authored intervals into the immutable submitted tick slot.
+copy_animation_intervals_to_slot :: proc(
+    service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot) {
+    slot^.formation_interval_count = service^.animation_accumulated_interval_count
+    for index in 0..<slot^.formation_interval_count {
+        slot^.formation_intervals[index] =
+            service^.animation_accumulated_intervals[index]
+    }
 }
 
 //   Populate one animation tick slot and snapshot its query state for the request.
@@ -112,6 +199,7 @@ fill_animation_tick_slot :: proc(
         submitted_at = time.tick_now(),
     }
     bridge_scene.capture_animation_query_snapshot(state, &slot^.query_snapshot)
+    copy_animation_intervals_to_slot(service, slot)
 }
 
 //   Recycle a tick slot and retain its elapsed time after a failed submission.
@@ -122,6 +210,15 @@ rollback_animation_tick_slot :: proc(
     service^.animation_accumulated_dt = total_dt
     service.animation_accumulated_authored_dt = slot.dt
     service.animation_accumulated_accelerated = slot.accelerated
+    for index in 0..<slot^.formation_interval_count {
+        interval := slot^.formation_intervals[index]
+        if !append_animation_time_interval(
+            service, interval.step, interval.generation, interval.authored_seconds) {
+            service^.animation_time_backpressured = true
+            log.errorf("animation_time_interval_rollback_failed generation=%d step=%d",
+                interval.generation, interval.step)
+        }
+    }
     service^.animation_ticks_dropped += 1
 }
 
@@ -141,25 +238,62 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     }
     slot := &service^.animation_tick_slots[slot_index]
     matches_current := animation_tick_matches_current(state, service, slot)
-    committed := false
-    reject_reason := ""
-    if !matches_current {
-        audio.set_drawing_activity(&state^.chalk_audio, false)
-        reject_reason = animation_tick_reject_reason(state, service, slot)
-    } else if !bridge_scene.commit_scene_command_batch(state, &slot^.scene_batch) {
-        reject_reason = "invalid_command_batch"
-    } else {
-        committed = true
-        service^.animation_progress = slot^.effective_progress
-        service.animation_last_commit_accelerated = slot.accelerated
-    }
+    committed, reject_reason := commit_completed_animation_tick(
+        state, service, slot, matches_current)
     if slot^.show_completed && matches_current {
         publish_animation_completion_state(state, slot, committed)
     }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
+    retire_superseded_animation_intervals(state, service, slot_index)
     release_completed_animation_ticks(service)
     service^.animation_tick_pending = false
     return committed
+}
+
+// Reconcile and commit one completed Julia result while retiring its overlap record.
+commit_completed_animation_tick :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    slot: ^Animation_Tick_Slot, matches_current: bool) -> (bool, string) {
+    committed := false
+    reject_reason := ""
+    if !matches_current {
+        reject_reason = animation_tick_reject_reason(state, service, slot)
+    } else {
+        progress, reconciled := particles.formation_reconcile_julia_intervals(
+            &state^.particle_system, slot^.generation,
+            slot^.formation_intervals[:slot^.formation_interval_count])
+        if !reconciled {
+            reject_reason = "formation_interval_reconciliation_failed"
+        } else {
+            slot^.scene_batch.formation_progress = progress
+            slot^.scene_batch.formation_progress_set = true
+            committed = bridge_scene.commit_scene_command_batch(
+                state, &slot^.scene_batch)
+            if committed {
+                service^.animation_progress = slot^.effective_progress
+                service^.animation_last_commit_accelerated = slot^.accelerated
+            } else {
+                reject_reason = "invalid_command_batch"
+            }
+        }
+    }
+    particles.formation_retire_native_intervals(
+        &state^.particle_system, slot^.generation,
+        slot^.formation_intervals[:slot^.formation_interval_count])
+    return committed, reject_reason
+}
+
+// Retire interval coverage for accepted results superseded before publication.
+retire_superseded_animation_intervals :: proc(
+    state: ^core.Euclid_General_State,
+    service: ^Julia_Runtime_Service, published_index: int) {
+    for &completed, index in service^.animation_tick_slots {
+        if index != published_index && completed.state == .Accepted {
+            particles.formation_retire_native_intervals(
+                &state^.particle_system, completed.generation,
+                completed.formation_intervals[:completed.formation_interval_count])
+        }
+    }
 }
 
 // Resolve completion intent only for the current result and start its native arrival.

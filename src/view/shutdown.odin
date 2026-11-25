@@ -21,6 +21,8 @@ import uilibrary "ui/library"
 import viewsharing "sharing"
 import collections "../collections"
 import viewmodel "ui/model"
+import operations "../operations"
+import audio "../audio"
 
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
@@ -115,6 +117,7 @@ free_animations_state :: proc(state: ^core.Euclid_General_State) {
     if state == nil {
         return
     }
+    shutdown_active_operations(state)
     viewcapture.gif_capture_destroy_session(&state^.gif_capture)
     if state.png_capture_status.phase == .Pending {
         state.png_capture_status.phase = .Error
@@ -136,4 +139,10 @@ free_animations_state :: proc(state: ^core.Euclid_General_State) {
         &state^.dynview_documents)
     julia.destroy_julia_interface_resources(state)
     free(state, context.allocator)
+}
+
+// Retire native operation activity and fixed storage before releasing the app root.
+shutdown_active_operations :: proc(state: ^core.Euclid_General_State) {
+    audio.clear_native_drawing_activity(&state^.chalk_audio)
+    operations.active_operation_storage_destroy(&state^.active_operations)
 }

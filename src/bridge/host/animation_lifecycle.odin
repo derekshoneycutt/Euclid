@@ -61,6 +61,8 @@ clear_animation_accumulated_time :: proc(service: ^Julia_Runtime_Service) {
         service^.animation_accumulated_dt = 0
         service^.animation_accumulated_authored_dt = 0
         service^.animation_accumulated_accelerated = false
+        service^.animation_accumulated_interval_count = 0
+        service^.animation_time_backpressured = false
     }
 }
 
@@ -108,6 +110,7 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
         state^.julia_interface^.current_animation
     reopening_completed := !selecting && state^.ui_runtime.playback.completed &&
         !state^.julia_interface^.pending_animation_reset
+    terminal_generation := current_terminal_generation(state)
     header_request_floor := animation_header_request_floor(service, selecting)
     service^.reload_state = .Quiescing
     if !invoke_animation_lifecycle_transaction(state) {
@@ -120,19 +123,45 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     if service^.reload_state == .Quiescing {
         service^.reload_state = .Idle
     }
-    service^.animation_generation += 1
-    service^.animation_accumulated_dt = 0
-    service.animation_accumulated_authored_dt = 0
-    service.animation_accumulated_accelerated = false
-    service.animation_last_commit_accelerated = false
-    service^.animation_progress = 0
-    particles.formation_reset_generation(
-        &state^.particle_system, service^.animation_generation)
+    active_operation_commit_generation_transition(state, service, terminal_generation)
+    reset_animation_lifecycle_progress(state, service)
     animation_clear_header_after_navigation(state, selecting, header_request_floor)
     restore_animation_completion_intent(state, selecting, reopening_completed)
     release_completed_animation_ticks(service)
     route_retained_display_view_content(service)
     return true
+}
+
+// Return the active Terminal session generation, or zero when it is unavailable.
+current_terminal_generation :: proc(state: ^core.Euclid_General_State) -> u64 {
+    if !state^.terminal.initialized {
+        return 0
+    }
+    return state^.terminal.animation_generation
+}
+
+// Reset accumulated animation timing and native formation progress after commit.
+reset_animation_lifecycle_progress :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service) {
+    service^.animation_accumulated_dt = 0
+    service.animation_accumulated_authored_dt = 0
+    service.animation_accumulated_accelerated = false
+    service^.animation_accumulated_interval_count = 0
+    service^.animation_time_backpressured = false
+    service.animation_last_commit_accelerated = false
+    service^.animation_progress = 0
+    particles.formation_reset_generation(
+        &state^.particle_system, service^.animation_generation)
+}
+
+// Retire native writers and audio only after the Julia lifecycle commit succeeds.
+active_operation_commit_generation_transition :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    terminal_generation: u64) {
+    active_operation_retire_animation_generation(state, service^.animation_generation)
+    active_operation_retire_session(state, terminal_generation)
+    audio.clear_native_drawing_activity(&state^.chalk_audio)
+    service^.animation_generation += 1
 }
 
 // Snapshot pre-transition header traffic so newly selected content remains eligible.
@@ -316,12 +345,21 @@ complete_actor_animation_lifecycle :: proc(
         return status == ANIMATION_LIFECYCLE_COMPLETED
     }
     reset_succeeded := reset_animation_switch_state(host^.native_state)
-    if operation == ANIMATION_LIFECYCLE_RELOAD &&
+    reset_succeeded = animation_lifecycle_reset_result(
+        service, operation, reset_succeeded)
+    return acknowledge_actor_animation_reset(host, request_id, reset_succeeded)
+}
+
+//   Apply one deterministic post-reset failure before lifecycle commit.
+animation_lifecycle_reset_result :: proc(
+    service: ^Julia_Runtime_Service, operation: i32,
+    reset_succeeded: bool) -> bool {
+    if operation == ANIMATION_LIFECYCLE_RELOAD && service != nil &&
         service^.reload_failure_injection == .Animation_Enter {
         service^.reload_failure_injection = .None
-        reset_succeeded = false
+        return false
     }
-    return acknowledge_actor_animation_reset(host, request_id, reset_succeeded)
+    return reset_succeeded
 }
 
 //   Validate one lifecycle call and consume candidate-load failure injection.
@@ -472,7 +510,13 @@ animation_prepare_tick_scene_batch :: proc(
     request: bridgemodel.Animation_Tick_Requested) {
     state^.animation_query_snapshot_target = &slot^.query_snapshot
     bridge_scene.begin_scene_command_batch(state, &slot^.scene_batch)
+    slot^.scene_batch.runtime_generation = service^.runtime_generation
     slot^.scene_batch.animation_generation = request.animation_generation
+    session_generation := current_terminal_generation(state)
+    if session_generation == 0 {
+        session_generation = request.animation_generation
+    }
+    slot^.scene_batch.session_generation = session_generation
     slot^.scene_batch.tick_sequence = request.sequence
     slot^.scene_batch.animation_progress = slot^.effective_progress
     service^.host_exercise_header_animation_generation = request.animation_generation

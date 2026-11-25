@@ -44,6 +44,7 @@ import viewpreferences "preferences"
 import viewsharing "sharing"
 import uiregions "ui/layout/regions"
 import collections "../collections"
+import operations "../operations"
 
 when !core.SCENARIOS_ENABLED {
     _ :: observe
@@ -558,6 +559,9 @@ init_ui_runtime_fields :: proc(
 //   Populate the simulation/UI scalar fields on the general state.
 init_runtime_fields :: proc(
     state: ^core.Euclid_General_State, settings: ^core.Euclid_Run_Settings) -> bool {
+    if !operations.active_operation_storage_init(&state^.active_operations) {
+        return false
+    }
     state^.julia_interface_active_slot = 0
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.user_drawing_sound_enabled = false

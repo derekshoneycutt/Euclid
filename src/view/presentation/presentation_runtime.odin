@@ -210,6 +210,15 @@ service_presentation_runtime :: proc(
     runtime^.state = state
     presentation_sync_lifecycle(state, runtime)
     _ = bridge.drain_julia_egress(service)
+    outcome_delivery := bridge.pump_active_operation_outcomes(state)
+    if outcome_delivery == .Allocation_Failed ||
+        outcome_delivery == .Channel_Closed {
+        log.error("active_operation_outcome_delivery_failed")
+    }
+    progress_delivery := bridge.pump_active_operation_progress(state)
+    if progress_delivery != .Sent && progress_delivery != .Queue_Full {
+        log.error("active_operation_progress_delivery_failed")
+    }
     terminalservice.terminal_tick_publish(state)
     presentation_poll_active(state, runtime)
     presentation_start_pending(state, runtime)

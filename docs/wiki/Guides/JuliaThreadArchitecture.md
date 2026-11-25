@@ -430,6 +430,18 @@ generation-scoped actors. Evaluation output can be emitted in bounded batches; O
 validates the generation before changing its grid. Native process ownership stays on
 the Odin side even when Julia shell policy participates.
 
+Point, line, and circle REPL jobs, rigid group transforms, and pen/compass highlights
+submit one copied native operation and wait for its generation-qualified terminal
+outcome before advancing the Julia FIFO. Group starts and analytic orientation are
+captured at activation; Odin expands each group sample into one atomic scene
+transaction, while highlight phase selection and endpoint retirement are native.
+Accepted elapsed time crosses back as a small immutable isbits ingress value; Julia
+matches the request, Terminal session, runtime, and animation generations before
+updating status. The request-ID source belongs to the persistent Julia host runtime,
+so replacing a Terminal session cannot collide with outcomes retained by Odin.
+Built-in Terminal ticks have no reloadable content-runtime generation, so their
+current animation generation supplies that identity field for native operations.
+
 ### Animation: snapshot in, transaction out
 
 An animation callback must not query or mutate canonical display state while Julia is

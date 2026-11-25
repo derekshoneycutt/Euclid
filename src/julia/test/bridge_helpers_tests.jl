@@ -55,7 +55,7 @@ end
     @test OdinJuliaBridge.BRIDGE_STATUS_NON_CONVERGED == Int32(7)
     @test OdinJuliaBridge.BRIDGE_STATUS_NOT_FOUND == Int32(8)
     @test OdinJuliaBridge.BRIDGE_STATUS_SCHEMA_MISMATCH == Int32(9)
-    @test OdinJuliaBridge.BRIDGE_VERSION == Int32(16)
+    @test OdinJuliaBridge.BRIDGE_VERSION == Int32(21)
     @test OdinJuliaBridge.BRIDGE_FEATURE_TYPED_ANIMATION_STATE == Int32(1 << 4)
     @test OdinJuliaBridge.BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG == Int32(1 << 5)
     @test OdinJuliaBridge.BRIDGE_FEATURE_MIME_PRESENTATION == Int32(1 << 6)
@@ -65,10 +65,20 @@ end
     @test OdinJuliaBridge.BRIDGE_FEATURE_SETTLING_FORMATION == Int32(1 << 11)
     @test OdinJuliaBridge.BRIDGE_FEATURE_CONICS == Int32(1 << 12)
     @test OdinJuliaBridge.BRIDGE_FEATURE_NATIVE_MODIFIERS == Int32(1 << 13)
+    @test OdinJuliaBridge.BRIDGE_FEATURE_ACTIVE_OPERATIONS == Int32(1 << 14)
+    @test OdinJuliaBridge.BRIDGE_FEATURE_ACTIVE_GROUP_TRANSFORMS == Int32(1 << 15)
+    @test OdinJuliaBridge.BRIDGE_FEATURE_ACTIVE_POLYGON_TRACES == Int32(1 << 16)
+    @test OdinJuliaBridge.BRIDGE_FEATURE_NATIVE_ROLLING_OPERATIONS == Int32(1 << 17)
+    @test OdinJuliaBridge.BRIDGE_FEATURE_NATIVE_CONIC_OPERATIONS == Int32(1 << 18)
 
     @test sizeof(OdinJuliaBridge.BridgeTrochoidGeometry) == 36
     @test sizeof(OdinJuliaBridge.BridgeTrochoidToolGeometry) == 24
     @test sizeof(OdinJuliaBridge.BridgeNativeModifierRequest) == 144
+    @test sizeof(OdinJuliaBridge.BridgeActiveGroupTransformTarget) == 24
+    @test sizeof(OdinJuliaBridge.BridgeActiveGroupTransformRequest) == 568
+    @test OdinJuliaBridge.POLYGON_TRACE_VERTEX_CAPACITY == 5
+    @test sizeof(OdinJuliaBridge.BridgeActivePolygonTraceTarget) == 24
+    @test sizeof(OdinJuliaBridge.BridgeActivePolygonTraceRequest) == 272
     @test sizeof(OdinJuliaBridge.BridgeCycloidGeometry) == 24
     @test sizeof(OdinJuliaBridge.BridgeCycloidToolGeometry) == 20
     @test sizeof(OdinJuliaBridge.BridgeCircleRegionGeometry) == 12

@@ -53,7 +53,7 @@ native_conic_test_sample :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State,
     request: modifier.Modifier_Request) {
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     command, captured := bridge_scene.append_scene_command(state, .Apply_Native_Modifier)
     testing.expect(t, captured && command != nil)
     command.modifier = request
@@ -177,7 +177,7 @@ native_conic_rejection_is_transactional :: proc(t: ^testing.T) {
     testing.expect_value(t, state.shape_world.parabola_tools.values[0], before)
 }
 
-// Keep all conic ABI discriminators symmetric and reject the next unassigned value.
+// Keep conic and construction ABI discriminators symmetric.
 @(test)
 native_conic_abi_kinds_are_closed :: proc(t: ^testing.T) {
     kinds: [8]modifier.Modifier_Kind = {
@@ -189,6 +189,23 @@ native_conic_abi_kinds_are_closed :: proc(t: ^testing.T) {
         testing.expect(t, valid)
         testing.expect_value(t, actual, kind)
     }
-    _, valid := native_modifier_kind_from_abi(47)
+    construction_kinds: [4]modifier.Modifier_Kind = {
+        .Construct_Point, .Construct_Line, .Construct_Circle,
+        .Construct_Filled_Circle,
+    }
+    for kind, index in construction_kinds {
+        actual, valid := native_modifier_kind_from_abi(i32(index + 47))
+        testing.expect(t, valid)
+        testing.expect_value(t, actual, kind)
+    }
+    sequence_kinds: [2]modifier.Modifier_Kind = {
+        .Pen_Highlight, .Compass_Highlight_Sequence,
+    }
+    for kind, index in sequence_kinds {
+        actual, valid := native_modifier_kind_from_abi(i32(index + 51))
+        testing.expect(t, valid)
+        testing.expect_value(t, actual, kind)
+    }
+    _, valid := native_modifier_kind_from_abi(53)
     testing.expect(t, !valid)
 }

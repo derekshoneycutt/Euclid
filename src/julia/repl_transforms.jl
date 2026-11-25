@@ -280,6 +280,49 @@ function render_rigid_transform!(
     return nothing
 end
 
+"""Build the native ordered group request from one activation-time transform snapshot."""
+function native_group_transform_request(
+    payload::TransformPayload, duration::Real)
+    target_count = length(payload.point_ids)
+    targets = ntuple(16) do index
+        if index <= target_count
+            start = payload.start_positions[index]
+            OdinJuliaBridge.BridgeActiveGroupTransformTarget(
+                payload.point_ids[index], (Cfloat(start[1]), Cfloat(start[2]),
+                    Cfloat(start[3])))
+        else
+            OdinJuliaBridge.BridgeActiveGroupTransformTarget(
+                UInt64(0), (Cfloat(0), Cfloat(0), Cfloat(0)))
+        end
+    end
+    request = native_group_transform_modifier(payload, duration)
+    orientation_enabled = payload.oriented && payload.spec isa RotateSpec
+    orientation_entity = orientation_enabled ? payload.host_id : UInt64(0)
+    orientation = orientation_enabled ? payload.start_orientation :
+        (0f0, 0f0, 0f0, 1f0)
+    return OdinJuliaBridge.BridgeActiveGroupTransformRequest(
+        request, Int32(target_count), targets, orientation_entity,
+        map(Cfloat, orientation), orientation_enabled)
+end
+
+"""Encode one common translation request for all captured defining points."""
+function native_group_transform_modifier(
+    payload::TransformPayload, duration::Real)
+    first_id = payload.point_ids[1]
+    first_start = payload.start_positions[1]
+    spec = payload.spec
+    if spec isa TranslateSpec
+        return OdinJuliaBridge.native_modifier_request(
+            OdinJuliaBridge.NATIVE_MODIFIER_TRANSLATE_POINT;
+            entity=first_id, duration, start_position=first_start,
+            displacement=spec.displacement)
+    end
+    return OdinJuliaBridge.native_modifier_request(
+        OdinJuliaBridge.NATIVE_MODIFIER_ROTATE_POINT;
+        entity=first_id, duration, start_position=first_start,
+        axis_a=spec.axis_a, axis_b=spec.axis_b, angle=spec.theta)
+end
+
 """Copy activation-time translation inputs without computing a sampled position."""
 function rigid_position_request(spec::TranslateSpec, id, start, elapsed, duration)
     return OdinJuliaBridge.native_modifier_request(

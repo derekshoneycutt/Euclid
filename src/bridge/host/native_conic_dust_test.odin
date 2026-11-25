@@ -49,7 +49,7 @@ native_parabola_contact_admission_is_transactional :: proc(t: ^testing.T) {
     host := bridge_scene.shape_create_parabola(state, {0.4, 0.5, 0},
         {0.075, 0, -1, 1, -1}, bridge_shape_test_input({}).style)
     batch: bridge_scene.Scene_Command_Batch
-    bridge_scene.begin_scene_command_batch(state, &batch)
+    bridge_scene.begin_native_scene_command_batch(state, &batch)
     command, captured := bridge_scene.append_scene_command(state, .Apply_Native_Modifier)
     testing.expect(t, captured)
     command.modifier = {

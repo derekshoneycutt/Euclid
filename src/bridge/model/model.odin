@@ -10,6 +10,7 @@ import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import shapemodel "../../shapes/model"
 import modifier "../../animation"
+import operations "../../operations"
 import julialib "../../../libs/julia/bindings"
 
 import "base:runtime"
@@ -19,6 +20,8 @@ import vmem "core:mem/virtual"
 
 // Bound dense completed figures independently of immutable-state write capacity.
 SCENE_COMMAND_BATCH_CAPACITY :: 256
+ACTIVE_OPERATION_BATCH_SUBMISSION_CAPACITY ::
+    operations.ACTIVE_OPERATION_SUBMISSIONS_PER_BATCH
 
 // View snapshot storage is double-buffered and bounded independently of channel traffic.
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
@@ -69,6 +72,7 @@ Scene_Command_Kind :: enum u8 {
     Set_Hyperbola_Tool_Active,
     Set_Shape_Orientation,
     Apply_Native_Modifier,
+    Submit_Active_Operation,
 }
 
 // Animation_Reveal_Kind names one authored target without guessing from geometry.
@@ -110,15 +114,39 @@ Scene_Command :: struct {
 }
 
 // Scene_Command_Batch owns one animation tick's transactional scene mutations.
+Scene_Producer_Kind :: enum u8 {
+    Julia,
+    Native,
+}
+
 Scene_Command_Batch :: struct {
+    producer: Scene_Producer_Kind,
     animation: ^Euclid_Julia_Animation_Interface,
+    runtime_generation: u64,
     animation_generation: u64,
+    session_generation: u64,
     tick_sequence: u64,
     animation_progress: f64,
+    formation_progress: f64,
+    formation_progress_set: bool,
+    native_interval_step: u64,
+    native_interval_seconds: f64,
+    native_interval_set: bool,
+    producer_identity: u64,
     command_count: int,
     overflowed: bool,
     animation_value_writes: animationmodel.Animation_Value_Pending_Writes,
     commands: [SCENE_COMMAND_BATCH_CAPACITY]Scene_Command,
+    active_operation_submission_count: int,
+    active_operation_submissions:
+        [ACTIVE_OPERATION_BATCH_SUBMISSION_CAPACITY]Active_Operation_Batch_Submission,
+}
+
+// Active_Operation_Batch_Submission ties a captured marker to display admission.
+Active_Operation_Batch_Submission :: struct {
+    request: operations.Active_Operation_Submission_Request,
+    reservation: operations.Active_Operation_Reservation,
+    reserved: bool,
 }
 
 // Animation_Query_Snapshot is the immutable native state visible to one animation tick.

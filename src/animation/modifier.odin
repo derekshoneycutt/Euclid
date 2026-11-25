@@ -6,6 +6,7 @@ import linalg "core:math/linalg"
 import shapemodel "../shapes/model"
 
 MODIFIER_OUTPUT_CAPACITY :: 16
+CONSTRUCTION_DRAW_ENTRY_FLAG :: 1
 
 Modifier_Kind :: enum u8 {
     Identity,
@@ -55,6 +56,16 @@ Modifier_Kind :: enum u8 {
     Hyperbola_Draw,
     Hyperbola_Rise,
     Rotate_Shape_Orientation,
+    Construct_Point,
+    Construct_Line,
+    Construct_Circle,
+    Construct_Filled_Circle,
+    Pen_Highlight,
+    Compass_Highlight_Sequence,
+    Cycloid_Sequence,
+    Trochoid_Sequence,
+    Parabola_Sequence,
+    Hyperbola_Sequence,
 }
 
 Modifier_Status :: enum u8 {
@@ -137,6 +148,20 @@ Modifier_Output_Buffer :: struct {
     outputs: [MODIFIER_OUTPUT_CAPACITY]Modifier_Output,
 }
 
+POLYGON_TRACE_VERTEX_CAPACITY :: 5
+
+// One ordered polygon vertex captured when its Terminal action is queued.
+Polygon_Trace_Vertex :: struct {
+    entity: u64,
+    position: geometry.Vector3,
+}
+
+// Bounded ordered path retained by one native polygon trace operation.
+Polygon_Trace :: struct {
+    count: int,
+    vertices: [POLYGON_TRACE_VERTEX_CAPACITY]Polygon_Trace_Vertex,
+}
+
 // Return whether one explicit-time modifier request is finite and well formed.
 modifier_request_valid :: proc(request: Modifier_Request) -> bool {
     if math.is_nan(request.elapsed) || math.is_inf(request.elapsed) ||
@@ -145,34 +170,86 @@ modifier_request_valid :: proc(request: Modifier_Request) -> bool {
         request.duration < 0 || !modifier_fields_finite(request) {
         return false
     }
+    handled, valid := modifier_analytic_request_valid(request)
+    if handled {
+        return valid
+    }
     #partial switch request.kind {
     case .Identity:
         return true
     case .Set_Point_Position, .Translate_Point, .Rotate_Point,
         .Reflect_Point_Xy_Above, .Reflect_Point_Xy_Below,
-        .Draw_Point, .Complete_Point, .Complete_Circle,
         .Reflect_Angle_Marker:
         return request.entity != 0
     case .Pen_Descend, .Pen_Rise, .Pen_Pose,
         .Compass_Descend, .Compass_Rise, .Pen_Tilt, .Pen_Cone,
         .Pen_Drag, .Pen_Transfer, .Compass_Transfer, .Compass_Highlight:
         return request.second_entity != 0
-    case .Pen_Highlight_Point, .Pen_Stroke:
-        return request.radius > 0
-    case .Draw_Line, .Complete_Line, .Draw_Circle,
-        .Draw_Filled_Circle, .Line_Segment, .Extend_Line, .Two_Segment_Stroke:
-        return request.entity != 0 && request.second_entity != 0 &&
-            request.third_entity != 0
-    case .Cycloid_Place, .Cycloid_Descend, .Cycloid_Draw, .Cycloid_Rise,
-        .Trochoid_Place, .Trochoid_Descend, .Trochoid_Draw, .Trochoid_Rise:
-        return rolling_request_valid(request)
-    case .Parabola_Place, .Parabola_Descend, .Parabola_Draw, .Parabola_Rise,
-        .Hyperbola_Place, .Hyperbola_Descend, .Hyperbola_Draw, .Hyperbola_Rise:
-        return conic_request_valid(request)
+    case .Pen_Highlight_Point, .Pen_Stroke,
+        .Pen_Highlight, .Compass_Highlight_Sequence:
+        return request.radius > 0 && modifier_highlight_sequence_request_valid(request)
+    case .Draw_Point, .Draw_Line, .Draw_Circle, .Draw_Filled_Circle,
+        .Complete_Point, .Complete_Line, .Complete_Circle, .Line_Segment,
+        .Extend_Line, .Two_Segment_Stroke, .Construct_Point, .Construct_Line,
+        .Construct_Circle, .Construct_Filled_Circle:
+        return construction_request_valid(request)
     case .Rotate_Shape_Orientation:
         return orientation_request_valid(request)
+    case:
+        return false
     }
-    return false
+}
+
+// Route analytic curve requests to their bounded family validators.
+modifier_analytic_request_valid :: proc(
+    request: Modifier_Request) -> (handled, valid: bool) {
+    #partial switch request.kind {
+    case .Cycloid_Place, .Cycloid_Descend, .Cycloid_Draw, .Cycloid_Rise,
+        .Cycloid_Sequence, .Trochoid_Place, .Trochoid_Descend, .Trochoid_Draw,
+        .Trochoid_Rise, .Trochoid_Sequence:
+        return true, rolling_request_valid(request)
+    case .Parabola_Place, .Parabola_Descend, .Parabola_Draw, .Parabola_Rise,
+        .Hyperbola_Place, .Hyperbola_Descend, .Hyperbola_Draw, .Hyperbola_Rise,
+        .Parabola_Sequence, .Hyperbola_Sequence:
+        return true, conic_request_valid(request)
+    }
+    return false, false
+}
+
+// Validate the extra fields required only by complete tool highlight sequences.
+modifier_highlight_sequence_request_valid :: proc(request: Modifier_Request) -> bool {
+    if request.kind != .Pen_Highlight &&
+        request.kind != .Compass_Highlight_Sequence {
+        return true
+    }
+    return request.second_entity != 0 && request.duration > 0
+}
+
+// Validate the host, endpoint, and tool-length fields shared by construction kinds.
+construction_request_valid :: proc(request: Modifier_Request) -> bool {
+    if request.entity == 0 {
+        return false
+    }
+    if request.kind == .Construct_Point {
+        return request.radius > 0
+    }
+    has_endpoints := request.kind == .Draw_Line ||
+        request.kind == .Complete_Line || request.kind == .Draw_Circle ||
+        request.kind == .Draw_Filled_Circle || request.kind == .Line_Segment ||
+        request.kind == .Extend_Line || request.kind == .Two_Segment_Stroke ||
+        request.kind == .Construct_Line || request.kind == .Construct_Circle ||
+        request.kind == .Construct_Filled_Circle
+    if !has_endpoints {
+        return true
+    }
+    if request.second_entity == 0 || request.third_entity == 0 {
+        return false
+    }
+    if request.kind == .Construct_Line || request.kind == .Construct_Circle ||
+        request.kind == .Construct_Filled_Circle {
+        return request.radius > 0
+    }
+    return true
 }
 
 // Append one bounded modifier output and report overflow explicitly.
@@ -621,7 +698,8 @@ evaluate_circle_effects :: proc(
         return status
     }
     if request.kind == .Draw_Filled_Circle &&
-        request.flag && request.elapsed <= 0 {
+        request.flag && (request.elapsed <= 0 ||
+            request.integer & CONSTRUCTION_DRAW_ENTRY_FLAG != 0) {
         reveal: Modifier_Output = {
             kind = .Reveal_Sweep,
             entity = request.entity,
@@ -673,6 +751,9 @@ evaluate_construction :: proc(
         return evaluate_circle(request, output)
     case .Complete_Point:
         return evaluate_complete_point(request, output)
+    case .Construct_Point, .Construct_Line,
+        .Construct_Circle, .Construct_Filled_Circle:
+        return evaluate_construction_recipe(request, output)
     case:
         return .Invalid_Argument
     }
@@ -709,7 +790,8 @@ evaluate_valid_modifier :: proc(
         return evaluate_tool_position(request, output)
     case .Draw_Point, .Draw_Line, .Draw_Circle,
         .Draw_Filled_Circle, .Complete_Point, .Complete_Line,
-        .Complete_Circle:
+        .Complete_Circle, .Construct_Point, .Construct_Line,
+        .Construct_Circle, .Construct_Filled_Circle:
         return evaluate_construction(request, output)
     case .Pen_Tilt, .Pen_Cone, .Pen_Drag, .Pen_Transfer:
         return evaluate_pen_motion(request, output)
@@ -723,12 +805,20 @@ evaluate_valid_modifier :: proc(
         return evaluate_reflected_angle_marker(request, output)
     case .Pen_Highlight_Point, .Pen_Stroke, .Extend_Line:
         return evaluate_pen_stroke(request, output)
+    case .Pen_Highlight:
+        return evaluate_pen_highlight_sequence(request, output)
+    case .Compass_Highlight_Sequence:
+        return evaluate_compass_highlight_sequence(request, output)
     case .Two_Segment_Stroke:
         return evaluate_two_segment_stroke(request, output)
     case .Cycloid_Place, .Cycloid_Descend, .Cycloid_Draw, .Cycloid_Rise:
         return evaluate_cycloid_motion(request, output)
     case .Trochoid_Place, .Trochoid_Descend, .Trochoid_Draw, .Trochoid_Rise:
         return evaluate_trochoid_motion(request, output)
+    case .Cycloid_Sequence, .Trochoid_Sequence:
+        return evaluate_rolling_sequence_sample(request, output)
+    case .Parabola_Sequence, .Hyperbola_Sequence:
+        return evaluate_conic_sequence_sample(request, output)
     case .Parabola_Place, .Parabola_Descend, .Parabola_Draw, .Parabola_Rise,
         .Hyperbola_Place, .Hyperbola_Descend, .Hyperbola_Draw, .Hyperbola_Rise:
         return evaluate_conic_motion(request, output)

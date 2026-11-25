@@ -192,6 +192,10 @@ function pump_euclid_reactor_status!(host::EuclidRuntimeHost)
             pending.mode, pending.generation)
         admitted = true
     end
+    if session.phase === EuclidHost.HostSessionActive
+        EuclidRepl.discard_stale_active_operation_outcomes!(
+            session.euclid_repl_runtime, session.generation, host.state_ptr)
+    end
     return status, admitted
 end
 
@@ -365,6 +369,10 @@ end
 function animation_host_tick_with_actor!(
     host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
     animation_id::UUID, actor::EuclidActorRuntime.ActorId)::Bool
+    EuclidRepl.set_active_operation_context!(
+        host.reactor.session.euclid_repl_runtime,
+        host.reactor.session.generation,
+        payload.runtime_generation, payload.animation_generation)
     command = EuclidPolicy.TickAnimation(
         payload.request_id, payload.runtime_generation,
         payload.animation_generation, animation_id, actor, payload.sequence,

@@ -9,6 +9,7 @@ import shapemodel "../../shapes/model"
 import evidence_trace "../../evidence/trace"
 import testing "core:testing"
 import core "../../core"
+import audio "../../audio"
 import particles "../../particles"
 import shapes "../../shapes"
 import projection "../../view/world/projection"
@@ -983,7 +984,7 @@ bridge_native_modifier_malformed_and_overflow :: proc(t: ^testing.T) {
     testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &overflow))
 }
 
-// Verify accepted batches replace drawing activity and rejected batches clear it.
+// Verify accepted batches replace Julia activity while rejection preserves accepted state.
 @(test)
 bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.T) {
     state := bridge_shape_test_state()
@@ -1007,10 +1008,10 @@ bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.
     testing.expect(t, bridge_scene.commit_scene_command_batch(state, &batch))
     testing.expect(t, !state^.chalk_audio.drawing_active)
 
-    state^.chalk_audio.drawing_active = true
+    audio.set_drawing_activity(&state^.chalk_audio, true)
     batch.overflowed = true
     testing.expect(t, !bridge_scene.commit_scene_command_batch(state, &batch))
-    testing.expect(t, !state^.chalk_audio.drawing_active)
+    testing.expect(t, state^.chalk_audio.drawing_active)
 }
 // Verify an unformed hide departs nothing and partial ink thins departure samples.
 @(test)

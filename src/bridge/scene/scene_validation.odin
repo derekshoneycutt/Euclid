@@ -6,6 +6,8 @@ import animation_model "../../core/animation"
 import modifier "../../animation"
 import "../../core"
 import "../../particles"
+import "../../audio"
+import operations "../../operations"
 import math "core:math"
 
 //   Check a command point index against the initialized canonical point span.
@@ -109,9 +111,14 @@ native_modifier_style_output_valid :: proc(
 native_modifier_tool_style_output_valid :: proc(
     state: ^core.Euclid_General_State,
     evaluated: ^modifier.Modifier_Output) -> bool {
+    if evaluated.entity > 3 &&
+        evaluated.entity != shapemodel.shape_entity_pack(state^.world_compass.joint1) &&
+        evaluated.entity != shapemodel.shape_entity_pack(state^.world_compass.joint2) {
+        return false
+    }
     style := evaluated^
     style.entity = native_modifier_tool_host(state, evaluated.entity)
-    return evaluated.entity <= 3 && native_modifier_style_output_valid(state, &style)
+    return native_modifier_style_output_valid(state, &style)
 }
 
 // Require a canonical arc component for a native sweep output.
@@ -502,14 +509,25 @@ validate_command_noop :: proc(
 scene_command_batch_wellformed :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
-    if state == nil || batch == nil || batch^.overflowed ||
-        state^.julia_interface == nil {
+    if state == nil || batch == nil || batch^.overflowed {
         return false
     }
     if batch^.command_count < 0 || batch^.command_count > len(batch^.commands) {
         return false
     }
-    return batch^.animation == state^.julia_interface^.current_animation
+    if batch^.active_operation_submission_count < 0 ||
+        batch^.active_operation_submission_count >
+            operations.ACTIVE_OPERATION_SUBMISSIONS_PER_BATCH {
+        return false
+    }
+    switch batch^.producer {
+    case .Julia:
+        return state^.julia_interface != nil &&
+            batch^.animation == state^.julia_interface^.current_animation
+    case .Native:
+        return batch^.animation == nil
+    }
+    return false
 }
 
 // Count commands that can enqueue one compound tool-contact intent.
@@ -553,32 +571,59 @@ scene_command_batch_tool_contact_count :: proc(batch: ^Scene_Command_Batch) -> i
 // dependencies, and any prior capture overflow. Commit must remain all-or-nothing.
 validate_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    if !scene_command_batch_preflight_valid(state, batch) ||
+        !scene_command_batch_commands_valid(state, batch) ||
+        !scene_command_batch_postflight_valid(state, batch) {
+        return false
+    }
+    return true
+}
 
-    if !scene_command_batch_wellformed(state, batch) {
+// Validate transaction-wide state before checking individual commands.
+scene_command_batch_preflight_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    if !scene_command_batch_wellformed(state, batch) ||
+        !scene_command_batch_progress_valid(state, batch) ||
+        !scene_command_batch_reveals_fit(state, batch) ||
+        !scene_command_batch_producer_writes_valid(state, batch) {
         return false
     }
-    if !scene_command_batch_progress_valid(state, batch) {
-        return false
-    }
-    if !scene_command_batch_reveals_fit(state, batch) {
-        return false
-    }
-    if animation_model.animation_value_store_validate_pending(
-        &state^.animation_values,
-        state^.animation_values.generation,
-        &batch^.animation_value_writes) != .Ok {
-        return false
-    }
+    return true
+}
 
+// Validate each ordered command, including markers and their first samples.
+scene_command_batch_commands_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
     validators := SCENE_COMMAND_VALIDATORS
+    marker_count := 0
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
+        if command^.kind == .Submit_Active_Operation {
+            marker_count += 1
+            if !scene_active_operation_submission_valid(
+                state, batch, command_index) {
+                return false
+            }
+            continue
+        }
         validator := validators[command^.kind]
         if validator == nil || !validator(state, command) {
             return false
         }
     }
+    return marker_count == batch^.active_operation_submission_count
+}
+
+// Validate world-plane constraints and bounded side-effect capacity.
+scene_command_batch_postflight_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
     if !scene_command_batch_planes_valid(state, batch) {
+        return false
+    }
+    if batch^.producer == .Native &&
+        scene_command_batch_has_drawing_activity(batch) &&
+        !audio.native_drawing_activity_can_set(
+            &state^.chalk_audio, batch^.producer_identity, true) {
         return false
     }
     contact_count := scene_command_batch_tool_contact_count(batch)
@@ -586,33 +631,342 @@ validate_scene_command_batch :: proc(
         &state^.particle_system, contact_count)
 }
 
+// Validate one marker, its time-zero sample, and all same-batch claim conflicts.
+scene_active_operation_submission_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch,
+    command_index: int) -> bool {
+    command := &batch^.commands[command_index]
+    if !scene_active_operation_marker_valid(state, batch, command) {
+        return false
+    }
+    submission := &batch^.active_operation_submissions[command^.integer].request
+    if !scene_active_operation_initial_samples_match(
+        batch, command_index, submission^) {
+        return false
+    }
+    if !scene_active_operation_submission_prior_claims_clear(
+        batch, command_index, submission^) {
+        return false
+    }
+    return !scene_active_operation_claims_conflict_with_later_commands(
+        state, batch, command_index, submission^)
+}
+
+// Verify every activation-time group sample follows its marker in target order.
+scene_active_operation_initial_samples_match :: proc(
+    batch: ^Scene_Command_Batch, marker_index: int,
+    submission: operations.Active_Operation_Submission_Request) -> bool {
+    REQUESTCAP :: operations.ACTIVE_OPERATION_GROUP_TARGET_CAPACITY + 1
+    requests: [REQUESTCAP]modifier.Modifier_Request
+    request_count := 1
+    initial := submission.modifier_request
+    initial.elapsed = 0
+    if initial.kind == .Cycloid_Sequence ||
+        initial.kind == .Trochoid_Sequence {
+        return scene_active_rolling_sequence_initial_sample_matches(
+            batch, marker_index, initial)
+    }
+    if initial.kind == .Parabola_Sequence ||
+        initial.kind == .Hyperbola_Sequence {
+        return scene_active_conic_sequence_initial_sample_matches(
+            batch, marker_index, initial)
+    }
+    if submission.group_transform.count > 0 {
+        if !operations.active_operation_group_sample_requests(
+            submission.group_transform, initial, 0, &requests, &request_count) {
+            return false
+        }
+    } else {
+        requests[0] = initial
+    }
+    return scene_active_operation_samples_match(
+        batch, marker_index, requests[:request_count])
+}
+
+// Match every ordered sample against the commands immediately after its marker.
+scene_active_operation_samples_match :: proc(
+    batch: ^Scene_Command_Batch, marker_index: int,
+    requests: []modifier.Modifier_Request) -> bool {
+    if marker_index + len(requests) >= batch^.command_count {
+        return false
+    }
+    for offset in 0..<len(requests) {
+        sample := &batch^.commands[marker_index + 1 + offset]
+        if sample.kind != .Apply_Native_Modifier ||
+            sample.modifier != requests[offset] {
+            return false
+        }
+    }
+    return true
+}
+
+// Match the activation-time descend sample expanded from one conic sequence.
+scene_active_conic_sequence_initial_sample_matches :: proc(
+    batch: ^Scene_Command_Batch, marker_index: int,
+    initial: modifier.Modifier_Request) -> bool {
+    samples := modifier.conic_sequence_samples(initial, 0, 0)
+    if samples.count != 1 || marker_index + 1 >= batch^.command_count {
+        return false
+    }
+    sample := &batch^.commands[marker_index + 1]
+    return sample.kind == .Apply_Native_Modifier &&
+        sample.modifier == samples.requests[0]
+}
+
+// Match the activation-time descend sample expanded from one rolling sequence.
+scene_active_rolling_sequence_initial_sample_matches :: proc(
+    batch: ^Scene_Command_Batch, marker_index: int,
+    initial: modifier.Modifier_Request) -> bool {
+    samples := modifier.rolling_sequence_samples(initial, 0, 0)
+    if samples.count != 1 || marker_index + 1 >= batch^.command_count {
+        return false
+    }
+    sample := &batch^.commands[marker_index + 1]
+    return sample.kind == .Apply_Native_Modifier &&
+        sample.modifier == samples.requests[0]
+}
+
+// Reject claims already reserved by an earlier operation in this batch.
+scene_active_operation_submission_prior_claims_clear :: proc(
+    batch: ^Scene_Command_Batch, command_index: int,
+    submission: operations.Active_Operation_Submission_Request) -> bool {
+    claims := submission.claims
+    for earlier_index in 0..<command_index {
+        earlier := &batch^.commands[earlier_index]
+        if earlier^.kind != .Submit_Active_Operation {
+            continue
+        }
+        earlier_submission :=
+            &batch^.active_operation_submissions[earlier^.integer].request
+        earlier_claims := earlier_submission.claims
+        for requested in claims[:submission.claim_count] {
+            for existing in earlier_claims[:earlier_submission.claim_count] {
+                if requested == existing {
+                    return false
+                }
+            }
+        }
+    }
+    return true
+}
+
+// Verify one ordered marker references a valid current-generation copied request.
+scene_active_operation_marker_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch,
+    command: ^Scene_Command) -> bool {
+    index := command^.integer
+    if index < 0 || index >= batch^.active_operation_submission_count {
+        return false
+    }
+    submission := batch^.active_operation_submissions[index].request
+    runtime_generation := scene_batch_operation_runtime_generation(batch)
+    return batch^.producer == .Julia &&
+        submission.runtime_generation == runtime_generation &&
+        submission.animation_generation == batch^.animation_generation &&
+        submission.session_generation == batch^.session_generation &&
+        operations.active_operation_modifier_request_valid(
+            &state^.active_operations, submission)
+}
+
+// Give native operations an animation-scoped identity when no content runtime exists.
+scene_batch_operation_runtime_generation :: proc(
+    batch: ^Scene_Command_Batch) -> u64 {
+    if batch^.runtime_generation != 0 {
+        return batch^.runtime_generation
+    }
+    return batch^.animation_generation
+}
+
+// Reject later writers that would race an operation admitted earlier in this batch.
+scene_active_operation_claims_conflict_with_later_commands :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch, marker_index: int,
+    submission: operations.Active_Operation_Submission_Request) -> bool {
+    claims := submission.claims
+    sample_count := 1
+    if submission.group_transform.count > 0 {
+        sample_count = submission.group_transform.count
+        if submission.group_transform.oriented {
+            sample_count += 1
+        }
+    }
+    for index in marker_index + 1 + sample_count..<batch^.command_count {
+        command := &batch^.commands[index]
+        if command^.kind == .Apply_Native_Modifier {
+            request := command^.modifier
+            if scene_active_operation_claim_matches_modifier(
+                state, claims[:submission.claim_count], request) {
+                return true
+            }
+        } else if scene_active_operation_claim_matches(
+            claims[:submission.claim_count], command^.entity) {
+            return true
+        }
+    }
+    return false
+}
+
+// Resolve tool sentinels before comparing same-batch writes with physical-joint claims.
+scene_active_operation_claim_matches_modifier :: proc(
+    state: ^core.Euclid_General_State, claims: []operations.Active_Operation_Claim,
+    request: modifier.Modifier_Request) -> bool {
+    if scene_active_operation_modifier_entities_claimed(claims, request) {
+        return true
+    }
+    if modifier.construction_recipe_kind(request.kind) {
+        if request.kind == .Construct_Circle ||
+            request.kind == .Construct_Filled_Circle {
+            return scene_active_operation_claim_matches(claims,
+                    shapemodel.shape_entity_pack(state^.world_compass.joint1)) ||
+                scene_active_operation_claim_matches(claims,
+                    shapemodel.shape_entity_pack(state^.world_compass.joint2))
+        }
+        return scene_active_operation_claim_matches(claims,
+                shapemodel.shape_entity_pack(state^.world_pen.joint1)) ||
+            scene_active_operation_claim_matches(claims,
+                shapemodel.shape_entity_pack(state^.world_pen.joint2))
+    }
+    #partial switch request.kind {
+    case .Pen_Descend, .Pen_Rise, .Pen_Pose, .Pen_Tilt, .Pen_Cone,
+         .Pen_Drag, .Pen_Transfer, .Pen_Highlight_Point, .Pen_Stroke,
+         .Pen_Highlight:
+        return scene_active_operation_claim_matches(claims,
+                shapemodel.shape_entity_pack(state^.world_pen.joint1)) ||
+            scene_active_operation_claim_matches(claims,
+                shapemodel.shape_entity_pack(state^.world_pen.joint2))
+    case .Compass_Descend, .Compass_Rise, .Compass_Transfer,
+         .Compass_Highlight, .Compass_Highlight_Sequence:
+        return scene_active_operation_claim_matches(claims,
+                shapemodel.shape_entity_pack(state^.world_compass.joint1)) ||
+            scene_active_operation_claim_matches(claims,
+                shapemodel.shape_entity_pack(state^.world_compass.joint2))
+    }
+    return false
+}
+
+// Match the direct entities named by a modifier before resolving tool claims.
+scene_active_operation_modifier_entities_claimed :: proc(
+    claims: []operations.Active_Operation_Claim,
+    request: modifier.Modifier_Request) -> bool {
+    return scene_active_operation_claim_matches(claims, request.entity) ||
+        scene_active_operation_claim_matches(claims, request.second_entity) ||
+        scene_active_operation_claim_matches(claims, request.third_entity)
+}
+
+// Compare one nonzero entity against a bounded operation claim set.
+scene_active_operation_claim_matches :: proc(
+    claims: []operations.Active_Operation_Claim, entity: u64) -> bool {
+    if entity == 0 {
+        return false
+    }
+    for claim in claims {
+        if claim.kind == operations.ACTIVE_OPERATION_CLAIM_ENTITY &&
+            claim.identity == entity {
+            return true
+        }
+    }
+    return false
+}
+
+// Keep Julia value-store admission separate from shared scene-output validation.
+scene_command_batch_producer_writes_valid :: proc(
+    state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    if batch^.producer == .Native {
+        return batch^.animation_value_writes.write_count == 0 &&
+            batch^.animation_value_writes.payload_size == 0 &&
+            !batch^.animation_value_writes.invalid
+    }
+    return animation_model.animation_value_store_validate_pending(
+        &state^.animation_values, state^.animation_values.generation,
+        &batch^.animation_value_writes) == .Ok &&
+        scene_command_batch_claims_clear(&state^.active_operations, batch)
+}
+
+// Reject delayed Julia writes that overlap currently authoritative native claims.
+scene_command_batch_claims_clear :: proc(
+    storage: ^operations.Active_Operation_Storage,
+    batch: ^Scene_Command_Batch) -> bool {
+    if storage == nil || batch == nil {
+        return false
+    }
+    for index in 0..<batch^.command_count {
+        command := &batch^.commands[index]
+        if operations.active_operation_entity_claim_conflicts(
+            storage, command^.entity) {
+            return false
+        }
+        if command^.kind == .Apply_Native_Modifier {
+            request := command^.modifier
+            if operations.active_operation_entity_claim_conflicts(
+                storage, request.entity) ||
+                operations.active_operation_entity_claim_conflicts(
+                    storage, request.second_entity) ||
+                operations.active_operation_entity_claim_conflicts(
+                    storage, request.third_entity) {
+                return false
+            }
+        }
+        if (command^.kind == .Reveal_Label ||
+            command^.kind == .Reveal_Region ||
+            command^.kind == .Reveal_Sweep) &&
+            operations.active_operation_entity_claim_conflicts(
+                storage, command^.reveal.owner_entity) {
+            return false
+        }
+    }
+    return true
+}
+
 // Validate the proposed accepted timeline against the owning animation service.
 scene_command_batch_progress_valid :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
-    if math.is_nan(batch^.animation_progress) ||
-        math.is_inf(batch^.animation_progress) || batch^.animation_progress < 0 {
+    effect_progress, progress_valid := scene_command_batch_effect_progress(state, batch)
+    if !progress_valid || math.is_nan(batch^.animation_progress) ||
+        math.is_inf(batch^.animation_progress) || batch^.animation_progress < 0 ||
+        math.is_nan(effect_progress) || math.is_inf(effect_progress) ||
+        effect_progress < state^.particle_system.formation.accepted_progress {
         return false
     }
-    if state^.julia_runtime_service == nil {
-        return batch^.animation_progress >=
-            state^.particle_system.formation.accepted_progress
+    if batch^.producer == .Native {
+        return batch^.animation_generation ==
+            state^.particle_system.formation.animation_generation
     }
     service := state^.julia_runtime_service
+    if service == nil {
+        return true
+    }
     return batch^.animation_generation == service^.animation_generation &&
         batch^.tick_sequence > service^.animation_last_committed_sequence &&
-        batch^.animation_progress >= service^.animation_progress &&
-        batch^.animation_progress >=
-            state^.particle_system.formation.accepted_progress
+        batch^.animation_progress >= service^.animation_progress
+}
+
+// Resolve and preflight the display-owned endpoint without changing accepted time.
+scene_command_batch_effect_progress :: proc(
+    state: ^core.Euclid_General_State,
+    batch: ^Scene_Command_Batch) -> (f64, bool) {
+    if batch^.formation_progress_set {
+        return batch^.formation_progress, true
+    }
+    if batch^.producer == .Native && batch^.native_interval_set {
+        progress, status := particles.formation_native_interval_candidate(
+            &state^.particle_system, batch^.animation_generation,
+            batch^.native_interval_step, batch^.native_interval_seconds)
+        return progress, status == .Accepted || status == .Already_Accepted
+    }
+    return batch^.animation_progress, true
 }
 
 // Preflight reveal-record capacity after endpoint completions and same-owner supersession.
 scene_command_batch_reveals_fit :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
+    progress, progress_valid := scene_command_batch_effect_progress(state, batch)
+    if !progress_valid {
+        return false
+    }
     formation := &state^.particle_system.formation
     live_count := 0
     for record in formation^.reveals {
         if record.active && record.animation_generation == batch^.animation_generation &&
-            batch^.animation_progress < record.start_progress + f64(record.duration) {
+            progress < record.start_progress + f64(record.duration) {
             live_count += 1
         }
     }
@@ -628,7 +982,7 @@ scene_command_batch_reveals_fit :: proc(
         }
         existing := scene_find_live_reveal(
             formation, descriptor, batch^.animation_generation,
-            batch^.animation_progress) >= 0
+            progress) >= 0
         if descriptor.duration == 0 && existing {
             live_count -= 1
         } else if descriptor.duration > 0 && !existing {
@@ -709,4 +1063,3 @@ scene_find_live_reveal :: proc(
     }
     return -1
 }
-

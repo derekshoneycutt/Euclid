@@ -38,6 +38,61 @@ normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
         "sweep delta should wrap across zero")
 }
 
+// Reconcile delayed Julia time against exact native interval overlap and mixed rates.
+@(test)
+formation_time_reconciles_native_overlap_and_retires_coverage :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps, context.allocator)
+    formation_reset_generation(ps, 4)
+    testing.expect_value(t, formation_accept_native_interval(ps, 4, 10, 0.1),
+        particlemodel.Formation_Time_Status.Accepted)
+    testing.expect_value(t, formation_accept_native_interval(ps, 4, 10, 0.1),
+        particlemodel.Formation_Time_Status.Already_Accepted)
+    testing.expect_value(t, ps^.formation.accepted_progress, f64(0.1))
+    intervals: [2]Formation_Time_Interval = {
+        {
+            step = 10,
+            generation = 4,
+            authored_seconds = 0.06,
+        },
+        {
+            step = 11,
+            generation = 4,
+            authored_seconds = 0.2,
+        },
+    }
+    progress, valid := formation_reconcile_julia_intervals(ps, 4, intervals[:])
+    testing.expect(t, valid)
+    testing.expect(t, math.abs(progress - f64(0.3)) < f64(1e-12))
+    formation_retire_native_intervals(ps, 4, intervals[:])
+    testing.expect_value(t, ps^.formation.native_time_interval_count, 0)
+    testing.expect(t, formation_advance_progress(ps, 4, progress))
+    testing.expect(t,
+        math.abs(ps^.formation.accepted_progress - f64(0.3)) < f64(1e-12))
+}
+
+// Reject valid native time when bounded overlap storage is exhausted and reset it by epoch.
+@(test)
+formation_time_capacity_and_generation_reset_are_explicit :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps, context.allocator)
+    formation_reset_generation(ps, 7)
+    for step in 0..<FORMATION_TIME_INTERVAL_CAPACITY {
+        ps^.formation.native_time_intervals[step] = {
+            step = u64(step + 1),
+            generation = 7,
+            authored_seconds = 0.001,
+        }
+    }
+    ps^.formation.native_time_interval_count = FORMATION_TIME_INTERVAL_CAPACITY
+    _, status := formation_native_interval_candidate(
+        ps, 7, u64(FORMATION_TIME_INTERVAL_CAPACITY + 1), 0.001)
+    testing.expect_value(t, status, particlemodel.Formation_Time_Status.Full)
+    formation_reset_generation(ps, 8)
+    testing.expect_value(t, ps^.formation.native_time_interval_count, 0)
+    testing.expect_value(t, ps^.formation.accepted_progress, f64(0))
+}
+
 // Count live low-layer particles within the configured test capacity.
 count_live_low_particles :: proc(ps: ^particlemodel.Particle_System) -> int {
     count: int

@@ -148,6 +148,19 @@ Use the Cycloid, Trochoid, Parabola, and Hyperbola motion/draw helpers for commo
 mechanics, just as other content uses the pen and compass helpers. Circle uses
 the existing compass descent, circle draw, and compass rise helpers.
 
+Terminal `point!`, `line!`, and `circle!` use the same readable descent/draw/rise
+rhythm through one native construction recipe. Their duration covers that complete
+sequence; native elapsed progress and a committed final tool retirement define
+completion, not Julia's tick cadence or particle settlement.
+
+Terminal `parabola!` and `hyperbola!` retain that full-duration native sequence
+without changing authored content's explicit-time phase helpers. Native fixed-step
+samples preserve the integrated rotated apparatus, directed drawing frontier,
+selected Hyperbola tips and paired floor contacts. A skipped phase boundary still
+commits its exact endpoint before the next phase. The analytic host is revealed at the
+draw-phase boundary and its frontier advances with native samples, so the curve is laid
+down progressively before the tool rises.
+
 Hyperbola content retains one curve identity and immutable constructor selection
 (`branches=:both`, `:positive`, or `:negative`, in the intrinsic axes). Its shared
 drawing helper receives the same selection, advances one native frontier, and

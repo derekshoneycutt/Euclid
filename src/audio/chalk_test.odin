@@ -34,3 +34,29 @@ chalk_drawing_activity_is_binary :: proc(t: ^testing.T) {
     set_drawing_activity(&runtime, false)
     testing.expect(t, !runtime.drawing_active)
 }
+
+// Keep audio active while any Julia or native drawing producer remains active.
+@(test)
+chalk_drawing_activity_aggregates_independent_producers :: proc(t: ^testing.T) {
+    runtime: Chalk_Audio_Runtime
+    set_drawing_activity(&runtime, true)
+    testing.expect(t, set_native_drawing_activity(&runtime, 11, true))
+    testing.expect(t, set_native_drawing_activity(&runtime, 12, true))
+    set_drawing_activity(&runtime, false)
+    testing.expect(t, runtime.drawing_active)
+    testing.expect(t, set_native_drawing_activity(&runtime, 11, false))
+    testing.expect(t, runtime.drawing_active)
+    testing.expect(t, set_native_drawing_activity(&runtime, 12, false))
+    testing.expect(t, !runtime.drawing_active)
+}
+
+// Report source exhaustion before an active native producer can publish.
+@(test)
+chalk_drawing_activity_capacity_is_preflightable :: proc(t: ^testing.T) {
+    runtime: Chalk_Audio_Runtime
+    for index in 0..<len(runtime.native_drawing_sources) {
+        testing.expect(t, set_native_drawing_activity(&runtime, u64(index + 1), true))
+    }
+    testing.expect(t, !native_drawing_activity_can_set(
+        &runtime, u64(len(runtime.native_drawing_sources) + 1), true))
+}

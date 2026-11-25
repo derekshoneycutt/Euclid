@@ -77,7 +77,7 @@ tables group code by the architectural question a contributor is likely to ask.
 | --- | --- | --- |
 | Core substrate | Bounded storage, animation-generation memory, protocols, portable values, shared grapheme text mechanics | [`src/core/storage/`](../../../src/core/storage/), [`src/core/animation/`](../../../src/core/animation/), [`src/core/protocol/`](../../../src/core/protocol/), [`src/core/text/`](../../../src/core/text/) |
 | Geometry and constraints | Shape world, curves, tools, constraints, render preparation | [`src/shapes/`](../../../src/shapes/) |
-| Particles | Loose dust/field physics plus bounded authored formation on accepted animation commits; region targets attach to prepared triangles, label targets to crisp label ink, and both render in a dedicated pass above tools | [`src/particles/`](../../../src/particles/) |
+| Particles | Loose dust/field physics plus bounded authored formation on accepted Julia/native scene commits; a display-owned monotonic endpoint reconciles overlapping producer intervals, while region targets attach to prepared triangles and label targets to crisp label ink in a dedicated pass above tools | [`src/particles/`](../../../src/particles/) |
 | UI and interaction | Regions, widgets, panels, focus, accessibility semantics | [`src/view/ui/`](../../../src/view/ui/) |
 | Terminal | Display-owned terminal surface and services, connected to Julia session policy | [`src/view/terminal/`](../../../src/view/terminal/) |
 | Dynview | Native semantic text model, compilation, math measurement, and layout | [`src/dynview/`](../../../src/dynview/) |
@@ -296,16 +296,41 @@ Parabola and Hyperbola samples move their configured native apparatus and exact
 frontier together, preserving intrinsic branch selection and paired tracer ink.
 Curve initialization/reset placement also uses native mechanics, admitted only
 during the existing quiesced Julia-owner lifecycle handoff.
-Julia still owns named-variant construction, directed completion policy, and
-instrument retirement.
+Authored animation content continues to use these explicit-time modifiers and
+its own phase machines. Terminal Parabola and Hyperbola jobs instead submit one
+native full-duration operation: Odin expands skipped descent/draw/rise boundaries,
+commits selected tracer contacts and the exact frontier, and reveals the host only
+on completion. Julia retains the FIFO, activation-time apparatus setup, and tool
+retirement.
 Terminal rigid transforms submit activation-time defining points and XYZW orientation
 to native evaluators. Their outputs participate in the same final-plane validation
 as direct writes; signed rotations retain the authored path rather than shortest-path
-interpolation. Terminal point, line, and arc finalizers use native completion requests.
+interpolation. Bounded group samples publish every defining point and optional
+orientation in one scene transaction. Pen and compass highlights submit one native
+phase-sequenced operation and retire the apparatus with its exact terminal sample.
+Terminal point, line, and arc construction, plus rolling and conic motion, use
+native full-duration operations rather than Julia elapsed loops.
+
+The display also owns a fixed-capacity active-operation store for modifier-backed
+motion. Julia submissions are captured as ordered markers in the scene transaction;
+preflight reserves their copied recipes, claims and outcomes before any scene effects,
+and their time-zero samples apply at the marker position. Candidate elapsed time is
+accepted only after the shared scene transaction commits; later Julia writes are
+rejected when they overlap an active entity claim. Correlated outcomes use bounded,
+nonblocking delivery to the Julia owner. The display retains each outcome slot after
+inbox publication until the session-owned Julia consumer admits an exact-identity
+receipt, including the outcome-slot generation, back to the display; full mailboxes
+preserve the result for retry. This
+retention is independent of execution-slot reuse. Julia exposes typed results through
+the owning session's `take_active_operation_outcome!`; submission callers provide
+request identities explicitly. Outcomes for an older Terminal generation are
+acknowledged without entering a successor session's result queue, and closing or
+stopping a session drains its remaining receipts before retiring the Julia owner.
 
 Start at [`src/bridge/model/`](../../../src/bridge/model/),
 [`src/bridge/host/runtime_service.odin`](../../../src/bridge/host/runtime_service.odin), and
-[`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl). Follow
+[`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl), using
+`submit_active_modifier!` for ordered submission. Follow
 [Julia Thread Architecture](JuliaThreadArchitecture.md) for the transport and
 publication patterns.
 

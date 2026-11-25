@@ -1,7 +1,9 @@
 package bridge_abi
 
 import host "../host"
+import bridgemodel "../model"
 import core "../../core"
+import operations "../../operations"
 import julialib "../../../libs/julia/bindings"
 
 //   Copy one Julia-owned opaque value into canonical animation storage.
@@ -72,6 +74,42 @@ apply_native_modifier :: proc "c" (
     state: ^core.Euclid_General_State,
     request_abi: host.Bridge_Native_Modifier_Request) -> i32 {
     return host.apply_native_modifier(state, request_abi)
+}
+
+// Capture one owned modifier operation in the current ordered animation transaction.
+@(export)
+submit_active_modifier :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: host.Bridge_Native_Modifier_Request) -> i32 {
+    return host.submit_active_modifier(state, request_id, request_abi)
+}
+
+// Capture one bounded group transform and all target starts from the Julia FIFO.
+@(export)
+submit_active_group_transform :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: ^host.Bridge_Active_Group_Transform_Request) -> i32 {
+    return host.submit_active_group_transform(state, request_id, request_abi)
+}
+
+// Capture one ordered polygon trace from the Julia FIFO's fixed-capacity request.
+@(export)
+submit_active_polygon_trace :: proc "c" (
+    state: ^core.Euclid_General_State, request_id: u64,
+    request_abi: ^host.Bridge_Active_Polygon_Trace_Request) -> i32 {
+    return host.submit_active_polygon_trace(state, request_id, request_abi)
+}
+
+// Publish one exact consumer receipt for display-owner outcome retirement.
+@(export)
+acknowledge_active_operation_outcome :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity: operations.Active_Operation_Outcome_Identity) -> i32 {
+    if state == nil {
+        return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    context = state^.saved_context
+    return host.publish_active_operation_outcome_acknowledgment(state, identity)
 }
 
 //   Return the bridge ABI version expected by Julia-side integration code.

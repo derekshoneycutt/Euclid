@@ -77,7 +77,8 @@ const NATIVE_MODIFIER_SUPPORT_INVENTORY = (:normalized_progress, :curve_paramete
     :reflection_arc_point_below_surface,)
 
 const NATIVE_MODIFIER_NONEXPORT_INVENTORY = Set([
-    :TransformEps, :checked_curve_status, :segments_intersect_xy,
+    :TransformEps, :PenLength, :PenDrawLineAngle, :checked_curve_status,
+    :segments_intersect_xy,
     :complete_point, :complete_line, :complete_circle,
     :place_cycloid_tools, :place_trochoid_tools,
     :place_hyperbola_tool, :place_parabola_tool,])
@@ -203,7 +204,7 @@ end
     @test isdefined(OdinJuliaBridge, :apply_native_modifier_request)
     kinds = sort([getfield(OdinJuliaBridge, name) for name in
         names(OdinJuliaBridge; all=true) if startswith(String(name), "NATIVE_MODIFIER_")])
-    @test kinds == Int32.(0:46)
+    @test kinds == vcat(Int32.(0:52), Int32[54, 55, 56, 57])
 end
 
 @testset "Terminal and stochastic effect inventory" begin

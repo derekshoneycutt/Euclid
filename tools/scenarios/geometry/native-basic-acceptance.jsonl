@@ -3,11 +3,11 @@
 {"select_animation":"Terminal","as":"terminal"}
 {"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
 {"wait_state":"terminal_ready","timeout_ms":10000}
-{"type":"p=point!([0.2,0.25,0];duration=0.1); l=line!([0.25,0.25,0],[0.55,0.25,0];duration=0.1); c=circle!([0.5,0.5,0],0.12;duration=0.1); f=circle!([0.75,0.5,0],0.12;filled=true,duration=0.1); @assert all(x->x.status==0,(p,l,c,f)); println(\"native-basic-\"*\"admitted\")"}
+{"type":"p=point!([0.2,0.25,0];duration=0.1); translate!(p,[0.05,0,0];duration=0.1); l=line!([0.25,0.25,0],[0.55,0.25,0];duration=0.1); c=circle!([0.5,0.5,0],0.12;duration=0.1); f=circle!([0.75,0.5,0],0.12;filled=true,duration=0.1); @assert all(x->x.status==0,(p,l,c,f)); hide!(p); show!(p); clear!(); show!(p); println(\"native-basic-\"*\"admitted\")"}
 {"key":"enter"}
 {"wait_terminal_contains":"native-basic-admitted","timeout_ms":10000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
-{"type":"while !status().drained && !status().failed; sleep(0.01); end; aq=OdinJuliaBridge.get_arc_geometry(state_ptr,c.host_id); fq=OdinJuliaBridge.get_arc_geometry(state_ptr,f.host_id); @assert !status().failed && aq.status==0 && fq.status==0; println(\"native-basic-\"*\"verified\")"}
+{"type":"while !status().drained && !status().failed; sleep(0.01); end; aq=OdinJuliaBridge.get_arc_geometry(state_ptr,c.host_id); fq=OdinJuliaBridge.get_arc_geometry(state_ptr,f.host_id); pv=OdinJuliaBridge.get_point(state_ptr,p.index); @assert !status().failed && aq.status==0 && fq.status==0 && pv.status==0 && isapprox(pv.pos[1],0.25;atol=0.001); println(\"native-basic-\"*\"verified\")"}
 {"key":"enter"}
 {"wait_terminal_contains":"native-basic-verified","timeout_ms":20000}
 {"wait_state":"terminal_idle","timeout_ms":10000}
