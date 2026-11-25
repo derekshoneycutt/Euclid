@@ -124,51 +124,24 @@ text fragments keep their normal colors, including during mixed transfers.
 
 ## Motion Conventions
 
-Each authored animation defines its own state, phases, initialization, reset,
-`loop`, completed-form selection, cleanup, and lifecycle entry in its content
-module. The leaf's loop explicitly chooses the phase ordering and transitions.
-Do not include a shared content lifecycle or delegate the loop to a generic
-animation runner.
+Each authored animation owns its state, phases, initialization, reset, `loop`,
+completed form, cleanup, and lifecycle entry. The leaf module controls its phase
+order and transitions; reusable content must not introduce a shared lifecycle or
+generic animation runner.
 
-Reusable motion belongs to the sysimage-owned `EuclidAnimations` module.
-Its entry point is [`animations.jl`](../../../src/julia/animations.jl), which
-includes logical implementation files from
-[`animations/`](../../../src/julia/animations/). These helpers take explicit
+Reusable motion lives in the sysimage-owned `EuclidAnimations` module. Its entry
+point is [`animations.jl`](../../../src/julia/animations.jl), which includes
+[`animations/`](../../../src/julia/animations/). These helpers receive explicit
 phase-local elapsed time, duration, geometry, and native identities. They perform
-the requested motion or drawing step; they do not own a content module's clock,
-successor phase, reset, text publication, or catalogue registration.
+one motion or drawing step and do not own clocks, phase succession, reset,
+publication, or catalogue registration.
 
-Keep the whole tool visible through descent, drawing, and rise. Pen motion should
-preserve its physical length and follow the drawing tip rather than stretching
-between a moving tip and a stationary upper joint. Show active contact only while
-drawing, not during descent or rise.
+Keep tools visible from descent through drawing and rise. A pen preserves its
+physical length and follows the drawing tip. Contact is active only during drawing.
 
-Named curves retain their own animation flows even when they share an apparatus.
-Use the Cycloid, Trochoid, Parabola, and Hyperbola motion/draw helpers for common
-mechanics, just as other content uses the pen and compass helpers. Circle uses
-the existing compass descent, circle draw, and compass rise helpers.
-
-Terminal `point!`, `line!`, and `circle!` use the same readable descent/draw/rise
-rhythm through one native construction recipe. Their duration covers that complete
-sequence; native elapsed progress and a committed final tool retirement define
-completion, not Julia's tick cadence or particle settlement.
-
-Terminal `parabola!` and `hyperbola!` retain that full-duration native sequence
-without changing authored content's explicit-time phase helpers. Native fixed-step
-samples preserve the integrated rotated apparatus, directed drawing frontier,
-selected Hyperbola tips and paired floor contacts. A skipped phase boundary still
-commits its exact endpoint before the next phase. The analytic host is revealed at the
-draw-phase boundary and its frontier advances with native samples, so the curve is laid
-down progressively before the tool rises.
-
-Hyperbola content retains one curve identity and immutable constructor selection
-(`branches=:both`, `:positive`, or `:negative`, in the intrinsic axes). Its shared
-drawing helper receives the same selection, advances one native frontier, and
-emits trails and activates contact only at selected tips. Both physical pens and
-carriages always move, even in one-sided mode. Descent, rise, and completed-form
-display leave both contacts inactive. Reset preserves selection; the single
-catalogue animation defaults to both. Disconnected strokes never require separate
-shape hosts.
+Named curves keep their own animation flows when they share an apparatus. Reuse
+the Cycloid, Trochoid, Parabola, Hyperbola, pen, and compass helpers where those
+mechanics apply.
 
 A typical construction follows this visual rhythm:
 

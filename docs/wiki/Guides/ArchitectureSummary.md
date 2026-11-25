@@ -262,77 +262,27 @@ ownership, messaging, evaluation, rendering, and lifecycle.
 
 ## Odin-Julia Bridge: How the Boundary Works
 
-The bridge is a closed typed contract, not a generic callback queue. Its Odin packages
-separate the executable C adapters in [`abi/`](../../../src/bridge/abi/), the Julia
-owner in [`host/`](../../../src/bridge/host/), bounded mailbox mechanics in
-[`transport/`](../../../src/bridge/transport/), animation registry and generation
-storage in [`animation/`](../../../src/bridge/animation/), exercise boundary
-operations in [`exercise/`](../../../src/bridge/exercise/), and captured scene
-transactions in [`scene/`](../../../src/bridge/scene/). The root bridge package
-links the ABI adapters into the application and harness; consumers otherwise import
-the owning package directly. Presentation classification and semantic replay live
-under [`view/presentation/`](../../../src/view/presentation/).
+The bridge is a closed typed contract, not a generic callback queue. Odin owns ABI
+adapters, bounded transport, native storage, and result publication; Julia owns
+runtime policy and typed wrappers. Start with
+[`src/bridge/model/`](../../../src/bridge/model/),
+[`src/bridge/host/runtime_service.odin`](../../../src/bridge/host/runtime_service.odin),
+and [`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl).
 
-Small requests and
-results use consumer-owned bounded native mailboxes; animation work and other long-lived
-payloads use checked slots or immutable snapshots. Odin validates and publishes
-results to the owner of visible state. Keep Odin exports, Julia wrappers, message
-identity, and failure handling symmetric.
+Use [`abi/`](../../../src/bridge/abi/) for C adapters,
+[`host/`](../../../src/bridge/host/) for the Julia owner,
+[`transport/`](../../../src/bridge/transport/) for mailboxes,
+[`animation/`](../../../src/bridge/animation/) for animation registry and generations,
+[`exercise/`](../../../src/bridge/exercise/) for exercise operations, and
+[`scene/`](../../../src/bridge/scene/) for scene transactions. Consumers import
+their owning package directly.
 
-Basic reusable native mechanics cross this boundary as explicit-time native modifier
-markers. Julia-authored phases still select elapsed time and phase transitions,
-while Odin evaluates the marker and expands it into ordinary scene commands before
-whole-batch validation and commit. The marker is callback-owned and has no
-independent clock or persistent motion slot. Direct bridge scene writes remain
-available and mixed direct/modifier batches keep callback order.
-Travel, point/arc highlights, connected strokes, extensions, and reflected-angle
-markers use the same boundary. Julia retains content/Terminal queue policy; Odin
-owns their sampled apparatus and geometry. Explicit labels and regions continue
-to use the native reveal contracts rather than a second modifier-owned lifecycle.
-Cycloid and Trochoid samples reuse canonical native curve geometry for rail/ring
-poses and tracer contact. Complete guide samples commit endpoints and scalar
-configuration atomically; analytic curve orientation is not overwritten.
-Parabola and Hyperbola samples move their configured native apparatus and exact
-frontier together, preserving intrinsic branch selection and paired tracer ink.
-Curve initialization/reset placement also uses native mechanics, admitted only
-during the existing quiesced Julia-owner lifecycle handoff.
-Authored animation content continues to use these explicit-time modifiers and
-its own phase machines. Terminal Parabola and Hyperbola jobs instead submit one
-native full-duration operation: Odin expands skipped descent/draw/rise boundaries,
-commits selected tracer contacts and the exact frontier, and reveals the host only
-on completion. Julia retains the FIFO, activation-time apparatus setup, and tool
-retirement.
-Terminal rigid transforms submit activation-time defining points and XYZW orientation
-to native evaluators. Their outputs participate in the same final-plane validation
-as direct writes; signed rotations retain the authored path rather than shortest-path
-interpolation. Bounded group samples publish every defining point and optional
-orientation in one scene transaction. Pen and compass highlights submit one native
-phase-sequenced operation and retire the apparatus with its exact terminal sample.
-Terminal point, line, and arc construction, plus rolling and conic motion, use
-native full-duration operations rather than Julia elapsed loops.
-
-The display also owns a fixed-capacity active-operation store for modifier-backed
-motion. Julia submissions are captured as ordered markers in the scene transaction;
-preflight reserves their copied recipes, claims and outcomes before any scene effects,
-and their time-zero samples apply at the marker position. Candidate elapsed time is
-accepted only after the shared scene transaction commits; later Julia writes are
-rejected when they overlap an active entity claim. Correlated outcomes use bounded,
-nonblocking delivery to the Julia owner. The display retains each outcome slot after
-inbox publication until the session-owned Julia consumer admits an exact-identity
-receipt, including the outcome-slot generation, back to the display; full mailboxes
-preserve the result for retry. This
-retention is independent of execution-slot reuse. Julia exposes typed results through
-the owning session's `take_active_operation_outcome!`; submission callers provide
-request identities explicitly. Outcomes for an older Terminal generation are
-acknowledged without entering a successor session's result queue, and closing or
-stopping a session drains its remaining receipts before retiring the Julia owner.
-
-Start at [`src/bridge/model/`](../../../src/bridge/model/),
-[`src/bridge/host/runtime_service.odin`](../../../src/bridge/host/runtime_service.odin), and
-[`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl), using
-`submit_active_modifier!` for ordered submission. Follow
-[Julia Thread Architecture](JuliaThreadArchitecture.md) for the transport and
-publication patterns.
+Requests and outcomes use bounded mailboxes or immutable checked-slot payloads.
+Keep exports, wrappers, identities, ownership, and failure handling symmetric.
+Native modifiers carry explicit-time recipes and resolved native identities; Julia
+selects authored timing and transitions, while Odin validates and commits the
+resulting scene. Follow [Julia Thread Architecture](JuliaThreadArchitecture.md)
+for transport and publication patterns.
 
 ## Testing Strategy
 
@@ -472,6 +422,10 @@ The particle system moved to a structure-of-arrays layout and SIMD-capable opera
 then to a PIC-style grounded dust model: particles deposit into a vector field, field
 physics run there, and results return to particles. These changes reflect a shift from
 individual per-particle behavior toward explicit data-oriented simulation stages.
+
+A native Odin animation system was constructed once the core was completed. This moved
+some prior Julia helpers into a dedicated Odin system of modifiers, native timed
+operations, and primitive initial scheduling capabilities.
 
 ### Julia host and interactive session matured
 

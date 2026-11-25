@@ -986,7 +986,7 @@ not portable between machines.
 - `clear!` queues hiding the Terminal-managed hosts admitted before it, not later
   admissions or unrelated application shapes. Cleared hosts can be shown again.
 - Pause the fixed-step simulation to inspect submitted native construction progress
-  without changing queue order. Animation-policy pause does not stop native progress.
+  without changing queue order.
 - Rolling operations use the same fixed-step pause, generation-qualified completion,
   and FIFO blocking rules; later Terminal work cannot start before their outcome.
 - Submitted rigid transforms and highlights follow the same fixed-step pause and

@@ -91,43 +91,19 @@ The bridge uses two typed tagged unions:
 - [`Julia_Host_Egress`](../../../src/bridge/model/runtime.odin) carries Julia-produced
   results and events back to the display.
 
-Each direction has a consumer-owned native mailbox. Publication atomically copies the
-complete envelope and nested payload; the sender is done with those bytes when it
-returns. Each inbox uses one plain standard growing `core:mem/virtual.Arena`,
-with initial reservations of 256 KiB for Julia and 640 KiB for display: two arenas
-total, without owner wrappers or custom chunk management. Each permits 64 accepted
-messages, with logical allocation-byte limits of 1 MiB and 2.5 MiB respectively.
-Those include envelope and payload layout, not allocator or OS backing overhead.
+Each direction has a consumer-owned bounded mailbox. Publishing copies the complete
+envelope and payload; payloads retained after dispatch must use destination-owned
+storage. Consumers drain the accepted FIFO outside the mailbox lock.
 
-Consumers pause admission and dispatch the entire accepted FIFO outside the mutex.
-Julia drains all accepted native requests before its ordinary actor-service step;
-display service drains the full accepted egress batch. The final release resets
-the arena using `vmem.arena_free_all`, clears epoch byte accounting, reopens
-admission unless closed, and wakes waiters. Growth blocks may be released at reset;
-the first block remains reserved. No second arena or return channel is needed.
-Full drains replace the previous one-request/16-message budgets. Count limits do
-not bound execution time: some control requests synchronously execute Julia work.
-Orderly service teardown logs `julia_mailbox_transport` for both directions, including
-accepted/limit/peak logical bytes, outstanding/peak counts, and cumulative publication,
-mutex-wait and payload-copy nanoseconds. These are measured costs, not latency
-guarantees.
-Payloads retained beyond dispatch must be copied into destination-owned storage.
+Capacity pressure pauses admission until the consumer drains. Mailbox outcomes
+remain distinct for count pressure, byte pressure, allocation failure, and closure.
+Display dispatch must not wait for Julia while Julia may need to publish in the
+display inbox. Startup and shutdown waits retain their matched completion while
+draining the rest of the accepted batch.
 
-Ordinary display sends do not wait for capacity, but copying and synchronous native
-arena growth can run under the mutex. Count pressure, byte pressure, allocation failure,
-and closure have distinct outcomes. `Queue_Full` also means admission is temporarily
-paused for draining. Reliable completion traffic waits outside the lock and wakes
-on reset or closure. Display dispatch must not synchronously wait for Julia while
-its inbox is draining, since Julia may be waiting to publish into that inbox.
-Startup and correlated lifecycle/shutdown waits retain their matched result while
-finishing the rest of the accepted batch before returning.
-
-Idle Julia uses mailbox notification, not notification counts as queue truth. The
-primitive `terminal_host_pump_wait_ns` wrapper computes a wait budget using Julia's
-`HostPumpStatus` and clock, avoiding a native mirror of the managed status layout.
-Runnable actor work, output, or newly admitted host work yields zero wait; finite timer
-deadlines shorten it. The current pump reports no finite timer deadline, so the maximum
-1 ms external-I/O polling interval remains necessary.
+Idle Julia waits for mailbox notification rather than actor notifications or native
+mirrors of Julia state. Runnable managed work or newly admitted host work requires
+no idle wait.
 
 The unions carry several message families. Their differences are part of the design,
 not implementation trivia:

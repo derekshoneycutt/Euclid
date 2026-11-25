@@ -139,11 +139,6 @@ function terminal_host_ingest_capabilities(
         version, encoding, color, modify_other_keys_level, kitty_keyboard_flags, features)
 end
 
-"""Pump one bounded turn of host-owned application actor work."""
-function terminal_host_pump(host::EuclidRuntimeHost)::Bool
-    return pump_euclid_reactor!(host)
-end
-
 """Pump host policy and return a primitive wait duration, never a managed status pointer."""
 function terminal_host_pump_wait_ns(host::EuclidRuntimeHost)::Int64
     status, admitted = pump_euclid_reactor_status!(host)

@@ -2909,7 +2909,15 @@ AnalysisSettings(
             "terminal_host_ingest_evaluation",
             "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:terminal_host_pump", :julia, "terminal_host_pump",
+            "odin-bridge:terminal_host_ingest_active_operation_outcome", :julia,
+            "terminal_host_ingest_active_operation_outcome",
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_active_operation_progress", :julia,
+            "terminal_host_ingest_active_operation_progress",
+            "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_pump_wait_ns", :julia, "terminal_host_pump_wait_ns",
             "src/bridge/host/terminal_callbacks.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:terminal_host_shutdown", :julia, "terminal_host_shutdown",

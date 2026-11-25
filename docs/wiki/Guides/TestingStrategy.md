@@ -57,6 +57,10 @@ shape API scenarios belong to `geometry`, even when they submit Terminal command
 Acceptance entry points and their seed, restore, recovery, and failure phases live
 together under the owning feature.
 
+Use scenarios when a behavioral claim crosses ordinary application boundaries: a
+request must correlate with a later event, a frame must follow a state change, or
+shutdown and allocation evidence matters.
+
 | Directory | Coverage |
 | --- | --- |
 | `animation/` | Controls, speed, completed figures, selection and content publication |
@@ -71,83 +75,15 @@ together under the owning feature.
 | `ui/`, `settings/` | Shared interaction/accessibility and durable preferences |
 | `capture/`, `rendering/`, `particles/` | Capture, native/font rendering and loose-dust physics |
 
-[`catalog.toml`](../../../tools/scenarios/catalog.toml) explicitly maps stable public
-CLI names to source paths. Moving a program does not rename its command.
-Only catalog entries are selected by `--all`; unlisted JSONL files are supporting
+[`catalog.toml`](../../../tools/scenarios/catalog.toml) is the authoritative public
+inventory. It maps stable public CLI names to source paths and categories. Moving a
+scenario source does not rename its command.
+
+Only catalog entries are public scenarios. Unlisted JSONL files are supporting
 workflow phases, not independently runnable acceptance tests. The
-[runner](../../../tools/scenario_runner.jl) retains explicit multi-process workflow
-dispatch, isolated databases, fault injection and post-launch evidence validation.
-Do not recursively discover JSONL files as public scenarios.
-
-Unified shape motion is covered by
-[`terminal-world-transforms-acceptance`](../../../tools/scenarios/geometry/terminal-world-transforms-acceptance.jsonl)
-(tilted arcs, sectors, lenses/lunes, polygons, inverse motion and directed reflection)
-and [`terminal-world-curves-acceptance`](../../../tools/scenarios/geometry/terminal-world-curves-acceptance.jsonl)
-(vertical/oblique cycloids, ellipses, conics, departure and allocation baselines).
-The native basic path is covered by
-[`native-basic-acceptance`](../../../tools/scenarios/geometry/native-basic-acceptance.jsonl),
-which covers Terminal point/line/circle construction interleaved with hide/show and
-clear, allocation samples, capture, and shutdown with particle effects disabled. Its
-FIFO drain check observes committed native construction outcomes rather than Julia
-capture alone. Julia
-regressions additionally cover submit-once behavior, generation-qualified progress,
-terminal outcome handling, rejection blocking, and request-ID reuse across Terminal
-session recreation. It does not establish intermediate tool-pose parity or allocation
-stability across repeated operations.
-Native tool regression tests use real pen and compass hosts and snap constraints
-to check descent/rise visibility, the unlocked pen upper joint, fixed-length
-tilted/dragged poses, and active compass visibility on the first and second circles.
-[`native-tool-motion-acceptance`](../../../tools/scenarios/geometry/native-tool-motion-acceptance.jsonl)
-samples ordinary queued Terminal jobs at intermediate descent, circle, tilt, drag,
-and rise poses, checking both joints after publication and capturing each pose.
-It sets the Julia-owned job elapsed time while animation scheduling is paused,
-then resumes ordinary native ticks to evaluate and publish each sample.
-[`native-compound-acceptance`](../../../tools/scenarios/geometry/native-compound-acceptance.jsonl)
-samples queued pen highlights in both directions and a filled compass highlight,
-checks published joints, captures those poses and label/region construction, then
-resets, reloads, and runs fresh highlights. Native unit tests cover travel heights,
-crossed compass detours, stroke boundaries, hidden future segments, extension
-frontiers, reflected marker ordering, and measured expansion counts. Julia adapter
-fixtures record actual typed payloads and reject any fallback setter call.
-Rolling tests execute every authored Cycloid/Trochoid leaf through production-shaped
-native adapters, including placement returns, phase boundaries, exact completion,
-and rejected capture. Native tests cover reversed partial domains, oblique rails,
-both ring modes, tracer ratios, rotation/phase, real guide and curve publication,
-interpolation history, host-orientation preservation, and measured output bounds.
-[`native-rolling-acceptance`](../../../tools/scenarios/geometry/native-rolling-acceptance.jsonl)
-samples queued oblique Cycloid and rotated Trochoid apparatus, then exercises all
-named Terminal variants, reset/reload interruption, captures, and orderly shutdown.
-Native conic tests cover exact skipped-phase endpoints, rotated and reversed
-frontiers, all Hyperbola branch selections, paired contacts, claims, final host
-visibility, and correlated completion. The catalogued
-[`terminal-shapes-conics-acceptance`](../../../tools/scenarios/geometry/terminal-shapes-conics-acceptance.jsonl)
-exercises the Terminal FIFO across Parabola and all three Hyperbola branch selections,
-then verifies final geometry and shutdown. Authored Parabola/Hyperbola content and its
-explicit-time helpers remain unchanged.
-Native tests assert rigid evaluation equivariance, orientation transport/lifetime,
-atomic final-plane validation, and split-triangle area/winding conservation.
-Julia tests compare every typed family against an independent Rodrigues oracle,
-including signed full-turn paths and noncommuting queued rotations.
-Coverage closure requires the exact 144-byte request ABI, a contiguous closed kind
-inventory, and native-only adapter fixtures covering overloads and rejected requests.
-[`native-sampled-coverage-acceptance`](../../../tools/scenarios/geometry/native-sampled-coverage-acceptance.jsonl)
-combines all sampled families in one Terminal FIFO, then checks activation-time
-composition, native rail/plane rotation, exact frontiers, ordered clear/show,
-allocation baselines, capture, and shutdown.
-Native filled-sector tests compare formation records with captured Julia sweep
-reveals, including once-only activation, particle preparation, capacity rejection,
-and supersession.
-
-| Remaining Julia work | Boundary |
-| --- | --- |
-| Phase selection, queues, construction, cleanup | Policy; no native scheduler. |
-| Vector helpers, reflection-plane checks, returned drag positions | Pure calculations; native evaluators own writes. |
-| Exact full-sweep setup, authored curve phase policy, Terminal tool setup/retirement | Checked lifecycle policy; Terminal conic progress is native. |
-| Label/region reveals and visibility/clear batches | Existing native owner APIs, not a second modifier lifecycle. |
-
-Use them when a behavioral claim crosses ordinary application boundaries—for example,
-when a request must be correlated with a later event, a frame must be captured after a
-state change, or shutdown evidence matters.
+[runner](../../../tools/scenario_runner.jl) provides public scenario dispatch,
+orchestration, isolated databases, fault injection, and evidence validation. Do not
+recursively discover JSONL files.
 
 ```sh
 julia tools/make.jl scenario SCENARIO_NAME
@@ -158,11 +94,10 @@ julia tools/make.jl scenario --list --format=json
 
 Listing requires neither a build nor a display. It reports each public name,
 feature category, source path, and whether it is a single scenario or an
-orchestrated workflow. When adding a public scenario, register its source in the
-catalog; add workflow dispatch when it needs orchestration. Keep supporting phases
-out of the catalog, and update source references and documentation when moving files.
+orchestrated workflow. Register public sources in the catalog and keep supporting
+phases out of it.
 
-An ad hoc scenario can exercise a debug build and retain its evidence bundle:
+An ad hoc scenario can exercise a debug build and retain evidence:
 
 ```sh
 julia tools/make.jl run --debug -- \
@@ -170,8 +105,8 @@ julia tools/make.jl run --debug -- \
   --scenario-artifacts=.build/scenario
 ```
 
-Each nonempty line issues one action. Use the vocabulary and limits exposed by the
-evidence commands rather than guessing names:
+Each nonempty line issues one action. Use the current vocabulary and limits exposed
+by the evidence commands rather than guessing names:
 
 ```sh
 julia tools/make.jl evidence capabilities
@@ -206,6 +141,7 @@ events such as screenshot completion that do not match the initiating action's i
 | Scenario need | Common actions |
 | --- | --- |
 | Change runtime or animation state | `select_animation`, `{"do":"reset_animation"}`, `{"do":"reload_runtime"}` |
+| Control construction playback | `{"do":"pause_construction"}`, `{"do":"show_completed"}`, `{"do":"resume_construction"}` |
 | Exercise header lifecycle | `set_exercise_header`, `{"do":"expand_exercise_header"}`, `{"do":"hide_exercise_header"}`, `set_exercise_header_scroll` |
 | Submit Terminal or presentation content | `scratchpad`, `set_view_content` |
 | Wait for progress or verify an observation | `wait_event`, `wait_state`, `assert_state`, `assert_focus` |
@@ -214,57 +150,6 @@ events such as screenshot completion that do not match the initiating action's i
 | Type into an open Favorite name editor | `{"type_library_name":"α"}` (requires input focus on that editor) |
 | Capture or retain evidence | `screenshot`, `start_gif`, `checkpoint`, `allocation_checkpoint`, `assert_allocation_baseline` |
 | End a run safely | `assert_no_bad_frees`, `shutdown` |
-
-Construction transport has its own boundary: `{"do":"pause_construction"}` holds
-authored work, while `simulation_running` and native dust remain independent.
-Wait for `construction_paused` to acknowledge the final pending tick. Then
-`{"do":"show_completed","as":"figure"}` and a correlated
-`{"wait_event":"animation_completed","correlation":"figure"}` prove a distinct
-completed-form commit, not elapsed playback. `resume_construction` continues an
-ordinary pause or resets a completed form; await `animation_reset_committed` in
-the latter case. Full `pause_simulation` and policy `pause_animation` are separate.
-
-The [completed-figure acceptance](../../../tools/scenarios/animation/completed-figure-acceptance.jsonl)
-checks transport, completed-first selection, and independent particle disablement.
-The [completed-figure lifecycle acceptance](../../../tools/scenarios/animation/completed-figure-lifecycle-acceptance.jsonl)
-checks reload retention, selection-policy isolation, ordinary Resume, and captures
-representative null, surface, polygon, curve, reflection, and Hilbert figures.
-`particle_effects_disabled` requires disabled preference intent and empty world
-and presentation material. Do not use `dust_settled` for this: that predicate
-intentionally requires live grounded dust. Preference snapshots retain both
-`interface.enable_particle_effects` and `animation.open_completed`.
-The isolated [completed-preferences persistence acceptance](../../../tools/scenarios/settings/completed-preferences-persistence-acceptance.jsonl)
-checks both committed database rows and their restored values in a new process,
-including the held completed figure on startup.
-
-The isolated [user-exercise persistence acceptance](../../../tools/scenarios/exercises/user-exercise-persistence-acceptance.jsonl)
-creates and renames a user exercise, restarts the application against the same
-temporary database, browses and loads it through the real Terminal menu, then
-edits and deletes it while checking attempt and displayed-instruction preservation.
-A final restart verifies the retired aliases and UUID remain unavailable. The
-scenario runner supplies its own `--user-db` and rejects use of the default data home.
-
-The [Parabola showcase](../../../tools/scenarios/content/curves/parabola-showcase.jsonl) and
-[Hyperbola showcase](../../../tools/scenarios/content/curves/hyperbola-showcase.jsonl) capture their
-apparatus during drawing and the finished ink after tool lift. The typed
-`parabola_frontier_committed` and `hyperbola_frontier_committed` events report actual
-native frontier commits, not elapsed animation time. Hyperbola evidence identifies
-one complete shape host. Native tests cover immutable both/positive/negative
-construction selection, query/snapshot and captured-geometry preservation, selected
-packet capacity, per-tip contacts with both physical pens retained, and departure
-only from selected ink without center-gap dust. Julia fixtures invoke the real
-authored lifecycle and shared helpers for each mode, including directed rotated
-trails, reset, and completed form. Neither a frontier event nor a screenshot alone
-proves those invariants. Existing scenarios use the default both mode; one-sided
-application/visual acceptance is not currently covered by them.
-
-The [parabola lifecycle acceptance](../../../tools/scenarios/content/curves/conic-lifecycle-acceptance.jsonl)
-and [hyperbola lifecycle acceptance](../../../tools/scenarios/content/curves/hyperbola-lifecycle-acceptance.jsonl)
-check reset, correlated completed-form publication, and allocation baselines.
-The [conic switching acceptance](../../../tools/scenarios/content/curves/conic-switching-acceptance.jsonl)
-checks switching back to existing instruments and runtime reload. These runs are
-separate to preserve the bounded evidence history. Inspect each artifact manifest's
-result and trace completeness in addition to the captures.
 
 Viewport and splitter requests take effect at a frame boundary; put them before the
 screenshot whose layout they are meant to exercise. A screenshot completes only after
@@ -275,14 +160,8 @@ pass condition.
 
 The scenario runner enforces bounded command, source, line, payload, alias, wait, and
 event-retention limits. Query `evidence capabilities` and `evidence schema` for the
-current vocabulary and bounds. Keep scenarios focused on one behavioral claim, and use
-the checked-in [MIME presentation](../../../tools/scenarios/presentation/mime-presentation-acceptance.jsonl),
-[keyboard focus](../../../tools/scenarios/ui/keyboard-focus-acceptance.jsonl), and
-[context menu](../../../tools/scenarios/ui/context-menu-acceptance.jsonl) scenarios as
-examples of longer flows.
-The [Dynview exercise-link acceptance](../../../tools/scenarios/presentation/dynview-exercise-links-acceptance.jsonl)
-loads a persisted user exercise from a saved collection-note link through keyboard
-focus and the shared fresh-session destination.
+current vocabulary and bounds. Keep scenarios focused on one behavioral claim and
+use public catalog entries as examples of longer flows.
 
 For a successful result, inspect the bundle's `manifest.json` and require both
 `result: "passed"` and `trace_complete: true`; consult `state.json` and `evidence.bin`
@@ -300,15 +179,9 @@ pacing, copied text/IME payloads, bounded off-thread handoff and shutdown, and
 transactional scene-target replacement. Run the complete documented Odin suite;
 the driver does not accept invented file or test selectors.
 
-Use the existing
-[geometry lifecycle](../../../tools/scenarios/rendering/sdl3-geometry-lifecycle.jsonl),
-[keyboard focus](../../../tools/scenarios/ui/keyboard-focus-acceptance.jsonl),
-[IME targeting](../../../tools/scenarios/ui/ime-text-target-acceptance.jsonl),
-[MIME presentation](../../../tools/scenarios/presentation/mime-presentation-acceptance.jsonl), and
-[GIF cancellation](../../../tools/scenarios/capture/gif-armed-cancellation-restores-allocations.jsonl)
-scenarios as bounded integration checks. A successful process alone is insufficient:
-inspect each manifest's result and trace-completeness fields. These scenarios do not
-themselves synthesize native interactive window resizing.
+Use catalogued scenarios as bounded integration checks. A successful process alone is
+insufficient: inspect each manifest's result and trace-completeness fields. Scenarios
+do not themselves synthesize native interactive window resizing.
 
 | Environment | What it can establish | Additional acceptance needed |
 | --- | --- | --- |
@@ -330,27 +203,22 @@ do not infer a scheduling failure solely from compositor/GPU presentation cadenc
 
 ### Input And IME Evidence
 
-The [IME text-target scenario](../../../tools/scenarios/ui/ime-text-target-acceptance.jsonl)
-checks real field-to-Terminal focus ownership. The
-[Terminal editor scenario](../../../tools/scenarios/terminal/terminal-editor-acceptance.jsonl)
-checks selection replacement, explicit multiline source, continuation, and clean
-shutdown. Run the existing keyboard-focus and context-menu scenarios alongside them.
-The [Terminal undo scenario](../../../tools/scenarios/terminal/terminal-undo-acceptance.jsonl)
-checks desktop undo/redo shortcuts, redo-branch replacement, completed-command reset,
-and retained edits across incomplete evaluation using evaluated output and clean
-shutdown. Its `z` key uses the existing structured `ctrl`/`shift` modifiers.
+Scenario evidence can cover real field-to-Terminal focus ownership, selection
+replacement, explicit multiline source, continuation, keyboard focus, context-menu
+navigation, desktop undo/redo shortcuts, redo-branch replacement, completed-command
+reset, and retained edits across incomplete evaluation.
+
 Unit tests separately cover SDL preedit/commit translation, composing-key suppression,
 ordered commit-before-Enter, atomic edits, owner retirement, and foreground encoders.
 Undo model and Terminal tests also cover Julia aliases, cursor/selection restoration,
 operation grouping, transient preedit, completion, retained capacity, and allocation
 failure without partial draft/timeline publication.
 
-The [Terminal completion scenario](../../../tools/scenarios/terminal/terminal-completion-acceptance.jsonl)
-exercises `func` → `function`, subsequent alternatives without replacing the draft,
-evaluation of the resulting function, unique `println` completion, and clean shutdown.
-The debug/test-only `terminal_completion_ready` predicate waits for a retained useful
-preview before capture or acceptance, rather than guessing at debounce or Julia
-response timing. Its screenshots are supporting single-row visual evidence.
+Terminal completion scenarios exercise alternatives without replacing the draft,
+evaluation of the resulting function, and clean shutdown. The debug/test-only
+`terminal_completion_ready` predicate waits for a retained useful preview before
+capture or acceptance, rather than guessing at debounce or Julia response timing.
+Screenshots remain supporting visual evidence.
 Owner-level tests deterministically cover Tab with a ready preview and
 before its response, Right acceptance, stale/duplicate responses, undo, Unicode byte
 boundaries, multiline replacement, bounded-buffer reuse, and capacity rejection at
