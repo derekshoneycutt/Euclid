@@ -108,6 +108,13 @@ end
     @test shutdown_euclid_reactor!(host)
 end
 
+@testset "Builder lifecycle callback is distinct from Terminal" begin
+    host = create_euclid_runtime_host(Ptr{Cvoid}(1))
+    @test builder_animation_callback !== host.terminal_animation_callback
+    @test builder_animation_callback(host.state_ptr, Int32(1), 0.1f0)
+    @test shutdown_euclid_reactor!(host)
+end
+
 @testset "runtime host startup banner" begin
     banner = EuclidReplEvaluation.startup_banner_for_host()
     @test occursin(string(VERSION), banner)

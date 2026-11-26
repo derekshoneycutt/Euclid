@@ -309,6 +309,9 @@ const EnUsCatalogNames = LocalizedContent.CatalogNameDeclaration[
         "builtin", UUID("c4cf618f-86ca-55ba-ac0e-14f31f09940d"), "en-US",
         "Terminal"),
     LocalizedContent.CatalogNameDeclaration(
+        "builtin", UUID("c4cf618f-86ca-55ba-ac0e-14f31f099410"), "en-US",
+        "Builder"),
+    LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("c70ab98c-08e5-42bc-b198-78b0f54ecf55"), "en-US",
         "Limaçon"),
     LocalizedContent.CatalogNameDeclaration(

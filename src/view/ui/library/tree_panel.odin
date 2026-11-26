@@ -365,10 +365,12 @@ tree_projection_prepare_new_generation :: proc(
         log.error("library_projection_owner_initialization_failed")
         return false
     }
-    has_terminal: bool
-    if !tree_projection_registry_info(params.ji, &has_terminal) ||
+    has_terminal: bool = false
+    has_builder: bool = false
+    if !tree_projection_registry_info(
+        params.ji, &has_terminal, &has_builder) ||
         !tree_projection_add_registry(
-            params, old, &staged, has_terminal) {
+            params, old, &staged, has_terminal, has_builder) {
         viewmodel.ui_tree_projection_destroy(&staged)
         log.error("library_projection_generation_build_failed")
         return false
@@ -798,38 +800,44 @@ tree_projection_begin :: proc(
     return true
 }
 
-// Validate the registry bound and report whether Collections follows Terminal.
+// Validate the registry bound and report native insertion points.
 tree_projection_registry_info :: proc(
-    ji: ^bridgemodel.Euclid_Julia_Interface, has_terminal: ^bool) -> bool {
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    has_terminal, has_builder: ^bool) -> bool {
     registry_count := 0
     for node, steps := ji^.animation_head, 0;
         node != nil && steps < ji^.animation_count;
         node, steps = node^.next_in_registry, steps + 1 {
         has_terminal^ = has_terminal^ || node^.node_kind == .Terminal
+        has_builder^ = has_builder^ || node^.node_kind == .Builder
         registry_count += 1
     }
     return registry_count == ji^.animation_count
 }
 
-// Append canonical nodes and insert Favorites at the approved tree boundary.
+// Append canonical nodes and insert Favorites after Builder or Terminal.
 tree_projection_add_registry :: proc(
     params: Tree_List_Params,
     previous: ^viewmodel.Ui_Tree_Projection,
     staged: ^viewmodel.Ui_Tree_Projection,
-    has_terminal: bool) -> bool {
-    if !has_terminal &&
+    has_terminal, has_builder: bool) -> bool {
+    if !has_terminal && !has_builder &&
         !tree_projection_add_favorites(
             staged, previous, params.ji, params.collections) {
         return false
     }
-    collections_added := !has_terminal
+    collections_added := !has_terminal && !has_builder
     for node, steps := params.ji^.animation_head, 0;
         node != nil && steps < params.ji^.animation_count;
         node, steps = node^.next_in_registry, steps + 1 {
         if !tree_projection_add_animation(staged, previous, node) {
             return false
         }
-        if node^.node_kind == .Terminal && !collections_added {
+        insert_after_node := node^.node_kind == .Builder
+        if !has_builder {
+            insert_after_node = node^.node_kind == .Terminal
+        }
+        if insert_after_node && !collections_added {
             if !tree_projection_add_favorites(
                 staged, previous, params.ji, params.collections) {
                 return false

@@ -89,15 +89,24 @@ scenario_pointer_frame :: proc(
     }
     runtime^.reorder_frame_time = result.sample_time_seconds
     if runtime^.pointer_override {
+        result.window_focused = true
+        previous := result.mouse_position
         result.mouse_position = {
             runtime^.pointer_position.x,
             runtime^.pointer_position.y,
         }
+        result.mouse_moved = result.mouse_moved ||
+            previous.x != result.mouse_position.x ||
+            previous.y != result.mouse_position.y
         result.mouse_down = {.Left} if runtime^.pointer_down else {}
         result.mouse_pressed = {.Left} if runtime^.pointer_pressed else {}
         result.mouse_released = {.Left} if runtime^.pointer_released else {}
+        if runtime^.pointer_wheel_delta != 0 {
+            result.mouse_wheel_delta = runtime^.pointer_wheel_delta
+        }
         runtime^.pointer_pressed = false
         runtime^.pointer_released = false
+        runtime^.pointer_wheel_delta = 0
     }
     return result
 }

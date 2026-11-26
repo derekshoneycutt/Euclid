@@ -88,6 +88,7 @@ Ui_Press_Owner_Kind :: enum {
     Scrollbar,
     Splitter,
     Dynview_Selection,
+    Builder_Placement,
 }
 
 Ui_Press_Owner_State :: struct {
@@ -99,6 +100,7 @@ Ui_Press_Owner_State :: struct {
 Ui_Focus_Kind :: enum u8 {
     None,
     Terminal,
+    Builder,
     Presentation,
     Accordion,
     Input_Box,
@@ -133,6 +135,7 @@ Ui_Surface_Interaction :: struct {
 Ui_Interaction_State :: struct {
     logical_focus: Ui_Focus_Target,
     terminal_was_present: bool,
+    builder_was_present: bool,
     terminal_effectively_focused: bool,
 }
 
@@ -144,6 +147,7 @@ Ui_Interaction_Frame :: struct {
     pointer_target: Ui_Interaction_Target,
     wheel_target: Ui_Interaction_Target,
     terminal: Ui_Surface_Interaction,
+    builder: Ui_Surface_Interaction,
     presentation: Ui_Surface_Interaction,
     accordion: Ui_Surface_Interaction,
     terminal_focus_changed: bool,
@@ -162,6 +166,7 @@ Ui_Node_Domain :: enum u8 {
     Settings_Control,
     Presentation,
     Terminal,
+    Builder,
     Context_Menu,
     Library_Action,
     Collection_Membership,
@@ -1002,11 +1007,35 @@ Ui_Magnifier_Presentation :: struct {
     lens_rect: geometry.Rectangle,
 }
 
+Ui_Builder_Pending_Action :: enum u8 {
+    None,
+    Select_Point,
+    Toggle_Tool,
+    Clear_Selection,
+    Hide_Point,
+    Show_Point,
+}
+
+// Ui_Builder_Interaction_State retains Builder scrolling and deferred intent.
+Ui_Builder_Interaction_State :: struct {
+    scroll_y: f32,
+    scroll_dragging: bool,
+    scroll_drag_off: f32,
+    layout_initialized: bool,
+    last_panel: geometry.Rectangle,
+    last_clip: geometry.Rectangle,
+    last_world: geometry.Rectangle,
+    pending_action: Ui_Builder_Pending_Action,
+    pending_point_generation: u64,
+    pending_point_id: u64,
+}
+
 // Euclid_Ui_Runtime_State composes persistent display-owned UI state.
 Euclid_Ui_Runtime_State :: struct {
     layout: Ui_Layout_State,
     library: Ui_Library_State,
     presentation: Ui_Presentation_Interaction_State,
+    builder: Ui_Builder_Interaction_State,
     settings_panel: Ui_Settings_Panel_State,
     terminal: Ui_Terminal_Interaction_State,
     input: Ui_Shared_Interaction_State,

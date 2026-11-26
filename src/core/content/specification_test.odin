@@ -31,9 +31,22 @@ specification_test_generation :: proc(t: ^testing.T) -> ^Content_Generation {
             15 = 1,
         },
         node_kind = .Terminal,
+        sibling_order = 0,
+        catalog_order = 0,
     }
     specification_test_append(t, generation, "Terminal", &terminal.display_name)
     testing.expect_value(t, content_generation_append_record(generation, terminal),
+        Content_Generation_Status.Ok)
+    builder: Catalog_Record = {
+        stable_id = {
+            15 = 2,
+        },
+        node_kind = .Builder,
+        sibling_order = 1,
+        catalog_order = 1,
+    }
+    specification_test_append(t, generation, "Builder", &builder.display_name)
+    testing.expect_value(t, content_generation_append_record(generation, builder),
         Content_Generation_Status.Ok)
     generation^.data.complete = true
     testing.expect_value(t, content_generation_seal(generation),

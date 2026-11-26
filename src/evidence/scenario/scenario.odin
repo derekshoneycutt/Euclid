@@ -134,6 +134,118 @@ Command_Kind :: enum u8 {
     Expand_Exercise_Header,
     Set_Exercise_Header_Scroll,
     Assert_Exercise_Header,
+    Builder_Pointer,
+    Builder_Control,
+    Wait_Builder,
+    Assert_Builder,
+}
+
+Builder_Pointer_Action :: enum u8 {
+    Hover,
+    Press,
+    Hold,
+    Release,
+    Wheel_Up,
+    Wheel_Down,
+}
+
+Builder_Control_Action :: enum u8 {
+    Focus,
+    Activate,
+    Increment,
+    Decrement,
+    Scroll_Up,
+    Scroll_Down,
+}
+
+Builder_Control :: enum u8 {
+    Tool,
+    Select,
+    Palette0,
+    Palette1,
+    Palette2,
+    Palette3,
+    Brush,
+    Hide,
+    Show,
+    Surface,
+}
+
+Builder_Point_State :: enum u8 {
+    Pending,
+    Constructing,
+    Ready,
+    Failed,
+}
+
+Builder_Queue_Kind :: enum u8 {
+    Construct,
+    Edit_Style,
+    Hide,
+    Show,
+}
+
+Builder_Placement_Phase :: enum u8 {
+    Idle,
+    Hover,
+    Held,
+    Waiting,
+}
+
+Builder_Placement_Status :: enum u8 {
+    Ready,
+    Point_Queued,
+    Queue_Full,
+    Point_Capacity_Full,
+    Failed,
+}
+
+Builder_Tool_Mode :: enum u8 {
+    None,
+    Point,
+}
+
+Builder_Point_Observation :: struct {
+    id: u64,
+    state: Builder_Point_State,
+    position: [3]f32,
+    color: [4]u8,
+    brush_size: f32,
+    visible: bool,
+}
+
+Builder_Queue_Observation :: struct {
+    command_id: u64,
+    kind: Builder_Queue_Kind,
+    point_id: u64,
+}
+
+Builder_Observation :: struct {
+    generation: u64,
+    point_count: int,
+    queue_count: int,
+    selected_point_id: u64,
+    failed: bool,
+    phase_present: bool,
+    phase: Builder_Placement_Phase,
+    status_present: bool,
+    status: Builder_Placement_Status,
+    tool_present: bool,
+    tool: Builder_Tool_Mode,
+    point_present: bool,
+    point: Builder_Point_Observation,
+    queue_head_present: bool,
+    queue_head: Builder_Queue_Observation,
+}
+
+Builder_Pointer_Request :: struct {
+    position: [2]f32,
+    action: Builder_Pointer_Action,
+}
+
+Builder_Control_Request :: struct {
+    control: Builder_Control,
+    action: Builder_Control_Action,
 }
 
 // Payload-free action names accepted by the `do` scenario field.
@@ -239,6 +351,9 @@ Command :: struct {
     setting_value: settings.Setting_Value,
     arrival_style: uidust.Ui_Dust_Arrival_Style,
     terminal_editor: Terminal_Editor_Expectation,
+    builder_pointer: Builder_Pointer_Request,
+    builder_control: Builder_Control_Request,
+    builder_observation: Builder_Observation,
 }
 
 // Stable scenario spelling for one retained presentation arrival policy.
@@ -275,6 +390,50 @@ Raw_Dust_Emission :: struct {
 Raw_Dust_Contact :: struct {
     x: f64,
     y: f64,
+}
+
+Raw_Builder_Pointer :: struct {
+    x: f64,
+    y: f64,
+    action: string,
+}
+
+Raw_Builder_Control :: struct {
+    name: string,
+    action: string,
+}
+
+Raw_Builder_Point_Observation :: struct {
+    id: u64,
+    state: string,
+    x: f64,
+    y: f64,
+    z: f64,
+    r: i64,
+    g: i64,
+    b: i64,
+    a: i64,
+    brush_size: f64,
+    visible: bool,
+}
+
+Raw_Builder_Queue_Observation :: struct {
+    command_id: u64,
+    kind: string,
+    point_id: u64,
+}
+
+Raw_Builder_Observation :: struct {
+    generation: u64,
+    point_count: i64,
+    queue_count: i64,
+    selected_point: u64,
+    failed: bool,
+    phase: string,
+    status: string,
+    tool: string,
+    point: Raw_Builder_Point_Observation,
+    queue_head: Raw_Builder_Queue_Observation,
 }
 
 // Fixed-capacity scenario program produced from one complete JSON Lines source.
@@ -366,6 +525,10 @@ Raw_Command :: struct {
     set_view_content: Raw_View_Content,
     emit_dust: Raw_Dust_Emission,
     contact_dust: Raw_Dust_Contact,
+    builder_pointer: Raw_Builder_Pointer,
+    builder_control: Raw_Builder_Control,
+    wait_builder: Raw_Builder_Observation,
+    assert_builder: Raw_Builder_Observation,
 
     // Event waits and display-state predicates.
     wait_event: string,
@@ -616,6 +779,397 @@ scenario_dust_contact_action_select :: proc(
     return 1, true
 }
 
+// Decode one bounded absolute pointer sample used by ordinary Builder input routing.
+scenario_builder_pointer_action_select :: proc(
+    root: json.Object, raw: Raw_Builder_Pointer,
+    command: ^Command) -> (int, bool) {
+    value, present := root["builder_pointer"]
+    if !present {
+        return 0, true
+    }
+    payload, valid := value.(json.Object)
+    testfields := [?]string{"x", "y", "action"}
+    if !valid || !scenario_json_object_has_exact_fields(payload, testfields[:]) {
+        return 0, false
+    }
+    x, x_valid := scenario_json_f32(payload["x"])
+    y, y_valid := scenario_json_f32(payload["y"])
+    if _, found := payload["x"]; !found {
+        return 0, false
+    }
+    if _, found := payload["y"]; !found {
+        return 0, false
+    }
+    if !x_valid || !y_valid || abs(x) > 16_384 || abs(y) > 16_384 {
+        return 0, false
+    }
+    pointer_action, action_valid := scenario_builder_pointer_action(raw.action)
+    if !action_valid {
+        return 0, false
+    }
+    command^.kind = .Builder_Pointer
+    command^.builder_pointer = {
+        position = {x, y},
+        action = pointer_action,
+    }
+    return 1, true
+}
+
+// Decode one supported pointer gesture name for the Builder scenario action.
+scenario_builder_pointer_action :: proc(
+    name: string) -> (Builder_Pointer_Action, bool) {
+    switch name {
+    case "hover":
+        return .Hover, true
+    case "press":
+        return .Press, true
+    case "hold":
+        return .Hold, true
+    case "release":
+        return .Release, true
+    case "wheel_up":
+        return .Wheel_Up, true
+    case "wheel_down":
+        return .Wheel_Down, true
+    }
+    return {}, false
+}
+
+// Decode a stable Builder semantic-control name and operation.
+scenario_builder_control_action_select :: proc(
+    root: json.Object, raw: Raw_Builder_Control,
+    command: ^Command) -> (int, bool) {
+    value, present := root["builder_control"]
+    if !present {
+        return 0, true
+    }
+    payload, valid := value.(json.Object)
+    testfields := [?]string{"name", "action"}
+    if !valid || !scenario_json_object_has_exact_fields(payload, testfields[:]) {
+        return 0, false
+    }
+    control, control_valid := scenario_builder_control(raw.name)
+    action, action_valid := scenario_builder_control_action(raw.action)
+    if !control_valid || !action_valid {
+        return 0, false
+    }
+    command^.kind = .Builder_Control
+    command^.builder_control = {control, action}
+    return 1, true
+}
+
+// Resolve the bounded public Builder control vocabulary.
+scenario_builder_control :: proc(name: string) -> (Builder_Control, bool) {
+    switch name {
+    case "tool":
+        return .Tool, true
+    case "select":
+        return .Select, true
+    case "palette_0":
+        return .Palette0, true
+    case "palette_1":
+        return .Palette1, true
+    case "palette_2":
+        return .Palette2, true
+    case "palette_3":
+        return .Palette3, true
+    case "brush":
+        return .Brush, true
+    case "hide":
+        return .Hide, true
+    case "show":
+        return .Show, true
+    case "surface":
+        return .Surface, true
+    }
+    return {}, false
+}
+
+// Resolve accessible operations supported by Builder controls.
+scenario_builder_control_action :: proc(
+    name: string) -> (Builder_Control_Action, bool) {
+    switch name {
+    case "focus":
+        return .Focus, true
+    case "activate":
+        return .Activate, true
+    case "increment":
+        return .Increment, true
+    case "decrement":
+        return .Decrement, true
+    case "scroll_up":
+        return .Scroll_Up, true
+    case "scroll_down":
+        return .Scroll_Down, true
+    }
+    return {}, false
+}
+
+// Resolve one required stable Builder point-state spelling.
+scenario_builder_point_state :: proc(
+    name: string) -> (Builder_Point_State, bool) {
+    switch name {
+    case "pending":
+        return .Pending, true
+    case "constructing":
+        return .Constructing, true
+    case "ready":
+        return .Ready, true
+    case "failed":
+        return .Failed, true
+    }
+    return {}, false
+}
+
+// Resolve one required Builder FIFO command spelling.
+scenario_builder_queue_kind :: proc(
+    name: string) -> (Builder_Queue_Kind, bool) {
+    switch name {
+    case "construct":
+        return .Construct, true
+    case "edit_style":
+        return .Edit_Style, true
+    case "hide":
+        return .Hide, true
+    case "show":
+        return .Show, true
+    }
+    return {}, false
+}
+
+// Resolve one optional placement phase for exact transient-state observations.
+scenario_builder_phase :: proc(
+    name: string) -> (Builder_Placement_Phase, bool) {
+    switch name {
+    case "idle":
+        return .Idle, true
+    case "hover":
+        return .Hover, true
+    case "held":
+        return .Held, true
+    case "waiting":
+        return .Waiting, true
+    }
+    return {}, false
+}
+
+// Resolve one optional placement status for failure and handoff observations.
+scenario_builder_status :: proc(
+    name: string) -> (Builder_Placement_Status, bool) {
+    switch name {
+    case "ready":
+        return .Ready, true
+    case "point_queued":
+        return .Point_Queued, true
+    case "queue_full":
+        return .Queue_Full, true
+    case "point_capacity_full":
+        return .Point_Capacity_Full, true
+    case "failed":
+        return .Failed, true
+    }
+    return {}, false
+}
+
+// Resolve one optional point-tool mode for accessible toolbar observations.
+scenario_builder_tool :: proc(name: string) -> (Builder_Tool_Mode, bool) {
+    switch name {
+    case "none":
+        return .None, true
+    case "point":
+        return .Point, true
+    }
+    return {}, false
+}
+
+// Validate and copy one exact generation/queue/selection expectation.
+scenario_builder_observation_action_select :: proc(
+    root: json.Object, field: string, raw: Raw_Builder_Observation,
+    kind: Command_Kind, command: ^Command) -> (int, bool) {
+    value, present := root[field]
+    if !present {
+        return 0, true
+    }
+    payload, valid := value.(json.Object)
+    if !valid || !scenario_builder_observation_fields_valid(payload) ||
+        raw.point_count < 0 || raw.point_count > 128 ||
+        raw.queue_count < 0 || raw.queue_count > 32 {
+        return 0, false
+    }
+    observation: Builder_Observation = {
+        generation = raw.generation,
+        point_count = int(raw.point_count),
+        queue_count = int(raw.queue_count),
+        selected_point_id = raw.selected_point,
+        failed = raw.failed,
+    }
+    if !scenario_builder_observation_optional_fields(payload, raw, &observation) {
+        return 0, false
+    }
+    if !scenario_builder_observation_details(payload, raw, &observation) {
+        return 0, false
+    }
+    command^.kind = kind
+    command^.builder_observation = observation
+    return 1, true
+}
+
+// Decode optional point and queue-head details for one Builder observation.
+scenario_builder_observation_details :: proc(
+    payload: json.Object, raw: Raw_Builder_Observation,
+    observation: ^Builder_Observation) -> bool {
+    if _, found := payload["point"]; found {
+        point, valid := scenario_builder_point_observation(
+            payload, raw.point)
+        if !valid {
+            return false
+        }
+        observation^.point = point
+        observation^.point_present = true
+    }
+    if _, found := payload["queue_head"]; found {
+        queue_head, valid := scenario_builder_queue_observation(
+            payload, raw.queue_head)
+        if !valid {
+            return false
+        }
+        observation^.queue_head = queue_head
+        observation^.queue_head_present = true
+    }
+    return true
+}
+
+// Validate the required fields and allowed optional fields for one Builder observation.
+scenario_builder_observation_fields_valid :: proc(payload: json.Object) -> bool {
+    if len(payload) < 5 || len(payload) > 10 {
+        return false
+    }
+    required := [?]string{
+        "generation", "point_count", "queue_count", "selected_point", "failed",
+    }
+    for field in required {
+        if _, found := payload[field]; !found {
+            return false
+        }
+    }
+    for field in payload {
+        if field != "generation" && field != "point_count" &&
+            field != "queue_count" && field != "selected_point" &&
+            field != "failed" && field != "point" && field != "queue_head" &&
+            field != "phase" && field != "status" && field != "tool" {
+            return false
+        }
+    }
+    return true
+}
+
+// Resolve optional phase, status, and tool fields into one observation.
+scenario_builder_observation_optional_fields :: proc(
+    payload: json.Object, raw: Raw_Builder_Observation,
+    observation: ^Builder_Observation) -> bool {
+    if _, found := payload["phase"]; found {
+        phase, valid := scenario_builder_phase(raw.phase)
+        if !valid {
+            return false
+        }
+        observation^.phase = phase
+        observation^.phase_present = true
+    }
+    if _, found := payload["status"]; found {
+        observation^.status, observation^.status_present =
+            scenario_builder_status(raw.status)
+        if !observation^.status_present {
+            return false
+        }
+    }
+    if _, found := payload["tool"]; found {
+        observation^.tool, observation^.tool_present =
+            scenario_builder_tool(raw.tool)
+        if !observation^.tool_present {
+            return false
+        }
+    }
+    return true
+}
+
+// Validate one optional point observation and copy its typed values.
+scenario_builder_point_observation :: proc(
+    payload: json.Object,
+    raw: Raw_Builder_Point_Observation) -> (Builder_Point_Observation, bool) {
+    value, found := payload["point"]
+    point_payload, valid := value.(json.Object)
+    fields := [?]string{
+        "id", "state", "x", "y", "z", "r", "g", "b", "a",
+        "brush_size", "visible",
+    }
+    if !found || !valid ||
+        !scenario_json_object_has_exact_fields(point_payload, fields[:]) {
+        return {}, false
+    }
+    state, state_valid := scenario_builder_point_state(raw.state)
+    values := [?]f32{
+        f32(raw.x), f32(raw.y), f32(raw.z), f32(raw.brush_size),
+    }
+    if raw.id == 0 || !state_valid || !scenario_builder_values_finite(values[:]) ||
+        raw.brush_size < 0 || raw.r < 0 || raw.r > 255 ||
+        raw.g < 0 || raw.g > 255 || raw.b < 0 || raw.b > 255 ||
+        raw.a < 0 || raw.a > 255 {
+        return {}, false
+    }
+    return {
+        id = raw.id,
+        state = state,
+        position = {values[0], values[1], values[2]},
+        color = {u8(raw.r), u8(raw.g), u8(raw.b), u8(raw.a)},
+        brush_size = values[3],
+        visible = raw.visible,
+    }, true
+}
+
+// Check every numeric point field for finite f32 representation.
+scenario_builder_values_finite :: proc(values: []f32) -> bool {
+    for value in values {
+        if math.is_nan(f64(value)) || math.is_inf(f64(value), 0) {
+            return false
+        }
+    }
+    return true
+}
+
+// Validate and copy one optional Builder FIFO head observation.
+scenario_builder_queue_observation :: proc(
+    payload: json.Object,
+    raw: Raw_Builder_Queue_Observation) -> (Builder_Queue_Observation, bool) {
+    value, found := payload["queue_head"]
+    queue_payload, valid := value.(json.Object)
+    fields := [?]string{"command_id", "kind", "point_id"}
+    kind, kind_valid := scenario_builder_queue_kind(raw.kind)
+    if !found || !valid ||
+        !scenario_json_object_has_exact_fields(queue_payload, fields[:]) ||
+        !kind_valid || raw.command_id == 0 {
+        return {}, false
+    }
+    return {
+        command_id = raw.command_id,
+        kind = kind,
+        point_id = raw.point_id,
+    }, true
+}
+
+// Require a JSON object to contain exactly the named bounded fields.
+scenario_json_object_has_exact_fields :: proc(
+    object: json.Object, fields: []string) -> bool {
+    if len(object) != len(fields) {
+        return false
+    }
+    for field in fields {
+        if _, found := object[field]; !found {
+            return false
+        }
+    }
+    return true
+}
+
 //   Return one finite JSON number as f32 without accepting narrowing overflow.
 scenario_json_f32 :: proc(value: json.Value) -> (f32, bool) {
     number: f64
@@ -777,8 +1331,7 @@ parse :: proc(source: string, program: ^Program) -> Parse_Error {
         if parsed_line.error != .None {
             return parsed_line.error
         }
-        command, command_error := command_from_raw(
-            parsed_line.raw, parsed_line.root)
+        command, command_error := command_from_raw(parsed_line.raw, parsed_line.root)
         json.destroy_value(parsed_line.value, allocator = context.temp_allocator)
         if command_error != .None {
             return command_error
@@ -898,11 +1451,15 @@ runner_update_command :: proc(
         return runner_update_event_wait(runner, command, frame)
     case .Wait_State:
         return runner_update_state_wait(runner, command, frame)
+    case .Wait_Builder:
+        return runner_update_action_wait(runner, command, frame)
     case .Wait_Terminal_Contains, .Wait_Terminal_History_Idle, .Wait_Terminal_Explorer,
          .Confirm_Terminal_History_Delete:
         return runner_update_action_wait(runner, command, frame)
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
+    case .Assert_Builder:
+        return runner_assert_action(runner, command, frame.actions)
     case .Assert_Focus, .Assert_Library_Search, .Assert_Terminal_Contains,
          .Assert_Terminal_Editor, .Assert_Terminal_Preview,
          .Assert_Allocation_Baseline, .Assert_Setting, .Assert_Favorites,
@@ -924,7 +1481,8 @@ runner_update_command :: proc(
          .Type_Collection_Note,
          .Set_Arrival_Style, .Set_Exercise_Header,
          .Hide_Exercise_Header, .Expand_Exercise_Header,
-         .Set_Exercise_Header_Scroll, .Activate_Terminal_Link:
+         .Set_Exercise_Header_Scroll, .Activate_Terminal_Link,
+         .Builder_Pointer, .Builder_Control:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -978,6 +1536,7 @@ runner_update :: proc(
 command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
     #partial switch kind {
     case .Wait_Event, .Wait_State, .Wait_Terminal_Contains,
+         .Wait_Builder,
          .Wait_Terminal_History_Idle, .Wait_Terminal_Explorer,
          .Confirm_Terminal_History_Delete,
          .Type_Text, .Type_Library_Name,
@@ -988,7 +1547,7 @@ command_kind_ends_frame :: proc(kind: Command_Kind) -> bool {
         .Favorite_Control, .Library_Placement, .Set_Arrival_Style, .Set_Setting,
         .Pause_Construction, .Resume_Construction, .Show_Completed,
         .Set_Exercise_Header, .Hide_Exercise_Header,
-        .Expand_Exercise_Header:
+        .Expand_Exercise_Header, .Builder_Pointer, .Builder_Control:
         return true
     case:
         return false
@@ -1215,6 +1774,7 @@ command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Erro
     command^.frame_number = raw.frame_number
     if command^.kind == .Wait_Event || command^.kind == .Wait_State ||
         command^.kind == .Wait_Terminal_Contains ||
+        command^.kind == .Wait_Builder ||
         command^.kind == .Wait_Terminal_History_Idle ||
         command^.kind == .Wait_Terminal_Explorer ||
         command^.kind == .Confirm_Terminal_History_Delete {
@@ -1231,6 +1791,33 @@ command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Erro
         return .Invalid_Command
     }
     return .None
+}
+
+// Decode Builder pointer, control, and observation commands from one JSON object.
+scenario_builder_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    selected := 0
+    count, valid := scenario_builder_pointer_action_select(
+        root, raw.builder_pointer, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_builder_control_action_select(
+        root, raw.builder_control, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_builder_observation_action_select(
+        root, "wait_builder", raw.wait_builder, .Wait_Builder, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_builder_observation_action_select(
+        root, "assert_builder", raw.assert_builder, .Assert_Builder, command)
+    return selected + count, valid
 }
 
 //   Select structured object and numeric actions while preserving exact-one semantics.
@@ -1257,11 +1844,26 @@ scenario_structured_action_select :: proc(
         return 0, false
     }
     selected += count
-    count, valid = scenario_setting_action_select(root, command)
+    count, valid = scenario_builder_action_select(root, raw, command)
     if !valid {
         return 0, false
     }
     selected += count
+    count, valid = scenario_setting_numeric_action_select(root, command)
+    if !valid {
+        return 0, false
+    }
+    return selected + count, true
+}
+
+// Decode scalar setting and numeric actions after structured payloads.
+scenario_setting_numeric_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    selected, valid := scenario_setting_action_select(root, command)
+    if !valid {
+        return 0, false
+    }
+    count: int
     count, valid = scenario_numeric_action_select(root, command)
     if !valid {
         return 0, false
@@ -1322,7 +1924,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Wait_Terminal_History_Idle,
          .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting,
          .Assert_Terminal_Editor, .Hide_Exercise_Header,
-         .Expand_Exercise_Header, .Set_Exercise_Header_Scroll:
+         .Expand_Exercise_Header, .Set_Exercise_Header_Scroll,
+         .Builder_Pointer, .Builder_Control, .Wait_Builder, .Assert_Builder:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,

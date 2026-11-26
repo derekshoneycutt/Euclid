@@ -915,6 +915,11 @@ semantic_legacy_focus :: proc(
             kind = .Presentation,
         }, true
     }
+    if node.id.domain == .Builder {
+        return {
+            kind = .Builder,
+        }, true
+    }
     if node.role == .Input {
         return {
             kind = .Input_Box,
@@ -942,6 +947,9 @@ semantic_hover_node_matches_target :: proc(
             return node.id.domain == .Animation_Control &&
                 node.id.local_id == u64(target.id)
         }
+        if target.focus.kind == .Builder {
+            return node.id.domain == .Builder
+        }
         return target.focus.kind == .Input_Box && node.role == .Input
     case .Panel_Content:
         #partial switch target.focus.kind {
@@ -952,6 +960,8 @@ semantic_hover_node_matches_target :: proc(
             return node.id.domain == .Presentation
         case .Terminal:
             return node.id.domain == .Terminal || node.role == .Terminal
+        case .Builder:
+            return node.id.domain == .Builder
         }
     }
     return false

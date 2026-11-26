@@ -54,9 +54,15 @@ catalog_materializer_test_snapshot :: proc() -> ^content.Content_Generation {
             sibling_order = 1,
             catalog_order = 3,
         },
+        {
+            stable_id = catalog_materializer_test_id(5),
+            node_kind = .Builder,
+            sibling_order = 2,
+            catalog_order = 4,
+        },
     }
-    names := [?]string{"Root", "Later child", "Earlier child", "Terminal"}
-    paths := [?]string{"root.jl", "later.jl", "earlier.jl", ""}
+    names := [?]string{"Root", "Later child", "Earlier child", "Terminal", "Builder"}
+    paths := [?]string{"root.jl", "later.jl", "earlier.jl", "", ""}
     for index in 0..<len(records) {
         if !catalog_materializer_test_append(
             generation, &records[index], names[index], paths[index]) {
@@ -105,7 +111,7 @@ catalog_snapshot_materializes_native_registry :: proc(t: ^testing.T) {
     defer contentdata.content_generation_destroy(snapshot)
     testing.expect(t, bridge_animation.content_generation_materialize(&iface, snapshot))
     testing.expect_value(t, iface.content_generation, u64(17))
-    testing.expect_value(t, iface.animation_count, 4)
+    testing.expect_value(t, iface.animation_count, 5)
     root := bridge_animation.animation_lookup_find(
         &iface, catalog_materializer_test_id(1))
     testing.expect(t, root != nil)
@@ -146,7 +152,7 @@ catalog_snapshot_preserves_materialized_registry :: proc(
             iface, catalog_materializer_test_id(1)) == nil)
 }
 
-// Verify UUID lookup copies only bounded path bytes and reports Terminal explicitly.
+// Verify UUID lookup copies paths and reports both pathless native destinations.
 @(test)
 catalog_path_copy_uses_materialized_registry :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
@@ -177,15 +183,28 @@ catalog_path_copy_uses_materialized_registry :: proc(t: ^testing.T) {
     testing.expect_value(t, metadata.byte_count, i32(len("later.jl")))
     testing.expect_value(t, destination[0], u8(0x7f))
 
-    status, metadata = catalog_path_copy_test_call(
-        state, catalog_materializer_test_id(4), destination[:], i32(len(destination)))
+    catalog_path_copy_test_native_entries(t, state, destination[:])
+}
+
+// Verify native catalogue nodes and unknown UUIDs preserve the bounded ABI contract.
+catalog_path_copy_test_native_entries :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State, destination: []u8) {
+    status, metadata := catalog_path_copy_test_call(
+        state, catalog_materializer_test_id(4), destination, i32(len(destination)))
     testing.expect_value(t, status, bridgemodel.BRIDGE_STATUS_OK)
     testing.expect_value(t, metadata.byte_count, i32(0))
     testing.expect_value(t, metadata.node_kind,
         i32(bridgemodel.Animation_Node_Kind.Terminal))
 
+    status, metadata = catalog_path_copy_test_call(
+        state, catalog_materializer_test_id(5), destination, i32(len(destination)))
+    testing.expect_value(t, status, bridgemodel.BRIDGE_STATUS_OK)
+    testing.expect_value(t, metadata.byte_count, i32(0))
+    testing.expect_value(t, metadata.node_kind,
+        i32(bridgemodel.Animation_Node_Kind.Builder))
+
     status, _ = catalog_path_copy_test_call(
-        state, catalog_materializer_test_id(99), destination[:], i32(len(destination)))
+        state, catalog_materializer_test_id(99), destination, i32(len(destination)))
     testing.expect_value(t, status, bridgemodel.BRIDGE_STATUS_NOT_FOUND)
 }
 
@@ -289,6 +308,29 @@ explicit_reload_requests_animation_lifecycle_update :: proc(t: ^testing.T) {
     service^.reload_requested = true
 
     testing.expect(t, animation_lifecycle_update_needed(state))
+}
+
+// Builder steady-state scheduling never submits authored Julia animation ticks.
+@(test)
+builder_steady_state_does_not_submit_animation_ticks :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
+    defer free(service, context.allocator)
+    ji := &state^.julia_interface_slots[0]
+    builder: bridgemodel.Euclid_Julia_Animation_Interface = {
+        node_kind = .Builder,
+    }
+    state^.julia_interface = ji
+    state^.julia_runtime_service = service
+    ji^.selected_animation = &builder
+    ji^.current_animation = &builder
+
+    schedule_animation_tick(state, 1 / 60)
+
+    testing.expect(t, !service^.animation_tick_pending)
+    testing.expect_value(t, service^.animation_ticks_submitted, u64(0))
+    testing.expect_value(t, service^.animation_tick_sequence, u64(0))
 }
 
 //   Verify retirement emits clear effects while animation geometry is still valid.

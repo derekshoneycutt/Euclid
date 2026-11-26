@@ -16,7 +16,7 @@ SEARCH_QUERY_ITEM_BYTE_CAPACITY :: 256
 SEARCH_MATCH_BYTE_CAPACITY :: 1024
 SEARCH_RESULT_WINDOW_CAPACITY :: viewmodel.LIBRARY_SEARCH_RESULT_CAPACITY
 SEARCH_DOCUMENT_ID_BYTE_COUNT :: 36
-CATALOG_RECORD_CAPACITY :: 140
+CATALOG_RECORD_CAPACITY :: 141
 CATALOG_NAME_BYTE_CAPACITY :: 256
 CATALOG_PATH_BYTE_CAPACITY :: 2 * 1024
 CATALOG_DATABASE_PATH_CAPACITY :: 4096
@@ -41,6 +41,7 @@ CONTENT_TEXT_BYTE_CAPACITY :: CATALOG_TEXT_BYTE_CAPACITY +
 Catalog_Node_Kind :: enum u8 {
     Animation = 1,
     Terminal = 2,
+    Builder = 3,
 }
 
 // Bounded offset/length view into one immutable generation's packed text bytes.
@@ -461,16 +462,19 @@ content_generation_reference_is_valid :: proc(
 content_generation_topology_is_valid :: proc(
     generation: ^Content_Generation) -> bool {
     terminal_count := 0
+    builder_count := 0
     for index in 0..<int(generation.record_count) {
         record := &generation.records[index]
         if record.node_kind == .Terminal {
             terminal_count += 1
+        } else if record.node_kind == .Builder {
+            builder_count += 1
         }
         if !content_generation_record_is_valid(generation, index) {
             return false
         }
     }
-    return terminal_count == 1
+    return terminal_count == 1 && builder_count == 1
 }
 
 // Validate one record's references, ordering, uniqueness, and ancestor chain.
@@ -508,7 +512,7 @@ content_generation_builder_text :: proc(
 content_generation_path_is_valid :: proc(
     kind: Catalog_Node_Kind, record: ^Catalog_Record,
     path: string) -> bool {
-    if kind == .Terminal {
+    if kind == .Terminal || kind == .Builder {
         return !record.has_parent && len(path) == 0
     }
     return kind == .Animation &&

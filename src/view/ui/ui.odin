@@ -13,11 +13,19 @@ import uisemantics "semantics"
 import uiwidgets "widgets"
 import uiaccordion "layout/accordion"
 import uisettings "settings"
+import builderui "builder"
 import uisharing "sharing"
 import uilibrary "library"
 import uipresentation "presentation"
 import uiterminal "terminal"
 import font "../font"
+
+Ui_View_Content_Draw :: struct {
+    terminal: uiterminal.Terminal_Prepared_Frame,
+    presentation: uipresentation.Presentation_Preparation,
+    effects: uipresentation.Presentation_Effects_Draw_Params,
+    builder: builderui.Builder_Surface_Preparation,
+}
 
 // draw_encoded_panel_geometry encodes visible composition backgrounds without text.
 draw_encoded_panel_geometry :: proc(
@@ -237,9 +245,7 @@ draw_encoded_focus_outline :: proc(
 // draw_encoded_view_content separates a render-only portrait tail from logical visibility.
 draw_encoded_view_content :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    terminal: uiterminal.Terminal_Prepared_Frame,
-    presentation: uipresentation.Presentation_Preparation,
-    effects: uipresentation.Presentation_Effects_Draw_Params) {
+    content: Ui_View_Content_Draw) {
     runtime := &state^.ui_runtime
     panel := geometry.Rectangle(runtime^.layout.ui_regions.text_rect)
     clip := uiaccordion.ui_presentation_clip(&runtime^.layout, panel)
@@ -247,10 +253,13 @@ draw_encoded_view_content :: proc(
         return
     }
     _ = native.draw_encoder_push_scissor(encoder, clip)
-    if uiterminal.is_terminal_selected(state) {
-        draw_encoded_terminal_content(state, encoder, terminal, panel, effects)
+    if builderui.is_builder_selected(state) {
+        builderui.draw_encoded_builder_surface(state, encoder, content.builder)
+    } else if uiterminal.is_terminal_selected(state) {
+        draw_encoded_terminal_content(
+            state, encoder, content.terminal, panel, content.effects)
     } else {
-        prepared := presentation
+        prepared := content.presentation
         if !prepared.active ||
             !uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
             prepared = uipresentation.prepare_presentation_visual(state, panel)
@@ -258,7 +267,7 @@ draw_encoded_view_content :: proc(
         uipresentation.draw_encoded_presentation_text(state, encoder, prepared)
         if uipresentation.ui_presentation_is_visible(&runtime^.presentation) {
             uipresentation.presentation_draw_effects(
-                encoder, prepared.scroll.view_rect, effects)
+                encoder, prepared.scroll.view_rect, content.effects)
         }
     }
     _ = native.draw_encoder_pop_scissor(encoder)

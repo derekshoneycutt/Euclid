@@ -3,7 +3,7 @@ package bridge_abi
 import host "../host"
 import bridgemodel "../model"
 import core "../../core"
-import operations "../../operations"
+import operations "../../animation/operations"
 import julialib "../../../libs/julia/bindings"
 
 //   Copy one Julia-owned opaque value into canonical animation storage.

@@ -128,6 +128,118 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "Could not write the file"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1525),
+            "ui.builder.tool.point", "Builder Point tool control label.",
+            LocalizedContent.MessageArgument[]),
+        "Point"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1526),
+            "ui.builder.tool.active", "Accessible value when the Point tool is armed.",
+            LocalizedContent.MessageArgument[]),
+        "On"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1527),
+            "ui.builder.tool.inactive", "Accessible value when the Point tool is disarmed.",
+            LocalizedContent.MessageArgument[]),
+        "Off"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1528),
+            "ui.builder.palette.steelblue", "Accessible name of the steel blue point color.",
+            LocalizedContent.MessageArgument[]),
+        "Steel blue"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1529),
+            "ui.builder.palette.palevioletred", "Accessible name of the pale violet red point color.",
+            LocalizedContent.MessageArgument[]),
+        "Pale violet red"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1530),
+            "ui.builder.palette.khaki", "Accessible name of the khaki point color.",
+            LocalizedContent.MessageArgument[]),
+        "Khaki"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1531),
+            "ui.builder.palette.grey", "Accessible name of the grey point color.",
+            LocalizedContent.MessageArgument[]),
+        "Grey"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1532),
+            "ui.builder.brush.label", "Builder brush-size slider label.",
+            LocalizedContent.MessageArgument[]),
+        "Brush size"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1533),
+            "ui.builder.brush.value", "Builder brush-size label with its current value.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("value",
+                    LocalizedContent.UInt32Argument)]),
+        "Brush size: {value}"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1534),
+            "ui.builder.hide", "Hide the selected Builder point.",
+            LocalizedContent.MessageArgument[]),
+        "Hide"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1535),
+            "ui.builder.show", "Show the selected Builder point.",
+            LocalizedContent.MessageArgument[]),
+        "Show"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1536),
+            "ui.builder.status.idle", "Builder status when no point tool is armed.",
+            LocalizedContent.MessageArgument[]),
+        "Choose Point to place a point."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1537),
+            "ui.builder.status.armed", "Builder status while the Point tool is armed.",
+            LocalizedContent.MessageArgument[]),
+        "Click and release on the board to place."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1538),
+            "ui.builder.status.selected", "Builder status for a selected point.",
+            LocalizedContent.MessageArgument[]),
+        "Selected point"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1539),
+            "ui.builder.status.constructing", "Builder status while a point is being constructed.",
+            LocalizedContent.MessageArgument[]),
+        "Constructing point..."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1540),
+            "ui.builder.status.point_failed", "Builder status for a failed point construction.",
+            LocalizedContent.MessageArgument[]),
+        "Point construction failed."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1541),
+            "ui.builder.status.hidden", "Warning that choosing another point loses access to a hidden point.",
+            LocalizedContent.MessageArgument[]),
+        "Hidden: choosing another point loses access."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1542),
+            "ui.builder.status.queued", "Builder status for queued point changes.",
+            LocalizedContent.MessageArgument[]),
+        "Point changes queued."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1543),
+            "ui.builder.status.queue_full", "Builder status when its action queue is full.",
+            LocalizedContent.MessageArgument[]),
+        "Builder queue is full."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1544),
+            "ui.builder.status.point_capacity", "Builder status when point capacity is exhausted.",
+            LocalizedContent.MessageArgument[]),
+        "Point capacity is full."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1545),
+            "ui.builder.status.failed", "Builder status when the scheduler requires a restart.",
+            LocalizedContent.MessageArgument[]),
+        "Builder failed. Restart to continue."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1546),
+            "ui.builder.tool.select", "Builder control that disarms Point and clears the selected point.",
+            LocalizedContent.MessageArgument[]),
+        "Select / clear selection"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1251), "ui.settings.particle_effects_help",
             "Help for the application-wide particle preference.",
             LocalizedContent.MessageArgument[]),

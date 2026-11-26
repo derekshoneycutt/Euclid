@@ -44,7 +44,7 @@ select_animation_programmatically :: proc(
     return true
 }
 
-//   Select the first non-Terminal animation as default selection.
+//   Select the first authored animation as the default selection.
 select_default_animation :: proc(state: ^core.Euclid_General_State) {
     if state == nil || state^.julia_interface == nil {
         return
@@ -59,7 +59,7 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
         if node == nil {
             break
         }
-        if node^.node_kind == .Terminal {
+        if node^.node_kind != .Animation {
             continue
         }
         if target == nil || node^.catalog_order < target^.catalog_order {

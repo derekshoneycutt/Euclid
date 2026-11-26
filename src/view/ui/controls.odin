@@ -21,6 +21,7 @@ import uipresentation "presentation"
 import uiregions "layout/regions"
 import uiterminal "terminal"
 import uioverlay "overlay"
+import builderui "builder"
 
 // Fixed frame-local control results prepared before services and rendering.
 Ui_Control_Preparation :: struct {
@@ -30,6 +31,7 @@ Ui_Control_Preparation :: struct {
     sharing: uisharing.Sharing_Preparation,
     tree: uilibrary.Tree_List_Preparation,
     library_search: uilibrary.Library_Search_Preparation,
+    builder: builderui.Builder_Surface_Preparation,
 }
 
 // Post-layout interaction results prepared after Dynview compilation completes.
@@ -57,6 +59,7 @@ prepare_ui_static_interaction :: proc(
     _ = ui_route_interaction_frame(&state^.ui_runtime, {
         frame = frame,
         terminal_present = uiterminal.is_terminal_selected(state),
+        builder_present = builderui.is_builder_selected(state),
         animation_controls = {
             favorite = uianimation.animation_favorite_eligible(
                 state^.julia_interface),
@@ -91,6 +94,20 @@ ui_accordion_input_frame :: proc(
         return input.input_frame_filter_pointer(frame, {.Screen_Position, .Wheel})
     }
     return input.input_frame_filter_pointer(frame, {.Screen_Position})
+}
+
+// Route pointer fields only while Builder owns the visible pointer target or capture.
+ui_builder_input_frame :: proc(
+    frame: input.Input_Frame,
+    routed: viewmodel.Ui_Surface_Interaction) -> input.Input_Frame {
+    fields: input.Input_Pointer_Fields = {.Screen_Position}
+    if routed.pointer {
+        fields += {.Motion, .Press_Edges, .Release_Edges, .Levels}
+    }
+    if routed.wheel {
+        fields += {.Wheel}
+    }
+    return input.input_frame_filter_pointer(frame, fields)
 }
 
 // Return pointer input only when the animation overlay owns this frame.
@@ -211,6 +228,9 @@ prepare_ui_controls :: proc(
     child_frame := ui_clip_accordion_child_frame(&state^.ui_runtime, routed_frame)
     prepare_active_accordion_controls(state, resolved_frame, child_frame,
         geometry.Rectangle(result^.accordion.layout.content), result)
+    builder_frame := ui_builder_input_frame(
+        resolved_frame, state^.ui_runtime.input.interaction_frame.builder)
+    result^.builder = builderui.prepare_builder_surface(state, builder_frame)
     prepare_outgoing_accordion_controls(state, result)
     finish_ui_control_preparation(state, resolved_frame)
 }
@@ -461,6 +481,10 @@ prepare_ui_layout_interaction :: proc(
     state: ^core.Euclid_General_State,
     frame: input.Input_Frame,
     terminal: uiterminal.Terminal_Prepared_Frame) -> Ui_Layout_Interaction_Preparation {
+    if builderui.is_builder_selected(state) {
+        state^.ui_runtime.terminal.semantic_focus_initialized = false
+        return {}
+    }
     if !uipresentation.ui_presentation_is_visible(
         &state^.ui_runtime.presentation) {
         state^.ui_runtime.presentation.text_scroll_max = 0

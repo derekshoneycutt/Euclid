@@ -1,7 +1,7 @@
 package operations
 
-import modifier "../animation"
-import geometry "../core/geometry"
+import modifier ".."
+import geometry "../../core/geometry"
 import math "core:math"
 
 ACTIVE_OPERATION_SLOT_COUNT :: 16
@@ -31,6 +31,13 @@ Active_Operation_Status :: enum u8 {
     Identity_Exhausted,
     Conflict,
     Admission_Rejected,
+    Wrong_Consumer,
+}
+
+// Active_Operation_Consumer identifies the owner responsible for each retained result.
+Active_Operation_Consumer :: enum u8 {
+    Julia,
+    Native,
 }
 
 Active_Operation_State :: enum u8 {
@@ -89,6 +96,7 @@ Active_Operation_Submission_Request :: struct {
     session_generation: u64,
     runtime_generation: u64,
     animation_generation: u64,
+    consumer: Active_Operation_Consumer,
     modifier_request: modifier.Modifier_Request,
     group_transform: Active_Operation_Group_Transform,
     polygon_trace: Active_Operation_Polygon_Trace,
@@ -142,6 +150,7 @@ Active_Operation_Reservation_Request :: struct {
     session_generation: u64,
     runtime_generation: u64,
     animation_generation: u64,
+    consumer: Active_Operation_Consumer,
     modifier_request: modifier.Modifier_Request,
     group_transform: Active_Operation_Group_Transform,
     polygon_trace: Active_Operation_Polygon_Trace,
@@ -189,6 +198,7 @@ Active_Operation_Control_Slot :: struct {
     session_generation: u64,
     runtime_generation: u64,
     animation_generation: u64,
+    consumer: Active_Operation_Consumer,
     outcome_handle: Active_Operation_Outcome_Handle,
     lifecycle: u16,
 }
@@ -200,6 +210,7 @@ Active_Operation_Outcome_Slot :: struct {
     session_generation: u64,
     runtime_generation: u64,
     animation_generation: u64,
+    consumer: Active_Operation_Consumer,
     state: Active_Operation_Outcome_State,
     delivered: bool,
 }
@@ -210,6 +221,7 @@ Active_Operation_Outcome :: struct {
     session_generation: u64,
     runtime_generation: u64,
     animation_generation: u64,
+    consumer: Active_Operation_Consumer,
     state: Active_Operation_Outcome_State,
 }
 
@@ -610,6 +622,7 @@ active_operation_initialize_control_slot :: proc(
         session_generation = request.session_generation,
         runtime_generation = request.runtime_generation,
         animation_generation = request.animation_generation,
+        consumer = request.consumer,
         outcome_handle = request.outcome_handle,
     }
     storage.payload_slots[locators.payload_index].payload = {
@@ -920,6 +933,7 @@ active_operation_initialize_modifier_reservation :: proc(
             session_generation = submission.session_generation,
             runtime_generation = submission.runtime_generation,
             animation_generation = submission.animation_generation,
+            consumer = submission.consumer,
             modifier_request = submission.modifier_request,
             group_transform = submission.group_transform,
             polygon_trace = submission.polygon_trace,
@@ -931,6 +945,7 @@ active_operation_initialize_modifier_reservation :: proc(
     outcome^.session_generation = submission.session_generation
     outcome^.runtime_generation = submission.runtime_generation
     outcome^.animation_generation = submission.animation_generation
+    outcome^.consumer = submission.consumer
     return reservation
 }
 
@@ -1078,8 +1093,40 @@ active_operation_read_outcome :: proc(
         session_generation = slot.session_generation,
         runtime_generation = slot.runtime_generation,
         animation_generation = slot.animation_generation,
+        consumer = slot.consumer,
         state = slot.state,
     }, .Ok
+}
+
+// Consume and release one native-owned result exactly once on the display owner.
+active_operation_consume_native_outcome :: proc(
+    storage: ^Active_Operation_Storage,
+    handle: Active_Operation_Outcome_Handle) -> (
+        Active_Operation_Outcome, Active_Operation_Status) {
+    slot := valid_outcome_handle(storage, handle)
+    if slot == nil {
+        return {}, .Invalid_Handle
+    }
+    if slot.consumer != .Native {
+        return {}, .Wrong_Consumer
+    }
+    if slot.state == .None {
+        return {}, .Invalid_Argument
+    }
+    outcome: Active_Operation_Outcome = {
+        handle = handle,
+        request_id = slot.correlation,
+        session_generation = slot.session_generation,
+        runtime_generation = slot.runtime_generation,
+        animation_generation = slot.animation_generation,
+        consumer = slot.consumer,
+        state = slot.state,
+    }
+    slot^ = {
+        occupied = false,
+        generation = slot.generation,
+    }
+    return outcome, .Ok
 }
 
 // Cancel a live operation, releasing claims but preserving its correlated outcome.

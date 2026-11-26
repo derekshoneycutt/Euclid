@@ -871,6 +871,20 @@ shape_registry_create :: proc(
     return .Ok
 }
 
+// Predict the entity identity that the next append will publish.
+shape_registry_next_entity :: proc(
+    registry: ^Shape_Registry) -> (Shape_Entity, bool) {
+    if registry == nil || registry.entity_count >= MAX_SHAPE_ENTITIES {
+        return {}, false
+    }
+    index := registry.entity_count
+    generation := registry.generations[index]
+    if generation == SHAPE_ENTITY_INVALID_GENERATION {
+        generation = 1
+    }
+    return {index + 1, generation}, true
+}
+
 // Freeze the current registry prefix as process-lifetime baseline entities.
 shape_registry_freeze_baseline :: proc(
     registry: ^Shape_Registry) -> Shape_World_Status {
@@ -1284,6 +1298,114 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     world.constraints.animation_start = world.constraints.count
     world.constraints.baseline_frozen = true
     return .Ok
+}
+
+// Remove only a newly appended standalone point, preserving every other entity identity.
+shape_world_remove_last_point :: proc(
+    world: ^Shape_World, entity: Shape_Entity) -> Shape_World_Status {
+    if world == nil || !world.registry.baseline_frozen ||
+        entity.slot == 0 || entity.slot != world.registry.entity_count ||
+        entity.slot <= world.registry.animation_entity_start ||
+        !shape_registry_resolves(&world.registry, entity) {
+        return .Illegal_State
+    }
+    geometry, found := shape_component_get(
+        &world.geometries, &world.registry, entity)
+    if !found || geometry.kind != .Point ||
+        !shape_component_contains(&world.transforms, &world.registry, entity) ||
+        !shape_component_contains(&world.render_styles, &world.registry, entity) ||
+        shape_component_contains(&world.active_features, &world.registry, entity) ||
+        shape_component_contains(&world.labels, &world.registry, entity) ||
+        !shape_component_is_last(&world.geometries, &world.registry, entity) ||
+        !shape_component_is_last(&world.render_styles, &world.registry, entity) ||
+        !shape_component_is_last(&world.transforms, &world.registry, entity) ||
+        shape_world_entity_is_referenced(world, entity) {
+        return .Illegal_State
+    }
+    assert(shape_component_remove_last(&world.geometries, &world.registry, entity))
+    assert(shape_component_remove_last(&world.render_styles, &world.registry, entity))
+    assert(shape_component_remove_last(&world.transforms, &world.registry, entity))
+    shape_world_invalidate_draw_cache(world)
+    slot_index := entity.slot - 1
+    generation := world.registry.generations[slot_index] + 1
+    if generation == SHAPE_ENTITY_INVALID_GENERATION {
+        generation = 1
+    }
+    world.registry.generations[slot_index] = generation
+    world.registry.entity_count -= 1
+    return .Ok
+}
+
+// Reject point retirement while any topology or constraint retains its identity.
+shape_world_entity_is_referenced :: proc(
+    world: ^Shape_World, entity: Shape_Entity) -> bool {
+    for reference in world.vertex_references.entities[:world.vertex_references.count] {
+        if reference == entity {
+            return true
+        }
+    }
+    for constraint in world.constraints.values[:world.constraints.count] {
+        if shape_constraint_references_entity(constraint, entity) {
+            return true
+        }
+    }
+    return false
+}
+
+// Match one direct target across every fixed constraint payload variant.
+shape_constraint_references_entity :: proc(
+    constraint: Shape_Constraint, entity: Shape_Entity) -> bool {
+    #partial switch constraint.kind {
+    case .Distance:
+        return constraint.payload.distance.first == entity ||
+            constraint.payload.distance.second == entity
+    case .Floor:
+        return constraint.payload.floor.point == entity
+    case .Snap_To_Floor:
+        return constraint.payload.snap_to_floor.point == entity
+    case .Snap_Point:
+        return constraint.payload.snap_point.point == entity
+    case .Max_Angle, .Min_Angle:
+        return constraint.payload.angle.first == entity ||
+            constraint.payload.angle.pivot == entity ||
+            constraint.payload.angle.second == entity
+    case .Center_Pivot:
+        return constraint.payload.center_pivot.first == entity ||
+            constraint.payload.center_pivot.pivot == entity ||
+            constraint.payload.center_pivot.second == entity
+    }
+    return false
+}
+
+// Remove an entity only when it is the final dense member of its component store.
+shape_component_remove_last :: proc(
+    set: ^Shape_Component_Set($Value), registry: ^Shape_Registry,
+    entity: Shape_Entity) -> bool {
+    if set == nil || registry == nil ||
+        !shape_component_contains(set, registry, entity) {
+        return false
+    }
+    if !shape_component_is_last(set, registry, entity) {
+        return false
+    }
+    dense := int(set.sparse[entity.slot - 1] - 1)
+    set.sparse[entity.slot - 1] = 0
+    set.entities[dense] = {}
+    set.values[dense] = {}
+    set.count -= 1
+    return true
+}
+
+// Check that one validated entity is the final dense component entry.
+shape_component_is_last :: proc(
+    set: ^Shape_Component_Set($Value), registry: ^Shape_Registry,
+    entity: Shape_Entity) -> bool {
+    if set == nil || registry == nil ||
+        !shape_component_contains(set, registry, entity) {
+        return false
+    }
+    dense := int(set.sparse[entity.slot - 1] - 1)
+    return dense == int(set.count) - 1 && set.entities[dense] == entity
 }
 
 // Require every owning store to have a baseline before retiring animation suffixes.

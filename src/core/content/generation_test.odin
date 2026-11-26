@@ -43,19 +43,22 @@ content_generation_test_build :: proc(
     return true
 }
 
-// Append one deterministic child animation and one root Terminal record.
+// Append one deterministic child animation and both root native destinations.
 content_generation_test_append_child :: proc(
     t: ^testing.T, generation: ^Content_Generation,
     identity: u8, path: string) {
     child_name: Content_Text_Ref
     child_path: Content_Text_Ref
     terminal_name: Content_Text_Ref
+    builder_name: Content_Text_Ref
     content_generation_test_append_text(t, generation, "Child",
         CATALOG_NAME_BYTE_CAPACITY, &child_name)
     content_generation_test_append_text(t, generation, path,
         CATALOG_PATH_BYTE_CAPACITY, &child_path)
     content_generation_test_append_text(t, generation, "Terminal",
         CATALOG_NAME_BYTE_CAPACITY, &terminal_name)
+    content_generation_test_append_text(t, generation, "Builder",
+        CATALOG_NAME_BYTE_CAPACITY, &builder_name)
     empty_path: Content_Text_Ref = {
         offset = u32(generation.text_builder.count),
     }
@@ -77,9 +80,19 @@ content_generation_test_append_child :: proc(
         display_name = terminal_name,
         implementation_path = empty_path,
     }
+    builder: Content_Generation_Record = {
+        stable_id = content_generation_test_id(254),
+        node_kind = .Builder,
+        sibling_order = 2,
+        catalog_order = 3,
+        display_name = builder_name,
+        implementation_path = empty_path,
+    }
     testing.expect_value(t, content_generation_append_record(generation, child),
         Content_Generation_Status.Ok)
     testing.expect_value(t, content_generation_append_record(generation, terminal),
+        Content_Generation_Status.Ok)
+    testing.expect_value(t, content_generation_append_record(generation, builder),
         Content_Generation_Status.Ok)
 }
 
@@ -111,7 +124,7 @@ content_generation_packs_text_and_seals_immutable_records :: proc(t: ^testing.T)
     testing.expect_value(t, name, "Child")
     testing.expect_value(t, path, "child.jl")
     testing.expect_value(t, string(generation.text_bytes),
-        "Rootroot.jlChildchild.jlTerminal")
+        "Rootroot.jlChildchild.jlTerminalBuilder")
     rejected_ref: Content_Text_Ref
     testing.expect_value(t, content_generation_append_text(
         &generation, "late", CATALOG_NAME_BYTE_CAPACITY, &rejected_ref),
@@ -121,7 +134,7 @@ content_generation_packs_text_and_seals_immutable_records :: proc(t: ^testing.T)
         Content_Generation_Status.Invalid_State)
 }
 
-// Verify nullable paths use an empty reference without consuming bytes.
+// Verify the Terminal path uses an empty reference without consuming bytes.
 @(test)
 content_generation_represents_terminal_path_as_empty_reference :: proc(
     t: ^testing.T) {
@@ -220,6 +233,7 @@ content_generation_test_build_recordless_root :: proc(
     t: ^testing.T, generation: ^Content_Generation) -> bool {
     content_generation_test_append_root(t, generation)
     content_generation_test_append_terminal(t, generation)
+    content_generation_test_append_builder(t, generation)
     return true
 }
 
@@ -262,6 +276,27 @@ content_generation_test_append_terminal :: proc(
         implementation_path = empty_path,
     }
     testing.expect_value(t, content_generation_append_record(generation, terminal),
+        Content_Generation_Status.Ok)
+}
+
+// Append the unique root Builder used by invalid-reference tests.
+content_generation_test_append_builder :: proc(
+    t: ^testing.T, generation: ^Content_Generation) {
+    builder_name: Content_Text_Ref
+    empty_path: Content_Text_Ref
+    content_generation_test_append_text(t, generation, "Builder",
+        CATALOG_NAME_BYTE_CAPACITY, &builder_name)
+    content_generation_test_append_text(t, generation, "",
+        CATALOG_PATH_BYTE_CAPACITY, &empty_path)
+    builder: Content_Generation_Record = {
+        stable_id = content_generation_test_id(254),
+        node_kind = .Builder,
+        sibling_order = 2,
+        catalog_order = 2,
+        display_name = builder_name,
+        implementation_path = empty_path,
+    }
+    testing.expect_value(t, content_generation_append_record(generation, builder),
         Content_Generation_Status.Ok)
 }
 

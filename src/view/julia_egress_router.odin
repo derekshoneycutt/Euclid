@@ -6,7 +6,7 @@ import core "../core"
 import exerciseheader "../core/exercise_header"
 import viewpresentation "presentation"
 import terminalservice "terminal/service"
-import operations "../operations"
+import operations "../animation/operations"
 import "core:log"
 
 // Route one non-event Julia envelope to its display-owned subsystem.

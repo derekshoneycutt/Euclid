@@ -300,6 +300,9 @@ Formation_State :: struct {
     accepted_progress: f64,
     native_time_intervals: [FORMATION_TIME_INTERVAL_CAPACITY]Formation_Time_Interval,
     native_time_interval_count: int,
+    // Deduplicate native-only steps without retaining Julia-overlap coverage.
+    native_last_interval: Formation_Time_Interval,
+    native_last_interval_set: bool,
 }
 
 // Formation_Time_Interval identifies authored time belonging to one display step.

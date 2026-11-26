@@ -44,7 +44,7 @@ import viewpreferences "preferences"
 import viewsharing "sharing"
 import uiregions "ui/layout/regions"
 import collections "../collections"
-import operations "../operations"
+import operations "../animation/operations"
 
 when !core.SCENARIOS_ENABLED {
     _ :: observe

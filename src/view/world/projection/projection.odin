@@ -324,6 +324,38 @@ iso_to_cartesian_inline :: #force_inline proc(
     return iso_to_cartesian_components_inline(coord.x, coord.y, coord.z, scale)
 }
 
+// Invert the board-plane projection for one screen-space sample.
+cartesian_to_iso_board :: proc(
+    screen: geometry.Vector2,
+    scale: worldmodel.Iso_Scale,
+    shake_enabled := false) -> (geometry.Vector3, bool) {
+    if scale.half_scale <= 0 || scale.quarter_scale <= 0 ||
+       math.is_nan(screen.x) || math.is_inf(screen.x) ||
+       math.is_nan(screen.y) || math.is_inf(screen.y) ||
+       math.is_nan(scale.x_offset) || math.is_inf(scale.x_offset) ||
+       math.is_nan(scale.y_offset) || math.is_inf(scale.y_offset) ||
+       (shake_enabled &&
+           (math.is_nan(scale.screenshake_offset_x) ||
+               math.is_inf(scale.screenshake_offset_x) ||
+               math.is_nan(scale.screenshake_offset_y) ||
+               math.is_inf(scale.screenshake_offset_y))) {
+        return {}, false
+    }
+    unshaken_screen := screen
+    if shake_enabled {
+        fit := viewport_scale_factor(scale)
+        unshaken_screen.x -= scale.screenshake_offset_x * fit
+        unshaken_screen.y -= scale.screenshake_offset_y * fit
+    }
+    difference := (unshaken_screen.x - scale.x_offset) / scale.half_scale
+    sum := (scale.y_offset - unshaken_screen.y) / scale.quarter_scale
+    return {
+        (sum + difference) * 0.5,
+        (sum - difference) * 0.5,
+        0,
+    }, true
+}
+
 //   Project an isometric 3D coordinate into 2D screen space.
 //
 // Parameters:

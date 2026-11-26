@@ -2,7 +2,7 @@ package bridge_scene
 
 import bridgemodel "../model"
 import animation_model "../../core/animation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import modifier "../../animation"
 import "../../core"
 import evidence_trace "../../evidence/trace"
@@ -223,6 +223,7 @@ begin_native_scene_command_batch :: proc(
         animation_generation = state^.particle_system.formation.animation_generation,
         tick_sequence = state^.fixed_step + 1,
         animation_progress = state^.particle_system.formation.accepted_progress,
+        native_interval_reconcile_julia = true,
         producer_identity = producer_identity,
     }
     state^.scene_command_batch_target = batch

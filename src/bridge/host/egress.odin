@@ -3,7 +3,7 @@ package julia_host
 import transport "../transport"
 import bridgemodel "../model"
 import presentation_model "../presentation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import "../../core"
 import evidence_session "../../evidence/session"
 import "core:log"
@@ -27,7 +27,8 @@ pump_active_operation_outcomes :: proc(
     service := state^.julia_runtime_service
     storage := &state^.active_operations
     for slot, index in storage^.outcome_slots {
-        if !slot.occupied || slot.state == .None || slot.delivered {
+        if !slot.occupied || slot.state == .None || slot.delivered ||
+            slot.consumer != .Julia {
             continue
         }
         handle: operations.Active_Operation_Outcome_Handle = {
@@ -69,6 +70,9 @@ pump_active_operation_progress :: proc(
             continue
         }
         control := state^.active_operations.control_slots[slot.control_index]
+        if control.consumer != .Julia {
+            continue
+        }
         message: bridgemodel.Active_Operation_Progress_Ready = {
             request_id = control.request_id,
             session_generation = control.session_generation,

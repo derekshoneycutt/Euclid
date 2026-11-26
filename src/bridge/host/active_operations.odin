@@ -5,13 +5,15 @@ import bridgemodel "../model"
 import core "../../core"
 import audio "../../audio"
 import modifier "../../animation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import math "core:math"
+import shapemodel "../../shapes/model"
 
 Active_Operation_Sample :: struct {
     request: modifier.Modifier_Request,
     group: operations.Active_Operation_Group_Transform,
     polygon: operations.Active_Operation_Polygon_Trace,
+    consumer: operations.Active_Operation_Consumer,
     previous_elapsed: f64,
     current_elapsed: f64,
     interval_seconds: f64,
@@ -31,8 +33,20 @@ active_operation_submit_modifier :: proc(
     if reserve_status != .Ok {
         return {}, reserve_status
     }
-    admission_status := active_operation_prepare_admission(
-        state, reservation, submission)
+    return active_operation_start_reserved_modifier(state, reservation, submission)
+}
+
+// Commit a reserved native operation's initial sample before making it live.
+active_operation_start_reserved_modifier :: proc(
+    state: ^core.Euclid_General_State,
+    reservation: operations.Active_Operation_Reservation,
+    submission: operations.Active_Operation_Submission_Request) -> (
+        operations.Active_Operation_Reservation,
+        operations.Active_Operation_Status) {
+    if state == nil || state^.scene_command_batch_target != nil {
+        return reservation, .Invalid_Argument
+    }
+    admission_status := active_operation_prepare_admission(state, reservation, submission)
     if admission_status != .Ok {
         return reservation, admission_status
     }
@@ -69,6 +83,7 @@ active_operation_prepare_admission :: proc(
         request = initial,
         group = submission.group_transform,
         polygon = submission.polygon_trace,
+        consumer = submission.consumer,
     }
     if !commit_active_operation_sample(state, submission.request_id, sample) {
         active_operation_reject_reservation(state, reservation)
@@ -123,12 +138,14 @@ advance_one_active_operation :: proc(
         request.integer = modifier.construction_transition_flags(
             request.kind, progress.elapsed, candidate_elapsed, progress.duration)
     }
-    producer_id := state^.active_operations.control_slots[
-        state^.active_operations.execution_slots[handle.index].control_index].request_id
+    control := state^.active_operations.control_slots[
+        state^.active_operations.execution_slots[handle.index].control_index]
+    producer_id := control.request_id
     sample: Active_Operation_Sample = {
         request = request,
         group = progress.group_transform,
         polygon = progress.polygon_trace,
+        consumer = control.consumer,
         previous_elapsed = progress.elapsed,
         current_elapsed = candidate_elapsed,
         interval_seconds = f64(dt),
@@ -156,6 +173,8 @@ commit_active_operation_sample :: proc(
         batch.native_interval_step = state^.fixed_step + 1
         batch.native_interval_seconds = sample.interval_seconds
         batch.native_interval_set = true
+        batch.native_interval_reconcile_julia =
+            sample.consumer == .Julia
     }
     if !append_active_operation_sample_commands(state, sample) {
         return false
@@ -399,4 +418,65 @@ active_operation_acknowledge_outcome :: proc(
         return bridgemodel.BRIDGE_STATUS_INVALID_ARGUMENT
     }
     return bridgemodel.BRIDGE_STATUS_ILLEGAL_STATE
+}
+
+// Consume one Builder-owned result directly without entering Julia egress.
+active_operation_consume_native_outcome :: proc(
+    state: ^core.Euclid_General_State,
+    handle: operations.Active_Operation_Outcome_Handle) -> (
+        operations.Active_Operation_Outcome, operations.Active_Operation_Status) {
+    if state == nil {
+        return {}, .Invalid_Argument
+    }
+    return operations.active_operation_consume_native_outcome(
+        &state^.active_operations, handle)
+}
+
+// Add deduplicated claims for the native joints moved by a construction recipe.
+active_operation_add_construction_tool_claims :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    state: ^core.Euclid_General_State,
+    kind: modifier.Modifier_Kind) -> bool {
+    if submission == nil || state == nil {
+        return false
+    }
+    if !modifier.construction_recipe_kind(kind) {
+        return true
+    }
+    if kind == .Construct_Circle || kind == .Construct_Filled_Circle {
+        return active_operation_add_request_claim(
+                submission, shapemodel.shape_entity_pack(state^.world_compass.joint1)) &&
+            active_operation_add_request_claim(
+                submission, shapemodel.shape_entity_pack(state^.world_compass.joint2))
+    }
+    return active_operation_add_request_claim(
+            submission, shapemodel.shape_entity_pack(state^.world_pen.joint1)) &&
+        active_operation_add_request_claim(
+            submission, shapemodel.shape_entity_pack(state^.world_pen.joint2))
+}
+
+// Add one nonzero entity claim without duplicating an existing identity.
+active_operation_add_request_claim :: proc(
+    submission: ^operations.Active_Operation_Submission_Request,
+    entity: u64) -> bool {
+    if submission == nil {
+        return false
+    }
+    if entity == 0 {
+        return true
+    }
+    for existing in 0..<submission^.claim_count {
+        if submission^.claims[existing].identity == entity {
+            return true
+        }
+    }
+    if submission^.claim_count >= operations.ACTIVE_OPERATION_CLAIMS_PER_SLOT {
+        return false
+    }
+    submission^.claims[submission^.claim_count] = {
+        kind = operations.ACTIVE_OPERATION_CLAIM_ENTITY,
+        identity = entity,
+    }
+    submission^.claim_count += 1
+    return true
 }

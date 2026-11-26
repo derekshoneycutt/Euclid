@@ -24,6 +24,11 @@ ui_refresh_surface_interaction :: proc(frame: ^Ui_Interaction_Frame) {
         pointer = frame^.pointer_target.focus.kind == .Terminal,
         wheel = frame^.wheel_target.focus.kind == .Terminal,
     }
+    frame^.builder = {
+        keyboard = frame^.effective_focus.kind == .Builder,
+        pointer = frame^.pointer_target.focus.kind == .Builder,
+        wheel = frame^.wheel_target.focus.kind == .Builder,
+    }
     frame^.presentation = {
         keyboard = frame^.effective_focus.kind == .Presentation,
         pointer = frame^.pointer_target.focus.kind == .Presentation,

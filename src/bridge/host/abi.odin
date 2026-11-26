@@ -1,7 +1,7 @@
 package julia_host
 
 import shapemodel "../../shapes/model"
-import operations "../../operations"
+import operations "../../animation/operations"
 
 // Julia module provides the Odin-Julia Bridge to coordinate all actions between the 2
 // languages. Most of these are wrappers around Odin module functions with some specific

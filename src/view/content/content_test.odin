@@ -102,7 +102,7 @@ content_worker_admits_and_rejects_typed_signatures :: proc(t: ^testing.T) {
         &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
-    testing.expect_value(t, generation^.data.argument_count, u16(23))
+    testing.expect_value(t, generation^.data.argument_count, u16(24))
     content_test_reject_candidate(t, &service, "content-native-signature",
         "INSERT INTO ui_argument VALUES ('ui.navigation.library',0,'count','uint32');"+
         "UPDATE ui_translation SET template='{count}' WHERE message_key='ui.navigation.library';")
@@ -172,10 +172,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok && contentfixture.content_test_mutate(&fixture,
         "INSERT INTO edition VALUES ('greek','Ancient Greek','grc','Greek source');"+
-        "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"+
-        "UPDATE content_metadata SET value='1035' WHERE key='record_count';"+
-        "UPDATE content_metadata SET value='1=6;2=1;3=92;4=13;5=92;6=141;7=140;8=140;9=4;10=282;11=140;12=1;13=0' "+
-        "WHERE key='table_counts';"))
+        "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"))
     service: Content_Service
     testing.expect(t, content_service_init(
         &service, fixture.path, contentfixture.SEARCH_TEST_FINGERPRINT))
@@ -183,7 +180,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
     generation := content_service_generation(&service)
     testing.expect(t, generation != nil && generation^.data.complete)
     testing.expect_value(t, generation^.data.edition_count, u16(4))
-    testing.expect_value(t, generation^.data.availability_count, u16(282))
+    testing.expect_value(t, generation^.data.availability_count, u16(284))
 }
 
 // Both stable slots retire all content and packed storage after repeated transactions.

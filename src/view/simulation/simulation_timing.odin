@@ -86,6 +86,13 @@ run_deterministic_fixed_step :: proc(
         operation_dt := dt * animationmodel.playback_rate_multiplier(rate)
         julia.advance_active_operations(state, operation_dt)
     }
+    selected_builder := state^.julia_interface != nil &&
+        state^.julia_interface^.selected_animation != nil &&
+        state^.julia_interface^.selected_animation^.node_kind == .Builder
+    _ = julia.builder_fixed_step(state,
+        selected_builder && !julia.animation_lifecycle_update_needed(state) &&
+        !state^.ui_runtime.playback.construction_paused &&
+        !state^.ui_runtime.playback.animation_policy_paused)
     run_parallel_simulation_step(state^.simulation_executor, dt)
     state^.fixed_step += 1
     terminalservice.terminal_tick_record_step(

@@ -58,11 +58,11 @@ end
         entry -> entry.message_key == "ui.library.actions_for",
         AuthoredManifest.translations))
     @test actions_translation.template == "Actions for {name}"
-    @test length(AuthoredManifest.catalog_names) == 140
+    @test length(AuthoredManifest.catalog_names) == 141
     @test length(AuthoredManifest.editions) == 3
-    @test length(AuthoredManifest.subjects) == 141
-    @test length(AuthoredManifest.availability) == 141
-    @test count(entry -> entry.is_default, AuthoredManifest.availability) == 141
+    @test length(AuthoredManifest.subjects) == 142
+    @test length(AuthoredManifest.availability) == 142
+    @test count(entry -> entry.is_default, AuthoredManifest.availability) == 142
     @test getproperty.(AuthoredManifest.locales, :tag) == ["en-US"]
     @test Set(getproperty.(AuthoredManifest.editions, :edition_id)) == Set((
         "elements-heath-adapted", "hilbert-townsend-adapted", "original-en-us"))
@@ -79,7 +79,7 @@ end
     @test count(entry -> entry.edition_id == "hilbert-townsend-adapted",
         AuthoredManifest.availability) == 61
     @test count(entry -> entry.edition_id == "original-en-us",
-        AuthoredManifest.availability) == 41
+        AuthoredManifest.availability) == 42
 
     @testset "duplicate identities and names" begin
         duplicate_message = copy_content_manifest(AuthoredManifest)

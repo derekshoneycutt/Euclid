@@ -93,6 +93,30 @@ formation_time_capacity_and_generation_reset_are_explicit :: proc(t: ^testing.T)
     testing.expect_value(t, ps^.formation.accepted_progress, f64(0))
 }
 
+// Retire native-only coverage while preserving same-step deduplication past capacity.
+@(test)
+formation_native_only_time_exceeds_overlap_capacity :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps, context.allocator)
+    formation_reset_generation(ps, 9)
+    for step in 1..<301 {
+        testing.expect_value(t, formation_accept_native_interval(
+            ps, 9, u64(step), 0.001, false),
+            particlemodel.Formation_Time_Status.Accepted)
+        testing.expect_value(t, formation_accept_native_interval(
+            ps, 9, u64(step), 0.001, false),
+            particlemodel.Formation_Time_Status.Already_Accepted)
+    }
+    testing.expect_value(t, ps^.formation.native_time_interval_count, 0)
+    testing.expect(t, math.abs(
+        ps^.formation.accepted_progress - f64(0.3)) < f64(1e-12))
+    formation_reset_generation(ps, 10)
+    testing.expect(t, !ps^.formation.native_last_interval_set)
+    testing.expect_value(t, formation_accept_native_interval(
+        ps, 10, 301, 0.002, false),
+        particlemodel.Formation_Time_Status.Accepted)
+}
+
 // Count live low-layer particles within the configured test capacity.
 count_live_low_particles :: proc(ps: ^particlemodel.Particle_System) -> int {
     count: int

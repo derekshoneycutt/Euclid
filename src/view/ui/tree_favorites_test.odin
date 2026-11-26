@@ -621,8 +621,9 @@ tree_favorites_failed_generation_preserves_live_projection :: proc(t: ^testing.T
     staged: viewmodel.Ui_Tree_Projection
     testing.expect(t, uilibrary.tree_projection_begin(params, projection, &staged))
     defer viewmodel.ui_tree_projection_destroy(&staged)
-    has_terminal: bool
-    testing.expect(t, !uilibrary.tree_projection_registry_info(&ji, &has_terminal))
+    has_terminal, has_builder: bool
+    testing.expect(t, !uilibrary.tree_projection_registry_info(
+        &ji, &has_terminal, &has_builder))
     testing.expect(t, projection.valid)
     testing.expect_value(t, projection.content_generation, stable_generation)
     testing.expect_value(t, projection.items[0], stable_node)

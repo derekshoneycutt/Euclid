@@ -10,7 +10,7 @@ import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import shapemodel "../../shapes/model"
 import modifier "../../animation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import julialib "../../../libs/julia/bindings"
 
 import "base:runtime"
@@ -132,6 +132,7 @@ Scene_Command_Batch :: struct {
     native_interval_step: u64,
     native_interval_seconds: f64,
     native_interval_set: bool,
+    native_interval_reconcile_julia: bool,
     producer_identity: u64,
     command_count: int,
     overflowed: bool,
@@ -220,6 +221,7 @@ View_Snapshot :: struct {
 Animation_Node_Kind :: enum i32 {
     Animation = 1,
     Terminal = 2,
+    Builder = 3,
 }
 
 // Animation_Operation identifies a lifecycle operation sent to animation policy.

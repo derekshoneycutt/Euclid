@@ -226,13 +226,13 @@ function search_projection_record(
     manifest::LocalizedContent.ContentManifest,
     content_loader::Function, locale_tag::String,
     by_id::Dict{UUID,AnimationDescriptor}, names_by_id::Dict{UUID,String})
-    content = descriptor.kind == TerminalNode ? nothing : content_loader(descriptor)
+    native_node = descriptor.kind == TerminalNode || descriptor.kind == BuilderNode
+    content = native_node ? nothing : content_loader(descriptor)
     content === nothing || content isa SearchContent ||
         throw(ArgumentError("sidecar returned invalid search content"))
     semantic_text = content === nothing ? "" : content.text
     aliases = content === nothing ? String[] : collect(content.aliases)
-    descriptor.kind == TerminalNode ||
-        !isempty(strip(semantic_text)) ||
+    native_node || !isempty(strip(semantic_text)) ||
         throw(ArgumentError("path-backed document has empty semantic text"))
     edition_id = default_edition(manifest, "builtin", descriptor.id, locale_tag)
     identity = "builtin|$(descriptor.id)|$locale_tag|$edition_id"

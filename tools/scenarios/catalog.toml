@@ -1,5 +1,8 @@
 # Public CLI names are stable; unlisted JSONL files are workflow phases.
 [scenarios]
+builder-departure-reentry-reload-acceptance = "builder/builder-departure-reentry-reload-acceptance.jsonl"
+builder-fifo-edit-ordering-acceptance = "builder/builder-fifo-edit-ordering-acceptance.jsonl"
+builder-placement-inspection-acceptance = "builder/builder-placement-inspection-acceptance.jsonl"
 native-rolling-acceptance = "geometry/native-rolling-acceptance.jsonl"
 accordion-portrait-acceptance = "ui/accordion-portrait-acceptance.jsonl"
 accordion-transition-acceptance = "ui/accordion-transition-acceptance.jsonl"

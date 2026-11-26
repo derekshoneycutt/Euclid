@@ -3,7 +3,7 @@ package view
 
 import core "../core"
 import audio "../audio"
-import operations "../operations"
+import operations "../animation/operations"
 import "core:mem"
 import "core:testing"
 import "base:runtime"

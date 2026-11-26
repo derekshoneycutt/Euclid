@@ -101,6 +101,12 @@ function create_euclid_runtime_host(
         UInt64(1), UInt64(0), nothing)
 end
 
+"""Keep native Builder lifecycle requests distinct from the Terminal callback."""
+function builder_animation_callback(
+    callback_state_ptr::Ptr{Cvoid}, operation, dt)
+    return true
+end
+
 """Root one uncommitted content generation until native publication resolves."""
 function stage_euclid_runtime_generation(
     host::EuclidRuntimeHost,
@@ -268,7 +274,7 @@ function await_animation_supervisor!(host::EuclidRuntimeHost)::Bool
     return false
 end
 
-"""Resolve null, Terminal, or path-backed implementations from native catalogue data."""
+"""Resolve null, native destination, or path-backed implementations."""
 function load_generation_animation_implementation(
     generation::EuclidRuntimeGeneration, state_ptr::Ptr{Cvoid},
     terminal_animation_callback::Function, animation_id::UUID)
@@ -286,21 +292,24 @@ function load_generation_animation_implementation(
         throw(ArgumentError("native catalogue rejected animation UUID"))
     path = _animation_implementation_path_from_metadata(metadata, path_bytes)
     if path === nothing
+        callback = metadata.node_kind == Int32(AnimationCatalog.BuilderNode) ?
+            builder_animation_callback : terminal_animation_callback
         return AnimationCatalog.AnimationImplementation(
-            animation_id, terminal_animation_callback)
+            animation_id, callback)
     end
     return load_generation_animation(generation, animation_id, path)
 end
 
-"""Validate copied catalogue metadata and return its path, or `nothing` for Terminal."""
+"""Validate copied catalogue metadata and return `nothing` for a native destination."""
 function _animation_implementation_path_from_metadata(
     metadata::OdinJuliaBridge.AnimationImplementationPathMetadata,
     path_bytes::Vector{UInt8})::Union{Nothing,String}
 
     terminal_kind = Int32(AnimationCatalog.TerminalNode)
-    if metadata.node_kind == terminal_kind
+    builder_kind = Int32(AnimationCatalog.BuilderNode)
+    if metadata.node_kind == terminal_kind || metadata.node_kind == builder_kind
         metadata.byte_count == 0 ||
-            throw(ArgumentError("Terminal catalogue node has an implementation path"))
+            throw(ArgumentError("native catalogue node has an implementation path"))
         return nothing
     end
     metadata.node_kind == Int32(AnimationCatalog.AnimationNode) ||

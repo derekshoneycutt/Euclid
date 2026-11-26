@@ -136,15 +136,18 @@ content_generation_shape_is_valid :: proc(snapshot: ^content.Content_Generation)
         return false
     }
     terminal_count := 0
+    builder_count := 0
     for index in 0..<int(snapshot^.record_count) {
         if snapshot^.records[index].node_kind == .Terminal {
             terminal_count += 1
+        } else if snapshot^.records[index].node_kind == .Builder {
+            builder_count += 1
         }
         if !content_generation_record_is_valid(snapshot, index) {
             return false
         }
     }
-    return terminal_count == 1
+    return terminal_count == 1 && builder_count == 1
 }
 
 //   Validate one bounded row and its ancestor chain before registry allocation.
@@ -175,7 +178,7 @@ content_generation_record_text_is_valid :: proc(
     if !utf8.valid_string(name) || strings.contains(name, "\x00") {
         return false
     }
-    if record.node_kind == .Terminal {
+    if record.node_kind == .Terminal || record.node_kind == .Builder {
         if record.has_parent || len(path) != 0 {
             return false
         }

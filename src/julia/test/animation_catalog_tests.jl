@@ -183,24 +183,27 @@ end
 end
 
 @testset "complete production catalog contract" begin
-    @test length(AnimationDescriptors) == 140
+    @test length(AnimationDescriptors) == 141
     corpus_records = EuclidLegacySearchCorpus.build_catalog_corpus(
         AnimationDescriptors,
         _ -> EuclidSearchContent.SearchContent("Catalog metadata.", ()))
     ordered_records = sort(corpus_records; by=record -> record.catalog_order)
-    @test getproperty.(ordered_records, :catalog_order) == collect(0:139)
+    @test getproperty.(ordered_records, :catalog_order) == collect(0:140)
     @test getproperty.(ordered_records, :sibling_order) ==
         getproperty.(AnimationDescriptors, :sibling_order)
     @test getproperty.(ordered_records, :implementation_path) ==
         getproperty.(AnimationDescriptors, :implementation_path)
-    @test count(record -> record.implementation_path === nothing,
-        ordered_records) == 1
-    @test only(filter(record -> record.implementation_path === nothing,
-        ordered_records)).node_kind == UInt8(TerminalNode)
+    native_records = filter(record -> record.implementation_path === nothing,
+        ordered_records)
+    @test length(native_records) == 2
+    @test getproperty.(native_records, :node_kind) ==
+        UInt8.([TerminalNode, BuilderNode])
     @test all(record -> !isempty(record.animation_id) &&
         !isempty(record.display_name) && !isempty(record.hierarchy_path),
         ordered_records)
     @test count(descriptor -> descriptor.kind == TerminalNode,
+        AnimationDescriptors) == 1
+    @test count(descriptor -> descriptor.kind == BuilderNode,
         AnimationDescriptors) == 1
     @test all(descriptor -> descriptor.kind == AnimationNode,
         filter(descriptor -> descriptor.implementation_path !== nothing,
@@ -209,7 +212,9 @@ end
         AnimationDescriptors)
     @test first(roots).kind == TerminalNode
     @test first(roots).display_name == "Terminal"
-    @test getproperty.(roots, :sibling_order) == collect(0:6)
+    @test roots[2].kind == BuilderNode
+    @test roots[2].display_name == "Builder"
+    @test getproperty.(roots, :sibling_order) == collect(0:7)
     curves_id = UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6")
     curves = sort(filter(descriptor -> descriptor.parent_id == curves_id,
         AnimationDescriptors); by=descriptor -> descriptor.sibling_order)

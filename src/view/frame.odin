@@ -26,6 +26,8 @@ import uisemantics "ui/semantics"
 import viewpresentation "presentation"
 import uipresentation "ui/presentation"
 import viewscenario "scenario"
+import builderui "ui/builder"
+import buildermodel "../animation/builder"
 import terminalservice "terminal/service"
 import exercise_link "exercise_link"
 import terminalview "terminal"
@@ -403,21 +405,11 @@ prepare_sdl_frame_owners :: proc(
     ctx: Window_Frame_Context,
     update: Sdl_Frame_Update,
     prepared: ^Frame_Draw_Preparation) {
-    uiaccessibility.drain_accessibility_actions(
-        state^.ui_runtime.semantic_focus, ctx.platform)
-    when core.SCENARIOS_ENABLED {
-        if ctx.scenario_runtime != nil {
-            viewscenario.scenario_reorder_drain(ctx.scenario_runtime)
-        }
-    }
-    ui.prepare_ui_controls(
-        state, update.routed_frame, update.ui_geometry.splitters,
-        &prepared^.controls)
-    uilibrary.library_entry_name_service(state, update.frame_dt)
-    uilibrary.library_collection_note_service(state, update.frame_dt)
+    prepare_sdl_interactive_frame_services(state, ctx, update, prepared)
     if state^.simulation_executor != nil {
         service_frame_user_data(state, ctx.platform)
     }
+
     libraryservice.service_library_search(state, ctx.content_service, update.frame_dt)
     service_exercise_queries(state)
     terminal_frame := terminalservice.terminal_service_update(
@@ -434,6 +426,82 @@ prepare_sdl_frame_owners :: proc(
     prepared^.splitters = update.ui_geometry.splitters
     prepared^.magnifier = prepare_sdl_frame_magnifier(
         state, ctx, update, terminal_frame)
+}
+
+// Prepare accessible controls and service UI-owned input before simulation work.
+prepare_sdl_interactive_frame_services :: proc(
+    state: ^core.Euclid_General_State,
+    ctx: Window_Frame_Context,
+    update: Sdl_Frame_Update,
+    prepared: ^Frame_Draw_Preparation) {
+    uiaccessibility.drain_accessibility_actions(
+        state^.ui_runtime.semantic_focus, ctx.platform)
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            viewscenario.scenario_reorder_drain(ctx.scenario_runtime)
+        }
+    }
+    ui.prepare_ui_controls(
+        state, update.routed_frame, update.ui_geometry.splitters,
+        &prepared^.controls)
+    builder_submit_ui_command(state, prepared^.controls.builder.command)
+    builder_submit_ui_placement(state, prepared^.controls.builder.placement)
+    uilibrary.library_entry_name_service(state, update.frame_dt)
+    uilibrary.library_collection_note_service(state, update.frame_dt)
+}
+
+// Submit a released Builder placement and retain its authoritative admission result.
+builder_submit_ui_placement :: proc(
+    state: ^core.Euclid_General_State,
+    request: builderui.Builder_Placement_Request) {
+    if !request.active {
+        return
+    }
+    admitted := julia.builder_enqueue_point(
+        state, request.position, request.color, request.brush_size)
+    status := buildermodel.Placement_Status.Failed
+    if admitted.status == .Ok {
+        status = .Point_Queued
+    } else if admitted.status == .Queue_Full {
+        status = .Queue_Full
+    } else if admitted.status == .Point_Capacity_Full {
+        status = .Point_Capacity_Full
+    }
+    builderui.builder_placement_result(
+        &state^.builder, admitted.point, status)
+}
+
+// Submit one Builder UI command through the display-owned native scheduler.
+builder_submit_ui_command :: proc(
+    state: ^core.Euclid_General_State,
+    request: builderui.Builder_Command_Request) {
+    if request.kind == .None {
+        return
+    }
+    admitted := false
+    status := julia.Builder_Status.Invalid_State
+    switch request.kind {
+    case .Edit_Style:
+        _, status = julia.builder_enqueue_style(
+            state, request.point, request.style)
+    case .Hide_Point:
+        _, status = julia.builder_enqueue_hide(state, request.point)
+    case .Show_Point:
+        _, status = julia.builder_enqueue_show(state, request.point)
+    case .None:
+        return
+    }
+    admitted = status == .Ok
+    builderui.builder_command_result(state, request, admitted)
+    if admitted {
+        state^.builder.placement_status = .Point_Queued
+    } else if status == .Queue_Full {
+        state^.builder.placement_status = .Queue_Full
+    } else if status == .Point_Capacity_Full {
+        state^.builder.placement_status = .Point_Capacity_Full
+    } else {
+        state^.builder.placement_status = .Failed
+    }
 }
 
 // Publish current Terminal/accessibility observations before scenario waits.
@@ -765,6 +833,7 @@ encode_sdl_world_geometry :: proc(
         return
     }
     world.draw_encoded_cached_basic_pass(state, encoder, false)
+    builderui.draw_world_waiting_marker(state, encoder)
     world.encode_low_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)
     encode_sdl_world_shadows(state, ctx, encoder)
@@ -773,6 +842,7 @@ encode_sdl_world_geometry :: proc(
         ctx.draw_runtime^.dust_atlas.handle)
     world.encode_formation_particles(&state^.particle_system, state, encoder,
         ctx.draw_runtime^.dust_atlas.handle)
+    builderui.draw_world_marker(state, encoder)
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 
@@ -791,6 +861,12 @@ encode_sdl_ui_geometry :: proc(
     if ctx.draw_runtime != nil {
         effects.dust_atlas = ctx.draw_runtime^.dust_atlas.handle
     }
+    view_content: ui.Ui_View_Content_Draw = {
+        terminal = prepared^.terminal_frame,
+        presentation = prepared^.layout_interaction.presentation,
+        effects = effects,
+        builder = prepared^.controls.builder,
+    }
     ui.draw_encoded_panel_geometry(state, encoder, &prepared^.controls)
     uianimation.draw_encoded_animation_controls(
         state, encoder, prepared^.controls.animation_controls)
@@ -798,12 +874,10 @@ encode_sdl_ui_geometry :: proc(
     ui.draw_encoded_panel_text(state, encoder, &prepared^.controls)
     if uiterminal.is_terminal_selected(state) {
         terminalservice.terminal_graphics_set_draw_encoder(state, encoder)
-        ui.draw_encoded_view_content(state, encoder, prepared^.terminal_frame,
-            prepared^.layout_interaction.presentation, effects)
+        ui.draw_encoded_view_content(state, encoder, view_content)
         terminalservice.terminal_graphics_set_draw_encoder(state, nil)
     } else {
-        ui.draw_encoded_view_content(state, encoder, prepared^.terminal_frame,
-            prepared^.layout_interaction.presentation, effects)
+        ui.draw_encoded_view_content(state, encoder, view_content)
     }
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
     uioverlay.draw_encoded_tooltip(state, encoder)

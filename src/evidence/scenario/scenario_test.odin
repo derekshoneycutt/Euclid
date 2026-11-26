@@ -955,6 +955,70 @@ scenario_test_reload_failure_injection :: proc(t: ^testing.T) {
         program.commands[0].kind, Command_Kind.Inject_Reload_Failure)
 }
 
+// Verify Builder pointer, semantic controls, and typed queue/point assertions parse.
+@(test)
+scenario_test_builder_commands_and_observations :: proc(t: ^testing.T) {
+    program: Program
+    source := "{\"builder_pointer\":{\"x\":640,\"y\":360,\"action\":\"press\"}}\n" +
+        "{\"builder_control\":{\"name\":\"palette_2\",\"action\":\"activate\"}}\n" +
+        "{\"builder_control\":{\"name\":\"select\",\"action\":\"activate\"}}\n" +
+        "{\"assert_builder\":{\"generation\":3,\"point_count\":1," +
+        "\"queue_count\":1,\"selected_point\":7,\"failed\":false," +
+        "\"phase\":\"waiting\",\"status\":\"point_queued\",\"tool\":\"none\"," +
+        "\"point\":{\"id\":7,\"state\":\"ready\",\"x\":0.25,\"y\":0.3," +
+        "\"z\":0,\"r\":70,\"g\":130,\"b\":180,\"a\":255," +
+        "\"brush_size\":5,\"visible\":true}," +
+        "\"queue_head\":{\"command_id\":9,\"kind\":\"hide\",\"point_id\":7}}}\n" +
+        "{\"wait_builder\":{\"generation\":3,\"point_count\":1," +
+        "\"queue_count\":0,\"selected_point\":7,\"failed\":false}," +
+        "\"timeout_ms\":1000}\n"
+    testing.expect_value(t, parse(source, &program), Parse_Error.None)
+    testing.expect_value(t, program.count, 5)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Builder_Pointer)
+    testing.expect_value(t, program.commands[0].builder_pointer.action,
+        Builder_Pointer_Action.Press)
+    testing.expect_value(t, program.commands[1].kind, Command_Kind.Builder_Control)
+    testing.expect_value(t, program.commands[1].builder_control.control,
+        Builder_Control.Palette2)
+    testing.expect_value(t, program.commands[2].builder_control.control,
+        Builder_Control.Select)
+    testing.expect_value(t, program.commands[3].kind, Command_Kind.Assert_Builder)
+    testing.expect_value(t, program.commands[3].builder_observation.phase,
+        Builder_Placement_Phase.Waiting)
+    testing.expect_value(t, program.commands[3].builder_observation.status,
+        Builder_Placement_Status.Point_Queued)
+    testing.expect_value(t, program.commands[3].builder_observation.tool,
+        Builder_Tool_Mode.None)
+    testing.expect(t, program.commands[3].builder_observation.point_present)
+    testing.expect(t, program.commands[3].builder_observation.queue_head_present)
+    testing.expect_value(t, program.commands[4].kind, Command_Kind.Wait_Builder)
+    testing.expect_value(t, program.commands[4].timeout_ms, u32(1000))
+}
+
+// Reject malformed or out-of-range Builder observations before runtime execution.
+@(test)
+scenario_test_builder_payload_validation :: proc(t: ^testing.T) {
+    invalid := [?]string{
+        "{\"builder_pointer\":{\"x\":20000,\"y\":20,\"action\":\"press\"}}\n",
+        "{\"builder_pointer\":{\"x\":2,\"y\":3,\"action\":\"double_click\"}}\n",
+        "{\"builder_control\":{\"name\":\"tool\",\"action\":\"delete\"}}\n",
+        "{\"assert_builder\":{\"generation\":1,\"point_count\":129," +
+            "\"queue_count\":0,\"selected_point\":0,\"failed\":false}}\n",
+        "{\"wait_builder\":{\"generation\":1,\"point_count\":0," +
+            "\"queue_count\":33,\"selected_point\":0,\"failed\":false}}\n",
+        "{\"assert_builder\":{\"generation\":1,\"point_count\":0," +
+            "\"queue_count\":0,\"selected_point\":0,\"failed\":false," +
+            "\"queue_head\":{\"command_id\":0,\"kind\":\"bad\",\"point_id\":0}}}\n",
+        "{\"assert_builder\":{\"generation\":1,\"point_count\":0," +
+            "\"queue_count\":0,\"selected_point\":0,\"failed\":false," +
+            "\"phase\":\"unknown\"}}\n",
+    }
+    for source in invalid {
+        program: Program
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
 // Verify required evidence loss makes the run inconclusive before actions execute.
 @(test)
 scenario_test_required_trace_loss_is_inconclusive :: proc(t: ^testing.T) {

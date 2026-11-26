@@ -51,7 +51,7 @@ end
         counts = [count(record -> record["kind"] == kind, canonical)
             for kind in 1:13]
         @test counts == [
-            6, 1, 207, counts[4], 207, 141, 140, 140, 3, 141, 140, 1, 0]
+            6, 1, 229, counts[4], 229, 142, 141, 141, 3, 142, 141, 1, 0]
         @test counts[4] <= 32
         exercise = only(filter(record -> record["kind"] == 12, canonical))
         @test exercise["exercise_id"] == "a9237c51-c9f6-4d54-8bf5-f8c651906e1c"
@@ -61,8 +61,10 @@ end
             "On a given finite straight line to construct an equilateral triangle."
         catalog_nodes = filter(record -> record["kind"] == 7, canonical)
         @test count(record -> record["node_kind"] == 2, catalog_nodes) == 1
-        @test all(record -> record["node_kind"] ==
-            (record["implementation_path"] === nothing ? 2 : 1), catalog_nodes)
+        @test count(record -> record["node_kind"] == 3, catalog_nodes) == 1
+        @test all(record -> record["implementation_path"] === nothing ?
+            record["node_kind"] in (2, 3) : record["node_kind"] == 1,
+            catalog_nodes)
         @test length(canonical) <= 4096
         @test length(read(corpus_path)) <= 4 * 1024 * 1024
 

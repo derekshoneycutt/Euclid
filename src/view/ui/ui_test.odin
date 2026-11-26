@@ -1394,7 +1394,10 @@ portrait_routes_origin_to_world_not_hidden_presentation :: proc(t: ^testing.T) {
         mouse_position = {0, 0},
     }
 
-    target := ui_hover_target(&runtime, frame, true)
+    target := ui_hover_target(&runtime, {
+        frame = frame,
+        terminal_present = true,
+    })
     testing.expect_value(t, target.kind,
         viewmodel.Ui_Interaction_Target_Kind.World)
 }
@@ -1418,12 +1421,17 @@ portrait_routes_expanded_view_content :: proc(t: ^testing.T) {
         runtime.layout.ui_regions.terminal_rect.y + 1,
     }
     terminal := ui_hover_target(&runtime, {
-        mouse_position = point,
-    }, true)
+        frame = {
+            mouse_position = point,
+        },
+        terminal_present = true,
+    })
     testing.expect_value(t, terminal.focus.kind, viewmodel.Ui_Focus_Kind.Terminal)
     presentation := ui_hover_target(&runtime, {
-        mouse_position = point,
-    }, false)
+        frame = {
+            mouse_position = point,
+        },
+    })
     testing.expect_value(t, presentation.focus.kind,
         viewmodel.Ui_Focus_Kind.Presentation)
 
@@ -1431,8 +1439,11 @@ portrait_routes_expanded_view_content :: proc(t: ^testing.T) {
     _ = ui_publish_presentation_visibility(
         &runtime.layout, &runtime.presentation, &runtime.input, &runtime.terminal)
     hidden := ui_hover_target(&runtime, {
-        mouse_position = point,
-    }, true)
+        frame = {
+            mouse_position = point,
+        },
+        terminal_present = true,
+    })
     testing.expect_value(t, hidden.focus.kind,
         viewmodel.Ui_Focus_Kind.Accordion)
 }
@@ -3200,4 +3211,19 @@ tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
 
     testing.expect_value(t,
         uilibrary.count_visible_tree_rows_limited(&ji, &nodes[0], 1), 1)
+}
+
+// Keep Builder wheel input routed without leaking pointer gestures into its panel.
+@(test)
+builder_input_frame_routes_wheel_independently :: proc(t: ^testing.T) {
+    frame: input.Input_Frame = {
+        mouse_pressed = {.Left},
+        mouse_wheel_delta = -1,
+    }
+    routed: viewmodel.Ui_Surface_Interaction = {
+        wheel = true,
+    }
+    filtered := ui_builder_input_frame(frame, routed)
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(-1))
+    testing.expect_value(t, filtered.mouse_pressed, input.Input_Mouse_Buttons{})
 }

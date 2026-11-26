@@ -7,7 +7,7 @@ import modifier "../../animation"
 import "../../core"
 import "../../particles"
 import "../../audio"
-import operations "../../operations"
+import operations "../../animation/operations"
 import math "core:math"
 
 //   Check a command point index against the initialized canonical point span.
@@ -949,7 +949,8 @@ scene_command_batch_effect_progress :: proc(
     if batch^.producer == .Native && batch^.native_interval_set {
         progress, status := particles.formation_native_interval_candidate(
             &state^.particle_system, batch^.animation_generation,
-            batch^.native_interval_step, batch^.native_interval_seconds)
+            batch^.native_interval_step, batch^.native_interval_seconds,
+            batch^.native_interval_reconcile_julia)
         return progress, status == .Accepted || status == .Already_Accepted
     }
     return batch^.animation_progress, true

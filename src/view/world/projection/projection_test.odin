@@ -201,6 +201,43 @@ iso_to_cartesian_components_inline_matches_projection_formula :: proc(t: ^testin
         "components inline projection should match formula")
 }
 
+// Verify board coordinates round-trip through the current fitted projection.
+@(test)
+cartesian_to_iso_board_round_trips_projection :: proc(t: ^testing.T) {
+    scale: worldmodel.Iso_Scale = {
+        scale = 240,
+        x_offset = 315,
+        y_offset = 184,
+    }
+    recompute_iso_scale_precompute(&scale)
+    expected: geometry.Vector3 = {7.25, -3.5, 0}
+    screen := iso_to_cartesian(expected, scale)
+    actual, valid := cartesian_to_iso_board(screen, scale)
+    testing.expect(t, valid)
+    testing.expect_value(t, actual.x, expected.x)
+    testing.expect_value(t, actual.y, expected.y)
+    testing.expect_value(t, actual.z, f32(0))
+}
+
+// Verify screen shake is removed before inverting a displayed board position.
+@(test)
+cartesian_to_iso_board_round_trips_screen_shake :: proc(t: ^testing.T) {
+    scale: worldmodel.Iso_Scale
+    fit_iso_scale_to_viewport(
+        &scale, worldmodel.VIEW_WIDTH * 2, worldmodel.VIEW_HEIGHT * 2)
+    screenshake_on_dust_kick(&scale)
+    screenshake_update(&scale, 0.01)
+    expected: geometry.Vector3 = {0.37, 0.64, 0}
+    base := screenshake_apply_origin(&scale, true)
+    shaken_screen := iso_to_cartesian(expected, scale)
+    screenshake_restore_origin(&scale, base)
+
+    actual, valid := cartesian_to_iso_board(shaken_screen, scale, true)
+    testing.expect(t, valid)
+    expect_vec2_close(t, {actual.x, actual.y}, {expected.x, expected.y},
+        "board inverse under screen shake")
+}
+
 //   Verify the coordinate, inline, and component projection variants agree.
 @(test)
 iso_to_cartesian_variants_match_each_other :: proc(t: ^testing.T) {

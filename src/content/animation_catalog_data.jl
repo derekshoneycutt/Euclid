@@ -3,9 +3,12 @@ const AnimationDescriptors = AnimationDescriptor[
         UUID("c4cf618f-86ca-55ba-ac0e-14f31f09940d"), nothing,
         "Terminal", 0, TerminalNode, nothing),
     AnimationDescriptor(
+        UUID("c4cf618f-86ca-55ba-ac0e-14f31f099410"), nothing,
+        "Builder", 1, BuilderNode, nothing),
+    AnimationDescriptor(
         UUID("4a3a9e1f-6448-554a-8e37-52f579b7476b"),
         nothing,
-        "Euclid's Elements", 1, AnimationNode,
+        "Euclid's Elements", 2, AnimationNode,
         "elements/elements_overview.jl"),
     AnimationDescriptor(
         UUID("72ebfc14-4165-584b-a571-9e9a0c86d9aa"),
@@ -225,7 +228,7 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("1c6b94cb-0ecb-5f34-8ea5-30833bcc77fb"),
         nothing,
-        "Proclus's Commentary", 2, AnimationNode,
+        "Proclus's Commentary", 3, AnimationNode,
         "proclus/proclus_overview.jl"),
     AnimationDescriptor(
         UUID("be7c1717-34d5-5dc9-906d-80c679269484"),
@@ -240,7 +243,7 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("65a8489e-e0bd-535f-bf47-3c5e9c9d70e6"),
         nothing,
-        "Hilbert's Foundations of Geometry", 3, AnimationNode,
+        "Hilbert's Foundations of Geometry", 4, AnimationNode,
         "hilbert/hilbert_overview.jl"),
     AnimationDescriptor(
         UUID("df6fe312-a86c-5489-96b5-39729053df0d"),
@@ -545,7 +548,7 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("a8bd259b-0c7b-5b60-b21f-84095e2eb903"),
         nothing,
-        "Algebra", 4, AnimationNode,
+        "Algebra", 5, AnimationNode,
         "algebra/algebra_overview.jl"),
     AnimationDescriptor(
         UUID("1c54c525-f85a-55a9-931b-8cfaafabec03"),
@@ -590,7 +593,7 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
         nothing,
-        "Curves", 5, AnimationNode,
+        "Curves", 6, AnimationNode,
         "curves/curves_overview.jl"),
     AnimationDescriptor(
         UUID("5eae70a6-d48e-4b85-9fe3-db3b2e82cb3b"),
@@ -685,7 +688,7 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("2905c158-007b-4412-be60-20a27decc0b2"),
         nothing,
-        "Logic", 6, AnimationNode,
+        "Logic", 7, AnimationNode,
         "logic/logic_overview.jl"),
     AnimationDescriptor(
         UUID("8785c9e6-53e9-4433-b1ae-7e18cef22c88"),

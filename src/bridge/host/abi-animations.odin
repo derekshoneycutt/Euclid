@@ -10,7 +10,7 @@ import bridgemodel "../model"
 
 import animation_model "../../core/animation"
 import modifier "../../animation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import shapemodel "../../shapes/model"
 
 import julialib "../../../libs/julia/bindings"
@@ -208,7 +208,7 @@ copy_animation_node_implementation_path :: proc(
     node: ^bridgemodel.Euclid_Julia_Animation_Interface, destination: ^u8,
     destination_capacity: i32, metadata: ^Animation_Implementation_Path_Metadata) -> i32 {
     metadata^.node_kind = i32(node^.node_kind)
-    if node^.node_kind == .Terminal {
+    if node^.node_kind == .Terminal || node^.node_kind == .Builder {
         return bridgemodel.BRIDGE_STATUS_OK
     }
     path_byte_count := i32(len(node^.implementation_path))
@@ -727,49 +727,6 @@ active_operation_add_highlight_tool_claims :: proc(
             active_operation_add_request_claim(submission,
                 shapemodel.shape_entity_pack(state^.world_compass.joint2))
     }
-    return true
-}
-
-// Claim the actual joints moved by a native construction recipe.
-active_operation_add_construction_tool_claims :: proc(
-    submission: ^operations.Active_Operation_Submission_Request,
-    state: ^core.Euclid_General_State,
-    kind: modifier.Modifier_Kind) -> bool {
-    if modifier.construction_recipe_kind(kind) {
-        if kind == .Construct_Circle || kind == .Construct_Filled_Circle {
-            return active_operation_add_request_claim(submission,
-                    shapemodel.shape_entity_pack(state^.world_compass.joint1)) &&
-                active_operation_add_request_claim(submission,
-                    shapemodel.shape_entity_pack(state^.world_compass.joint2))
-        }
-        return active_operation_add_request_claim(submission,
-                shapemodel.shape_entity_pack(state^.world_pen.joint1)) &&
-            active_operation_add_request_claim(submission,
-                shapemodel.shape_entity_pack(state^.world_pen.joint2))
-    }
-    return true
-}
-
-// Add one deduplicated modifier entity to the fixed copied claim set.
-active_operation_add_request_claim :: proc(
-    submission: ^operations.Active_Operation_Submission_Request,
-    entity: u64) -> bool {
-    if entity == 0 {
-        return true
-    }
-    for existing in 0..<submission^.claim_count {
-        if submission^.claims[existing].identity == entity {
-            return true
-        }
-    }
-    if submission^.claim_count >= operations.ACTIVE_OPERATION_CLAIMS_PER_SLOT {
-        return false
-    }
-    submission^.claims[submission^.claim_count] = {
-        kind = operations.ACTIVE_OPERATION_CLAIM_ENTITY,
-        identity = entity,
-    }
-    submission^.claim_count += 1
     return true
 }
 

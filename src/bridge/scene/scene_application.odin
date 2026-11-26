@@ -6,7 +6,7 @@ import shapemodel "../../shapes/model"
 import audio "../../audio"
 import animation_model "../../core/animation"
 import modifier "../../animation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import "../../core"
 import "../../particles"
 
@@ -329,7 +329,8 @@ commit_scene_command_batch_effects :: proc(
     } else if batch^.native_interval_set {
         status := particles.formation_accept_native_interval(
             &state^.particle_system, batch^.animation_generation,
-            batch^.native_interval_step, batch^.native_interval_seconds)
+            batch^.native_interval_step, batch^.native_interval_seconds,
+            batch^.native_interval_reconcile_julia)
         assert(status == .Accepted || status == .Already_Accepted)
     }
     assert(particles.formation_advance_progress(

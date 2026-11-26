@@ -102,6 +102,7 @@ const EnUsEditionAssignments = Pair{UUID,String}[
     UUID("be7c1717-34d5-5dc9-906d-80c679269484") => "original-en-us",
     UUID("bf196800-9bc6-4612-bf22-00051d3152e6") => "original-en-us",
     UUID("c4cf618f-86ca-55ba-ac0e-14f31f09940d") => "original-en-us",
+    UUID("c4cf618f-86ca-55ba-ac0e-14f31f099410") => "original-en-us",
     UUID("c70ab98c-08e5-42bc-b198-78b0f54ecf55") => "original-en-us",
     UUID("c80d3bfc-88be-5b70-af19-c7edcc240c23") => "hilbert-townsend-adapted",
     UUID("cb213191-4c0f-5a1d-8104-eb651e1123db") => "hilbert-townsend-adapted",

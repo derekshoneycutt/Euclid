@@ -3,12 +3,13 @@ module AnimationCatalog
 using UUIDs
 
 export AnimationDescriptor, AnimationImplementation,
-    AnimationNodeKind, AnimationNode, TerminalNode,
+    AnimationNodeKind, AnimationNode, TerminalNode, BuilderNode,
     animation, ensure_animation_loaded, validate_catalog
 
 @enum AnimationNodeKind::UInt8 begin
     AnimationNode = 1
     TerminalNode = 2
+    BuilderNode = 3
 end
 
 """Immutable metadata for one animation tree node."""
@@ -48,7 +49,23 @@ function _validate_catalog_descriptor!(
     descriptor::AnimationDescriptor,
     by_id::Dict{UUID,AnimationDescriptor},
     sibling_orders::Set{Tuple{Union{UUID,Nothing},Int}})
+    _validate_catalog_descriptor_identity!(descriptor, by_id, sibling_orders)
+    if descriptor.kind == TerminalNode || descriptor.kind == BuilderNode
+        _validate_native_catalog_descriptor!(descriptor)
+    else
+        path = descriptor.implementation_path
+        path isa String && _implementation_path_is_safe(path) ||
+            throw(ArgumentError("animation implementation path is unsafe"))
+    end
+    by_id[descriptor.id] = descriptor
+    return nothing
+end
 
+"""Validate unique identity, display name, and sibling order."""
+function _validate_catalog_descriptor_identity!(
+    descriptor::AnimationDescriptor,
+    by_id::Dict{UUID,AnimationDescriptor},
+    sibling_orders::Set{Tuple{Union{UUID,Nothing},Int}})
     descriptor.id == UUID(UInt128(0)) &&
         throw(ArgumentError("animation id must be nonzero"))
     haskey(by_id, descriptor.id) &&
@@ -60,15 +77,16 @@ function _validate_catalog_descriptor!(
     order_key = (descriptor.parent_id, descriptor.sibling_order)
     order_key in sibling_orders && throw(ArgumentError("duplicate sibling order"))
     push!(sibling_orders, order_key)
-    if descriptor.kind == TerminalNode
-        descriptor.implementation_path === nothing ||
-            throw(ArgumentError("Terminal must not have an implementation path"))
-    else
-        path = descriptor.implementation_path
-        path isa String && _implementation_path_is_safe(path) ||
-            throw(ArgumentError("animation implementation path is unsafe"))
-    end
-    by_id[descriptor.id] = descriptor
+    return nothing
+end
+
+"""Require native descriptors to be root nodes without implementation paths."""
+function _validate_native_catalog_descriptor!(descriptor::AnimationDescriptor)
+    descriptor.parent_id === nothing ||
+        throw(ArgumentError("native catalogue node must be a root"))
+    descriptor.implementation_path === nothing ||
+        throw(ArgumentError(
+            "native catalogue node must not have an implementation path"))
     return nothing
 end
 

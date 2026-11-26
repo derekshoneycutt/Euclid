@@ -14,6 +14,7 @@ import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import particlemodel "../particles/model"
+import buildermodel "../animation/builder"
 import input "input"
 import setting_model "../settings"
 import log "core:log"
@@ -102,6 +103,128 @@ scenario_favorites_pointer_edges_are_one_shot :: proc(t: ^testing.T) {
         .Left in released.mouse_released && .Left not_in released.mouse_down)
     settled := viewscenario.scenario_pointer_frame(&runtime, {})
     testing.expect(t, .Left not_in settled.mouse_released)
+}
+
+// Scenario Builder pointer injection preserves press/hold/release and wheel edges.
+@(test)
+scenario_builder_pointer_uses_ordinary_frame_input :: proc(t: ^testing.T) {
+    runtime: viewscenario.Scenario_Runtime
+    command: scenario.Command = {
+        kind = .Builder_Pointer,
+        builder_pointer = {
+            position = {410, 330},
+            action = .Press,
+        },
+    }
+    handled, accepted := viewscenario.scenario_issue_builder_action(
+        &runtime, &command)
+    testing.expect(t, handled && accepted)
+    pressed := viewscenario.scenario_pointer_frame(&runtime, {
+        window_focused = false,
+    })
+    testing.expect(t, pressed.window_focused)
+    testing.expect_value(t, pressed.mouse_position.x, f32(410))
+    testing.expect_value(t, pressed.mouse_position.y, f32(330))
+    testing.expect(t, .Left in pressed.mouse_pressed && .Left in pressed.mouse_down)
+
+    command.builder_pointer.action = .Hold
+    _, accepted = viewscenario.scenario_issue_builder_action(&runtime, &command)
+    held := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect(t, accepted && .Left in held.mouse_down)
+    testing.expect(t, .Left not_in held.mouse_pressed)
+
+    command.builder_pointer.action = .Wheel_Down
+    _, accepted = viewscenario.scenario_issue_builder_action(&runtime, &command)
+    wheeled := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect(t, accepted)
+    testing.expect_value(t, wheeled.mouse_wheel_delta, f32(-1))
+    testing.expect(t, .Left in wheeled.mouse_down)
+
+    command.builder_pointer.action = .Release
+    _, accepted = viewscenario.scenario_issue_builder_action(&runtime, &command)
+    released := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect(t, accepted && .Left in released.mouse_released)
+    testing.expect(t, .Left not_in released.mouse_down)
+}
+
+// Scenario Builder observations bind point facts to the current generation and projection tolerance.
+@(test)
+scenario_builder_observation_matches_fifo_and_tolerant_point :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    identity: buildermodel.Point_Identity = {
+        generation = 3,
+        id = 7,
+    }
+    state^.builder.generation = 3
+    state^.builder.point_count = 1
+    state^.builder.job_count = 1
+    state^.builder.selected_point = identity
+    state^.builder.points[0] = {
+        identity = identity,
+        position = {0.25, 0.3, 0},
+        color = {70, 130, 180, 255},
+        brush_size = 5,
+        visible = true,
+        state = .Ready,
+    }
+    state^.builder.jobs[0] = {
+        identity = {
+            generation = 3,
+            id = 9,
+        },
+        kind = .Hide_Point,
+        point = identity,
+    }
+    expected: scenario.Builder_Observation = {
+        generation = 3,
+        point_count = 1,
+        queue_count = 1,
+        selected_point_id = 7,
+        phase_present = true,
+        phase = .Idle,
+        status_present = true,
+        status = .Ready,
+        tool_present = true,
+        tool = .None,
+        point_present = true,
+        point = {
+            id = 7,
+            state = .Ready,
+            position = {0.25, 0.3, 0},
+            color = {70, 130, 180, 255},
+            brush_size = 5,
+            visible = true,
+        },
+        queue_head_present = true,
+        queue_head = {
+            command_id = 9,
+            kind = .Hide,
+            point_id = 7,
+        },
+    }
+    testing.expect(t,
+        viewscenario.scenario_builder_observation_matches(state, expected))
+    state^.builder.points[0].position.x +=
+        viewscenario.SCENARIO_BUILDER_POSITION_TOLERANCE * 0.5
+    testing.expect(t,
+        viewscenario.scenario_builder_observation_matches(state, expected))
+    state^.builder.points[0].position.x += 0.001
+    testing.expect(t,
+        !viewscenario.scenario_builder_observation_matches(state, expected))
+    state^.builder.points[0].position.x -= 0.001 +
+        viewscenario.SCENARIO_BUILDER_POSITION_TOLERANCE * 0.5
+    expected.queue_head.command_id += 1
+    testing.expect(t,
+        !viewscenario.scenario_builder_observation_matches(state, expected))
+    expected.queue_head.command_id -= 1
+    expected.generation += 1
+    testing.expect(t,
+        !viewscenario.scenario_builder_observation_matches(state, expected))
+    expected.generation -= 1
+    expected.phase = .Hover
+    testing.expect(t,
+        !viewscenario.scenario_builder_observation_matches(state, expected))
 }
 
 // Missing or unpublished placements and ineligible star actions reject without injecting input.

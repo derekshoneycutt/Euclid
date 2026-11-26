@@ -1847,6 +1847,7 @@ formation_reset_generation :: proc(ps: ^Particle_System, generation: u64) {
     state^.animation_generation = generation
     state^.accepted_progress = 0
     state^.native_time_interval_count = 0
+    state^.native_last_interval_set = false
 }
 
 // Advance formation only to progress accepted with a committed animation batch.
@@ -1882,7 +1883,8 @@ formation_advance_progress :: proc(
 // Preflight one unique native fixed-step interval without changing accepted state.
 formation_native_interval_candidate :: proc(
     ps: ^Particle_System, generation, step: u64,
-    authored_seconds: f64) -> (f64, Formation_Time_Status) {
+    authored_seconds: f64,
+    reconcile_julia: bool = true) -> (f64, Formation_Time_Status) {
     if ps == nil || generation != ps^.formation.animation_generation ||
         step == 0 || math.is_nan(authored_seconds) || math.is_inf(authored_seconds) ||
         authored_seconds <= 0 {
@@ -1897,7 +1899,16 @@ formation_native_interval_candidate :: proc(
             return state^.accepted_progress, .Already_Accepted
         }
     }
-    if state^.native_time_interval_count >= len(state^.native_time_intervals) {
+    previous := state^.native_last_interval
+    if state^.native_last_interval_set &&
+        previous.step == step && previous.generation == generation {
+        if previous.authored_seconds != authored_seconds {
+            return 0, .Invalid
+        }
+        return state^.accepted_progress, .Already_Accepted
+    }
+    if reconcile_julia &&
+        state^.native_time_interval_count >= len(state^.native_time_intervals) {
         return 0, .Full
     }
     return state^.accepted_progress + authored_seconds, .Accepted
@@ -1906,19 +1917,24 @@ formation_native_interval_candidate :: proc(
 // Accept native elapsed time once per display interval after the owning batch preflights.
 formation_accept_native_interval :: proc(
     ps: ^Particle_System, generation, step: u64,
-    authored_seconds: f64) -> Formation_Time_Status {
+    authored_seconds: f64,
+    reconcile_julia: bool = true) -> Formation_Time_Status {
     progress, status := formation_native_interval_candidate(
-        ps, generation, step, authored_seconds)
+        ps, generation, step, authored_seconds, reconcile_julia)
     if status != .Accepted {
         return status
     }
     if !formation_advance_progress(ps, generation, progress) {
         return .Invalid
     }
-    interval := &ps^.formation.native_time_intervals[
-        ps^.formation.native_time_interval_count]
-    interval^ = {step, generation, authored_seconds}
-    ps^.formation.native_time_interval_count += 1
+    state := &ps^.formation
+    state^.native_last_interval = {step, generation, authored_seconds}
+    state^.native_last_interval_set = true
+    if reconcile_julia {
+        interval := &state^.native_time_intervals[state^.native_time_interval_count]
+        interval^ = {step, generation, authored_seconds}
+        state^.native_time_interval_count += 1
+    }
     return .Accepted
 }
 

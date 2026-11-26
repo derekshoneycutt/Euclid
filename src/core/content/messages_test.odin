@@ -107,6 +107,13 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Exported {count} collections", "Imported {count} collections",
     "Last import left out {count} entries", "Could not read the file",
     "This file needs a newer version of Euclid", "Could not write the file",
+    "Point", "On", "Off", "Steel blue", "Pale violet red", "Khaki", "Grey",
+    "Brush size", "Brush size: {value}", "Hide", "Show",
+    "Choose Point to place a point.", "Click and release on the board to place.",
+    "Selected point", "Constructing point...", "Point construction failed.",
+    "Hidden: choosing another point loses access.", "Point changes queued.",
+    "Builder queue is full.", "Point capacity is full.",
+    "Builder failed. Restart to continue.", "Select / clear selection",
 }
 
 // Build a complete message fixture with a stable arena owner for consumer tests.
@@ -163,6 +170,8 @@ content_message_test_signature :: proc(
         return "name", .Text
     case .Library_Unicode_Completion:
         return "symbol", .Text
+    case .Builder_Brush_Value:
+        return "value", .Uint32
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
          .Gif_Cadence_Multiple, .Share_Import_Selected,
          .Share_Missing_Animations, .Share_Exported, .Share_Imported,

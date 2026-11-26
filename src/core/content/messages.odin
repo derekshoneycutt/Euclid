@@ -217,6 +217,28 @@ Content_Message_Id :: enum u16 {
     Share_Error_Read = 1522,
     Share_Error_Unsupported = 1523,
     Share_Error_Write = 1524,
+    Builder_Tool_Point = 1525,
+    Builder_Tool_Active = 1526,
+    Builder_Tool_Inactive = 1527,
+    Builder_Palette_Steelblue = 1528,
+    Builder_Palette_Palevioletred = 1529,
+    Builder_Palette_Khaki = 1530,
+    Builder_Palette_Grey = 1531,
+    Builder_Brush_Label = 1532,
+    Builder_Brush_Value = 1533,
+    Builder_Hide = 1534,
+    Builder_Show = 1535,
+    Builder_Status_Idle = 1536,
+    Builder_Status_Armed = 1537,
+    Builder_Status_Selected = 1538,
+    Builder_Status_Constructing = 1539,
+    Builder_Status_Point_Failed = 1540,
+    Builder_Status_Hidden = 1541,
+    Builder_Status_Queued = 1542,
+    Builder_Status_Queue_Full = 1543,
+    Builder_Status_Point_Capacity = 1544,
+    Builder_Status_Failed = 1545,
+    Builder_Tool_Select = 1546,
 }
 
 // One native ID/key identity shared by admission and runtime lookup.
@@ -225,7 +247,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 207
+CONTENT_SHIPPED_MESSAGE_COUNT :: 229
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -434,6 +456,28 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1522, "ui.share_collections.error.read"},
     {1523, "ui.share_collections.error.unsupported"},
     {1524, "ui.share_collections.error.write"},
+    {1525, "ui.builder.tool.point"},
+    {1526, "ui.builder.tool.active"},
+    {1527, "ui.builder.tool.inactive"},
+    {1528, "ui.builder.palette.steelblue"},
+    {1529, "ui.builder.palette.palevioletred"},
+    {1530, "ui.builder.palette.khaki"},
+    {1531, "ui.builder.palette.grey"},
+    {1532, "ui.builder.brush.label"},
+    {1533, "ui.builder.brush.value"},
+    {1534, "ui.builder.hide"},
+    {1535, "ui.builder.show"},
+    {1536, "ui.builder.status.idle"},
+    {1537, "ui.builder.status.armed"},
+    {1538, "ui.builder.status.selected"},
+    {1539, "ui.builder.status.constructing"},
+    {1540, "ui.builder.status.point_failed"},
+    {1541, "ui.builder.status.hidden"},
+    {1542, "ui.builder.status.queued"},
+    {1543, "ui.builder.status.queue_full"},
+    {1544, "ui.builder.status.point_capacity"},
+    {1545, "ui.builder.status.failed"},
+    {1546, "ui.builder.tool.select"},
 }
 
 // Explicit formatting failure; no error is a successful English fallback.
@@ -494,6 +538,8 @@ content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Sig
         return {"name", .Text}
     case .Library_Unicode_Completion:
         return {"symbol", .Text}
+    case .Builder_Brush_Value:
+        return {"value", .Uint32}
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
          .Gif_Cadence_Multiple, .Share_Import_Selected,
          .Share_Missing_Animations, .Share_Exported, .Share_Imported,

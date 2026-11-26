@@ -1,8 +1,8 @@
 package operations
 
 import "core:testing"
-import modifier "../animation"
-import geometry "../core/geometry"
+import modifier ".."
+import geometry "../../core/geometry"
 
 Operation_Storage_Test_Generations :: struct {
     payload: u64,

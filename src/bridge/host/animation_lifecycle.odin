@@ -22,6 +22,13 @@ import time "core:time"
 import projection "../../view/world/projection"
 import capturemodel "../../view/capture/model"
 
+Animation_Lifecycle_Transition :: struct {
+    selecting: bool,
+    reopening_completed: bool,
+    terminal_generation: u64,
+    header_request_floor: u64,
+}
+
 //  Perform a single animation frame update for the julia system, including
 //  updating the state, hot-reloading julia code and assets, etc. as required.
 //
@@ -41,6 +48,12 @@ schedule_animation_tick :: proc(state: ^core.Euclid_General_State, dt: f32) {
         if !synchronize_animation_lifecycle(state) {
             return
         }
+    }
+    if state^.julia_interface^.current_animation == nil ||
+       state^.julia_interface^.current_animation^.node_kind != .Animation {
+        clear_animation_accumulated_time(state^.julia_runtime_service)
+        audio.set_drawing_activity(&state^.chalk_audio, false)
+        return
     }
     if state^.ui_runtime.playback.completion_requested {
         _ = try_request_animation_completed(state)
@@ -74,7 +87,7 @@ try_request_animation_completed :: proc(state: ^core.Euclid_General_State) -> bo
     }
     if !state^.ui_runtime.playback.construction_paused ||
         state^.julia_interface^.current_animation == nil ||
-        state^.julia_interface^.current_animation^.node_kind == .Terminal {
+        state^.julia_interface^.current_animation^.node_kind != .Animation {
         state^.ui_runtime.playback.completion_requested = false
         state^.ui_runtime.playback.completion_failed = true
         log.warn("animation_completion_rejected_invalid_transport")
@@ -106,6 +119,9 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     if service == nil || service^.animation_tick_pending {
         return false
     }
+    if state^.builder.active_operation {
+        return false
+    }
     selecting := state^.julia_interface^.selected_animation !=
         state^.julia_interface^.current_animation
     reopening_completed := !selecting && state^.ui_runtime.playback.completed &&
@@ -123,10 +139,38 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
     if service^.reload_state == .Quiescing {
         service^.reload_state = .Idle
     }
-    active_operation_commit_generation_transition(state, service, terminal_generation)
+    return commit_animation_lifecycle_transition(
+        state, service, {
+            selecting = selecting,
+            reopening_completed = reopening_completed,
+            terminal_generation = terminal_generation,
+            header_request_floor = header_request_floor,
+        })
+}
+
+// Commit owner state after Julia's lifecycle transaction has succeeded.
+commit_animation_lifecycle_transition :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    transition: Animation_Lifecycle_Transition) -> bool {
+    active_operation_commit_generation_transition(
+        state, service, transition.terminal_generation)
+    if !builder_reset_after_animation_rewind(state) {
+        log.error("builder_lifecycle_rewind_retirement_failed")
+        return false
+    }
+    if state^.julia_interface^.current_animation != nil &&
+       state^.julia_interface^.current_animation^.node_kind == .Builder &&
+       state^.builder.generation == 0 {
+        if builder_begin(state) != .Ok {
+            log.error("builder_lifecycle_start_failed")
+            return false
+        }
+    }
     reset_animation_lifecycle_progress(state, service)
-    animation_clear_header_after_navigation(state, selecting, header_request_floor)
-    restore_animation_completion_intent(state, selecting, reopening_completed)
+    animation_clear_header_after_navigation(
+        state, transition.selecting, transition.header_request_floor)
+    restore_animation_completion_intent(
+        state, transition.selecting, transition.reopening_completed)
     release_completed_animation_ticks(service)
     route_retained_display_view_content(service)
     return true
@@ -194,7 +238,7 @@ restore_animation_completion_intent :: proc(
     playback^.completion_failed = false
     playback^.completion_requested = reopening_completed ||
         (selecting && state^.ui_runtime.preferences.values.animation.open_completed &&
-         state^.julia_interface^.current_animation^.node_kind != .Terminal)
+         state^.julia_interface^.current_animation^.node_kind == .Animation)
     playback^.completion_initial = playback^.completion_requested
     if selecting {
         playback^.construction_paused = playback^.completion_requested

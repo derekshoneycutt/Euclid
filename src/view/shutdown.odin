@@ -21,7 +21,7 @@ import uilibrary "ui/library"
 import viewsharing "sharing"
 import collections "../collections"
 import viewmodel "ui/model"
-import operations "../operations"
+import operations "../animation/operations"
 import audio "../audio"
 
 JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0

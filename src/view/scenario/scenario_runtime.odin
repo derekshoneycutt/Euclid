@@ -23,6 +23,9 @@ import strings "core:strings"
 import time "core:time"
 import viewcapture "../capture"
 import viewmodel "../ui/model"
+import builderui "../ui/builder"
+import uisemantics "../ui/semantics"
+import buildermodel "../../animation/builder"
 import core "../../core"
 import viewevidence "../evidence"
 import libraryservice "../ui/library/service"
@@ -41,6 +44,10 @@ import geometry "../../core/geometry"
 import uianimation "../ui/animation"
 import viewsharing "../sharing"
 import exerciseheader "../../core/exercise_header"
+import math "core:math"
+
+// Allow only subpixel-scale float error from board-coordinate projection.
+SCENARIO_BUILDER_POSITION_TOLERANCE :: f32(0.00001)
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -75,6 +82,7 @@ Scenario_Runtime :: struct {
     pointer_down: bool,
     pointer_pressed: bool,
     pointer_released: bool,
+    pointer_wheel_delta: f32,
     favorites_memory: Scenario_Favorites_Memory,
     reorder_sample_active: bool,
     reorder_sample_time: f64,
@@ -1066,6 +1074,9 @@ scenario_focus_matches :: proc(runtime: ^Scenario_Runtime, name: string) -> bool
 scenario_issue_generic_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
+    if handled, accepted := scenario_issue_builder_action(runtime, command); handled {
+        return handled, accepted
+    }
     text := scenario.text_string(&command.text)
     if handled, accepted := scenario_issue_input_action(
         runtime, command, text); handled {
@@ -1085,6 +1096,13 @@ scenario_issue_generic_action :: proc(
         return true, scenario_terminal_editor_matches(runtime, command)
     case:
     }
+    return scenario_issue_remaining_action(runtime, command, identity)
+}
+
+// Route remaining worker, Julia-host, display, or allocation scenario actions.
+scenario_issue_remaining_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
     if handled, accepted := scenario_issue_particle_action(
         runtime, command, identity); handled {
         return handled, accepted
@@ -1098,6 +1116,283 @@ scenario_issue_generic_action :: proc(
         return handled, accepted
     }
     return scenario_issue_allocation_action(runtime, command)
+}
+
+// Route Builder controls and observations through the ordinary display input owner.
+scenario_issue_builder_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command) -> (bool, bool) {
+    #partial switch command.kind {
+    case .Builder_Pointer:
+        return true, scenario_issue_builder_pointer(
+            runtime, command.builder_pointer)
+    case .Builder_Control:
+        return true, scenario_issue_builder_control(runtime, command.builder_control)
+    case .Wait_Builder, .Assert_Builder:
+        return true, scenario_builder_observation_matches(
+            runtime.state, command.builder_observation)
+    case:
+        return false, false
+    }
+}
+
+// Apply one Builder pointer sample through the display's ordinary input frame.
+scenario_issue_builder_pointer :: proc(
+    runtime: ^Scenario_Runtime,
+    request: scenario.Builder_Pointer_Request) -> bool {
+    runtime.pointer_override = true
+    runtime.pointer_position = {request.position[0], request.position[1]}
+    runtime.pointer_wheel_delta = 0
+    runtime.pointer_pressed = false
+    runtime.pointer_released = false
+    switch request.action {
+    case .Hover:
+        runtime.pointer_down = false
+    case .Press:
+        runtime.pointer_down = true
+        runtime.pointer_pressed = true
+    case .Hold:
+        runtime.pointer_down = true
+    case .Release:
+        runtime.pointer_down = false
+        runtime.pointer_released = true
+    case .Wheel_Up:
+        runtime.pointer_wheel_delta = 1
+    case .Wheel_Down:
+        runtime.pointer_wheel_delta = -1
+    }
+    return true
+}
+
+// Enqueue one accessible Builder action against the stable semantic control identity.
+scenario_issue_builder_control :: proc(
+    runtime: ^Scenario_Runtime, request: scenario.Builder_Control_Request) -> bool {
+    if runtime == nil || runtime.state == nil ||
+        !builderui.is_builder_selected(runtime.state) {
+        return false
+    }
+    control_id := scenario_builder_control_id(request.control)
+    action, numeric_value := scenario_builder_focus_action(request.action)
+    accepted := uisemantics.semantic_apply_external_action(
+        runtime.state.ui_runtime.semantic_focus,
+        uisemantics.semantic_control_id(.Builder, control_id),
+        action, numeric_value)
+    if !accepted {
+        log.warnf("scenario_builder_control_rejected control=%d focused=%v",
+            int(request.control),
+            runtime.state.ui_runtime.semantic_focus.window_focused)
+    }
+    return accepted
+}
+
+// Resolve a Builder toolbar action to its stable focus contract ID.
+scenario_builder_control_id :: proc(
+    control: scenario.Builder_Control) -> int {
+    control_id := int(builderui.BUILDER_SURFACE_SEMANTIC_ID)
+    switch control {
+    case .Tool:
+        control_id = builderui.BUILDER_TOOL_BUTTON_ID
+    case .Select:
+        control_id = builderui.BUILDER_SELECT_BUTTON_ID
+    case .Palette0, .Palette1, .Palette2, .Palette3:
+        control_id = builderui.BUILDER_PALETTE_BUTTON_BASE_ID +
+            int(control) - int(scenario.Builder_Control.Palette0)
+    case .Brush:
+        control_id = builderui.BUILDER_BRUSH_SLIDER_ID
+    case .Hide:
+        control_id = builderui.BUILDER_HIDE_BUTTON_ID
+    case .Show:
+        control_id = builderui.BUILDER_SHOW_BUTTON_ID
+    case .Surface:
+        control_id = builderui.BUILDER_SURFACE_SEMANTIC_ID
+    }
+    return control_id
+}
+
+// Resolve a Builder action to its focus operation and numeric adjustment.
+scenario_builder_focus_action :: proc(
+    requested: scenario.Builder_Control_Action) ->
+    (viewmodel.Ui_Focus_Command_Kind, f64) {
+    action := viewmodel.Ui_Focus_Command_Kind.Focus
+    numeric_value: f64
+    switch requested {
+    case .Focus:
+        action = .Focus
+    case .Activate:
+        action = .Activate
+    case .Increment:
+        action = .Increment
+    case .Decrement:
+        action = .Decrement
+    case .Scroll_Up:
+        action = .Scroll_Page
+        numeric_value = 1
+    case .Scroll_Down:
+        action = .Scroll_Page
+        numeric_value = -1
+    }
+    return action, numeric_value
+}
+
+// Compare requested generation-qualified Builder state at the display owner boundary.
+scenario_builder_observation_matches :: proc(
+    state: ^core.Euclid_General_State,
+    expected: scenario.Builder_Observation) -> bool {
+    if state == nil {
+        return false
+    }
+    builder := &state^.builder
+    if builder^.generation != expected.generation ||
+        builder^.point_count != expected.point_count ||
+        builder^.job_count != expected.queue_count ||
+        builder^.selected_point.id != expected.selected_point_id ||
+        builder^.failed != expected.failed {
+        return false
+    }
+    if expected.phase_present &&
+        scenario_builder_phase(builder^.placement_phase) != expected.phase {
+        return false
+    }
+    if expected.status_present &&
+        scenario_builder_status(builder^.placement_status) != expected.status {
+        return false
+    }
+    if expected.tool_present &&
+        scenario_builder_tool(builder^.tool) != expected.tool {
+        return false
+    }
+    if expected.point_present &&
+        !scenario_builder_point_matches(builder, expected.point) {
+        return false
+    }
+    if expected.queue_head_present &&
+        !scenario_builder_queue_head_matches(builder, expected.queue_head) {
+        return false
+    }
+    return true
+}
+
+// Translate native placement phases into the bounded scenario vocabulary.
+scenario_builder_phase :: proc(
+    value: buildermodel.Placement_Phase) -> scenario.Builder_Placement_Phase {
+    switch value {
+    case .Idle:
+        return .Idle
+    case .Hover:
+        return .Hover
+    case .Held:
+        return .Held
+    case .Waiting:
+        return .Waiting
+    }
+    return .Idle
+}
+
+// Translate native placement outcomes into the bounded scenario vocabulary.
+scenario_builder_status :: proc(
+    value: buildermodel.Placement_Status) -> scenario.Builder_Placement_Status {
+    switch value {
+    case .Ready:
+        return .Ready
+    case .Point_Queued:
+        return .Point_Queued
+    case .Queue_Full:
+        return .Queue_Full
+    case .Point_Capacity_Full:
+        return .Point_Capacity_Full
+    case .Failed:
+        return .Failed
+    }
+    return .Failed
+}
+
+// Translate the native tool selection into the bounded scenario vocabulary.
+scenario_builder_tool :: proc(
+    value: buildermodel.Tool_Mode) -> scenario.Builder_Tool_Mode {
+    switch value {
+    case .None:
+        return .None
+    case .Point:
+        return .Point
+    }
+    return .None
+}
+
+// Compare one exact point record without exposing its slot as public identity.
+scenario_builder_point_matches :: proc(
+    builder: ^buildermodel.Runtime,
+    expected: scenario.Builder_Point_Observation) -> bool {
+    for index in 0..<builder^.point_count {
+        point := &builder^.points[index]
+        if point^.identity.id != expected.id ||
+            point^.identity.generation != builder^.generation {
+            continue
+        }
+        if scenario_builder_point_state(point^.state) != expected.state ||
+            math.abs(point^.position.x - expected.position[0]) >
+                SCENARIO_BUILDER_POSITION_TOLERANCE ||
+            math.abs(point^.position.y - expected.position[1]) >
+                SCENARIO_BUILDER_POSITION_TOLERANCE ||
+            math.abs(point^.position.z - expected.position[2]) >
+                SCENARIO_BUILDER_POSITION_TOLERANCE ||
+            point^.brush_size != expected.brush_size ||
+            point^.visible != expected.visible {
+            return false
+        }
+        for color_index in 0..<4 {
+            if point^.color[color_index] != expected.color[color_index] {
+                return false
+            }
+        }
+        return true
+    }
+    return false
+}
+
+// Compare the FIFO head by its generation-qualified command and point identity.
+scenario_builder_queue_head_matches :: proc(
+    builder: ^buildermodel.Runtime,
+    expected: scenario.Builder_Queue_Observation) -> bool {
+    if builder^.job_count == 0 {
+        return false
+    }
+    job := builder^.jobs[builder^.job_head]
+    return job.identity.generation == builder^.generation &&
+        job.identity.id == expected.command_id &&
+        job.point.generation == builder^.generation &&
+        job.point.id == expected.point_id &&
+        scenario_builder_queue_kind(job.kind) == expected.kind
+}
+
+// Convert a native Builder point state to the bounded scenario vocabulary.
+scenario_builder_point_state :: proc(
+    value: buildermodel.Point_State) -> scenario.Builder_Point_State {
+    switch value {
+    case .Pending:
+        return .Pending
+    case .Constructing:
+        return .Constructing
+    case .Ready:
+        return .Ready
+    case .Failed:
+        return .Failed
+    }
+    return .Failed
+}
+
+// Convert one native FIFO kind to its bounded scenario spelling.
+scenario_builder_queue_kind :: proc(
+    value: buildermodel.Job_Kind) -> scenario.Builder_Queue_Kind {
+    switch value {
+    case .Construct_Point:
+        return .Construct
+    case .Edit_Point_Style:
+        return .Edit_Style
+    case .Hide_Point:
+        return .Hide
+    case .Show_Point:
+        return .Show
+    }
+    return .Construct
 }
 
 // Route Terminal assertions and confirmed history deletion through their owners.

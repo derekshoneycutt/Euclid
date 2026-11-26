@@ -6,7 +6,7 @@ import core "../../core"
 import bridge_animation "../animation"
 import audio "../../audio"
 import modifier "../../animation"
-import operations "../../operations"
+import operations "../../animation/operations"
 import particles "../../particles"
 import geometry "../../core/geometry"
 import shapes "../../shapes"
@@ -151,12 +151,71 @@ active_point_recipe_advances_transactionally_and_completes :: proc(t: ^testing.T
         operations.Active_Operation_Outcome_State.Committed)
 }
 
+// Run a Builder-owned recipe for more than 256 steps without Julia tick intervals.
+@(test)
+active_native_recipe_consumes_its_result_after_untracked_steps :: proc(t: ^testing.T) {
+    state := active_operation_test_state()
+    defer active_operation_test_destroy(state)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
+    testing.expect(t, service != nil)
+    if service == nil {
+        return
+    }
+    defer free(service, context.allocator)
+    testing.expect(t, transport.consumer_mailbox_init(
+        &service^.julia_inbox, 1024, 4096, 8) == .None)
+    state^.julia_runtime_service = service
+    defer active_operation_test_close_mailbox(state, service)
+
+    point, reservation := active_recipe_test_submit_point(
+        t, state, 103, .Native)
+    active_operation_test_expect_no_native_progress_egress(t, state, service)
+    active_operation_test_advance_recipe_steps(state, 300, 0.004)
+    testing.expect(t, bridge_scene.shape_get_view(state, point).visible != 0)
+    testing.expect_value(t,
+        state^.particle_system.formation.native_time_interval_count, 0)
+    active_operation_test_expect_no_native_outcome_egress(t, state, service)
+    outcome, status := active_operation_consume_native_outcome(
+        state, reservation.outcome)
+    testing.expect_value(t, status, operations.Active_Operation_Status.Ok)
+    testing.expect_value(t, outcome.consumer, operations.Active_Operation_Consumer.Native)
+    testing.expect_value(t,
+        outcome.state, operations.Active_Operation_Outcome_State.Committed)
+    _, repeated_status := active_operation_consume_native_outcome(
+        state, reservation.outcome)
+    testing.expect_value(t, repeated_status,
+        operations.Active_Operation_Status.Invalid_Handle)
+    testing.expect_value(t, operations.active_operation_storage_diagnostics(
+        &state^.active_operations).outcome_used, 0)
+}
+
+// Reuse a directly consumed native outcome slot only with a fresh generation.
+@(test)
+active_native_outcome_reuse_advances_generation :: proc(t: ^testing.T) {
+    state := active_operation_test_state()
+    defer active_operation_test_destroy(state)
+    first := active_operation_test_publish_native_outcome(t, state, 104)
+    first_outcome, first_status := active_operation_consume_native_outcome(
+        state, first.outcome)
+    testing.expect_value(t, first_status, operations.Active_Operation_Status.Ok)
+    testing.expect_value(t, first_outcome.state,
+        operations.Active_Operation_Outcome_State.Committed)
+    second := active_operation_test_publish_native_outcome(t, state, 105)
+    testing.expect_value(t, second.outcome.index, first.outcome.index)
+    testing.expect(t, second.outcome.generation > first.outcome.generation)
+    second_outcome, second_status := active_operation_consume_native_outcome(
+        state, second.outcome)
+    testing.expect_value(t, second_status, operations.Active_Operation_Status.Ok)
+    testing.expect_value(t, second_outcome.state,
+        operations.Active_Operation_Outcome_State.Committed)
+}
+
 // Keep committed point geometry while cancelling before the native recipe completes.
 @(test)
 active_point_recipe_cancellation_retains_partial_geometry :: proc(t: ^testing.T) {
     state := active_operation_test_state()
     defer active_operation_test_destroy(state)
-    point, reservation := active_recipe_test_submit_point(t, state, 102)
+    point, reservation := active_recipe_test_submit_point(t, state, 102, .Native)
     state^.fixed_step += 1
     advance_active_operations(state, 0.5)
     before := bridge_scene.shape_get_view(state, point)
@@ -166,8 +225,11 @@ active_point_recipe_cancellation_retains_partial_geometry :: proc(t: ^testing.T)
     after := bridge_scene.shape_get_view(state, point)
     testing.expect(t, after.visible != 0)
     testing.expect_value(t, after.position, before.position)
-    active_operation_test_expect_outcome(
-        t, state, reservation.outcome, .Cancelled)
+    outcome, status := active_operation_consume_native_outcome(
+        state, reservation.outcome)
+    testing.expect_value(t, status, operations.Active_Operation_Status.Ok)
+    testing.expect_value(t, outcome.state,
+        operations.Active_Operation_Outcome_State.Cancelled)
 }
 
 // Reserve an ordered native polygon trace with an exclusive pen claim.
@@ -439,11 +501,16 @@ active_conic_sequences_reject_shared_tool_conflicts_and_cancel :: proc(t: ^testi
         806, request, active_operation_test_claim(second_host))
     testing.expect(t, active_operation_add_conic_tool_claims(
         &submission, state, .Parabola_Sequence))
+    submission.consumer = .Native
     rejected, status := active_operation_submit_modifier(state, submission)
     testing.expect_value(t, status, operations.Active_Operation_Status.Conflict)
     testing.expect_value(t, active_operation_cancel_on_display(state, active.execution),
         operations.Active_Operation_Status.Ok)
-    active_operation_test_expect_outcome(t, state, rejected.outcome, .Rejected)
+    rejected_outcome, consume_status := active_operation_consume_native_outcome(
+        state, rejected.outcome)
+    testing.expect_value(t, consume_status, operations.Active_Operation_Status.Ok)
+    testing.expect_value(t, rejected_outcome.state,
+        operations.Active_Operation_Outcome_State.Rejected)
     active_operation_test_expect_outcome(t, state, active.outcome, .Cancelled)
 }
 
@@ -967,7 +1034,11 @@ active_operation_outcome_delivery_retries_after_full_mailbox :: proc(
         &service^.julia_inbox, 1024, 4096, 1) == .None)
     state^.julia_runtime_service = service
     defer active_operation_test_close_mailbox(state, service)
-    _ = active_operation_test_publish_outcome(t, state, 81)
+    reservation := active_operation_test_publish_outcome(t, state, 81)
+    _, wrong_consumer_status := active_operation_consume_native_outcome(
+        state, reservation.outcome)
+    testing.expect_value(t, wrong_consumer_status,
+        operations.Active_Operation_Status.Wrong_Consumer)
     active_operation_test_fill_mailbox(t, service)
     testing.expect_value(t, pump_active_operation_outcomes(state),
         bridgemodel.Communication_Send_Outcome.Queue_Full)
@@ -1137,7 +1208,9 @@ active_operation_test_state :: proc() -> ^core.Euclid_General_State {
 active_recipe_test_submit_point :: proc(
     t: ^testing.T,
     state: ^core.Euclid_General_State,
-    request_id: u64) -> (u64, operations.Active_Operation_Reservation) {
+    request_id: u64,
+    consumer: operations.Active_Operation_Consumer = .Julia) -> (
+        u64, operations.Active_Operation_Reservation) {
     point := bridge_scene.shape_create_point(
         state, bridge_shape_test_input({0, 0, 0}))
     pen, pen_status := shapes.world_create_pen(&state^.shape_world, {
@@ -1158,9 +1231,9 @@ active_recipe_test_submit_point :: proc(
     }
     submission := active_operation_test_submission(
         request_id, request, active_operation_test_claim(point.entity))
-    submission.claim_count = 2
-    submission.claims[1] = active_operation_test_claim(
-        shapemodel.shape_entity_pack(state^.world_pen.shape))
+    submission.consumer = consumer
+    testing.expect(t, active_operation_add_construction_tool_claims(
+        &submission, state, .Construct_Point))
     reservation, status := active_operation_submit_modifier(state, submission)
     testing.expect_value(t, status, operations.Active_Operation_Status.Ok)
     return point.entity, reservation
@@ -1295,6 +1368,35 @@ active_operation_test_publish_outcome :: proc(
     return reservation
 }
 
+// Submit one immediate native operation for direct outcome-ownership tests.
+active_operation_test_publish_native_outcome :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    request_id: u64) -> operations.Active_Operation_Reservation {
+    point := bridge_scene.shape_create_point(
+        state, bridge_shape_test_input({0, 0, 0}))
+    request: modifier.Modifier_Request = {
+        kind = .Set_Point_Position,
+        entity = point.entity,
+        start_position = {1, 0, 0},
+    }
+    submission := active_operation_test_submission(
+        request_id, request, active_operation_test_claim(point.entity))
+    submission.consumer = .Native
+    reservation, status := active_operation_submit_modifier(state, submission)
+    testing.expect_value(t, status, operations.Active_Operation_Status.Ok)
+    return reservation
+}
+
+// Advance one native recipe and its particle consumer through fixed-step boundaries.
+active_operation_test_advance_recipe_steps :: proc(
+    state: ^core.Euclid_General_State, count: int, dt: f32) {
+    for _ in 0..<count {
+        state^.fixed_step += 1
+        advance_active_operations(state, dt)
+        particles.update_particles(&state^.particle_system, dt)
+    }
+}
+
 // Start one claimed native operation and seed independent activity sources.
 active_operation_test_begin_lifecycle_operation :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State,
@@ -1327,6 +1429,26 @@ active_operation_test_fill_mailbox :: proc(
     testing.expect_value(t, transport.consumer_mailbox_publish(
         &service^.julia_inbox, bridgemodel.Julia_Host_Ingress(filler)),
         bridgemodel.Communication_Send_Outcome.Sent)
+}
+
+// Verify native progress is never published through the Julia inbox.
+active_operation_test_expect_no_native_progress_egress :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    service: ^bridgemodel.Julia_Runtime_Service) {
+    testing.expect_value(t, pump_active_operation_progress(state),
+        bridgemodel.Communication_Send_Outcome.Sent)
+    _, published := transport.consumer_mailbox_try_recv(&service^.julia_inbox)
+    testing.expect(t, !published)
+}
+
+// Verify native completion stays available for direct display-owner consumption.
+active_operation_test_expect_no_native_outcome_egress :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    service: ^bridgemodel.Julia_Runtime_Service) {
+    testing.expect_value(t, pump_active_operation_outcomes(state),
+        bridgemodel.Communication_Send_Outcome.Sent)
+    _, published := transport.consumer_mailbox_try_recv(&service^.julia_inbox)
+    testing.expect(t, !published)
 }
 
 // Release one delayed consumer message and return its typed outcome when present.
