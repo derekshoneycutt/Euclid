@@ -9,6 +9,7 @@ import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
 import particles "../../particles"
 import shapes "../../shapes"
+import shapemodel "../../shapes/model"
 import taskpool "../../taskpool"
 import font "../font"
 import ui "../ui"
@@ -460,6 +461,28 @@ run_parallel_simulation_step :: proc(executor: ^core.Simulation_Executor, dt: f3
         &executor^.constraint_task.evidence_ring)
 }
 
+// Update joined frame-local point packets without mutating authoritative shapes.
+builder_apply_point_previews :: proc(state: ^core.Euclid_General_State) {
+    cache := &state^.shape_world.draw_cache
+    for index in 0..<state^.builder.point_count {
+        record := &state^.builder.points[index]
+        if !record^.preview_active || record^.entity == 0 {
+            continue
+        }
+        entity := shapemodel.shape_entity_unpack(record^.entity)
+        for item_index in 0..<cache^.item_count {
+            item := &cache^.items[item_index]
+            #partial switch &point in item {
+            case shapemodel.Shapes_Point_Draw:
+                if point.source_index == int(entity.slot) - 1 &&
+                    point.source_generation == entity.generation {
+                    point.point1 = record^.preview_position
+                }
+            }
+        }
+    }
+}
+
 //   Prepare frame-owned shape and text caches after UI geometry was resolved.
 run_parallel_frame_preparation_after_ui :: proc(
     state: ^core.Euclid_General_State, alpha: f32,
@@ -476,6 +499,7 @@ run_parallel_frame_preparation_after_ui :: proc(
             rawptr(&executor^.dynview_task))
     }
     assert(taskpool.task_fence_wait(&executor^.pool, &fence) == .Succeeded)
+    builder_apply_point_previews(state)
     evidence_session.session_accept_ring(
         &state^.evidence_session, &executor^.shape_cache_task.evidence_ring)
     evidence_session.session_accept_ring(

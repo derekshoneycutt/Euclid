@@ -1391,6 +1391,8 @@ scenario_builder_queue_kind :: proc(
         return .Hide
     case .Show_Point:
         return .Show
+    case .Move_Point:
+        return .Move
     }
     return .Construct
 }

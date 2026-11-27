@@ -27,15 +27,18 @@ Builder_Command_Kind :: enum u8 {
     Edit_Style,
     Hide_Point,
     Show_Point,
+    Move_Point,
 }
 
 BUILDER_SELECTION_BREATH_PERIOD_SECONDS :: f32(1.6)
 BUILDER_SELECTION_BREATH_MAX_EXPANSION :: f32(0.6)
+BUILDER_DRAG_THRESHOLD :: f32(4)
 
 Builder_Command_Request :: struct {
     kind: Builder_Command_Kind,
     point: buildermodel.Point_Identity,
     style: buildermodel.Point_Style_Edit,
+    position: geometry.Vector3,
 }
 
 Builder_Placement_Request :: struct {
@@ -194,7 +197,8 @@ prepare_builder_surface :: proc(
         return result
     }
     if !is_builder_selected(state) {
-        if builder_control_press_id(state^.ui_runtime.input.press_owner.id) {
+        if state^.builder.gesture_active || state^.builder.drag_active ||
+            builder_control_press_id(state^.ui_runtime.input.press_owner.id) {
             builder_release_surface_capture(state)
         }
         return result
@@ -1099,6 +1103,15 @@ builder_prepare_board_gesture :: proc(
         !viewpresentation.presentation_reduced_motion_enabled(state)
     if builder_escape_pressed(frame) || !frame.window_focused {
         builder_cancel_gesture(state)
+        return
+    }
+    if builder_continue_drag(state, {
+        frame = frame,
+        mouse = mouse,
+        over_board = over_board,
+        shake_enabled = shake_enabled,
+    }, result) {
+        return
     }
     if builder_continue_pointer_gesture(state, {
         frame = frame,
@@ -1174,15 +1187,7 @@ builder_begin_pointer_gesture :: proc(
     builder := &state^.builder
     hit := builder_hit_test(state, mouse)
     if hit.generation != 0 {
-        if builder^.style_draft_color_dirty ||
-            builder^.style_draft_brush_dirty {
-            builder_defer_action(state, .Select_Point, hit)
-            if result^.command.kind == .None {
-                result^.command = builder_pending_style_request(builder)
-            }
-        } else {
-            builder_select_point(builder, hit)
-        }
+        builder_handle_point_press(state, hit, mouse, shake_enabled, result)
         return
     }
     if builder^.tool != .Point || builder^.style_draft_color_dirty ||
@@ -1208,6 +1213,106 @@ builder_begin_pointer_gesture :: proc(
         kind = .Builder_Placement,
         id = BUILDER_PLACEMENT_PRESS_ID,
     }
+}
+
+// Select a newly hit point or capture a second press after inspector edits.
+builder_handle_point_press :: proc(
+    state: ^core.Euclid_General_State, hit: buildermodel.Point_Identity,
+    mouse: geometry.Vector2, shake_enabled: bool,
+    result: ^Builder_Surface_Preparation) {
+    builder := &state^.builder
+    if builder^.style_draft_color_dirty || builder^.style_draft_brush_dirty {
+        builder_defer_action(state, .Select_Point, hit)
+        if result^.command.kind == .None {
+            result^.command = builder_pending_style_request(builder)
+        }
+    } else if hit == builder^.selected_point && result^.command.kind == .None {
+        builder_begin_drag(state, hit, mouse, shake_enabled)
+    } else {
+        builder_select_point(builder, hit)
+    }
+}
+
+// Capture a second press on the selected point without moving it yet.
+builder_begin_drag :: proc(
+    state: ^core.Euclid_General_State, point: buildermodel.Point_Identity,
+    mouse: geometry.Vector2, shake_enabled: bool) {
+    record := builder_find_record(&state^.builder, point)
+    position, valid := projection.cartesian_to_iso_board(
+        mouse, state^.iso_scale, shake_enabled)
+    if record == nil || !valid {
+        return
+    }
+    original := record^.position
+    if record^.preview_active {
+        original = record^.preview_position
+    }
+    builder := &state^.builder
+    builder^.drag_active = true
+    builder^.drag_moved = false
+    builder^.drag_point = point
+    builder^.drag_press = mouse
+    builder^.drag_original = original
+    builder^.drag_offset = original - position
+    state^.ui_runtime.input.press_owner = {
+        active = true,
+        kind = .Builder_Placement,
+        id = BUILDER_DRAG_PRESS_ID,
+    }
+}
+
+// Update a bounded preview and submit only the final valid drag position.
+builder_continue_drag :: proc(
+    state: ^core.Euclid_General_State, gesture: Builder_Pointer_Gesture_Input,
+    result: ^Builder_Surface_Preparation) -> bool {
+    builder := &state^.builder
+    if !builder^.drag_active {
+        return false
+    }
+    owner := state^.ui_runtime.input.press_owner
+    record := builder_find_record(builder, builder^.drag_point)
+    if !owner.active || owner.kind != .Builder_Placement ||
+        owner.id != BUILDER_DRAG_PRESS_ID || builder^.failed || record == nil ||
+        record^.state != .Ready || !record^.visible {
+        builder_cancel_gesture(state)
+        return true
+    }
+    delta := gesture.mouse - builder^.drag_press
+    if delta.x * delta.x + delta.y * delta.y >=
+        BUILDER_DRAG_THRESHOLD * BUILDER_DRAG_THRESHOLD {
+        builder^.drag_moved = true
+    }
+    position, valid := projection.cartesian_to_iso_board(
+        gesture.mouse, state^.iso_scale, gesture.shake_enabled)
+    position += builder^.drag_offset
+    if builder^.drag_moved && gesture.over_board && valid &&
+        builder_board_position_valid(position) {
+        record^.preview_active = true
+        record^.preview_position = position
+    }
+    if uiwidgets.input_frame_left_released(gesture.frame) {
+        builder_finish_drag(state, result, position,
+            gesture.over_board && valid && builder_board_position_valid(position))
+    } else if !uiwidgets.input_frame_left_down(gesture.frame) {
+        builder_cancel_gesture(state)
+    }
+    return true
+}
+
+// Admit an eligible release for FIFO submission, otherwise restore the preview.
+builder_finish_drag :: proc(
+    state: ^core.Euclid_General_State, result: ^Builder_Surface_Preparation,
+    position: geometry.Vector3, valid: bool) {
+    builder := &state^.builder
+    if builder^.drag_moved && valid && result^.command.kind == .None {
+        result^.command = {
+            kind = .Move_Point,
+            point = builder^.drag_point,
+            position = position,
+        }
+        builder^.drag_active = false
+    }
+    builder_cancel_gesture(state)
 }
 
 // Update the idle placement preview without disturbing a pending release.
@@ -1257,7 +1362,11 @@ builder_hit_test :: proc(
             point^.identity.generation != builder^.generation {
             continue
         }
-        projected := projection.iso_to_cartesian(point^.position, scale)
+        position := point^.position
+        if point^.preview_active {
+            position = point^.preview_position
+        }
+        projected := projection.iso_to_cartesian(position, scale)
         dx := projected.x - mouse.x
         dy := projected.y - mouse.y
         radius := max(f32(8), projection.effective_ink_size(
@@ -1351,13 +1460,22 @@ builder_reconcile_waiting_point :: proc(builder: ^buildermodel.Runtime) {
 // Cancel only the active pointer gesture and its owner capture.
 builder_cancel_gesture :: proc(state: ^core.Euclid_General_State) {
     builder := &state^.builder
+    if builder^.drag_active {
+        record := builder_find_record(builder, builder^.drag_point)
+        if record != nil {
+            record^.preview_active = record^.preview_command.id != 0
+            record^.preview_position = builder^.drag_original
+        }
+    }
+    builder^.drag_active = false
     builder^.gesture_active = false
     if builder^.placement_phase == .Held {
         builder^.placement_phase = .Idle
     }
     owner := &state^.ui_runtime.input.press_owner
     if owner^.active && owner^.kind == .Builder_Placement &&
-        owner^.id == BUILDER_PLACEMENT_PRESS_ID {
+        (owner^.id == BUILDER_PLACEMENT_PRESS_ID ||
+            owner^.id == BUILDER_DRAG_PRESS_ID) {
         owner^ = {}
     }
 }
@@ -1408,6 +1526,24 @@ builder_style_command_result :: proc(
         builder^.style_draft_brush_dirty = false
     }
     builder^.placement_status = .Point_Queued
+}
+
+// Keep an admitted preview until its exact FIFO command commits, or restore it.
+builder_move_command_result :: proc(
+    builder: ^buildermodel.Runtime, request: Builder_Command_Request,
+    identity: buildermodel.Command_Identity, admitted: bool) {
+    record := builder_find_record(builder, request.point)
+    if record == nil {
+        return
+    }
+    if admitted {
+        record^.preview_active = true
+        record^.preview_position = request.position
+        record^.preview_command = identity
+    } else {
+        record^.preview_active = record^.preview_command.id != 0
+        record^.preview_position = builder^.drag_original
+    }
 }
 
 // Retire a deferred visibility intent only after its exact FIFO command is admitted.
@@ -1494,7 +1630,11 @@ builder_draw_selected_point_marker :: proc(
     selected := builder_find_record(builder, builder^.selected_point)
     if selected != nil && selected^.state == .Ready && selected^.visible {
         prefs := state^.ui_runtime.preferences.values
-        projected := projection.iso_to_cartesian(selected^.position, state^.iso_scale)
+        position := selected^.position
+        if selected^.preview_active {
+            position = selected^.preview_position
+        }
+        projected := projection.iso_to_cartesian(position, state^.iso_scale)
         radius := projection.effective_ink_size(selected^.brush_size,
             state^.iso_scale, prefs.animation.scale_percent)
         reduced_motion := viewpresentation.presentation_reduced_motion_enabled(state)

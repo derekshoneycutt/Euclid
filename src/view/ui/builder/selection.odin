@@ -12,6 +12,7 @@ BUILDER_SCROLLBAR_ID :: 8803
 BUILDER_PLACEMENT_PRESS_ID :: 8830
 BUILDER_HIDE_BUTTON_ID :: 8831
 BUILDER_SHOW_BUTTON_ID :: 8832
+BUILDER_DRAG_PRESS_ID :: 8833
 
 // Return whether the selected catalogue node owns the Builder surface.
 is_builder_selected :: #force_inline proc(state: ^core.Euclid_General_State) -> bool {
@@ -27,6 +28,7 @@ builder_control_press_id :: #force_inline proc(id: int) -> bool {
         id < BUILDER_PALETTE_BUTTON_BASE_ID + BUILDER_PALETTE_BUTTON_COUNT ||
         id == BUILDER_BRUSH_SLIDER_ID ||
         id == BUILDER_PLACEMENT_PRESS_ID ||
+        id == BUILDER_DRAG_PRESS_ID ||
         id == BUILDER_SCROLLBAR_ID ||
         id == BUILDER_HIDE_BUTTON_ID || id == BUILDER_SHOW_BUTTON_ID
 }

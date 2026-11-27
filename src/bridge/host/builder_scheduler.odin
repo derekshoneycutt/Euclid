@@ -202,6 +202,28 @@ builder_enqueue_show :: proc(
     return builder_enqueue_visibility(state, point, true)
 }
 
+// Queue one point position for transactional publication in FIFO order.
+builder_enqueue_move :: proc(
+    state: ^core.Euclid_General_State, point: buildermodel.Point_Identity,
+    position: geometry.Vector3) -> (buildermodel.Command_Identity, Builder_Status) {
+    if state == nil || !builder_vector_is_finite(position) ||
+        position.x < 0 || position.x > 1 || position.y < 0 || position.y > 1 {
+        return {}, .Invalid_Argument
+    }
+    record, status := builder_find_point(&state^.builder, point)
+    if status != .Ok {
+        return {}, status
+    }
+    if record^.state != .Ready {
+        return {}, .Invalid_State
+    }
+    return builder_enqueue_job(state, {
+        kind = .Move_Point,
+        point = point,
+        position = position,
+    })
+}
+
 // Admit one command unless its generation has failed or bounded FIFO is full.
 builder_enqueue_job :: proc(
     state: ^core.Euclid_General_State, job: buildermodel.Job) -> (
@@ -364,6 +386,19 @@ builder_commit_edit :: proc(
         return builder_fail_head(state, .Native_Failure)
     }
     builder_apply_record_edit(record, job)
+    if job.kind == .Move_Point {
+        transform, found := shapemodel.shape_component_get_mut(
+            &state^.shape_world.transforms, &state^.shape_world.registry,
+            shapemodel.shape_entity_unpack(record^.entity))
+        assert(found)
+        transform^.previous_position = job.position
+    }
+    if job.kind == .Move_Point && record^.preview_command == job.identity {
+        record^.preview_command = {}
+        if !state^.builder.drag_active || state^.builder.drag_point != job.point {
+            record^.preview_active = false
+        }
+    }
     builder_pop_head(&state^.builder)
     return .Ok
 }
@@ -381,6 +416,9 @@ builder_capture_job :: proc(
     case .Show_Point:
         return bridge_scene.shape_set_visible(
             state, entity, 1) == bridgemodel.BRIDGE_STATUS_OK
+    case .Move_Point:
+        return bridge_scene.shape_set_position(
+            state, entity, job.position) == bridgemodel.BRIDGE_STATUS_OK
     case .Construct_Point:
         return false
     }
@@ -417,6 +455,8 @@ builder_apply_record_edit :: proc(
         record^.visible = false
     case .Show_Point:
         record^.visible = true
+    case .Move_Point:
+        record^.position = job.position
     case .Construct_Point:
     }
 }
@@ -466,6 +506,11 @@ builder_fail_head :: proc(
         builder_pop_head(runtime)
     }
     runtime^.failed = true
+    runtime^.placement_status = .Failed
+    for index in 0..<runtime^.point_count {
+        runtime^.points[index].preview_active = false
+        runtime^.points[index].preview_command = {}
+    }
     return failure
 }
 

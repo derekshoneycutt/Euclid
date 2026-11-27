@@ -480,6 +480,7 @@ builder_submit_ui_command :: proc(
     }
     admitted := false
     status := julia.Builder_Status.Invalid_State
+    identity: buildermodel.Command_Identity
     switch request.kind {
     case .Edit_Style:
         _, status = julia.builder_enqueue_style(
@@ -488,19 +489,32 @@ builder_submit_ui_command :: proc(
         _, status = julia.builder_enqueue_hide(state, request.point)
     case .Show_Point:
         _, status = julia.builder_enqueue_show(state, request.point)
+    case .Move_Point:
+        identity, status = julia.builder_enqueue_move(
+            state, request.point, request.position)
     case .None:
         return
     }
     admitted = status == .Ok
+    if request.kind == .Move_Point {
+        builderui.builder_move_command_result(
+            &state^.builder, request, identity, admitted)
+    }
     builderui.builder_command_result(state, request, admitted)
-    if admitted {
-        state^.builder.placement_status = .Point_Queued
+    builder_update_command_status(&state^.builder, status)
+}
+
+// Surface the scheduler's admission result in the Builder status control.
+builder_update_command_status :: proc(
+    builder: ^buildermodel.Runtime, status: julia.Builder_Status) {
+    if status == .Ok {
+        builder^.placement_status = .Point_Queued
     } else if status == .Queue_Full {
-        state^.builder.placement_status = .Queue_Full
+        builder^.placement_status = .Queue_Full
     } else if status == .Point_Capacity_Full {
-        state^.builder.placement_status = .Point_Capacity_Full
+        builder^.placement_status = .Point_Capacity_Full
     } else {
-        state^.builder.placement_status = .Failed
+        builder^.placement_status = .Failed
     }
 }
 

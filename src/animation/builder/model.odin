@@ -47,6 +47,7 @@ Job_Kind :: enum u8 {
     Edit_Point_Style,
     Hide_Point,
     Show_Point,
+    Move_Point,
 }
 
 // Hold the per-field style values captured when a command is accepted.
@@ -83,6 +84,9 @@ Point_Record :: struct {
     brush_size: f32,
     visible: bool,
     state: Point_State,
+    preview_active: bool,
+    preview_position: geometry.Vector3,
+    preview_command: Command_Identity,
 }
 
 // Own the bounded FIFO, point records, active result, and generation counters.
@@ -107,6 +111,12 @@ Runtime :: struct {
     placement_position: geometry.Vector3,
     gesture_active: bool,
     gesture_style: Point_Style_Edit,
+    drag_active: bool,
+    drag_moved: bool,
+    drag_point: Point_Identity,
+    drag_press: geometry.Vector2,
+    drag_offset: geometry.Vector3,
+    drag_original: geometry.Vector3,
     selected_point: Point_Identity,
     waiting_point: Point_Identity,
     selection_revision: u64,

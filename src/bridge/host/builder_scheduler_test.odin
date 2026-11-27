@@ -4,6 +4,7 @@ import buildermodel "../../animation/builder"
 import bridge_scene "../scene"
 import core "../../core"
 import color "../../core/color"
+import geometry "../../core/geometry"
 import operations "../../animation/operations"
 import particles "../../particles"
 import modifier "../../animation"
@@ -135,6 +136,72 @@ builder_fifo_wraparound_preserves_visibility_order :: proc(t: ^testing.T) {
         testing.expect_value(t, builder_fixed_step(state, true), Builder_Status.Ok)
     }
     testing.expect(t, !state^.builder.points[0].visible)
+}
+
+// Position changes commit in order and preserve point identity and style.
+@(test)
+builder_move_commits_transactionally_in_fifo_order :: proc(t: ^testing.T) {
+    state := builder_test_state_create(t)
+    defer builder_test_state_destroy(state)
+    point := builder_test_enqueue_point(t, state)
+    builder_test_complete_head(t, state)
+    record := &state^.builder.points[0]
+    entity := record^.entity
+    initial := record^.position
+    target: geometry.Vector3 = {0.6, 0.7, 0}
+    _, style_status := builder_enqueue_style(state, point, {
+        color_set = true,
+        color = {90, 80, 70, 255},
+    })
+    command, status := builder_enqueue_move(state, point, target)
+    testing.expect_value(t, style_status, Builder_Status.Ok)
+    testing.expect_value(t, status, Builder_Status.Ok)
+    record^.preview_active = true
+    record^.preview_position = target
+    record^.preview_command = command
+    testing.expect_value(t, builder_fixed_step(state, false), Builder_Status.Ok)
+    testing.expect_value(t, record^.position, initial)
+    testing.expect(t, record^.preview_active)
+    testing.expect_value(t, builder_fixed_step(state, false), Builder_Status.Ok)
+    testing.expect_value(t, record^.position, target)
+    testing.expect_value(t, record^.identity, point)
+    testing.expect_value(t, record^.entity, entity)
+    testing.expect_value(t, record^.color, color.Color_RGBA8{90, 80, 70, 255})
+    testing.expect(t, !record^.preview_active)
+    transform, found := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry,
+        shapemodel.shape_entity_unpack(entity))
+    testing.expect(t, found)
+    testing.expect_value(t, transform.position, target)
+    testing.expect_value(t, transform.previous_position, target)
+    _, invalid := builder_enqueue_move(state, point, {2, 0, 0})
+    testing.expect_value(t, invalid, Builder_Status.Invalid_Argument)
+}
+
+// An older committed move cannot retire a newer move's displayed preview.
+@(test)
+builder_move_preview_tracks_latest_admitted_command :: proc(t: ^testing.T) {
+    state := builder_test_state_create(t)
+    defer builder_test_state_destroy(state)
+    point := builder_test_enqueue_point(t, state)
+    builder_test_complete_head(t, state)
+    first: geometry.Vector3 = {0.4, 0.4, 0}
+    second: geometry.Vector3 = {0.6, 0.6, 0}
+    _, first_status := builder_enqueue_move(state, point, first)
+    command, second_status := builder_enqueue_move(state, point, second)
+    testing.expect_value(t, first_status, Builder_Status.Ok)
+    testing.expect_value(t, second_status, Builder_Status.Ok)
+    record := &state^.builder.points[0]
+    record^.preview_active = true
+    record^.preview_position = second
+    record^.preview_command = command
+    testing.expect_value(t, builder_fixed_step(state, false), Builder_Status.Ok)
+    testing.expect_value(t, record^.position, first)
+    testing.expect(t, record^.preview_active)
+    testing.expect_value(t, record^.preview_position, second)
+    testing.expect_value(t, builder_fixed_step(state, false), Builder_Status.Ok)
+    testing.expect_value(t, record^.position, second)
+    testing.expect(t, !record^.preview_active)
 }
 
 // Stress native-only Builder edits beyond interval-ledger capacity without Julia ticks.

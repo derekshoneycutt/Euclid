@@ -47,6 +47,164 @@ builder_surface_test_screen :: proc(
     return projection.iso_to_cartesian(position, state^.iso_scale)
 }
 
+// Add one completed visible point to the fixed Builder test fixture.
+builder_surface_test_point :: proc(
+    state: ^core.Euclid_General_State) -> buildermodel.Point_Identity {
+    point: buildermodel.Point_Identity = {1, 1}
+    state^.builder.generation = 1
+    state^.builder.point_count = 1
+    state^.builder.points[0] = {
+        identity = point,
+        position = {0.25, 0.35, 0},
+        state = .Ready,
+        visible = true,
+        brush_size = 5,
+    }
+    return point
+}
+
+// Select a point with a gesture that moves but must not initiate dragging.
+builder_surface_test_select_first :: proc(
+    t: ^testing.T, state: ^core.Euclid_General_State,
+    point: buildermodel.Point_Identity, press, moved: geometry.Vector2) {
+    result: Builder_Surface_Preparation
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(press, {.Left}, {.Left}, {}), &result)
+    testing.expect_value(t, state^.builder.selected_point, point)
+    testing.expect(t, !state^.builder.drag_active)
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(moved, {}, {.Left}, {}), &result)
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(moved, {}, {}, {.Left}), &result)
+    testing.expect_value(t, result.command.kind, Builder_Command_Kind.None)
+}
+
+// Selection consumes the first gesture; a later drag preserves the grab offset.
+@(test)
+builder_drag_requires_selection_and_tracks_offset :: proc(t: ^testing.T) {
+    state := builder_surface_test_state_create()
+    defer builder_surface_test_state_destroy(state)
+    point := builder_surface_test_point(state)
+    origin := state^.builder.points[0].position
+    screen := builder_surface_test_screen(state, origin)
+    press := screen + geometry.Vector2{3, 0}
+    moved := press + geometry.Vector2{60, 20}
+    builder_surface_test_select_first(t, state, point, press, moved)
+    result: Builder_Surface_Preparation
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(press, {.Left}, {.Left}, {}), &result)
+    testing.expect(t, state^.builder.drag_active)
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(press + {2, 0}, {}, {.Left}, {}), &result)
+    testing.expect(t, !state^.builder.points[0].preview_active)
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(moved, {}, {.Left}, {}), &result)
+    testing.expect(t, state^.builder.points[0].preview_active)
+    preview := state^.builder.points[0].preview_position
+    expected_screen := screen + (moved - press)
+    actual_screen := builder_surface_test_screen(state, preview)
+    delta := actual_screen - expected_screen
+    testing.expect(t, delta.x * delta.x + delta.y * delta.y < 0.001)
+    testing.expect_value(t, state^.builder.points[0].position, origin)
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(moved, {}, {}, {.Left}), &result)
+    testing.expect_value(t, result.command.kind, Builder_Command_Kind.Move_Point)
+    testing.expect_value(t, result.command.position, preview)
+    testing.expect(t, !state^.builder.drag_active)
+}
+
+// Cancellation restores a previous pending preview and never submits a move.
+@(test)
+builder_drag_cancellation_restores_pending_preview :: proc(t: ^testing.T) {
+    state := builder_surface_test_state_create()
+    defer builder_surface_test_state_destroy(state)
+    point := builder_surface_test_point(state)
+    state^.builder.selected_point = point
+    record := &state^.builder.points[0]
+    record^.preview_active = true
+    record^.preview_position = {0.4, 0.4, 0}
+    record^.preview_command = {1, 4}
+    original := record^.preview_position
+    press := builder_surface_test_screen(state, original)
+    result: Builder_Surface_Preparation
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(press, {.Left}, {.Left}, {}), &result)
+    builder_prepare_board_gesture(
+        state, builder_surface_test_frame(press + {40, 10}, {}, {.Left}, {}), &result)
+    testing.expect(t, record^.preview_position != original)
+    escape := builder_surface_test_frame(press, {}, {.Left}, {})
+    events := [?]input.Input_Event{{
+        kind = .Press,
+        key = .Escape,
+    }}
+    escape.events = events[:]
+    builder_prepare_board_gesture(state, escape, &result)
+    testing.expect(t, !state^.builder.drag_active)
+    testing.expect(t, record^.preview_active)
+    testing.expect_value(t, record^.preview_position, original)
+    testing.expect_value(t, result.command.kind, Builder_Command_Kind.None)
+    testing.expect(t, !state^.ui_runtime.input.press_owner.active)
+}
+
+// Queue backpressure restores the prior admitted position rather than the rejected drag.
+@(test)
+builder_rejected_move_restores_prior_preview :: proc(t: ^testing.T) {
+    state := builder_surface_test_state_create()
+    defer builder_surface_test_state_destroy(state)
+    point := builder_surface_test_point(state)
+    record := &state^.builder.points[0]
+    record^.preview_active = true
+    record^.preview_command = {1, 4}
+    state^.builder.drag_original = {0.4, 0.4, 0}
+    request: Builder_Command_Request = {
+        kind = .Move_Point,
+        point = point,
+        position = {0.6, 0.6, 0},
+    }
+    builder_move_command_result(&state^.builder, request, {}, false)
+    testing.expect(t, record^.preview_active)
+    testing.expect_value(t, record^.preview_position, state^.builder.drag_original)
+    record^.preview_command = {}
+    builder_move_command_result(&state^.builder, request, {}, false)
+    testing.expect(t, !record^.preview_active)
+}
+
+// Lost capture, focus, layout, and outside release discard uncommitted previews.
+@(test)
+builder_drag_cancels_on_interaction_loss :: proc(t: ^testing.T) {
+    for mode in 0..<4 {
+        state := builder_surface_test_state_create()
+        point := builder_surface_test_point(state)
+        state^.builder.selected_point = point
+        press := builder_surface_test_screen(state, state^.builder.points[0].position)
+        result: Builder_Surface_Preparation
+        builder_prepare_board_gesture(
+            state, builder_surface_test_frame(press, {.Left}, {.Left}, {}), &result)
+        builder_prepare_board_gesture(
+            state, builder_surface_test_frame(press + {30, 0}, {}, {.Left}, {}), &result)
+        testing.expect(t, state^.builder.points[0].preview_active)
+        switch mode {
+        case 0:
+            frame := builder_surface_test_frame(press, {}, {.Left}, {})
+            frame.window_focused = false
+            builder_prepare_board_gesture(state, frame, &result)
+        case 1:
+            state^.ui_runtime.input.press_owner = {}
+            builder_prepare_board_gesture(
+                state, builder_surface_test_frame(press, {}, {.Left}, {}), &result)
+        case 2:
+            builder_release_surface_capture(state)
+        case 3:
+            builder_prepare_board_gesture(state,
+                builder_surface_test_frame({-10, -10}, {}, {}, {.Left}), &result)
+        }
+        testing.expect(t, !state^.builder.drag_active)
+        testing.expect(t, !state^.builder.points[0].preview_active)
+        testing.expect_value(t, result.command.kind, Builder_Command_Kind.None)
+        builder_surface_test_state_destroy(state)
+    }
+}
+
 // Keep the initial empty workspace limited to its fixed Point control.
 @(test)
 builder_empty_workspace_hides_contextual_options :: proc(t: ^testing.T) {

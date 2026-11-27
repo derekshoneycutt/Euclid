@@ -183,6 +183,7 @@ Builder_Queue_Kind :: enum u8 {
     Edit_Style,
     Hide,
     Show,
+    Move,
 }
 
 Builder_Placement_Phase :: enum u8 {
@@ -933,6 +934,8 @@ scenario_builder_queue_kind :: proc(
         return .Hide, true
     case "show":
         return .Show, true
+    case "move":
+        return .Move, true
     }
     return {}, false
 }
